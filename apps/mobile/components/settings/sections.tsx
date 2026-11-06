@@ -11,6 +11,7 @@ import { BudgetEditor } from "../BudgetEditor";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "../form";
 import type { IconName } from "../Icon";
 import { IncomesEditor } from "../IncomeEditor";
+import { EmergencyFundNote, looksLikeEmergencyFund } from "../EmergencyFundNote";
 import { AddDebtButtons, DebtEditor } from "../DebtEditor";
 import { debtLabel } from "../../lib/debts";
 import { Card, Divider } from "../ui";
@@ -224,8 +225,9 @@ function GoalsSection() {
   return (
     <>
       <Text style={[type.body, { color: t.text2 }]}>
-        Each goal becomes a step in your plan (a house deposit, a car, a wedding). Reorder it on the Plan tab.
+        Things you're saving up for: a house deposit, a car, a wedding. Change their priority on the Plan tab.
       </Text>
+      <EmergencyFundNote />
       {state.goals.length === 0 ? <Empty text="No goals yet" /> : null}
       {state.goals.map((g, i) => (
         <ItemCard
@@ -236,6 +238,9 @@ function GoalsSection() {
           onName={(v) => update((p) => { p.goals[i]!.name = v; })}
           onDelete={() => removeItem("this goal", g.name, () => update((p) => { p.goals.splice(i, 1); }))}
         >
+          {looksLikeEmergencyFund(g.name) ? (
+            <Text style={[type.caption, { color: t.warn, fontWeight: "600" }]}>This looks like an emergency fund, which your plan already builds for you (see above). You can remove this goal.</Text>
+          ) : null}
           <Rows>
             {[
               <FieldRow key="t" label="Target">

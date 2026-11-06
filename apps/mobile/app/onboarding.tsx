@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { BudgetEditor } from "../components/BudgetEditor";
 import { AddDebtButtons, DebtEditor } from "../components/DebtEditor";
+import { EmergencyFundNote, looksLikeEmergencyFund } from "../components/EmergencyFundNote";
 import { Button, FieldRow, IconButton, NumberInput, TextField } from "../components/form";
 import { Icon } from "../components/Icon";
 import { ProgressBar, ProgressRing } from "../components/ProgressRing";
@@ -235,6 +236,7 @@ function GoalsStep() {
   return (
     <>
       <Text style={[type.body, { color: t.text2 }]}>A house deposit, a car, a wedding… Each goal becomes a step in your plan, just before investing in a brokerage. Totally optional.</Text>
+      <EmergencyFundNote linkToSettings={false} />
       {state.goals.map((g, i) => (
         <Card key={g.id} style={{ gap: space.sm }}>
           <View style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
@@ -243,6 +245,9 @@ function GoalsStep() {
             </View>
             <IconButton icon="trash" color={t.bad} label={`Remove ${g.name}`} onPress={() => update((p) => { p.goals.splice(i, 1); })} />
           </View>
+          {looksLikeEmergencyFund(g.name) ? (
+            <Text style={[type.caption, { color: t.warn, fontWeight: "600" }]}>This looks like an emergency fund, which your plan already builds for you (see above). You can remove this goal.</Text>
+          ) : null}
           <View style={styles.debtGrid}>
             <Labeled label="Target"><NumberInput kind="money" width="100%" label={`${g.name} target`} value={g.target} min={0} onChange={(v) => update((p) => { p.goals[i]!.target = v; })} /></Labeled>
             <Labeled label="Saved so far"><NumberInput kind="money" width="100%" label={`${g.name} saved`} value={g.saved} min={0} onChange={(v) => update((p) => { p.goals[i]!.saved = v; })} /></Labeled>

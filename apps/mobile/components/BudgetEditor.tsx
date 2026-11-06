@@ -74,20 +74,46 @@ export function BudgetEditor() {
       update((p) => { p.budget = p.budget.filter((b) => groupOf(b) !== group); });
   };
 
-  const header = (
-    <Card style={styles.totals}>
+  // what's left each month once the budget and debt minimums are paid (engine numbers, normal month)
+  const d = result.d;
+  const leftover = d.leanMonthly - d.budgetTotal - d.debtMins;
+  const figure = (label: string, value: string, sign?: "−" | "=") => (
+    <View style={styles.figure}>
+      {sign ? <Text style={[type.heading, { color: t.text3, marginRight: space.sm }]}>{sign}</Text> : null}
       <View>
-        <Text style={[type.caption, { color: t.text3 }]}>Total per month</Text>
-        <Text style={[type.stat, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(result.d.budgetTotal)}</Text>
+        <Text style={[type.caption, { color: t.text3 }]}>{label}</Text>
+        <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{value}</Text>
       </View>
-      <View style={{ alignItems: "flex-end" }}>
+    </View>
+  );
+  const header = (
+    <Card style={{ gap: space.md }}>
+      <View style={styles.flow} role="group" aria-label={`Take-home ${money(d.leanMonthly)} minus budget ${money(d.budgetTotal)} minus debt minimums ${money(d.debtMins)} leaves ${money(leftover)} a month`}>
+        {figure("Take-home (normal month)", money(d.leanMonthly))}
+        {figure("Budget", money(d.budgetTotal), "−")}
+        {figure("Debt minimums", money(d.debtMins), "−")}
+        <View style={[styles.figure, styles.result, { backgroundColor: leftover < 0 ? t.badSoft : t.goodSoft }]}>
+          <Text style={[type.heading, { color: t.text3, marginRight: space.sm }]}>=</Text>
+          <View>
+            <Text style={[type.caption, { color: t.text2 }]}>{leftover < 0 ? "Short each month" : "Left over to save"}</Text>
+            <Text style={[type.stat, { color: leftover < 0 ? t.bad : t.good, fontVariant: ["tabular-nums"] }]}>{money(leftover)}/mo</Text>
+          </View>
+        </View>
+      </View>
+      <Text style={[type.caption, { color: t.text3 }]}>
+        {leftover < 0
+          ? "Your budget is more than you bring home in a normal month. Coasting only works once today's bills are covered."
+          : "Your plan puts the leftover to work: emergency fund, employer match, debt, then investing (see the Plan tab)."}
+        {d.extraChecksPerYear > 1 ? ` Extra-paycheck months add about ${money(d.extraChecksPerYear)} a year on top.` : ""}
+      </Text>
+      <View style={[styles.totals, { borderTopColor: t.border }]}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
           <Text style={[type.caption, { color: t.text3 }]}>Still paid after you retire</Text>
           <InfoTip text={HELP.inRetirement} label="still paid after you retire" open={retireTip} onToggle={setRetireTip} />
         </View>
-        <Text style={[type.label, { color: t.text2, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(retireMonthly)}</Text>
+        <Text style={[type.label, { color: t.text2, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(retireMonthly)}/mo</Text>
+        {retireTip ? <Text style={[type.caption, styles.tip, { color: t.text, backgroundColor: t.accentSoft }]}>{HELP.inRetirement}</Text> : null}
       </View>
-      {retireTip ? <Text style={[type.caption, styles.tip, { color: t.text, backgroundColor: t.accentSoft }]}>{HELP.inRetirement}</Text> : null}
     </Card>
   );
 
@@ -259,7 +285,10 @@ function BudgetRow({
 }
 
 const styles = StyleSheet.create({
-  totals: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: space.sm },
+  totals: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm },
+  flow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.lg },
+  figure: { flexDirection: "row", alignItems: "center" },
+  result: { borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, marginLeft: "auto" },
   tip: { width: "100%", padding: space.md, borderRadius: radius.sm, overflow: "hidden" },
   headRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingLeft: space.lg, paddingRight: space.sm, paddingVertical: space.sm },
   cols: { flexDirection: "row", alignItems: "center", gap: space.sm },
