@@ -42,10 +42,42 @@ describe("estimateTaxRate", () => {
 describe("estimatePaycheckTaxes", () => {
   it("splits a year's estimate into per-check federal / state / SS / Medicare", () => {
     const t = estimatePaycheckTaxes(3500, 26, 140);
-    const annual = estimateAnnualTaxes(3500 * 26, 140 * 26);
+    const annual = estimateAnnualTaxes({ gross: 3500 * 26, pretax: 140 * 26 });
     expect(t.socialSecurity).toBeCloseTo(3500 * 0.062, 2);
     expect(t.medicare).toBeCloseTo(3500 * 0.0145, 2);
     expect(t.federal).toBeCloseTo(annual.federal / 26, 2);
     expect(t.state).toBeCloseTo(((3500 - 140) * 26 * 0.04) / 26, 2);
+  });
+});
+
+describe("filing status", () => {
+  it("married filing jointly with one earner owes much less federal tax than single", () => {
+    const single = estimateAnnualTaxes({ gross: 91_000, pretax: 0 }, "single").federal;
+    const mfj = estimateAnnualTaxes({ gross: 91_000, pretax: 0 }, "mfj").federal;
+    // 91,000 − 31,500 = 59,500 taxable: 23,850 × 10% + 35,650 × 12%
+    expect(mfj).toBeCloseTo(2_385 + 35_650 * 0.12, 6);
+    expect(single - mfj).toBeGreaterThan(3_000);
+  });
+
+  it("head of household sits between single and married", () => {
+    const f = (s: "single" | "mfj" | "hoh") => estimateAnnualTaxes({ gross: 91_000, pretax: 0 }, s).federal;
+    expect(f("hoh")).toBeLessThan(f("single"));
+    expect(f("hoh")).toBeGreaterThan(f("mfj"));
+  });
+
+  it("two jobs on one joint return: federal tax is figured together and split by pay", () => {
+    const a = { gross: 90_000, pretax: 0 };
+    const b = { gross: 30_000, pretax: 0 };
+    const fa = estimateAnnualTaxes(a, "mfj", [b]).federal;
+    const fb = estimateAnnualTaxes(b, "mfj", [a]).federal;
+    const together = federalIncomeTax(120_000 - 31_500, "mfj");
+    expect(fa + fb).toBeCloseTo(together, 6);
+    expect(fa / (fa + fb)).toBeCloseTo(0.75, 9);
+  });
+
+  it("Social Security and Medicare don't depend on filing status or other jobs", () => {
+    const x = estimateAnnualTaxes({ gross: 91_000, pretax: 5_000 }, "mfj", [{ gross: 50_000, pretax: 0 }]);
+    expect(x.socialSecurity).toBeCloseTo(91_000 * 0.062, 6);
+    expect(x.medicare).toBeCloseTo(91_000 * 0.0145, 6);
   });
 });

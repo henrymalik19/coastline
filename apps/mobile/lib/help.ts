@@ -3,6 +3,8 @@ export const HELP = {
   age: "Your age today. The plan runs month by month from now until your retirement age.",
   retireAge:
     "The age you'd like work to be optional. It doesn't have to be when you stop. Coast FI is the point where your savings alone can grow into enough by this age.",
+  filingStatus:
+    "How you file your taxes. Married couples filing together pay noticeably less tax on the same income, so this makes the paycheck tax estimate closer. It doesn't change anything you've typed from a pay stub.",
   healthcare:
     "At work, your employer usually pays most of your health insurance. If you stop working before 65, you'll buy your own until Medicare (government health insurance) starts at 65. That often costs $500–$1,500+ a month per person, so it's added to your retirement spending. Retiring at 65 or later? Leave this at $0.",
   currentInvest:

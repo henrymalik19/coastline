@@ -136,7 +136,11 @@ export type PlanState = {
   adjustments?: Adjustment[];
   /** Emergency mode (optional; missing or inactive = normal plan). */
   emergency?: EmergencyMode;
+  /** Tax filing status, used for paycheck tax estimates. Missing = single. */
+  filingStatus?: FilingStatus;
 };
+
+export type FilingStatus = "single" | "mfj" | "hoh";
 
 /**
  * Emergency mode: from the start of the plan through `until` (inclusive), the waterfall is

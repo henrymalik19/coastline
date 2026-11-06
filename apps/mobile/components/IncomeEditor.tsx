@@ -5,7 +5,7 @@ import { money, percent } from "../lib/format";
 import { HELP } from "../lib/help";
 import { DEDUCTION_KINDS, paycheck, withAutoNet } from "../lib/paycheck";
 import { MATCH_PRESETS } from "../lib/presets";
-import { estimatePaycheckTaxes } from "../lib/tax";
+import { estimatePaycheckTaxes, FILING_LABELS } from "../lib/tax";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, DateField, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "./form";
 import { AddChip, MasterDetail } from "./MasterDetail";
@@ -127,8 +127,17 @@ function SubHeading({ children, right }: { children: string; right?: ReactNode }
 function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean; change: (p: Partial<Income>) => void; marginalTax: number }) {
   const t = useTheme();
   const [custom, setCustom] = useState(false);
+  const { state } = usePlan();
   const pay = paycheck(inc);
   const P = PERIODS[inc.freq];
+  const status = state.filingStatus ?? "single";
+  // other jobs in the plan go on the same tax return (joint filers, or one person with two jobs)
+  const otherJobs = state.incomes
+    .filter((j) => j.id !== inc.id && (j.kind ?? "job") === "job" && (j.gross ?? 0) > 0)
+    .map((j) => {
+      const p = paycheck(j);
+      return { gross: p.gross * PERIODS[j.freq], pretax: (p.k401 + p.pretaxDeductions) * PERIODS[j.freq] };
+    });
   const taxes = inc.taxes ?? { federal: 0, state: 0, socialSecurity: 0, medicare: 0 };
   const setTax = (k: keyof PayTaxes, v: number) => change({ taxes: { ...taxes, [k]: v } });
   const deductions = inc.deductions ?? [];
@@ -236,10 +245,13 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
               title="Fill in an estimate"
               tone="ghost"
               disabled={!((inc.gross ?? 0) > 0)}
-              onPress={() => change({ taxes: estimatePaycheckTaxes(inc.gross ?? 0, P, pay.k401 + pay.pretaxDeductions) })}
+              onPress={() => change({ taxes: estimatePaycheckTaxes(inc.gross ?? 0, P, pay.k401 + pay.pretaxDeductions, status, otherJobs) })}
             />
           </View>
-          <Text style={[type.caption, { color: t.text3 }]}>Copy these from a pay stub, per paycheck. The estimate assumes a single filer and about 4% state tax.</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>
+            Copy these from a pay stub, per paycheck. The estimate uses {FILING_LABELS[status].toLowerCase()} (change it in About you)
+            {otherJobs.length ? ", counts your other job income on the same return," : ""} and about 4% state tax.
+          </Text>
           {(
             [
               ["federal", "Federal income tax"],

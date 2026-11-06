@@ -124,6 +124,7 @@ export const PlanStateSchema = z.object({
   whatif: WhatIfSchema,
   adjustments: z.array(AdjustmentSchema).optional(),
   emergency: EmergencyModeSchema.optional(),
+  filingStatus: z.enum(["single", "mfj", "hoh"]).optional(),
 });
 
 /** A monthly check-in (its own table in Phase 3). */

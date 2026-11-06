@@ -120,6 +120,14 @@ function Profile() {
             <FieldRow key="ret" label="Age you'd like to retire" hint="When work becomes optional" info={HELP.retireAge}>
               <NumberInput kind="int" label="Retirement age" value={state.retireAge} max={100} onChange={(v) => update((p) => { p.retireAge = v; })} />
             </FieldRow>,
+            <FieldRow key="fs" label="How you file taxes" info={HELP.filingStatus} stacked>
+  <Segmented
+    label="Tax filing status"
+    options={[{ value: "single", label: "Single" }, { value: "mfj", label: "Married, filing jointly" }, { value: "hoh", label: "Head of household" }]}
+    value={state.filingStatus ?? "single"}
+    onChange={(v) => update((p) => { p.filingStatus = v; })}
+  />
+</FieldRow>,
             <View key="hc">
 <FieldRow
                             label="Health insurance until 65"
