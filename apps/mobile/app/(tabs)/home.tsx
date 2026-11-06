@@ -6,7 +6,7 @@ import { ProgressRing } from "../../components/ProgressRing";
 import { Card, Divider, Pill, Screen, SectionLabel, Stat, type Tone } from "../../components/ui";
 import { ageLabel, money, monthLabel, percent } from "../../lib/format";
 import { useLayout } from "../../lib/layout";
-import { monthTodos, usePlan, type Todo } from "../../lib/plan";
+import { monthTodos, shortfallText, usePlan, type Todo } from "../../lib/plan";
 import { monthKey, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
 
@@ -57,6 +57,11 @@ export default function Home() {
       <View style={{ marginTop: space.lg, gap: space.sm }}>
         <Row label="Invested today" value={money(d.invested)} />
         <Row label="Coast number today" value={money(o.coastNow)} />
+        <Row
+          label="Cash cushion"
+          value={Number.isFinite(d.emergencyMonths) ? `${d.emergencyMonths.toFixed(1)} months of expenses` : "No monthly expenses set"}
+          tone={Number.isFinite(d.emergencyMonths) && d.emergencyMonths < 3 ? t.warn : undefined}
+        />
       </View>
     </Card>
   );
@@ -98,7 +103,7 @@ export default function Home() {
         </View>
       ))}
       {m0.shortfall > 0.5 ? (
-        <Text style={[type.caption, { color: t.bad, padding: space.lg }]}>Short {money(m0.shortfall)} this month, covered from cash.</Text>
+        <Text style={[type.caption, { color: t.bad, padding: space.lg }]}>{shortfallText(m0)}</Text>
       ) : null}
     </Card>
   );
@@ -135,12 +140,12 @@ export default function Home() {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, tone }: { label: string; value: string; tone?: string }) {
   const t = useTheme();
   return (
     <View style={styles.between}>
       <Text style={[type.label, { color: t.text2 }]}>{label}</Text>
-      <Text style={[type.label, { color: t.text, fontVariant: ["tabular-nums"] }]}>{value}</Text>
+      <Text style={[type.label, { color: tone ?? t.text, fontVariant: ["tabular-nums"], fontWeight: tone ? "700" : undefined }]}>{value}</Text>
     </View>
   );
 }

@@ -1,13 +1,14 @@
 import { BUCKET_LABELS, BUCKETS, type MonthRow, type PlanState } from "@coastfi/engine";
 import { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { AdjustmentsCard, KIND_TEXT } from "../../components/AdjustmentsCard";
 import { Button } from "../../components/form";
 import { Legend, StackedBars, type BarDatum } from "../../components/StackedBars";
 import { Card, Divider, Pill, Screen, SectionLabel } from "../../components/ui";
 import { bucketValues, total } from "../../lib/chart";
 import { money, monthLabel } from "../../lib/format";
 import { useLayout } from "../../lib/layout";
-import { monthTodos, usePlan } from "../../lib/plan";
+import { monthTodos, shortfallText, usePlan } from "../../lib/plan";
 import { radius, space, type, useTheme, type Theme } from "../../lib/theme";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -17,7 +18,8 @@ type Seg = { key: string; label: string; value: number; color: string };
 /** Where a month's take-home goes (pre-tax payroll is already out of take-home). */
 function splits(m: MonthRow, t: Theme, mt: number): Seg[] {
   const a = m.alloc;
-  const segs: Seg[] = [{ key: "spend", label: "Budget + debt minimums", value: m.expenses, color: t.track }];
+  const segs: Seg[] = [{ key: "spend", label: "Budget + debt minimums", value: m.expenses - m.adjExpense, color: t.track }];
+  if (m.adjExpense > 0.5) segs.push({ key: "oneoff", label: "One-off expenses", value: m.adjExpense, color: t.warn });
   const matchTH = a.k401TakeHome - a.k401Step;
   if (matchTH > 0.5) segs.push({ key: "match", label: `401(k) raise to full match (+${money(a.matchGain)} match)`, value: matchTH, color: t.series.k401 });
   if (a.k401Step > 0.5) segs.push({ key: "k401", label: `Extra 401(k) (${money(a.k401Step / (1 - mt))} pre-tax)`, value: a.k401Step, color: t.series.k401 });
@@ -36,6 +38,8 @@ function MonthCard({ m, title, start, state }: { m: MonthRow; title: string; sta
   const segs = splits(m, t, state.plan.marginalTax);
   const sum = segs.reduce((a, s) => a + s.value, 0) || 1;
   const todos = monthTodos(m, t, state.plan.marginalTax);
+  const key = `${m.y}-${String(m.mo + 1).padStart(2, "0")}`;
+  const oneOffs = (state.adjustments ?? []).filter((a) => a.month === key);
   const checks = state.incomes
     .map((inc, i) => {
       const c = m.checks[i] ?? 0;
@@ -54,6 +58,11 @@ function MonthCard({ m, title, start, state }: { m: MonthRow; title: string; sta
       <View>
         <Text style={[type.display, { color: t.text, fontSize: 30, lineHeight: 36, fontVariant: ["tabular-nums"] }]}>{money(m.income)}</Text>
         <Text style={[type.caption, { color: t.text3 }]}>Take-home · paychecks: {checks || "none"}</Text>
+        {oneOffs.map((a) => (
+          <Text key={a.id} style={[type.caption, { color: a.kind === "incomeGain" ? t.good : t.bad, fontWeight: "600" }]}>
+            One-off: {a.kind === "incomeGain" ? "+" : "−"}{money(a.amount)} · {a.note || KIND_TEXT[a.kind].label.toLowerCase()}
+          </Text>
+        ))}
       </View>
 
       {/* the split, as one bar with 2px gaps */}
@@ -85,7 +94,7 @@ function MonthCard({ m, title, start, state }: { m: MonthRow; title: string; sta
       ) : (
         <Text style={[type.caption, { color: t.text3 }]}>Nothing extra this month.</Text>
       )}
-      {m.shortfall > 0.5 ? <Text style={[type.caption, { color: t.bad }]}>Short {money(m.shortfall)}, covered from cash.</Text> : null}
+      {m.shortfall > 0.5 ? <Text style={[type.caption, { color: t.bad }]}>{shortfallText(m)}</Text> : null}
       <Text style={[type.caption, { color: t.text3 }]}>
         After this month: cash {money(m.cash)} · debt {money(m.debtTotal)}
       </Text>
@@ -118,6 +127,8 @@ export default function Monthly() {
         {months[0] ? <MonthCard m={months[0]} title="This month" start={start} state={state} /> : null}
         {months[1] ? <MonthCard m={months[1]} title="Next month" start={start} state={state} /> : null}
       </View>
+
+      <AdjustmentsCard start={start} />
 
       <Card style={{ gap: space.md }}>
         <View style={styles.between}>

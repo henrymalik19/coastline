@@ -18,6 +18,17 @@ export function usePlan(): { state: PlanState; result: RunResult; start: Date } 
   return { state, result, start };
 }
 
+/** Plain-English line for a month that comes up short. */
+export function shortfallText(m: MonthRow): string {
+  const fromCash = m.shortfall - m.borrowed;
+  if (m.borrowed > 0.5) {
+    return fromCash > 0.5
+      ? `Short ${money(m.shortfall)}: ${money(fromCash)} from cash, ${money(m.borrowed)} on a credit card. The next months rebuild your cash and pay off the card, in your plan's order.`
+      : `Short ${money(m.shortfall)}, all on a credit card (no cash left). The next months pay it off in your plan's order.`;
+  }
+  return `Short ${money(m.shortfall)} this month, covered from your cash. The plan refills it.`;
+}
+
 export type Todo = { key: string; title: string; detail?: string; amount?: number; color: string };
 
 /** A month's actions, in plan order. Formatting only; amounts come from the engine. */

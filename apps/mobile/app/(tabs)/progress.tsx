@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Button, NumberInput } from "../../components/form";
@@ -7,6 +8,7 @@ import { Slider } from "../../components/Slider";
 import { Legend } from "../../components/StackedBars";
 import { Card, Divider, Pill, Screen, SectionLabel } from "../../components/ui";
 import { badgeList, streakInfo } from "../../lib/badges";
+import { debtLabel } from "../../lib/debts";
 import { money, monthLabel, percent } from "../../lib/format";
 import { useLayout } from "../../lib/layout";
 import { usePlan } from "../../lib/plan";
@@ -20,12 +22,14 @@ export default function Progress() {
   const t = useTheme();
   const { twoColumn, statColumns } = useLayout();
   const { state, result: o, start } = usePlan();
+  const router = useRouter();
   const update = useStore((s) => s.update);
   const checkins = useStore((s) => s.checkins);
   const logCheckin = useStore((s) => s.logCheckin);
   const [sel, setSel] = useState<number | null>(null);
   const [table, setTable] = useState(false);
   const [msg, setMsg] = useState("");
+  const [spent, setSpent] = useState(0);
   const d = o.d;
   const w = state.whatif;
 
@@ -165,6 +169,17 @@ export default function Progress() {
     </Card>
   );
 
+  // spending vs. budget over the last check-ins that recorded it: nudge if off by more than 10%
+  const withSpend = checkins.filter((c) => c.spent !== undefined).slice(-3);
+  const avgSpent = withSpend.length ? withSpend.reduce((a, c) => a + c.spent!, 0) / withSpend.length : 0;
+  const budgetHint =
+    withSpend.length >= 2 && d.monthlyExpenses > 0 && Math.abs(avgSpent - d.monthlyExpenses) / d.monthlyExpenses > 0.1
+      ? { n: withSpend.length, avg: avgSpent }
+      : null;
+  // gentle note when the most recent check-in came in under last month's projection
+  const lastTwo = checkins.slice(-2);
+  const latestBehind = lastTwo.length === 2 && lastTwo[1]!.invested < lastTwo[0]!.expectedNextInvested - 1;
+
   /* ---------- check-in ---------- */
   const log = () => {
     const key = monthKey(start);
@@ -177,6 +192,7 @@ export default function Progress() {
       debt: d.debtTotal,
       netWorth: d.invested + d.bal.cash + state.goals.reduce((a, g) => a + (+g.saved || 0), 0) - d.debtTotal,
       expectedNextInvested: o.projSeries.length > 1 ? o.projSeries[1]! : d.invested,
+      ...(spent > 0 ? { spent, budget: d.monthlyExpenses } : {}),
     });
     const after = streakInfo([...checkins.filter((c) => c.month !== key), { month: key, invested: 0, cash: 0, debt: 0, netWorth: 0, expectedNextInvested: 0 }], start).n;
     setMsg(after > before ? `Checked in. Streak: ${after} month${after > 1 ? "s" : ""} 🔥` : "Updated this month's check-in.");
@@ -196,9 +212,9 @@ export default function Progress() {
       {state.debts.map((x, i) => (
         <View key={x.id} style={styles.ciRow}>
           <Text style={[type.body, { color: t.text, flex: 1 }]} numberOfLines={1}>
-            {x.name} <Text style={[type.caption, { color: t.text3 }]}>debt</Text>
+            {debtLabel(x)} <Text style={[type.caption, { color: t.text3 }]}>debt</Text>
           </Text>
-          <NumberInput kind="money" label={`${x.name} balance`} value={x.balance} min={0} onChange={(v) => update((p) => { p.debts[i]!.balance = v; })} />
+          <NumberInput kind="money" label={`${debtLabel(x)} balance`} value={x.balance} min={0} onChange={(v) => update((p) => { p.debts[i]!.balance = v; })} />
         </View>
       ))}
       {state.goals.map((g, i) => (
@@ -209,6 +225,17 @@ export default function Progress() {
           <NumberInput kind="money" label={`${g.name} saved`} value={g.saved} min={0} onChange={(v) => update((p) => { p.goals[i]!.saved = v; })} />
         </View>
       ))}
+      <View style={[styles.spentBox, { backgroundColor: t.surface2 }]}>
+        <View style={styles.ciRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[type.body, { color: t.text }]}>About how much did you spend this month?</Text>
+            <Text style={[type.caption, { color: t.text3 }]}>
+              Optional. Bills, groceries, fun, debt minimums: everything except saving and investing. Your budget is {money(d.monthlyExpenses)}.
+            </Text>
+          </View>
+          <NumberInput kind="money" label="About how much you spent this month" value={spent} onChange={setSpent} step={100} />
+        </View>
+      </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, marginTop: space.sm, flexWrap: "wrap" }}>
         <Button title={streak.thisMonth ? "Update check-in" : "Log check-in"} tone="primary" onPress={log} />
         {msg ? <Text role="status" style={[type.label, { color: t.good }]}>{msg}</Text> : null}
@@ -221,29 +248,49 @@ export default function Progress() {
       <SectionLabel>History vs. plan</SectionLabel>
       {checkins.length ? (
         <>
+          {budgetHint ? (
+            <View style={[styles.hint, { backgroundColor: t.warnSoft }]}>
+              <Text style={[type.caption, { color: t.text, flex: 1 }]}>
+                Your last {budgetHint.n} check-ins averaged <Text style={{ fontWeight: "700" }}>{money(budgetHint.avg)}</Text> of spending vs. your{" "}
+                <Text style={{ fontWeight: "700" }}>{money(d.monthlyExpenses)}</Text> budget. A realistic budget makes the whole plan more accurate.
+              </Text>
+              <Button title="Update budget" onPress={() => router.push("/settings/budget")} />
+            </View>
+          ) : null}
           <View style={[styles.tr, { borderBottomColor: t.border }]}>
             <Text style={[styles.th, { flex: 1, color: t.text3 }]}>Month</Text>
             <Text style={[styles.th, { flex: 1, textAlign: "right", color: t.text3 }]}>Invested</Text>
-            <Text style={[styles.th, { flex: 1, textAlign: "right", color: t.text3 }]}>Net worth</Text>
+            <Text style={[styles.th, { flex: 1, textAlign: "right", color: t.text3 }]}>Spending</Text>
             <Text style={[styles.th, { flex: 1.2, textAlign: "right", color: t.text3 }]}>vs. plan</Text>
           </View>
           {[...checkins].reverse().map((c) => {
             const i = checkins.findIndex((x) => x.month === c.month);
             const prev = checkins[i - 1];
             const diff = prev ? c.invested - prev.expectedNextInvested : null;
+            const over = c.spent !== undefined && c.budget !== undefined ? c.spent - c.budget : null;
             return (
               <View key={c.month} style={[styles.tr, { borderBottomColor: t.border }]}>
                 <Text style={[styles.td, { flex: 1, color: t.text }]}>{MON[+c.month.slice(5) - 1]} {c.month.slice(0, 4)}</Text>
                 <Text style={[styles.td, { flex: 1, textAlign: "right", color: t.text2 }]}>{money(c.invested)}</Text>
-                <Text style={[styles.td, { flex: 1, textAlign: "right", color: t.text2 }]}>{money(c.netWorth)}</Text>
-                <Text style={[styles.td, { flex: 1.2, textAlign: "right", color: diff === null ? t.text3 : diff >= 0 ? t.good : t.warn, fontWeight: "600" }]}>
-                  {diff === null ? "–" : `${diff >= 0 ? "▲ +" : "▼ "}${money(diff)}`}
+                <Text style={[styles.td, { flex: 1, textAlign: "right", color: over === null ? t.text3 : over > 0 ? t.warn : t.good }]}>
+                  {over === null ? "–" : over > 0 ? `${money(over)} over` : `${money(-over)} under`}
+                </Text>
+                <Text style={[styles.td, { flex: 1.2, textAlign: "right", color: diff === null ? t.text3 : diff >= 0 ? t.good : t.text2, fontWeight: "600" }]}>
+                  {diff === null ? "–" : diff >= 0 ? `▲ ${money(diff)} ahead` : `${money(-diff)} behind`}
                 </Text>
               </View>
             );
           })}
+          {latestBehind ? (
+            <View style={[styles.hint, { backgroundColor: t.accentSoft }]}>
+              <Text style={[type.caption, { color: t.text, flex: 1 }]}>
+                <Text style={{ fontWeight: "700" }}>A bit behind last month's plan. That's normal.</Text> Markets swing and life happens. Your plan already
+                adjusts from your real balances{d.emergencyMonths < (state.plan.efMonths || 3) ? ", starting by refilling your emergency fund" : ""}. Keep checking in.
+              </Text>
+            </View>
+          ) : null}
           <Text style={[type.caption, { color: t.text3 }]}>
-            "vs. plan" compares what you actually have invested with what last month's projection expected. Markets swing, so one month below plan is normal.
+            "vs. plan" compares what you have invested with what last month's projection expected. "Spending" compares what you told us you spent with your budget.
           </Text>
         </>
       ) : (
@@ -333,5 +380,7 @@ const styles = StyleSheet.create({
   td: { ...type.caption, paddingVertical: 8, paddingHorizontal: 6, fontVariant: ["tabular-nums"] },
   c0: { width: 60 },
   cn: { width: 110, textAlign: "right" },
+  spentBox: { borderRadius: radius.md, padding: space.md, marginTop: space.xs },
+  hint: { flexDirection: "row", alignItems: "center", gap: space.md, borderRadius: radius.md, padding: space.md, flexWrap: "wrap" },
   badge: { flex: 1, borderWidth: 1, borderRadius: radius.md, padding: space.md, gap: 3, minWidth: 0 },
 });

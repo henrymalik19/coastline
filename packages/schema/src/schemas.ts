@@ -124,6 +124,10 @@ export const CheckinSchema = z.object({
   debt: z.number().finite(),
   netWorth: z.number().finite(),
   expectedNextInvested: z.number().finite(),
+  /** Roughly what was spent that month (optional), compared with the budget. */
+  spent: z.number().finite().min(0).optional(),
+  /** The monthly budget when the check-in was logged, for the comparison. */
+  budget: z.number().finite().min(0).optional(),
 });
 export type Checkin = z.infer<typeof CheckinSchema>;
 
