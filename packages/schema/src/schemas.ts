@@ -12,6 +12,7 @@ const nonNeg = z.number().finite().min(0);
 const rate = z.number().finite();
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const id = z.string().min(1);
+const MONTH_RE = /^[0-9]{4}-[0-9]{2}$/;
 
 export const PayFreqSchema = z.enum(["weekly", "biweekly", "semimonthly", "monthly"]);
 
@@ -36,7 +37,7 @@ export const IncomeSchema = z.object({
   fullMatch: z.boolean().optional(),
 });
 
-export const BudgetItemSchema = z.object({ id, name: z.string(), amount: money, inRetirement: z.boolean(), group: z.string().optional() });
+export const BudgetItemSchema = z.object({ id, name: z.string(), amount: money, inRetirement: z.boolean(), group: z.string().optional(), essential: z.boolean().optional() });
 export const AccountTypeSchema = z.enum(["pretax", "roth", "taxable", "hsa", "cash"]);
 export const AccountSchema = z.object({
   id,
@@ -89,6 +90,13 @@ export const AdjustmentSchema = z.object({
   note: z.string(),
 });
 
+export const EmergencyModeSchema = z.object({
+  active: z.boolean(),
+  until: z.string().regex(MONTH_RE, "Use YYYY-MM"),
+  essentialsOnly: z.boolean(),
+  pause401k: z.boolean(),
+});
+
 export const WhatIfSchema = z.object({ extra: money, retDelta: rate, spendDelta: rate });
 
 export const PlanStateSchema = z.object({
@@ -112,6 +120,7 @@ export const PlanStateSchema = z.object({
   contribGrowth: rate,
   whatif: WhatIfSchema,
   adjustments: z.array(AdjustmentSchema).optional(),
+  emergency: EmergencyModeSchema.optional(),
 });
 
 /** A monthly check-in (its own table in Phase 3). */

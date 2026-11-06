@@ -86,3 +86,13 @@ describe("one-off adjustments", () => {
     expect(parsePlanState(JSON.stringify(s)).adjustments).toBeUndefined();
   });
 });
+
+describe("emergency mode settings", () => {
+  it("round-trip; bad end month rejected", () => {
+    const s = defaultPlanState();
+    s.emergency = { active: true, until: "2027-02", essentialsOnly: true, pause401k: false };
+    s.budget.push({ id: "b", name: "Streaming", amount: 20, inRetirement: true, essential: false });
+    expect(parsePlanState(JSON.stringify(s))).toEqual(s);
+    expect(() => parsePlanState({ ...s, emergency: { ...s.emergency, until: "Feb 2027" } })).toThrow(PlanStateError);
+  });
+});

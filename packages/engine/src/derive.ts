@@ -20,6 +20,8 @@ export function derive(s: PlanState, startDate: Date): Derived {
   const budgetTotal = sum(budget.map((b) => b.amount));
   const debtMins = sum((s.debts ?? []).filter((d) => num(d.balance) > 0).map((d) => d.minPayment));
   const monthlyExpenses = budgetTotal + debtMins;
+  // essentials: items not explicitly marked non-essential, plus debt minimums
+  const essentialExpenses = sum(budget.filter((b) => b.essential !== false).map((b) => b.amount)) + debtMins;
 
   const retireMonthly =
     (sum(budget.filter((b) => b.inRetirement).map((b) => b.amount)) + num(s.healthcare)) * (1 + (w.spendDelta || 0));
@@ -49,6 +51,8 @@ export function derive(s: PlanState, startDate: Date): Derived {
     retireMonthly,
     retireAnnual: retireMonthly * 12,
     emergencyMonths: monthlyExpenses > 0 ? bal.cash / monthlyExpenses : Infinity,
+    essentialExpenses,
+    runwayEssential: essentialExpenses > 0 ? bal.cash / essentialExpenses : Infinity,
     debtTotal: sum((s.debts ?? []).map((d) => d.balance)),
     matchLeftPerYear: sum(incomes.map((i) => i.gapMatch * PERIODS[i.freq])),
   };

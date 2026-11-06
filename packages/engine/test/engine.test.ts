@@ -291,3 +291,66 @@ describe("one-off adjustments and short months", () => {
     expect(dec.minPay).toBeCloseTo(Math.max(25, 1000 * (1 + 0.22 / 12) * 0.02), 6);
   });
 });
+
+describe("emergency mode", () => {
+  // Nov 2026 start; $5,000 take-home; budget $2,000 essential + $1,000 non-essential; payroll 401(k) $400 + $200 match
+  const base = (emergency?: PlanState["emergency"]) =>
+    blank({
+      age: 32, retireAge: 60,
+      incomes: [{ id: "i", name: "Job", freq: "monthly", net: 5000, matchMode: "usd", pretax: 400, match: 200 }],
+      budget: [
+        { id: "rent", name: "Rent", amount: 2000, inRetirement: true },
+        { id: "fun", name: "Fun", amount: 1000, inRetirement: true, essential: false },
+      ],
+      accounts: [{ id: "c", name: "Cash", type: "cash", balance: 1000 }],
+      limits: DEFAULT_LIMITS,
+      plan: { ...blank().plan, marginalTax: 0.2, steps: ["starterEF", "taxable"], starterEF: 500 },
+      emergency,
+    });
+  const months = (s: PlanState) => simulatePlan(s, derive(s, START)).months;
+
+  it("off: the normal plan runs", () => {
+    const m = months(base())[0]!;
+    expect(m.emergency).toBe(false);
+    expect(m.alloc.taxable).toBe(2000);
+  });
+
+  it("on: everything left over stays in cash through the end month, then the plan resumes", () => {
+    const ms = months(base({ active: true, until: "2026-12", essentialsOnly: false, pause401k: false }));
+    for (const m of ms.slice(0, 2)) {
+      expect(m.emergency).toBe(true);
+      expect(m.alloc.taxable + m.alloc.ira + m.alloc.debt + m.alloc.goals + m.alloc.k401 + m.alloc.ef).toBe(0);
+      expect(m.alloc.leftover).toBe(2000);
+    }
+    expect(ms[1]!.cash).toBe(5000);
+    expect(ms[2]!.emergency).toBe(false);
+    expect(ms[2]!.alloc.taxable).toBe(2000);
+  });
+
+  it("cutting to essentials drops non-essential items from expenses", () => {
+    const m = months(base({ active: true, until: "2026-11", essentialsOnly: true, pause401k: false }))[0]!;
+    expect(m.expenses).toBe(2000);
+    expect(m.alloc.leftover).toBe(3000);
+  });
+
+  it("pausing the 401(k) returns it to take-home after tax and stops the match", () => {
+    const m = months(base({ active: true, until: "2026-11", essentialsOnly: false, pause401k: true }))[0]!;
+    expect(m.payPre).toBe(0);
+    expect(m.payMatch).toBe(0);
+    expect(m.income).toBeCloseTo(5000 + 400 * 0.8, 6);
+  });
+
+  it("runway counts essentials and debt minimums", () => {
+    const d = derive(base(), START);
+    expect(d.essentialExpenses).toBe(2000);
+    expect(d.runwayEssential).toBeCloseTo(0.5, 9);
+    expect(d.emergencyMonths).toBeCloseTo(1000 / 3000, 9);
+  });
+
+  it("inactive emergency settings change nothing", () => {
+    const off = run(base(), START);
+    const inactive = run(base({ active: false, until: "2027-06", essentialsOnly: true, pause401k: true }), START);
+    expect(inactive.fire).toBe(off.fire);
+    expect(inactive.projectedFinal).toBe(off.projectedFinal);
+  });
+});

@@ -39,6 +39,8 @@ export type BudgetItem = {
   inRetirement: boolean;
   /** Category the item is shown under ("Housing", "Food"…). Display only. */
   group?: string;
+  /** Kept when emergency mode cuts spending to essentials. Missing = essential (nothing is cut by surprise). */
+  essential?: boolean;
 };
 export type AccountType = "pretax" | "roth" | "taxable" | "hsa" | "cash";
 export type Account = { id: string; name: string; type: AccountType; balance: number; plaidAccountId?: string };
@@ -118,6 +120,22 @@ export type PlanState = {
   whatif: WhatIf;
   /** One-off month changes (optional; missing = none). */
   adjustments?: Adjustment[];
+  /** Emergency mode (optional; missing or inactive = normal plan). */
+  emergency?: EmergencyMode;
+};
+
+/**
+ * Emergency mode: from the start of the plan through `until` (inclusive), the waterfall is
+ * paused and everything left over stays in cash. Debt minimums are still paid.
+ */
+export type EmergencyMode = {
+  active: boolean;
+  /** Last month in emergency mode, "YYYY-MM". */
+  until: string;
+  /** Spend only budget items marked essential during emergency months. */
+  essentialsOnly: boolean;
+  /** Stop payroll 401(k) contributions (they come back as take-home after tax; the match stops too). */
+  pause401k: boolean;
 };
 
 /* ---------- engine outputs ---------- */
@@ -160,6 +178,10 @@ export type Derived = {
   retireMonthly: number;
   retireAnnual: number;
   emergencyMonths: number;
+  /** Monthly cost of essential budget items + debt minimums. */
+  essentialExpenses: number;
+  /** Months your cash would cover essentials with no income at all. */
+  runwayEssential: number;
   debtTotal: number;
   matchLeftPerYear: number;
 };
@@ -202,6 +224,8 @@ export type MonthRow = {
   shortfall: number;
   /** Part of the shortfall that cash couldn't cover, added to a credit card balance. */
   borrowed: number;
+  /** This month is in emergency mode (waterfall paused, leftover kept as cash). */
+  emergency: boolean;
   alloc: Alloc;
   cash: number;
   debtTotal: number;

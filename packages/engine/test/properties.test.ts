@@ -80,8 +80,13 @@ function expectParity(input: PlanState) {
     for (const k of ["payCut", "adjIncome", "adjExpense", "borrowed"]) {
       expect(m[k]).toBe(0);
       delete m[k];
-    }
+    }    expect(m.emergency).toBe(false);
+    delete m.emergency;
   }
+  // derived numbers new in the port
+  const od = ours.d as Record<string, unknown>;
+  delete od.essentialExpenses;
+  delete od.runwayEssential;
   const theirs = ref.run(structuredClone(s), START) as AnyRun;
   const strip = ({ whenBalance: _a, whenCoastPct: _b, ...rest }: AnyRun) => rest;
   expect(strip(ours)).toEqual(strip(theirs));

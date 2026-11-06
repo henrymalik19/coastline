@@ -49,6 +49,10 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   const goals = (s.goals ?? []).map((g) => ({ ...g, saved: num(g.saved), target: num(g.target) }));
 
   // one-off adjustments, by "YYYY-MM"
+  // emergency mode: waterfall paused (and optionally essentials-only spending / no payroll 401(k)) through 'until'
+  const em = s.emergency?.active ? s.emergency : null;
+  const essentialBudget = sum((s.budget ?? []).filter((b) => b.essential !== false).map((b) => b.amount));
+
   const adjByMonth = new Map<string, Adjustment[]>();
   for (const a of s.adjustments ?? []) adjByMonth.set(a.month, [...(adjByMonth.get(a.month) ?? []), a]);
   // a short month beyond your cash goes on a card at your card's rate (highest card APR, else a typical 22%)
@@ -118,6 +122,14 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       payPre = payRoom;
       income += payCut * (1 - mt);
     }
+    const monthStr = y + "-" + String(mo + 1).padStart(2, "0");
+    const inEmergency = !!em && monthStr <= em.until;
+    if (inEmergency && em!.pause401k && payPre > 0) {
+      // stopping payroll 401(k) puts it back in the paycheck (after tax); the match stops with it
+      income += payPre * (1 - mt);
+      payPre = 0;
+      payMatch = 0;
+    }
     ytd.k401 += payPre;
 
     // one-off adjustments for this calendar month
@@ -144,7 +156,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       dt.balance -= pay;
       minPay += pay;
     }
-    const expenses = d.budgetTotal + minPay + adjExpense;
+    const expenses = (inEmergency && em!.essentialsOnly ? essentialBudget : d.budgetTotal) + minPay + adjExpense;
     let avail = income - expenses + extraMonthly;
     const alloc: Alloc = {
       k401: 0, k401TakeHome: 0, k401Step: 0, matchGain: 0,
@@ -189,7 +201,9 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       }
     };
 
-    if (mode === "current") {
+    if (inEmergency) {
+      // emergency: keep everything left over as cash (debt minimums were already paid)
+    } else if (mode === "current") {
       let inv = Math.min(avail, num(s.currentInvestMonthly) + extraMonthly);
       const toIra = Math.min(inv, capIra);
       alloc.ira += toIra;
@@ -283,7 +297,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     }
 
     out.push({
-      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payCut, adjIncome, adjExpense, shortfall, borrowed,
+      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency,
       alloc,
       cash,
       debtTotal: sum(debts.map((x) => x.balance)),
