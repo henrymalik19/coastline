@@ -1,9 +1,13 @@
-import { Text, View } from "react-native";
+import { ComingSoon } from "../../components/ComingSoon";
 
 export default function Progress() {
   return (
-    <View style={{ padding: 16 }}>
-      <Text>Progress: coming in Phase 2.</Text>
-    </View>
+    <ComingSoon
+      title="Progress"
+      subtitle="Track it, and keep the streak"
+      icon="trend"
+      heading="See how far you have come"
+      points={["Projection with realistic ranges, not one line", "What-if sliders for savings, returns and spending", "Monthly check-ins, streaks and badges"]}
+    />
   );
 }
