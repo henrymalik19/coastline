@@ -69,10 +69,10 @@ export const useStore = create<AppState>()(
         try {
           raw = JSON.parse(text);
         } catch {
-          throw new Error("That isn't a Coast FI backup file.");
+          throw new Error("That isn't a Coastline backup file.");
         }
         const r = raw as { app?: string; plan?: unknown; checkins?: unknown };
-        if (!r || typeof r !== "object" || r.app !== "coastfi" || !r.plan) throw new Error("That isn't a Coast FI backup file.");
+        if (!r || typeof r !== "object" || r.app !== "coastfi" || !r.plan) throw new Error("That isn't a Coastline backup file.");
         const plan = PlanStateSchema.safeParse(r.plan);
         if (!plan.success) throw new Error("The backup is damaged or from an incompatible version.");
         const checkins = z.array(CheckinSchema).safeParse(r.checkins ?? []);

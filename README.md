@@ -1,4 +1,4 @@
-# Coast FI
+# Coastline
 
 See [PLAN.md](PLAN.md) for the full build plan.
 

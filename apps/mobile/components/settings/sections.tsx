@@ -393,12 +393,12 @@ function DataSection() {
       const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
       const a = document.createElement("a");
       a.href = url;
-      a.download = `coastfi-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `coastline-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
       setMsg({ ok: true, text: "Downloaded your backup file." });
     } else {
-      await Share.share({ message: json, title: "Coast FI backup" });
+      await Share.share({ message: json, title: "Coastline backup" });
     }
   };
   const doImport = async () => {
@@ -409,7 +409,7 @@ function DataSection() {
       setText("");
       setMsg({ ok: true, text: "Restored. Your plan has been updated." });
     } catch (e) {
-      setMsg({ ok: false, text: e instanceof Error && e.message ? `Couldn't restore: ${e.message}` : "That doesn't look like a Coast FI backup." });
+      setMsg({ ok: false, text: e instanceof Error && e.message ? `Couldn't restore: ${e.message}` : "That doesn't look like a Coastline backup." });
     }
   };
 
@@ -424,11 +424,11 @@ function DataSection() {
       <Group title="Restore">
         <View style={{ paddingVertical: space.sm, gap: space.md }}>
           <TextInput
-            accessibilityLabel="Paste a Coast FI backup"
+            accessibilityLabel="Paste a Coastline backup"
             multiline
             value={text}
             onChangeText={setText}
-            placeholder="Paste the contents of a Coast FI backup file here"
+            placeholder="Paste the contents of a Coastline backup file here"
             placeholderTextColor={t.text3}
             style={[styles.textarea, { color: t.text, backgroundColor: t.surface2, borderColor: t.border }]}
           />

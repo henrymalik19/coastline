@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Coast FI",
-    "slug": "coastfi",
+    "name": "Coastline",
+    "slug": "coastline",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -22,7 +22,7 @@
       "favicon": "./assets/favicon.png",
       "output": "single"
     },
-    "scheme": "coastfi",
+    "scheme": "coastline",
     "plugins": [
       "expo-router"
     ]

@@ -161,7 +161,7 @@ site_url = "http://localhost:8081"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["http://localhost:8081", "coastfi://"]
+additional_redirect_urls = ["http://localhost:8081", "coastline://"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -247,11 +247,11 @@ otp_expiry = 3600
 
 # Sign-in emails carry a 6-digit code (the app has no link handler)
 [auth.email.template.magic_link]
-subject = "Your Coast FI sign-in code"
+subject = "Your Coastline sign-in code"
 content_path = "./supabase/templates/code.html"
 
 [auth.email.template.confirmation]
-subject = "Your Coast FI sign-in code"
+subject = "Your Coastline sign-in code"
 content_path = "./supabase/templates/code.html"
 
 # Uncomment to customize email template

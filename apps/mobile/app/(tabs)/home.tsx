@@ -125,7 +125,7 @@ export default function Home() {
 
   /* ---------- layout: dashboard on desktop web, single column on phones ---------- */
   return (
-    <Screen title="Coast FI" subtitle={monthLabel(start, 0, true)}>
+    <Screen title="Coastline" subtitle={monthLabel(start, 0, true)}>
       {state.emergency?.active ? (
         <View style={[styles.banner, { backgroundColor: t.warnSoft }]} role="status">
           <Icon name="shield" size={20} color={t.warn} />

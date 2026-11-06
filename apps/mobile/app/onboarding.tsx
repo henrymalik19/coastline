@@ -44,7 +44,7 @@ export default function Onboarding() {
   };
 
   const titles: Record<Step, [string, string]> = {
-    you: ["Welcome to Coast FI", "Let's start with you. Setup takes about 5 minutes."],
+    you: ["Welcome to Coastline", "Let's start with you. Setup takes about 5 minutes."],
     income: ["Your income", "Every source of money that comes in"],
     budget: ["Your monthly budget", "What life costs now, and what you'll still pay after you retire"],
     money: ["What you have and owe", "Account balances and debts"],
@@ -77,7 +77,7 @@ export default function Onboarding() {
           </View>
         ) : (
           <Text style={[type.caption, { color: t.text2 }]}>
-            Already use Coast FI on another device?{" "}
+            Already use Coastline on another device?{" "}
             <Text role="link" style={{ color: t.accent, fontWeight: "700" }} onPress={() => setSigningIn(true)}>Sign in to load your plan</Text>
           </Text>
         )

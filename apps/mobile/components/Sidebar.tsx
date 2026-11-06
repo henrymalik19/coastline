@@ -24,7 +24,7 @@ export function Sidebar({ state, descriptors, emitter, navigateToTab, icons }: B
           <Icon name="trend" size={18} color="#fff" />
         </View>
         <View>
-          <Text style={[type.heading, { color: t.text }]}>Coast FI</Text>
+          <Text style={[type.heading, { color: t.text }]}>Coastline</Text>
           <Text style={[type.caption, { color: t.text3 }]}>Planner</Text>
         </View>
       </View>
