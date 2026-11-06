@@ -78,7 +78,7 @@ export default function Plan() {
     </Card>
   );
 
-  const items = milestones(o);
+  const items = milestones(o, state);
   const timeline = (
     <Card>
       <SectionLabel>Milestone timeline</SectionLabel>

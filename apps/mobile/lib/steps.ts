@@ -3,6 +3,7 @@
  * Reads engine output only; no money math beyond display.
  */
 import { BUCKET_LABELS, limitsFor, PERIODS, STEP_LABELS, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
+import { debtLabel } from "./debts";
 import { money, monthLabel, percent } from "./format";
 
 export type StepInfo = {
@@ -64,7 +65,7 @@ export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date)
       key: step,
       label: hi ? `Pay off high-interest debt (≥ ${percent(thr, 1)} APR)` : `Pay down low-interest debt (< ${percent(thr, 1)} APR)`,
       done: bal <= 0.5,
-      meta: bal <= 0.5 ? "None" : `${list.map((x) => `${x.name} ${money(x.balance)}`).join(", ")} · ${last !== null ? "paid off " + when(last) : "not paid off within the plan"}`,
+      meta: bal <= 0.5 ? "None" : `${list.map((x) => `${debtLabel(x)} ${money(x.balance)}`).join(", ")} · ${last !== null ? "paid off " + when(last) : "not paid off within the plan"}`,
     };
   }
   if (step === "hsa" || step === "ira" || step === "k401") {
@@ -105,8 +106,13 @@ export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date)
 export type Milestone = { m: number; text: string; minor?: boolean; big?: boolean };
 
 /** Everything worth celebrating, in date order. */
-export function milestones(o: RunResult): Milestone[] {
-  const items: Milestone[] = o.plan.events.filter((e) => e.m < Math.max(o.d.years * 12, 36)).map((e) => ({ m: e.m, text: e.text }));
+export function milestones(o: RunResult, s: PlanState): Milestone[] {
+  // debt events: use the on-screen label (a debt may have no name, just a type)
+  const debtText = (key: string) => {
+    const d = key.startsWith("debt:") ? s.debts.find((x) => "debt:" + x.id === key) : undefined;
+    return d ? `${debtLabel(d)} paid off` : undefined;
+  };
+  const items: Milestone[] = o.plan.events.filter((e) => e.m < Math.max(o.d.years * 12, 36)).map((e) => ({ m: e.m, text: debtText(e.key) ?? e.text }));
   for (const k of ["ira", "k401", "hsa", "taxable"] as const) {
     const m = o.plan.firstFund[k];
     if (m !== undefined) items.push({ m, text: `Start funding ${BUCKET_LABELS[k]}`, minor: true });

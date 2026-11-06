@@ -42,7 +42,18 @@ export type BudgetItem = {
 };
 export type AccountType = "pretax" | "roth" | "taxable" | "hsa" | "cash";
 export type Account = { id: string; name: string; type: AccountType; balance: number; plaidAccountId?: string };
-export type Debt = { id: string; name: string; balance: number; apr: number; minPayment: number; plaidAccountId?: string };
+/** What kind of debt this is. Display only; payoff math is the same for every kind. */
+export type DebtKind = "credit_card" | "car" | "student" | "mortgage" | "personal" | "medical" | "other";
+export type Debt = {
+  id: string;
+  /** Optional description ("Chase Sapphire"); the UI falls back to the kind's label. */
+  name: string;
+  kind?: DebtKind;
+  balance: number;
+  apr: number;
+  minPayment: number;
+  plaidAccountId?: string;
+};
 export type Goal = { id: string; name: string; target: number; saved: number };
 export type LimitsRow = {
   year: number;

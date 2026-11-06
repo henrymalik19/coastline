@@ -45,9 +45,11 @@ export const AccountSchema = z.object({
   balance: money,
   plaidAccountId: z.string().optional(),
 });
+export const DebtKindSchema = z.enum(["credit_card", "car", "student", "mortgage", "personal", "medical", "other"]);
 export const DebtSchema = z.object({
   id,
   name: z.string(),
+  kind: DebtKindSchema.optional(),
   balance: nonNeg,
   apr: rate.min(0),
   minPayment: nonNeg,

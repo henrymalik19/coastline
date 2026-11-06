@@ -11,6 +11,8 @@ import { BudgetEditor } from "../BudgetEditor";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "../form";
 import type { IconName } from "../Icon";
 import { IncomesEditor } from "../IncomeEditor";
+import { AddDebtButtons, DebtEditor } from "../DebtEditor";
+import { debtLabel } from "../../lib/debts";
 import { Card, Divider } from "../ui";
 import { HealthcareSuggestion } from "../HealthcareSuggestion";
 
@@ -201,30 +203,14 @@ function DebtsSection() {
       </Text>
       {state.debts.length === 0 ? <Empty text="No debts. Nice." /> : null}
       {state.debts.map((dt, i) => (
-        <ItemCard
+        <DebtEditor
           key={dt.id}
-          label="Debt"
-          placeholder="e.g. Credit card"
-          name={dt.name}
-          onName={(v) => update((p) => { p.debts[i]!.name = v; })}
-          onDelete={() => removeItem("this debt", dt.name, () => update((p) => { p.debts.splice(i, 1); }))}
-        >
-          <Rows>
-            {[
-              <FieldRow key="b" label="Balance">
-                <NumberInput kind="money" label={`${dt.name} balance`} value={dt.balance} onChange={(v) => update((p) => { p.debts[i]!.balance = v; })} />
-              </FieldRow>,
-              <FieldRow key="a" label="Interest rate (APR)" info={HELP.apr}>
-                <NumberInput kind="percent" label={`${dt.name} APR`} value={dt.apr} max={1} onChange={(v) => update((p) => { p.debts[i]!.apr = v; })} />
-              </FieldRow>,
-              <FieldRow key="m" label="Minimum payment" hint="Per month" info={HELP.minPayment}>
-                <NumberInput kind="money" label={`${dt.name} minimum payment`} value={dt.minPayment} onChange={(v) => update((p) => { p.debts[i]!.minPayment = v; })} />
-              </FieldRow>,
-            ]}
-          </Rows>
-        </ItemCard>
+          debt={dt}
+          onChange={(patch) => update((p) => { p.debts[i] = { ...p.debts[i]!, ...patch }; })}
+          onRemove={() => removeItem("this debt", debtLabel(dt), () => update((p) => { p.debts.splice(i, 1); }))}
+        />
       ))}
-      <Button title="Add debt" icon="plus" onPress={() => update((p) => { p.debts.push({ id: newId(), name: "", balance: 0, apr: 0.2, minPayment: 0 }); })} style={{ alignSelf: "flex-start" }} />
+      <AddDebtButtons hasAny={state.debts.length > 0} onAdd={(d) => update((p) => { p.debts.push(d); })} />
     </>
   );
 }

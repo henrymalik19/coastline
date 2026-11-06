@@ -27,8 +27,8 @@ export function samplePlanState(): PlanState {
       { id: "b7", group: "Personal", name: "Subscriptions", amount: 80, inRetirement: true },
     ],
     debts: [
-      { id: "d1", name: "Credit card", balance: 3500, apr: 0.229, minPayment: 100 },
-      { id: "d2", name: "Student loan", balance: 18000, apr: 0.055, minPayment: 300 },
+      { id: "d1", name: "Credit card", kind: "credit_card", balance: 3500, apr: 0.229, minPayment: 100 },
+      { id: "d2", name: "Student loan", kind: "student", balance: 18000, apr: 0.055, minPayment: 300 },
     ],
     goals: [{ id: "g1", name: "House down payment", target: 30000, saved: 2000 }],
     accounts: [

@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { BudgetEditor } from "../components/BudgetEditor";
+import { AddDebtButtons, DebtEditor } from "../components/DebtEditor";
 import { Button, FieldRow, IconButton, NumberInput, TextField } from "../components/form";
 import { Icon } from "../components/Icon";
 import { ProgressBar, ProgressRing } from "../components/ProgressRing";
@@ -204,21 +205,14 @@ function MoneyStep() {
       </Block>
       <Text style={[type.heading, { color: t.text, marginTop: space.sm }]}>Debts</Text>
       {state.debts.map((dt, i) => (
-        <Card key={dt.id} style={{ gap: space.sm }}>
-          <View style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
-            <View style={{ flex: 1 }}>
-              <TextField label="Debt name" placeholder="e.g. Credit card" value={dt.name} onChange={(v) => update((p) => { p.debts[i]!.name = v; })} />
-            </View>
-            <IconButton icon="trash" color={t.bad} label={`Remove ${dt.name}`} onPress={() => update((p) => { p.debts.splice(i, 1); })} />
-          </View>
-          <View style={styles.debtGrid}>
-            <Labeled label="Balance"><NumberInput kind="money" width="100%" label={`${dt.name} balance`} value={dt.balance} min={0} onChange={(v) => update((p) => { p.debts[i]!.balance = v; })} /></Labeled>
-            <Labeled label="Interest rate (APR)"><NumberInput kind="percent" width="100%" label={`${dt.name} APR`} value={dt.apr} min={0} onChange={(v) => update((p) => { p.debts[i]!.apr = v; })} /></Labeled>
-            <Labeled label="Minimum / mo"><NumberInput kind="money" width="100%" label={`${dt.name} minimum payment`} value={dt.minPayment} min={0} onChange={(v) => update((p) => { p.debts[i]!.minPayment = v; })} /></Labeled>
-          </View>
-        </Card>
+        <DebtEditor
+          key={dt.id}
+          debt={dt}
+          onChange={(patch) => update((p) => { p.debts[i] = { ...p.debts[i]!, ...patch }; })}
+          onRemove={() => update((p) => { p.debts.splice(i, 1); })}
+        />
       ))}
-      <Button title={state.debts.length ? "Add another debt" : "Add a debt"} icon="plus" onPress={() => update((p) => { p.debts.push({ id: newId(), name: "", balance: 0, apr: 0.2, minPayment: 0 }); })} style={{ alignSelf: "flex-start" }} />
+      <AddDebtButtons hasAny={state.debts.length > 0} onAdd={(d) => update((p) => { p.debts.push(d); })} />
       {!state.debts.length ? <Text style={[type.caption, { color: t.text3 }]}>No debts? Skip this part.</Text> : null}
     </>
   );
