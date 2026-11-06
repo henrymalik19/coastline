@@ -1,18 +1,25 @@
 import type { ReactNode } from "react";
 import { Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { CONTENT_MAX_WIDTH, radius, space, type, useTheme } from "../lib/theme";
+import { useIsWide } from "../lib/layout";
+import { CONTENT_MAX_WIDTH, CONTENT_MAX_WIDTH_WIDE, radius, space, type, useTheme } from "../lib/theme";
 
 /** Scrolling page with a large title, safe-area padding and a phone-width column. */
 export function Screen({ title, subtitle, children, right }: { title: string; subtitle?: string; children: ReactNode; right?: ReactNode }) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
+  const wide = useIsWide();
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: t.bg }}
-      contentContainerStyle={{ paddingTop: insets.top + space.xl, paddingBottom: space.xxl, paddingHorizontal: space.lg, alignItems: "center" }}
+      contentContainerStyle={{
+        paddingTop: insets.top + (wide ? 40 : space.xl),
+        paddingBottom: space.xxl,
+        paddingHorizontal: wide ? 40 : space.lg,
+        alignItems: wide ? "stretch" : "center",
+      }}
     >
-      <View style={{ width: "100%", maxWidth: CONTENT_MAX_WIDTH, gap: space.lg }}>
+      <View style={{ width: "100%", maxWidth: wide ? CONTENT_MAX_WIDTH_WIDE : CONTENT_MAX_WIDTH, gap: space.lg }}>
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text accessibilityRole="header" style={[type.title, { color: t.text }]}>{title}</Text>

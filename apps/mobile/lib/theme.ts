@@ -71,3 +71,5 @@ export function useTheme(): Theme {
 
 /** Max content width so the layout stays phone-shaped on tablets and the web. */
 export const CONTENT_MAX_WIDTH = 560;
+/** Desktop: content fills the space next to the sidebar, capped only on very large monitors. */
+export const CONTENT_MAX_WIDTH_WIDE = 1440;

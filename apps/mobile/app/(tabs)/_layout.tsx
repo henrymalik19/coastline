@@ -1,6 +1,8 @@
 import { Tabs } from "expo-router";
 import { Platform, StyleSheet } from "react-native";
 import { Icon, type IconName } from "../../components/Icon";
+import { Sidebar } from "../../components/Sidebar";
+import { useIsWide } from "../../lib/layout";
 import { useTheme } from "../../lib/theme";
 
 const TABS: { name: string; title: string; icon: IconName }[] = [
@@ -9,13 +11,18 @@ const TABS: { name: string; title: string; icon: IconName }[] = [
   { name: "monthly", title: "Monthly", icon: "calendar" },
   { name: "progress", title: "Progress", icon: "trend" },
 ];
+const ICONS = Object.fromEntries(TABS.map((t) => [t.name, t.icon])) as Record<string, IconName>;
 
 export default function TabsLayout() {
   const t = useTheme();
+  const wide = useIsWide();
   return (
     <Tabs
+      // Desktop web: sidebar on the left. Phones (native and narrow web): bottom tabs.
+      tabBar={wide ? (props) => <Sidebar {...props} icons={ICONS} /> : undefined}
       screenOptions={{
         headerShown: false,
+        tabBarPosition: wide ? "left" : "bottom",
         tabBarActiveTintColor: t.accent,
         tabBarInactiveTintColor: t.text3,
         tabBarLabelStyle: { fontSize: 11, lineHeight: 14, fontWeight: "600" },
