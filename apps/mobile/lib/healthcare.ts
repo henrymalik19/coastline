@@ -17,6 +17,21 @@ const BY_AGE: { upTo: number; monthly: number }[] = [
 
 const costAt = (age: number) => (BY_AGE.find((b) => age <= b.upTo) ?? BY_AGE[BY_AGE.length - 1]!).monthly;
 
+/**
+ * Rough monthly cost per child under 21 (premium + typical out-of-pocket). Marketplace plans
+ * charge for at most the 3 oldest children under 21, so extra kids add nothing.
+ */
+export const CHILD_MONTHLY = 400;
+export const MAX_CHARGED_CHILDREN = 3;
+
+/** Household estimate: adults at the age-based rate plus children (capped at 3 charged). Rounded to $50. */
+export function suggestHousehold(retireAge: number, adults: 1 | 2, children: number): number {
+  const one = suggestHealthcare(retireAge);
+  if (one === 0) return 0;
+  const kids = Math.min(Math.max(0, Math.round(children)), MAX_CHARGED_CHILDREN) * CHILD_MONTHLY;
+  return Math.round((one * adults + kids) / 50) * 50;
+}
+
 /** Average monthly estimate for one person from `retireAge` until 65 (0 if retiring at 65+). Rounded to $50. */
 export function suggestHealthcare(retireAge: number): number {
   const start = Math.max(18, Math.round(retireAge));
