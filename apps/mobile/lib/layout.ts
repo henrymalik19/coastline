@@ -26,7 +26,7 @@ export function useLayout(): Layout {
   const web = Platform.OS === "web";
   const sidebar = web && width >= SIDEBAR_BREAKPOINT;
   const gutter = width >= 1024 ? 40 : width >= 600 ? 24 : 16;
-  const contentWidth = Math.min(1440, width - (sidebar ? SIDEBAR_WIDTH : 0) - gutter * 2);
+  const contentWidth = width - (sidebar ? SIDEBAR_WIDTH : 0) - gutter * 2;
   return {
     sidebar,
     gutter,
