@@ -1,0 +1,61 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`snapshot: sample state > headline numbers and plan events 1`] = `
+{
+  "coastNow": 347508,
+  "coastSoonerMonths": 8,
+  "crossing": 12.5,
+  "crossingC": 19.166666666666668,
+  "events": [
+    {
+      "key": "starterEF",
+      "m": 0,
+      "text": "Starter emergency fund done",
+    },
+    {
+      "key": "match",
+      "m": 0,
+      "text": "Full employer match captured",
+    },
+    {
+      "key": "debt:d1",
+      "m": 2,
+      "text": "Credit card paid off",
+    },
+    {
+      "key": "fullEF",
+      "m": 7,
+      "text": "Emergency fund full (3 months)",
+    },
+    {
+      "key": "goal:g1",
+      "m": 9,
+      "text": "Vacation goal reached",
+    },
+    {
+      "key": "debt:d2",
+      "m": 35,
+      "text": "Car loan paid off",
+    },
+    {
+      "key": "debt:d3",
+      "m": 106,
+      "text": "Student loan paid off",
+    },
+    {
+      "key": "debtFree",
+      "m": 106,
+      "text": "Debt-free",
+    },
+  ],
+  "fire": 1326411,
+  "firstFund": {
+    "hsa": 9,
+    "ira": 11,
+    "k401": 22,
+  },
+  "freedomDays": 486,
+  "probCoastNow": 0.013,
+  "probFire": 0.84,
+}
+`;
