@@ -82,6 +82,8 @@ async function push(): Promise<void> {
   const userId = useSync.getState().userId;
   if (!supabase || !userId) return;
   const s = useStore.getState();
+  // never upload an unfinished setup: it could replace a real plan from another device
+  if (!s.onboarded) return;
   setSync({ status: "syncing" });
   try {
     const plan = await supabase.from("plans").upsert(
@@ -143,13 +145,15 @@ export async function syncNow(): Promise<void> {
     const remoteCheckins = ((ciRes.data ?? []) as CheckinRow[]).map(fromRow).filter((c): c is Checkin => !!c);
     const local = useStore.getState();
 
-    if (remote && remote.client_updated_at > local.updatedAt) {
+    // a finished plan always beats an unfinished setup on this device (e.g. a new phone)
+    const remoteWins = !!remote && (remote.client_updated_at > local.updatedAt || (remote.onboarded && !local.onboarded));
+    if (remote && remoteWins) {
       applyRemote(remote, remoteCheckins);
       // send back any check-ins only this device had
       const remoteMonths = new Set(remoteCheckins.map((c) => c.month));
       if (useStore.getState().checkins.some((c) => !remoteMonths.has(c.month))) await push();
       else setSync({ status: "synced", lastSyncedAt: Date.now(), error: undefined });
-    } else if (local.onboarded || remote) {
+    } else if (local.onboarded) {
       // this device is newer (or the account is empty and this device has a plan)
       const localMonths = new Set(local.checkins.map((c) => c.month));
       const missing = remoteCheckins.filter((c) => !localMonths.has(c.month));

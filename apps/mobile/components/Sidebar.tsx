@@ -6,6 +6,7 @@ import { SIDEBAR_WIDTH } from "../lib/layout";
 import { usePlan } from "../lib/plan";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Icon, type IconName } from "./Icon";
+import { SyncStatusLine } from "./AccountPanel";
 import { ProgressBar } from "./ProgressRing";
 
 /** Desktop web navigation: replaces the bottom tab bar on wide windows. */
@@ -87,6 +88,7 @@ export function Sidebar({ state, descriptors, emitter, navigateToTab, icons }: B
           <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{percent(Math.min(result.progress, 9.99))}</Text>
         </View>
         <ProgressBar progress={result.progress} />
+        <SyncStatusLine />
       </View>
     </View>
   );

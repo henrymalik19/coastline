@@ -7,6 +7,7 @@ import { HELP } from "../../lib/help";
 import { usePlan } from "../../lib/plan";
 import { newId, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
+import { AccountPanel } from "../AccountPanel";
 import { BudgetEditor } from "../BudgetEditor";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "../form";
 import type { IconName } from "../Icon";
@@ -19,10 +20,11 @@ import { HealthcareSuggestion } from "../HealthcareSuggestion";
 
 /* ---------- registry ---------- */
 
-type SectionKey = "profile" | "income" | "budget" | "accounts" | "debts" | "goals" | "assumptions" | "limits" | "data";
+type SectionKey = "account" | "profile" | "income" | "budget" | "accounts" | "debts" | "goals" | "assumptions" | "limits" | "data";
 type SectionMeta = { key: SectionKey; title: string; subtitle: string; icon: IconName };
 
 export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
+  { title: "Account", items: [{ key: "account", title: "Account & sync", subtitle: "Sign in to use your plan on every device", icon: "user" }] },
   {
     title: "Your money",
     items: [
@@ -454,6 +456,7 @@ function DataSection() {
 }
 
 export const SECTION_SCREENS: Record<SectionKey, ComponentType> = {
+  account: () => <AccountPanel />,
   profile: Profile,
   income: IncomeSection,
   budget: BudgetSection,

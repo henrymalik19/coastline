@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { AccountPanel } from "../components/AccountPanel";
 import { BudgetEditor } from "../components/BudgetEditor";
 import { AddDebtButtons, DebtEditor } from "../components/DebtEditor";
 import { EmergencyFundNote, looksLikeEmergencyFund } from "../components/EmergencyFundNote";
@@ -12,6 +13,8 @@ import { Card, Divider, Screen } from "../components/ui";
 import { HealthcareSuggestion } from "../components/HealthcareSuggestion";
 import { ageLabel, money, percent } from "../lib/format";
 import { usePlan } from "../lib/plan";
+import { syncConfigured } from "../lib/supabase";
+import { useSync } from "../lib/sync";
 import { HELP } from "../lib/help";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
@@ -25,6 +28,13 @@ export default function Onboarding() {
   const completeOnboarding = useStore((s) => s.completeOnboarding);
   const [step, setStep] = useState<Step>("you");
   const i = STEPS.indexOf(step);
+  const [signingIn, setSigningIn] = useState(false);
+  const syncEmail = useSync((s) => s.email);
+  // a second device: once sign-in pulls down a finished plan, go straight to it
+  const onboarded = useStore((s) => s.onboarded);
+  useEffect(() => {
+    if (onboarded) router.replace("/home");
+  }, [onboarded, router]);
 
   const next = () => setStep(STEPS[Math.min(STEPS.length - 1, i + 1)]!);
   const back = () => setStep(STEPS[Math.max(0, i - 1)]!);
@@ -53,8 +63,24 @@ export default function Onboarding() {
       {step === "you" ? (
         <Text style={[type.body, { color: t.text2 }]}>
           Coast FI is the point where what you've already invested can grow into your full retirement number on its own, so you'd only need to cover today's bills.
-          Everything is in today's dollars, and your data stays on this device.
+          Everything is in today's dollars{syncConfigured ? "." : ", and your data stays on this device."}
         </Text>
+      ) : null}
+      {step === "you" && syncConfigured ? (
+        signingIn ? (
+          <View style={{ gap: space.sm }}>
+            <AccountPanel />
+            <Text style={[type.caption, { color: t.text3 }]}>
+              {syncEmail ? "Signed in. If your account has a plan, it'll load here in a moment." : "We'll load your plan from your account."}{" "}
+              <Text style={{ color: t.accent, fontWeight: "700" }} onPress={() => setSigningIn(false)}>Set up a new plan instead</Text>
+            </Text>
+          </View>
+        ) : (
+          <Text style={[type.caption, { color: t.text2 }]}>
+            Already use Coast FI on another device?{" "}
+            <Text role="link" style={{ color: t.accent, fontWeight: "700" }} onPress={() => setSigningIn(true)}>Sign in to load your plan</Text>
+          </Text>
+        )
       ) : null}
       {step === "you" ? <YouStep /> : null}
       {step === "income" ? <IncomeStep /> : null}

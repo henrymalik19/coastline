@@ -5,13 +5,17 @@ import { Card, Divider, Screen } from "../../../components/ui";
 import { SECTIONS } from "../../../components/settings/sections";
 import { money } from "../../../lib/format";
 import { usePlan } from "../../../lib/plan";
+import { syncConfigured } from "../../../lib/supabase";
+import { useSync } from "../../../lib/sync";
 import { radius, space, type, useTheme } from "../../../lib/theme";
 
 export default function SettingsIndex() {
   const t = useTheme();
   const router = useRouter();
   const { state, result } = usePlan();
+  const syncEmail = useSync((s) => s.email);
   const summary: Record<string, string> = {
+    account: syncConfigured ? (syncEmail ? `Signed in as ${syncEmail}` : "Not signed in") : "Saved on this device",
     profile: `Age ${state.age} · retire at ${state.retireAge}`,
     income: state.incomes.length ? `${state.incomes.length} source${state.incomes.length > 1 ? "s" : ""} · ${money(result.d.leanMonthly)}/mo` : "None yet",
     budget: `${state.budget.length} items · ${money(result.d.budgetTotal)}/mo`,
