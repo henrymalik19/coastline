@@ -52,6 +52,7 @@ export default function TabsLayout() {
       ))}
       {/* Settings: not in the bottom tab bar (gear in the header on phones; sidebar item on desktop) */}
       {/* note: `href: null` would make the route redirect away in this expo-router version */}
+      <Tabs.Screen name="emergency" options={{ title: "Emergency mode", tabBarButton: () => null, tabBarItemStyle: { display: "none" } }} />
       <Tabs.Screen name="settings" options={{ title: "Settings", tabBarButton: () => null, tabBarItemStyle: { display: "none" } }} />
     </Tabs>
   );

@@ -1,5 +1,6 @@
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { longMonth } from "../../components/AdjustmentsCard";
 import { Button } from "../../components/form";
 import { Icon } from "../../components/Icon";
 import { ProgressRing } from "../../components/ProgressRing";
@@ -62,6 +63,11 @@ export default function Home() {
           value={Number.isFinite(d.emergencyMonths) ? `${d.emergencyMonths.toFixed(1)} months of expenses` : "No monthly expenses set"}
           tone={Number.isFinite(d.emergencyMonths) && d.emergencyMonths < 3 ? t.warn : undefined}
         />
+        {!state.emergency?.active ? (
+          <Pressable role="link" onPress={() => router.push("/emergency")} hitSlop={6} style={{ alignSelf: "flex-end" }}>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Money emergency? Pause the plan →</Text>
+          </Pressable>
+        ) : null}
       </View>
     </Card>
   );
@@ -120,6 +126,16 @@ export default function Home() {
   /* ---------- layout: dashboard on desktop web, single column on phones ---------- */
   return (
     <Screen title="Coast FI" subtitle={monthLabel(start, 0, true)}>
+      {state.emergency?.active ? (
+        <View style={[styles.banner, { backgroundColor: t.warnSoft }]} role="status">
+          <Icon name="shield" size={20} color={t.warn} />
+          <View style={{ flex: 1, minWidth: 220 }}>
+            <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Emergency mode is on through {longMonth(state.emergency.until)}</Text>
+            <Text style={[type.caption, { color: t.text2 }]}>Investing is paused and everything left over stays in cash. Your plan resumes after that.</Text>
+          </View>
+          <Button title="Manage" onPress={() => router.push("/emergency")} />
+        </View>
+      ) : null}
       {wide ? (
         <>
           {stats}

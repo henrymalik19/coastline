@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
+import { longMonth } from "../../components/AdjustmentsCard";
 import { IconButton } from "../../components/form";
 import { Icon } from "../../components/Icon";
 import { ProgressBar } from "../../components/ProgressRing";
@@ -118,6 +119,12 @@ export default function Plan() {
 
   return (
     <Screen title="Plan" subtitle="Where the next dollar goes">
+      {state.emergency?.active ? (
+        <Card style={{ backgroundColor: t.warnSoft, borderColor: t.warn }}>
+          <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Paused for emergency mode through {longMonth(state.emergency.until)}</Text>
+          <Text style={[type.caption, { color: t.text2 }]}>Until then everything left over stays in cash. These steps pick up again the month after; the dates below already account for the pause.</Text>
+        </Card>
+      ) : null}
       {twoColumn ? (
         <View style={{ flexDirection: "row", gap: space.lg, alignItems: "flex-start" }}>
           {steps}

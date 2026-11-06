@@ -35,6 +35,11 @@ export type Todo = { key: string; title: string; detail?: string; amount?: numbe
 export function monthTodos(m: MonthRow, t: Theme, marginalTax: number): Todo[] {
   const a = m.alloc;
   const out: Todo[] = [];
+  if (m.emergency) {
+    // emergency mode: the only job is to hold on to cash
+    if (a.leftover > 0.5) out.push({ key: "em", title: "Keep it in cash (emergency mode)", detail: "Investing and extra payments are paused", amount: a.leftover, color: t.series.ef });
+    return out;
+  }
   if (a.matchGain > 0.5)
     out.push({ key: "match", title: "Raise your 401(k) to the full-match %", detail: `Your employer adds ${money(a.matchGain)} more this month`, amount: a.k401TakeHome - a.k401Step, color: t.series.k401 });
   if (a.debt > 0.5) out.push({ key: "debt", title: "Pay extra toward debt", detail: "Highest interest rate first", amount: a.debt, color: t.series.debt });
