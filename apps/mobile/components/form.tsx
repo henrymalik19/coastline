@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Switch, Text, TextInput, View, type ViewStyle } from "react-native";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Icon, type IconName } from "./Icon";
@@ -7,57 +7,174 @@ import { Icon, type IconName } from "./Icon";
 
 export type NumberKind = "money" | "percent" | "int" | "decimal";
 
-const toText = (v: number, kind: NumberKind) => {
+/** Display text for a stored value. Percent is stored as a decimal (0.05 → "5"). */
+const toText = (v: number, kind: NumberKind, pretty: boolean) => {
   if (!Number.isFinite(v)) return "";
   if (kind === "percent") return String(+(v * 100).toFixed(3));
-  if (kind === "money") return String(+v.toFixed(2));
+  if (kind === "money") return pretty ? v.toLocaleString("en-US", { maximumFractionDigits: 2 }) : String(+v.toFixed(2));
   return String(v);
 };
 const fromText = (s: string, kind: NumberKind) => {
-  const n = Number(s.replace(/[$,%\s]/g, ""));
+  if (s.trim() === "" || s === "-" || s === ".") return null;
+  const n = Number(s);
   if (!Number.isFinite(n)) return null;
   if (kind === "percent") return n / 100;
   if (kind === "int") return Math.round(n);
   return n;
 };
+/** Keep only what a number can contain: digits, one decimal point (not for ints), a leading minus if allowed. */
+const sanitize = (s: string, kind: NumberKind, allowNegative: boolean) => {
+  let out = s.replace(kind === "int" ? /[^\d-]/g : /[^\d.-]/g, "");
+  const neg = allowNegative && out.startsWith("-");
+  out = out.replace(/-/g, "");
+  const dot = out.indexOf(".");
+  if (dot >= 0) out = out.slice(0, dot + 1) + out.slice(dot + 1).replace(/\./g, "");
+  return (neg ? "-" : "") + out;
+};
+const defaultStep: Record<NumberKind, number> = { money: 50, percent: 0.25, int: 1, decimal: 0.5 };
 
 /**
- * Numeric input that keeps what you type while editing (so "1." or "" don't jump),
- * stores clean numbers, and shows $ / % adornments. Percent is stored as a decimal.
+ * Number-only input: typing anything else is ignored, Up/Down arrows nudge the value
+ * (web), money shows thousands separators when not editing, $ / % adornments.
+ * `step` is in display units (e.g. 0.25 for percent = 0.25 percentage points).
  */
 export function NumberInput({
-  value, onChange, kind = "decimal", label, width = 140, min, max,
-}: { value: number; onChange: (v: number) => void; kind?: NumberKind; label: string; width?: number | "100%"; min?: number; max?: number }) {
+  value, onChange, kind = "decimal", label, width = 140, min = 0, max, step, stepper = true,
+}: {
+  value: number; onChange: (v: number) => void; kind?: NumberKind; label: string; width?: number | "100%";
+  min?: number; max?: number; step?: number;
+  /** Show the up/down arrow buttons (tap to nudge, hold to repeat). */
+  stepper?: boolean;
+}) {
   const t = useTheme();
-  const [text, setText] = useState(toText(value, kind));
   const [focused, setFocused] = useState(false);
+  const [text, setText] = useState(toText(value, kind, true));
   useEffect(() => {
-    if (!focused) setText(toText(value, kind));
+    if (!focused) setText(toText(value, kind, true));
   }, [value, kind, focused]);
-  const clamp = (n: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n));
+  const clamp = (n: number) => Math.min(max ?? Infinity, Math.max(min, n));
+  const s = step ?? defaultStep[kind];
+  // latest value for press-and-hold repeats (the closure would otherwise be stale)
+  const current = useRef(value);
+  current.current = value;
+  const nudge = (dir: 1 | -1) => {
+    const display = kind === "percent" ? current.current * 100 : current.current;
+    const next = +(Math.round((display + dir * s) / s) * s).toFixed(6);
+    const stored = clamp(kind === "percent" ? next / 100 : next);
+    current.current = stored;
+    onChange(stored);
+    setText(toText(stored, kind, focused ? false : true));
+  };
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const repeated = useRef(false);
+  const stopRepeat = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
+  useEffect(() => stopRepeat, []);
+  const startRepeat = (dir: 1 | -1) => {
+    stopRepeat();
+    repeated.current = false;
+    const tick = (delay: number) => {
+      timer.current = setTimeout(() => { repeated.current = true; nudge(dir); tick(Math.max(40, delay * 0.85)); }, delay);
+    };
+    tick(400);
+  };
+  const atMin = value <= min;
+  const atMax = max !== undefined && value >= max;
+  const arrow = (dir: 1 | -1) => (
+    <Pressable
+      role="button"
+      accessibilityLabel={`${dir > 0 ? "Increase" : "Decrease"} ${label}`}
+      disabled={dir > 0 ? atMax : atMin}
+      focusable={false}
+      hitSlop={{ left: 6, right: 6, top: dir > 0 ? 6 : 0, bottom: dir > 0 ? 0 : 6 }}
+      onPress={() => { if (!repeated.current) nudge(dir); repeated.current = false; }}
+      onPressIn={() => startRepeat(dir)}
+      onPressOut={stopRepeat}
+      style={(st) => {
+        const hovered = (st as typeof st & { hovered?: boolean }).hovered;
+        return [styles.stepBtn, { backgroundColor: st.pressed ? t.accentSoft : hovered ? t.surface : "transparent", opacity: (dir > 0 ? atMax : atMin) ? 0.3 : 1 }];
+      }}
+    >
+      <Icon name={dir > 0 ? "up" : "down"} size={14} color={t.text2} />
+    </Pressable>
+  );
   return (
-    <View style={[styles.input, { width, borderColor: focused ? t.accent : t.border, backgroundColor: t.surface2 }]}>
+    <View style={[styles.input, { width, borderColor: focused ? t.accent : t.border, backgroundColor: t.surface2, paddingRight: stepper ? 4 : space.md }]}>
       {kind === "money" ? <Text style={[type.body, { color: t.text3 }]}>$</Text> : null}
       <TextInput
         accessibilityLabel={label}
         value={text}
-        onChangeText={(s) => {
-          setText(s);
-          const n = fromText(s, kind);
-          if (n !== null && s.trim() !== "" && s.trim() !== "-") onChange(clamp(n));
+        onChangeText={(raw) => {
+          const clean = sanitize(raw, kind, min < 0);
+          setText(clean);
+          const n = fromText(clean, kind);
+          if (n !== null) onChange(clamp(n));
         }}
-        onFocus={() => setFocused(true)}
+        onFocus={() => {
+          setFocused(true);
+          setText(toText(value, kind, false));
+        }}
         onBlur={() => {
           setFocused(false);
-          const n = fromText(text, kind);
-          if (n === null || text.trim() === "") onChange(clamp(0));
+          if (fromText(text, kind) === null) onChange(clamp(0));
         }}
         keyboardType={kind === "int" ? "number-pad" : "decimal-pad"}
-        inputMode="decimal"
+        inputMode={kind === "int" ? "numeric" : "decimal"}
         selectTextOnFocus
-        style={[type.body, styles.inputText, { color: t.text, textAlign: "right" }, Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null]}
+        {...(Platform.OS === "web"
+          ? ({
+              onKeyDown: (e: { key: string; preventDefault: () => void }) => {
+                if (e.key === "ArrowUp") { e.preventDefault(); nudge(1); }
+                if (e.key === "ArrowDown") { e.preventDefault(); nudge(-1); }
+              },
+            } as object)
+          : {})}
+        style={[type.body, styles.inputText, { color: t.text, textAlign: "right", fontVariant: ["tabular-nums"] }, Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null]}
       />
       {kind === "percent" ? <Text style={[type.body, { color: t.text3 }]}>%</Text> : null}
+      {stepper ? (
+        <View style={[styles.stepper, { borderLeftColor: t.border }]}>
+          {arrow(1)}
+          {arrow(-1)}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/* ---------- tooltip ---------- */
+
+/** ⓘ button that reveals an explanation: tap anywhere, hover on web. Text stays inline so it never covers inputs. */
+export function InfoTip({ label, open, onToggle }: { text: string; label: string; open: boolean; onToggle: (v: boolean) => void }) {
+  const t = useTheme();
+  // hover previews; a click/tap pins it open until clicked again
+  const pinned = useRef(false);
+  return (
+    <Pressable
+      role="button"
+      accessibilityLabel={`What is ${label}?`}
+      aria-expanded={open}
+      hitSlop={10}
+      onPress={() => {
+        pinned.current = !pinned.current;
+        onToggle(pinned.current);
+      }}
+      onHoverIn={() => onToggle(true)}
+      onHoverOut={() => { if (!pinned.current) onToggle(false); }}
+      style={{ padding: 2 }}
+    >
+      <Icon name="info" size={16} color={open ? t.accent : t.text3} />
+    </Pressable>
+  );
+}
+
+function InfoText({ text }: { text: string }) {
+  const t = useTheme();
+  return (
+    <View role="note" style={[styles.tip, { backgroundColor: t.accentSoft }]}>
+      <Text style={[type.caption, { color: t.text }]}>{text}</Text>
     </View>
   );
 }
@@ -123,16 +240,23 @@ export function DateField({ value, onChange, label, width = 150 }: { value?: str
 
 /* ---------- rows ---------- */
 
-/** A settings row: label (and hint) on the left, control on the right. */
-export function FieldRow({ label, hint, children, stacked }: { label: string; hint?: string; children: ReactNode; stacked?: boolean }) {
+/** A settings row: label (with optional ⓘ explanation) and hint on the left, control on the right. */
+export function FieldRow({ label, hint, info, children, stacked }: { label: string; hint?: string; info?: string; children: ReactNode; stacked?: boolean }) {
   const t = useTheme();
+  const [open, setOpen] = useState(false);
   return (
-    <View style={[styles.row, stacked ? { flexDirection: "column", alignItems: "stretch" } : null]}>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[type.body, { color: t.text }]}>{label}</Text>
-        {hint ? <Text style={[type.caption, { color: t.text3 }]}>{hint}</Text> : null}
+    <View style={{ paddingVertical: space.md, gap: space.sm }}>
+      <View style={[styles.rowInner, stacked ? { flexDirection: "column", alignItems: "stretch" } : null]}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Text style={[type.body, { color: t.text, flexShrink: 1 }]}>{label}</Text>
+            {info ? <InfoTip text={info} label={label} open={open} onToggle={setOpen} /> : null}
+          </View>
+          {hint ? <Text style={[type.caption, { color: t.text3 }]}>{hint}</Text> : null}
+        </View>
+        {children}
       </View>
-      {children}
+      {info && open ? <InfoText text={info} /> : null}
     </View>
   );
 }
@@ -234,7 +358,10 @@ export function IconButton({ icon, label, onPress, disabled, color }: { icon: Ic
 const styles = StyleSheet.create({
   input: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: space.md, minHeight: 44 },
   inputText: { flex: 1, minWidth: 0, paddingVertical: 10 },
-  row: { flexDirection: "row", alignItems: "center", gap: space.lg, paddingVertical: space.md, minHeight: 56 },
+  stepper: { alignSelf: "stretch", justifyContent: "center", borderLeftWidth: StyleSheet.hairlineWidth, paddingLeft: 4, marginLeft: 4, gap: 1 },
+  stepBtn: { width: 24, height: 19, borderRadius: 4, alignItems: "center", justifyContent: "center" },
+  rowInner: { flexDirection: "row", alignItems: "center", gap: space.lg, minHeight: 32 },
+  tip: { borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: 10 },
   seg: { flexDirection: "row", borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, padding: 3, gap: 2, alignSelf: "flex-start", flexWrap: "wrap" },
   segItem: { paddingHorizontal: space.md, paddingVertical: 7, borderRadius: 6, minHeight: 36, justifyContent: "center" },
   button: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm, paddingHorizontal: space.lg, minHeight: 44, borderRadius: radius.sm, borderWidth: 1 },

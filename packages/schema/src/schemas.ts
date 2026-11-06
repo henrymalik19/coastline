@@ -15,9 +15,12 @@ const id = z.string().min(1);
 
 export const PayFreqSchema = z.enum(["weekly", "biweekly", "semimonthly", "monthly"]);
 
+export const IncomeKindSchema = z.enum(["job", "business", "rental", "other"]);
+
 export const IncomeSchema = z.object({
   id,
   name: z.string(),
+  kind: IncomeKindSchema.optional(),
   freq: PayFreqSchema,
   net: nonNeg,
   nextPayday: isoDate.optional(),
@@ -33,7 +36,7 @@ export const IncomeSchema = z.object({
   fullMatch: z.boolean().optional(),
 });
 
-export const BudgetItemSchema = z.object({ id, name: z.string(), amount: money, inRetirement: z.boolean() });
+export const BudgetItemSchema = z.object({ id, name: z.string(), amount: money, inRetirement: z.boolean(), group: z.string().optional() });
 export const AccountTypeSchema = z.enum(["pretax", "roth", "taxable", "hsa", "cash"]);
 export const AccountSchema = z.object({
   id,
@@ -99,6 +102,19 @@ export const PlanStateSchema = z.object({
   contribGrowth: rate,
   whatif: WhatIfSchema,
 });
+
+/** A monthly check-in (its own table in Phase 3). */
+export const CheckinSchema = z.object({
+  /** "YYYY-MM" */
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  date: z.string().optional(),
+  invested: z.number().finite(),
+  cash: z.number().finite(),
+  debt: z.number().finite(),
+  netWorth: z.number().finite(),
+  expectedNextInvested: z.number().finite(),
+});
+export type Checkin = z.infer<typeof CheckinSchema>;
 
 export type PlanStateInput = z.input<typeof PlanStateSchema>;
 

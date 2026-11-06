@@ -1,27 +1,22 @@
-import type { Income, PayFreq } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Button, DateField, FieldRow, IconButton, NumberInput, Segmented, TextField, Toggle } from "../components/form";
+import { BudgetEditor } from "../components/BudgetEditor";
+import { Button, FieldRow, IconButton, NumberInput, TextField } from "../components/form";
 import { Icon } from "../components/Icon";
 import { ProgressBar, ProgressRing } from "../components/ProgressRing";
-import { IncomeSummary } from "../components/settings/sections";
+import { IncomesEditor } from "../components/IncomeEditor";
 import { Card, Divider, Screen } from "../components/ui";
+import { HealthcareSuggestion } from "../components/HealthcareSuggestion";
 import { ageLabel, money, percent } from "../lib/format";
 import { usePlan } from "../lib/plan";
-import { freshPlan, MATCH_PRESETS } from "../lib/presets";
+import { HELP } from "../lib/help";
+import { freshPlan } from "../lib/presets";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 
 const STEPS = ["you", "income", "budget", "money", "goals", "review"] as const;
 type Step = (typeof STEPS)[number] | "welcome";
-
-const FREQS: { value: PayFreq; label: string }[] = [
-  { value: "weekly", label: "Weekly" },
-  { value: "biweekly", label: "Every 2 weeks" },
-  { value: "semimonthly", label: "Twice a month" },
-  { value: "monthly", label: "Monthly" },
-];
 
 export default function Onboarding() {
   const t = useTheme();
@@ -44,7 +39,7 @@ export default function Onboarding() {
 
   if (step === "welcome") {
     return (
-      <Screen title="Welcome to Coast FI" subtitle="See how close you are to never needing to invest another dollar" narrow hideSettings>
+      <Screen title="Welcome to Coast FI" subtitle="See how close you are to never needing to invest another dollar" hideSettings maxWidth={880}>
         <Card style={{ gap: space.md }}>
           <Text style={[type.body, { color: t.text2 }]}>
             Coast FI is the point where what you've already invested can grow into your full retirement number on its own. You'd only need to cover today's bills from then on.
@@ -82,7 +77,7 @@ export default function Onboarding() {
   const [title, subtitle] = titles[step];
 
   return (
-    <Screen title={title} subtitle={subtitle} narrow hideSettings>
+    <Screen title={title} subtitle={subtitle} hideSettings maxWidth={1120} fill={step === "income" || step === "budget"}>
       <View style={{ gap: 6 }}>
         <View style={styles.between}>
           <Text style={[type.caption, { color: t.text3 }]}>Step {i + 1} of {STEPS.length}</Text>
@@ -158,127 +153,37 @@ function Block({ children, hint }: { children: ReactNode; hint?: string }) {
 function YouStep() {
   const { state } = usePlan();
   const update = useStore((s) => s.update);
+  const medicareAge = state.retireAge >= 65;
   return (
-    <Block hint="If you'll leave employer health coverage before Medicare at 65, budget roughly $500–$1,500+ a month per person.">
-      <FieldRow label="Your age">
-        <NumberInput kind="int" label="Your age" value={state.age} min={0} max={100} onChange={(v) => update((p) => { p.age = v; })} />
+    <Block>
+      <FieldRow label="Your age" info={HELP.age}>
+        <NumberInput kind="int" label="Your age" value={state.age} max={100} onChange={(v) => update((p) => { p.age = v; })} />
       </FieldRow>
       <Divider />
-      <FieldRow label="Age you'd like to retire" hint="When work becomes optional">
-        <NumberInput kind="int" label="Retirement age" value={state.retireAge} min={0} max={100} onChange={(v) => update((p) => { p.retireAge = v; })} />
+      <FieldRow label="Age you'd like to retire" hint="When work becomes optional" info={HELP.retireAge}>
+        <NumberInput kind="int" label="Retirement age" value={state.retireAge} max={100} onChange={(v) => update((p) => { p.retireAge = v; })} />
       </FieldRow>
       <Divider />
-      <FieldRow label="Healthcare before Medicare" hint="Per month, in retirement">
-        <NumberInput kind="money" label="Healthcare per month" value={state.healthcare} min={0} onChange={(v) => update((p) => { p.healthcare = v; })} />
+      <View>
+<FieldRow
+        label="Health insurance until 65"
+        hint={medicareAge ? "You'll retire at 65+, so Medicare covers you. $0 is fine." : `Per month, from ${state.retireAge} until Medicare starts at 65`}
+        info={HELP.healthcare}
+      >
+        <NumberInput kind="money" label="Health insurance per month until 65" value={state.healthcare} onChange={(v) => update((p) => { p.healthcare = v; })} />
       </FieldRow>
+{!medicareAge ? <HealthcareSuggestion retireAge={state.retireAge} value={state.healthcare} onUse={(v) => update((p) => { p.healthcare = v; })} /> : null}
+</View>
     </Block>
   );
 }
 
 function IncomeStep() {
-  const t = useTheme();
-  const { state } = usePlan();
-  const update = useStore((s) => s.update);
-  const inc = state.incomes[0];
-  const set = (patch: Partial<Income>) =>
-    update((p) => {
-      if (!p.incomes[0]) p.incomes.push({ id: newId(), name: "Main job", freq: "biweekly", net: 0, matchMode: "pct" });
-      p.incomes[0] = { ...p.incomes[0]!, ...patch };
-    });
-  if (!inc) {
-    return <Button title="Add my main income" icon="plus" onPress={() => set({})} />;
-  }
-  return (
-    <>
-      <Block>
-        <View style={{ paddingVertical: space.sm, gap: space.sm }}>
-          <Text style={[type.label, { color: t.text2 }]}>How often are you paid?</Text>
-          <Segmented label="Pay schedule" options={FREQS} value={inc.freq} onChange={(v) => set({ freq: v })} />
-        </View>
-        <Divider />
-        <FieldRow label="Take-home per paycheck" hint="What lands in your bank account">
-          <NumberInput kind="money" label="Take-home per paycheck" value={inc.net} min={0} onChange={(v) => set({ net: v })} />
-        </FieldRow>
-        {inc.freq === "weekly" || inc.freq === "biweekly" ? (
-          <>
-            <Divider />
-            <FieldRow label="Next payday" hint="Finds your 3-paycheck months">
-              <DateField label="Next payday" value={inc.nextPayday} onChange={(v) => set({ nextPayday: v })} />
-            </FieldRow>
-          </>
-        ) : null}
-      </Block>
-      <Block hint="Not sure of your match? It's usually in your benefits portal under 401(k) or retirement plan.">
-        <FieldRow label="Gross pay per paycheck" hint="Before taxes">
-          <NumberInput kind="money" label="Gross pay per paycheck" value={inc.gross ?? 0} min={0} onChange={(v) => set({ matchMode: "pct", gross: v })} />
-        </FieldRow>
-        <Divider />
-        <FieldRow label="You put into your 401(k)" hint="% of gross pay">
-          <NumberInput kind="percent" label="Your 401(k) percent" value={inc.contribPct ?? 0} min={0} max={1} onChange={(v) => set({ matchMode: "pct", contribPct: v })} />
-        </FieldRow>
-        <Divider />
-        <View style={{ paddingVertical: space.md, gap: space.sm }}>
-          <Text style={[type.body, { color: t.text }]}>Employer match</Text>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-            {MATCH_PRESETS.map((m) => {
-              const on = (inc.matchRate1 ?? 0) === m.r1 && (inc.matchUpTo1 ?? 0) === m.u1 && (inc.matchRate2 ?? 0) === m.r2 && (inc.matchUpTo2 ?? 0) === m.u2;
-              return (
-                <Pressable
-                  key={m.label}
-                  role="radio"
-                  aria-checked={on}
-                  onPress={() => set({ matchMode: "pct", matchRate1: m.r1, matchUpTo1: m.u1, matchRate2: m.r2, matchUpTo2: m.u2 })}
-                  style={[styles.chip, { borderColor: on ? t.accent : t.border, backgroundColor: on ? t.accentSoft : t.surface }]}
-                >
-                  <Text style={[type.caption, { color: on ? t.accent : t.text2, fontWeight: on ? "700" : "500" }]}>{m.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Text style={[type.caption, { color: t.text3 }]}>Something else? Enter the exact formula later in Settings → Income.</Text>
-        </View>
-        {(inc.gross ?? 0) > 0 ? <View style={{ paddingBottom: space.md }}><IncomeSummary inc={inc} marginalTax={state.plan.marginalTax} /></View> : null}
-      </Block>
-      <Text style={[type.caption, { color: t.text3 }]}>Side income or a partner's job? Add more income sources in Settings.</Text>
-    </>
-  );
+  return <IncomesEditor />;
 }
 
 function BudgetStep() {
-  const t = useTheme();
-  const { state, result } = usePlan();
-  const update = useStore((s) => s.update);
-  return (
-    <>
-      <Text style={[type.body, { color: t.text2 }]}>
-        Monthly amounts. Leave debt payments out (they're next). Switch off anything that stops when you retire.
-      </Text>
-      <Card padded={false}>
-        {state.budget.map((b, i) => (
-          <View key={b.id}>
-            <View style={[styles.budgetRow, { flexDirection: "column", alignItems: "stretch" }]}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <TextField label="Budget item" placeholder="e.g. Pet care" value={b.name} onChange={(v) => update((p) => { p.budget[i]!.name = v; })} />
-                </View>
-                <NumberInput kind="money" width={120} label={`${b.name} per month`} value={b.amount} min={0} onChange={(v) => update((p) => { p.budget[i]!.amount = v; })} />
-              </View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                <Toggle label={`${b.name} continues in retirement`} value={b.inRetirement} onChange={(v) => update((p) => { p.budget[i]!.inRetirement = v; })} />
-                <Text style={[type.caption, { color: t.text3, flex: 1 }]}>{b.inRetirement ? "Continues in retirement" : "Stops when I retire"}</Text>
-                <IconButton icon="trash" label={`Remove ${b.name}`} onPress={() => update((p) => { p.budget.splice(i, 1); })} />
-              </View>
-            </View>
-            <Divider />
-          </View>
-        ))}
-        <View style={[styles.between, { padding: space.lg }]}>
-          <Button title="Add a line" icon="plus" tone="ghost" onPress={() => update((p) => { p.budget.push({ id: newId(), name: "", amount: 0, inRetirement: true }); })} />
-          <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(result.d.budgetTotal)}/mo</Text>
-        </View>
-      </Card>
-    </>
-  );
+  return <BudgetEditor />;
 }
 
 function MoneyStep() {
@@ -290,8 +195,8 @@ function MoneyStep() {
       <Block hint="Rough is fine. You'll update these at each monthly check-in.">
         {state.accounts.map((a, i) => (
           <View key={a.id}>
-            <FieldRow label={a.name}>
-              <NumberInput kind="money" label={`${a.name} balance`} value={a.balance} min={0} onChange={(v) => update((p) => { p.accounts[i]!.balance = v; })} />
+            <FieldRow label={a.name} info={HELP[a.type]}>
+              <NumberInput kind="money" label={`${a.name} balance`} value={a.balance} onChange={(v) => update((p) => { p.accounts[i]!.balance = v; })} />
             </FieldRow>
             {i < state.accounts.length - 1 ? <Divider /> : null}
           </View>
@@ -304,11 +209,11 @@ function MoneyStep() {
             <View style={{ flex: 1 }}>
               <TextField label="Debt name" placeholder="e.g. Credit card" value={dt.name} onChange={(v) => update((p) => { p.debts[i]!.name = v; })} />
             </View>
-            <IconButton icon="trash" label={`Remove ${dt.name}`} onPress={() => update((p) => { p.debts.splice(i, 1); })} />
+            <IconButton icon="trash" color={t.bad} label={`Remove ${dt.name}`} onPress={() => update((p) => { p.debts.splice(i, 1); })} />
           </View>
           <View style={styles.debtGrid}>
             <Labeled label="Balance"><NumberInput kind="money" width="100%" label={`${dt.name} balance`} value={dt.balance} min={0} onChange={(v) => update((p) => { p.debts[i]!.balance = v; })} /></Labeled>
-            <Labeled label="APR"><NumberInput kind="percent" width="100%" label={`${dt.name} APR`} value={dt.apr} min={0} onChange={(v) => update((p) => { p.debts[i]!.apr = v; })} /></Labeled>
+            <Labeled label="Interest rate (APR)"><NumberInput kind="percent" width="100%" label={`${dt.name} APR`} value={dt.apr} min={0} onChange={(v) => update((p) => { p.debts[i]!.apr = v; })} /></Labeled>
             <Labeled label="Minimum / mo"><NumberInput kind="money" width="100%" label={`${dt.name} minimum payment`} value={dt.minPayment} min={0} onChange={(v) => update((p) => { p.debts[i]!.minPayment = v; })} /></Labeled>
           </View>
         </Card>
@@ -342,7 +247,7 @@ function GoalsStep() {
             <View style={{ flex: 1 }}>
               <TextField label="Goal name" placeholder="e.g. House down payment" value={g.name} onChange={(v) => update((p) => { p.goals[i]!.name = v; })} />
             </View>
-            <IconButton icon="trash" label={`Remove ${g.name}`} onPress={() => update((p) => { p.goals.splice(i, 1); })} />
+            <IconButton icon="trash" color={t.bad} label={`Remove ${g.name}`} onPress={() => update((p) => { p.goals.splice(i, 1); })} />
           </View>
           <View style={styles.debtGrid}>
             <Labeled label="Target"><NumberInput kind="money" width="100%" label={`${g.name} target`} value={g.target} min={0} onChange={(v) => update((p) => { p.goals[i]!.target = v; })} /></Labeled>

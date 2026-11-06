@@ -12,19 +12,19 @@ export function samplePlanState(): PlanState {
     contribGrowth: 0,
     incomes: [
       {
-        id: "i1", name: "Main job", freq: "biweekly", net: 2400, nextPayday: "2026-11-13",
+        id: "i1", name: "Main job", kind: "job", freq: "biweekly", net: 2400, nextPayday: "2026-11-13",
         matchMode: "pct", gross: 3500, contribPct: 0.04, matchRate1: 1, matchUpTo1: 0.03, matchRate2: 0.5, matchUpTo2: 0.02,
       },
-      { id: "i2", name: "Side gig", freq: "monthly", net: 600, matchMode: "usd", pretax: 0, match: 0, fullMatch: true },
+      { id: "i2", name: "Side gig", kind: "other", freq: "monthly", net: 600, matchMode: "usd", pretax: 0, match: 0, fullMatch: true },
     ],
     budget: [
-      { id: "b1", name: "Rent / mortgage", amount: 1800, inRetirement: true },
-      { id: "b2", name: "Groceries", amount: 600, inRetirement: true },
-      { id: "b3", name: "Transportation", amount: 400, inRetirement: true },
-      { id: "b4", name: "Utilities & phone", amount: 250, inRetirement: true },
-      { id: "b5", name: "Insurance", amount: 200, inRetirement: true },
-      { id: "b6", name: "Fun & dining", amount: 400, inRetirement: true },
-      { id: "b7", name: "Subscriptions", amount: 80, inRetirement: true },
+      { id: "b1", group: "Housing", name: "Rent / mortgage", amount: 1800, inRetirement: true },
+      { id: "b2", group: "Food", name: "Groceries", amount: 600, inRetirement: true },
+      { id: "b3", group: "Transportation", name: "Gas, transit & upkeep", amount: 400, inRetirement: true },
+      { id: "b4", group: "Housing", name: "Utilities & phone", amount: 250, inRetirement: true },
+      { id: "b5", group: "Housing", name: "Insurance", amount: 200, inRetirement: true },
+      { id: "b6", group: "Personal", name: "Fun & dining", amount: 400, inRetirement: true },
+      { id: "b7", group: "Personal", name: "Subscriptions", amount: 80, inRetirement: true },
     ],
     debts: [
       { id: "d1", name: "Credit card", balance: 3500, apr: 0.229, minPayment: 100 },

@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { PlanState } from "@coastfi/engine";
-import { importPrototypeJson, PlanStateSchema, samplePlanState, type Checkin } from "@coastfi/schema";
+import { CheckinSchema, PlanStateSchema, samplePlanState, type Checkin } from "@coastfi/schema";
+import { z } from "zod";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -69,16 +70,18 @@ export const useStore = create<AppState>()(
       },
       completeOnboarding: () => set({ onboarded: true, updatedAt: now() }),
       importJson: (text) => {
-        const raw = JSON.parse(text) as unknown;
-        // our own export wraps { plan, checkins }; anything else is treated as a prototype export
-        if (raw && typeof raw === "object" && "plan" in raw && (raw as { app?: string }).app === "coastfi") {
-          const r = raw as { plan: unknown; checkins?: Checkin[] };
-          const plan = PlanStateSchema.parse(r.plan);
-          set({ plan, checkins: r.checkins ?? [], onboarded: true, isSampleData: false, updatedAt: now() });
-          return;
+        let raw: unknown;
+        try {
+          raw = JSON.parse(text);
+        } catch {
+          throw new Error("That isn't a Coast FI backup file.");
         }
-        const { state, checkins } = importPrototypeJson(raw);
-        set({ plan: state, checkins, onboarded: true, isSampleData: false, updatedAt: now() });
+        const r = raw as { app?: string; plan?: unknown; checkins?: unknown };
+        if (!r || typeof r !== "object" || r.app !== "coastfi" || !r.plan) throw new Error("That isn't a Coast FI backup file.");
+        const plan = PlanStateSchema.safeParse(r.plan);
+        if (!plan.success) throw new Error("The backup is damaged or from an incompatible version.");
+        const checkins = z.array(CheckinSchema).safeParse(r.checkins ?? []);
+        set({ plan: plan.data, checkins: checkins.success ? checkins.data : [], onboarded: true, isSampleData: false, updatedAt: now() });
       },
       exportJson: () => {
         const { plan, checkins } = get();

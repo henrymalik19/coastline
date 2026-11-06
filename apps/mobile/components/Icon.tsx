@@ -3,7 +3,7 @@ import Svg, { Path, Polyline, Rect } from "react-native-svg";
 
 export type IconName =
   | "home" | "plan" | "calendar" | "trend" | "check" | "info" | "sparkle"
-  | "gear" | "plus" | "trash" | "chevron" | "back" | "up" | "down" | "user" | "wallet" | "card" | "target" | "sliders" | "database" | "shield";
+  | "gear" | "plus" | "trash" | "chevron" | "back" | "up" | "down" | "user" | "wallet" | "card" | "target" | "sliders" | "database" | "shield" | "edit";
 
 /** Small stroke icon set (24px grid, 2px stroke), drawn with react-native-svg. */
 export function Icon({ name, size = 24, color }: { name: IconName; size?: number; color: string }) {
@@ -49,6 +49,12 @@ export function Icon({ name, size = 24, color }: { name: IconName; size?: number
         </>
       )}
       {name === "plus" && <Path d="M12 5v14M5 12h14" {...p} />}
+      {name === "edit" && (
+        <>
+          <Path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z" {...p} />
+          <Path d="m13.5 6.5 4 4" {...p} />
+        </>
+      )}
       {name === "trash" && (
         <>
           <Path d="M4 7h16M10 11v6M14 11v6" {...p} />

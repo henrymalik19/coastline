@@ -38,8 +38,6 @@ filled the 401(k), so a year's total could pass the IRS limit (e.g. $38,000 vs. 
 Parity tests compare against `reference/engine.js` only for states where the prototype stays under
 the limit; there the two engines agree exactly.
 
-## Importing prototype data
+## Backups
 
-`importPrototypeJson()` in `@coastfi/schema` reads prototype v1 and v2 exports: it mirrors the
-prototype's `migrate()`, adds ids to budget/account rows, drops empty paydays, syncs goal steps,
-and returns check-ins separately (they get their own table in Phase 3).
+Settings → Backup & restore downloads (web) or shares (phone) a JSON backup of your plan and check-ins, and restores it. Only this app's own backups are accepted.

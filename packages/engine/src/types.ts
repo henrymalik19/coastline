@@ -5,10 +5,14 @@
  */
 
 export type PayFreq = "weekly" | "biweekly" | "semimonthly" | "monthly";
+/** What kind of income this is. Display only; the math is the same (non-jobs have no 401(k)). */
+export type IncomeKind = "job" | "business" | "rental" | "other";
 
 export type Income = {
   id: string;
   name: string;
+  /** Defaults to "job" when missing (older plans). */
+  kind?: IncomeKind;
   freq: PayFreq;
   /** Take-home per check. */
   net: number;
@@ -28,7 +32,14 @@ export type Income = {
   fullMatch?: boolean;
 };
 
-export type BudgetItem = { id: string; name: string; amount: number; inRetirement: boolean };
+export type BudgetItem = {
+  id: string;
+  name: string;
+  amount: number;
+  inRetirement: boolean;
+  /** Category the item is shown under ("Housing", "Food"…). Display only. */
+  group?: string;
+};
 export type AccountType = "pretax" | "roth" | "taxable" | "hsa" | "cash";
 export type Account = { id: string; name: string; type: AccountType; balance: number; plaidAccountId?: string };
 export type Debt = { id: string; name: string; balance: number; apr: number; minPayment: number; plaidAccountId?: string };

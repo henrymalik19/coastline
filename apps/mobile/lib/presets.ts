@@ -2,16 +2,20 @@ import type { PlanState } from "@coastfi/engine";
 import { defaultPlanState } from "@coastfi/schema";
 import { newId } from "./store";
 
-/** Budget categories offered during setup (amounts start at 0; nothing is assumed). */
-export const BUDGET_PRESETS: { name: string; inRetirement: boolean }[] = [
-  { name: "Rent / mortgage", inRetirement: true },
-  { name: "Groceries", inRetirement: true },
-  { name: "Transportation", inRetirement: true },
-  { name: "Utilities & phone", inRetirement: true },
-  { name: "Insurance", inRetirement: true },
-  { name: "Fun & dining", inRetirement: true },
-  { name: "Subscriptions", inRetirement: true },
-  { name: "Childcare", inRetirement: false },
+/** Budget groups and items offered during setup (amounts start at 0; nothing is assumed). */
+export const BUDGET_PRESETS: { group: string; name: string; inRetirement: boolean }[] = [
+  { group: "Housing", name: "Rent / mortgage", inRetirement: true },
+  { group: "Housing", name: "Utilities", inRetirement: true },
+  { group: "Housing", name: "Home / renter's insurance", inRetirement: true },
+  { group: "Food", name: "Groceries", inRetirement: true },
+  { group: "Food", name: "Dining out", inRetirement: true },
+  { group: "Transportation", name: "Gas & transit", inRetirement: true },
+  { group: "Transportation", name: "Car insurance", inRetirement: true },
+  { group: "Bills", name: "Phone & internet", inRetirement: true },
+  { group: "Bills", name: "Subscriptions", inRetirement: true },
+  { group: "Personal", name: "Fun & hobbies", inRetirement: true },
+  { group: "Personal", name: "Clothing & personal care", inRetirement: true },
+  { group: "Family", name: "Childcare", inRetirement: false },
 ];
 
 /** Common employer match formulas, as tier settings. */
@@ -27,9 +31,9 @@ export const MATCH_PRESETS = [
 export function freshPlan(): PlanState {
   const p = defaultPlanState();
   p.incomes = [
-    { id: newId(), name: "Main job", freq: "biweekly", net: 0, matchMode: "pct", gross: 0, contribPct: 0.04, matchRate1: 1, matchUpTo1: 0.03, matchRate2: 0.5, matchUpTo2: 0.02 },
+    { id: newId(), name: "Main job", kind: "job", freq: "biweekly", net: 0, matchMode: "pct", gross: 0, contribPct: 0.04, matchRate1: 1, matchUpTo1: 0.03, matchRate2: 0.5, matchUpTo2: 0.02 },
   ];
-  p.budget = BUDGET_PRESETS.map((b) => ({ id: newId(), name: b.name, amount: 0, inRetirement: b.inRetirement }));
+  p.budget = BUDGET_PRESETS.map((b) => ({ id: newId(), name: b.name, group: b.group, amount: 0, inRetirement: b.inRetirement }));
   p.accounts = [
     { id: newId(), name: "401(k) / traditional IRA", type: "pretax", balance: 0 },
     { id: newId(), name: "Roth IRA", type: "roth", balance: 0 },

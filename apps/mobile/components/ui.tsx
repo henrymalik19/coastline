@@ -12,7 +12,7 @@ import { Icon } from "./Icon";
  * phone-width column.
  */
 export function Screen({
-  title, subtitle, children, right, narrow, back, hideSettings,
+  title, subtitle, children, right, narrow, back, hideSettings, fill, maxWidth: maxWidthProp,
 }: {
   title: string; subtitle?: string; children: ReactNode; right?: ReactNode;
   /** Forms and text: cap at a readable width instead of filling the screen. */
@@ -20,13 +20,17 @@ export function Screen({
   /** Show a back button (sub-pages). */
   back?: boolean;
   hideSettings?: boolean;
+  /** Full-height page that doesn't scroll; its content scrolls internally (e.g. two-pane editors). */
+  fill?: boolean;
+  /** Override the content width cap. */
+  maxWidth?: number;
 }) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
   const { sidebar, gutter } = useLayout();
   const web = Platform.OS === "web";
   const router = useRouter();
-  const maxWidth = narrow ? FORM_MAX_WIDTH : web ? CONTENT_MAX_WIDTH_WIDE : CONTENT_MAX_WIDTH;
+  const maxWidth = maxWidthProp ?? (narrow ? FORM_MAX_WIDTH : web ? CONTENT_MAX_WIDTH_WIDE : CONTENT_MAX_WIDTH);
   const headerRight = (
     <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
       {right}
@@ -38,17 +42,9 @@ export function Screen({
       ) : null}
     </View>
   );
-  return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: t.bg }}
-      contentContainerStyle={{
-        paddingTop: insets.top + (sidebar ? 40 : space.xl),
-        paddingBottom: space.xxl,
-        paddingHorizontal: gutter,
-        alignItems: "center",
-      }}
-    >
-      <View style={{ width: "100%", maxWidth, gap: space.lg }}>
+  const pad = { paddingTop: insets.top + (sidebar ? 40 : space.xl), paddingHorizontal: gutter, alignItems: "center" as const };
+  const body = (
+      <View style={{ width: "100%", maxWidth, gap: space.lg, ...(fill ? { flex: 1, minHeight: 0 } : null) }}>
         {back ? (
           <Pressable
             role="link"
@@ -69,6 +65,13 @@ export function Screen({
         </View>
         {children}
       </View>
+  );
+  // plain conditional JSX (not an inline component) so inputs keep focus across renders
+  return fill ? (
+    <View style={[{ flex: 1, backgroundColor: t.bg, paddingBottom: Math.max(insets.bottom, space.lg) }, pad]}>{body}</View>
+  ) : (
+    <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={[pad, { paddingBottom: space.xxl }]}>
+      {body}
     </ScrollView>
   );
 }
