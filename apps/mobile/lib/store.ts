@@ -13,6 +13,11 @@ export type AppState = {
   checkins: Checkin[];
   /** False until onboarding is done; until then the sample plan is shown. */
   onboarded: boolean;
+  /** The welcome screen has been shown once (so skipping it isn't nagged again). */
+  seenWelcome: boolean;
+  /** The plan is still the built-in sample (setup replaces it; re-entering setup keeps your entries). */
+  isSampleData: boolean;
+  markWelcomeSeen: () => void;
   /** Ticked to-dos per month: { "2026-11": ["debt", "ira"] } */
   todoDone: Record<string, string[]>;
   updatedAt: number;
@@ -39,6 +44,9 @@ export const useStore = create<AppState>()(
       plan: samplePlanState(),
       checkins: [],
       onboarded: false,
+      seenWelcome: false,
+      isSampleData: true,
+      markWelcomeSeen: () => set({ seenWelcome: true }),
       todoDone: {},
       updatedAt: 0,
       hydrated: false,
@@ -66,24 +74,24 @@ export const useStore = create<AppState>()(
         if (raw && typeof raw === "object" && "plan" in raw && (raw as { app?: string }).app === "coastfi") {
           const r = raw as { plan: unknown; checkins?: Checkin[] };
           const plan = PlanStateSchema.parse(r.plan);
-          set({ plan, checkins: r.checkins ?? [], onboarded: true, updatedAt: now() });
+          set({ plan, checkins: r.checkins ?? [], onboarded: true, isSampleData: false, updatedAt: now() });
           return;
         }
         const { state, checkins } = importPrototypeJson(raw);
-        set({ plan: state, checkins, onboarded: true, updatedAt: now() });
+        set({ plan: state, checkins, onboarded: true, isSampleData: false, updatedAt: now() });
       },
       exportJson: () => {
         const { plan, checkins } = get();
         return JSON.stringify({ app: "coastfi", exportedAt: new Date().toISOString(), plan, checkins }, null, 2);
       },
-      resetToSample: () => set({ plan: samplePlanState(), onboarded: false, updatedAt: now() }),
-      startFresh: (plan) => set({ plan, onboarded: false, todoDone: {}, updatedAt: now() }),
+      resetToSample: () => set({ plan: samplePlanState(), onboarded: false, isSampleData: true, updatedAt: now() }),
+      startFresh: (plan) => set({ plan, onboarded: false, isSampleData: false, todoDone: {}, updatedAt: now() }),
     }),
     {
       name: "coastfi.app",
       version: 1,
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: ({ plan, checkins, onboarded, todoDone, updatedAt }) => ({ plan, checkins, onboarded, todoDone, updatedAt }),
+      partialize: ({ plan, checkins, onboarded, seenWelcome, isSampleData, todoDone, updatedAt }) => ({ plan, checkins, onboarded, seenWelcome, isSampleData, todoDone, updatedAt }),
       // never trust stored data blindly: validate, and fall back to the sample plan
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState>;
@@ -94,6 +102,8 @@ export const useStore = create<AppState>()(
           plan: ok.success ? ok.data : current.plan,
           checkins: Array.isArray(p.checkins) ? p.checkins : [],
           todoDone: p.todoDone && typeof p.todoDone === "object" ? p.todoDone : {},
+          // older saves have no flag: only treat it as the sample if nothing has happened yet
+          isSampleData: typeof p.isSampleData === "boolean" ? p.isSampleData : !p.onboarded && !p.seenWelcome,
         };
       },
       onRehydrateStorage: () => () => useStore.setState({ hydrated: true }),

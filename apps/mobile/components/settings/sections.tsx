@@ -8,7 +8,7 @@ import { money, percent } from "../../lib/format";
 import { usePlan } from "../../lib/plan";
 import { newId, useStore } from "../../lib/store";
 import { FORM_MAX_WIDTH, radius, space, type, useTheme } from "../../lib/theme";
-import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, Toggle, ToggleRow } from "../form";
+import { Button, DateField, FieldRow, IconButton, NumberInput, Segmented, TextField, Toggle, ToggleRow } from "../form";
 import type { IconName } from "../Icon";
 import { Card, Divider } from "../ui";
 
@@ -139,7 +139,7 @@ const FREQS: { value: PayFreq; label: string }[] = [
   { value: "monthly", label: "Monthly" },
 ];
 
-function IncomeSummary({ inc, marginalTax }: { inc: Income; marginalTax: number }) {
+export function IncomeSummary({ inc, marginalTax }: { inc: Income; marginalTax: number }) {
   const t = useTheme();
   const r = resolveIncome(inc);
   const P = PERIODS[r.freq];
@@ -193,14 +193,8 @@ function IncomeSection() {
                 <NumberInput kind="money" label="Take-home per paycheck" value={inc.net} min={0} onChange={(v) => set(i, { net: v })} />
               </FieldRow>,
               inc.freq === "weekly" || inc.freq === "biweekly" ? (
-                <FieldRow key="pd" label="Next payday" hint="YYYY-MM-DD">
-                  <TextField
-                    width={140}
-                    label="Next payday"
-                    placeholder="2026-11-13"
-                    value={inc.nextPayday ?? ""}
-                    onChange={(v) => set(i, { nextPayday: /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : v === "" ? undefined : inc.nextPayday })}
-                  />
+                <FieldRow key="pd" label="Next payday" hint="Finds your 3-paycheck months">
+                  <DateField label="Next payday" value={inc.nextPayday} onChange={(v) => set(i, { nextPayday: v })} />
                 </FieldRow>
               ) : null,
             ]}

@@ -83,6 +83,44 @@ export function TextField({
   );
 }
 
+/**
+ * YYYY-MM-DD field: keeps partial input while typing, saves only real dates
+ * (or clears when emptied), and flags anything else on blur.
+ */
+export function DateField({ value, onChange, label, width = 150 }: { value?: string; onChange: (v: string | undefined) => void; label: string; width?: number }) {
+  const t = useTheme();
+  const [text, setText] = useState(value ?? "");
+  const [focused, setFocused] = useState(false);
+  const valid = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
+  useEffect(() => {
+    if (!focused) setText(value ?? "");
+  }, [value, focused]);
+  const bad = !focused && text !== "" && !valid(text);
+  return (
+    <View style={{ gap: 2, alignItems: "flex-end" }}>
+      <View style={[styles.input, { width, borderColor: bad ? t.bad : focused ? t.accent : t.border, backgroundColor: t.surface2 }]}>
+        <TextInput
+          accessibilityLabel={`${label}, year-month-day`}
+          value={text}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={t.text3}
+          maxLength={10}
+          onChangeText={(s) => {
+            setText(s);
+            if (s === "") onChange(undefined);
+            else if (valid(s)) onChange(s);
+          }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          inputMode="numeric"
+          style={[type.body, styles.inputText, { color: t.text, textAlign: "right" }, Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null]}
+        />
+      </View>
+      {bad ? <Text style={[type.caption, { color: t.bad }]}>Use YYYY-MM-DD</Text> : null}
+    </View>
+  );
+}
+
 /* ---------- rows ---------- */
 
 /** A settings row: label (and hint) on the left, control on the right. */

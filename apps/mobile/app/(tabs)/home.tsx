@@ -1,4 +1,6 @@
+import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Button } from "../../components/form";
 import { Icon } from "../../components/Icon";
 import { ProgressRing } from "../../components/ProgressRing";
 import { Card, Divider, Pill, Screen, SectionLabel, Stat, type Tone } from "../../components/ui";
@@ -12,6 +14,7 @@ const oddsTone = (p: number): Tone => (p >= 0.8 ? "good" : p >= 0.6 ? "warn" : "
 
 export default function Home() {
   const t = useTheme();
+  const router = useRouter();
   // `wide` = room for two cards side by side; stats go 4 or 2 per row
   const { twoColumn: wide, statColumns } = useLayout();
   const { state, result: o, start, isSample } = usePlan();
@@ -112,6 +115,16 @@ export default function Home() {
   /* ---------- layout: dashboard on desktop web, single column on phones ---------- */
   return (
     <Screen title="Coast FI" subtitle={monthLabel(start, 0, true)} right={isSample ? <Pill tone="accent">Sample plan</Pill> : undefined}>
+      {isSample ? (
+        <View style={[styles.banner, { backgroundColor: t.accentSoft }]}>
+          <Icon name="sparkle" size={20} color={t.accent} />
+          <View style={{ flex: 1, minWidth: 200 }}>
+            <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>You're looking at a sample plan</Text>
+            <Text style={[type.caption, { color: t.text2 }]}>Set up yours in about 5 minutes to see your real numbers.</Text>
+          </View>
+          <Button title="Set up my plan" tone="primary" onPress={() => router.push("/onboarding")} />
+        </View>
+      ) : null}
       {wide ? (
         <>
           {stats}
@@ -182,4 +195,5 @@ const styles = StyleSheet.create({
   amount: { flexDirection: "row", alignItems: "center", gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   footer: { flexDirection: "row", gap: space.sm, paddingHorizontal: space.xs, alignItems: "flex-start" },
+  banner: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.lg, flexWrap: "wrap" },
 });
