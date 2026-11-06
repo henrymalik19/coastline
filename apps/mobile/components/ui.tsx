@@ -1,25 +1,30 @@
 import type { ReactNode } from "react";
 import { Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useIsWide } from "../lib/layout";
+import { useLayout } from "../lib/layout";
 import { CONTENT_MAX_WIDTH, CONTENT_MAX_WIDTH_WIDE, radius, space, type, useTheme } from "../lib/theme";
 
-/** Scrolling page with a large title, safe-area padding and a phone-width column. */
+/**
+ * Scrolling page with a large title and safe-area padding. On the web the content
+ * fills the available width (capped on huge monitors); native tablets keep a
+ * phone-width column.
+ */
 export function Screen({ title, subtitle, children, right }: { title: string; subtitle?: string; children: ReactNode; right?: ReactNode }) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const wide = useIsWide();
+  const { sidebar, gutter } = useLayout();
+  const web = Platform.OS === "web";
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: t.bg }}
       contentContainerStyle={{
-        paddingTop: insets.top + (wide ? 40 : space.xl),
+        paddingTop: insets.top + (sidebar ? 40 : space.xl),
         paddingBottom: space.xxl,
-        paddingHorizontal: wide ? 40 : space.lg,
-        alignItems: wide ? "stretch" : "center",
+        paddingHorizontal: gutter,
+        alignItems: web ? "stretch" : "center",
       }}
     >
-      <View style={{ width: "100%", maxWidth: wide ? CONTENT_MAX_WIDTH_WIDE : CONTENT_MAX_WIDTH, gap: space.lg }}>
+      <View style={{ width: "100%", maxWidth: web ? CONTENT_MAX_WIDTH_WIDE : CONTENT_MAX_WIDTH, gap: space.lg }}>
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text accessibilityRole="header" style={[type.title, { color: t.text }]}>{title}</Text>

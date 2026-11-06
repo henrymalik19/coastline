@@ -4,7 +4,7 @@ import { Icon } from "../../components/Icon";
 import { ProgressRing } from "../../components/ProgressRing";
 import { Card, Divider, Pill, Screen, SectionLabel, Stat, type Tone } from "../../components/ui";
 import { ageLabel, money, monthLabel, percent } from "../../lib/format";
-import { useIsWide } from "../../lib/layout";
+import { useLayout } from "../../lib/layout";
 import { monthTodos, usePlan, type Todo } from "../../lib/plan";
 import { radius, space, type, useTheme } from "../../lib/theme";
 
@@ -12,7 +12,8 @@ const oddsTone = (p: number): Tone => (p >= 0.8 ? "good" : p >= 0.6 ? "warn" : "
 
 export default function Home() {
   const t = useTheme();
-  const wide = useIsWide();
+  // `wide` = room for two cards side by side; stats go 4 or 2 per row
+  const { twoColumn: wide, statColumns } = useLayout();
   const { state, result: o, start, isSample } = usePlan();
   const d = o.d;
   const m0 = o.plan.months[0]!;
@@ -54,20 +55,23 @@ export default function Home() {
     </Card>
   );
 
+  const statCards = [
+    <Stat key="fire" label="FIRE number" value={money(o.fire, { compact: true })} hint={`${money(d.retireAnnual, { compact: true })}/yr at ${percent(d.swr, 1)}`} />,
+    <Stat key="odds" label={`Odds of FIRE by ${d.retireAge}`} value={percent(o.mc.probFire)} tone={oddsTone(o.mc.probFire)} hint="Across 2,000 market paths" />,
+    <Stat key="days" label="Freedom bought" value={`${Math.round(o.freedomDays).toLocaleString("en-US")} days`} hint="Of retirement spending, today" />,
+    <Stat key="100" label="+$100/month" value={o.coastSoonerMonths ? `${o.coastSoonerMonths} mo sooner` : "—"} hint="Effect on your coast date" />,
+  ];
+  const statRows: (typeof statCards)[] = [];
+  for (let i = 0; i < statCards.length; i += statColumns) statRows.push(statCards.slice(i, i + statColumns));
   const stats = (
-    <View style={styles.grid}>
-      <Card style={styles.cell}>
-        <Stat label="FIRE number" value={money(o.fire, { compact: true })} hint={`${money(d.retireAnnual, { compact: true })}/yr at ${percent(d.swr, 1)}`} />
-      </Card>
-      <Card style={styles.cell}>
-        <Stat label={`Odds of FIRE by ${d.retireAge}`} value={percent(o.mc.probFire)} tone={oddsTone(o.mc.probFire)} hint="Across 2,000 market paths" />
-      </Card>
-      <Card style={styles.cell}>
-        <Stat label="Freedom bought" value={`${Math.round(o.freedomDays).toLocaleString("en-US")} days`} hint="Of retirement spending, today" />
-      </Card>
-      <Card style={styles.cell}>
-        <Stat label="+$100/month" value={o.coastSoonerMonths ? `${o.coastSoonerMonths} mo sooner` : "—"} hint="Effect on your coast date" />
-      </Card>
+    <View style={{ gap: space.lg }}>
+      {statRows.map((row, r) => (
+        <View key={r} style={styles.statRow}>
+          {row.map((s) => (
+            <Card key={s.key} style={{ flex: 1 }}>{s}</Card>
+          ))}
+        </View>
+      ))}
     </View>
   );
 
@@ -169,9 +173,7 @@ const styles = StyleSheet.create({
   heroRow: { flexDirection: "row", alignItems: "center", gap: space.xl },
   note: { marginTop: space.lg, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: 10, flexDirection: "row" },
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.sm },
-  // 2 across on phones, 4 across when there's room (flexBasis + minWidth do the wrapping)
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: space.lg },
-  cell: { flexGrow: 1, flexBasis: "22%", minWidth: 150 },
+  statRow: { flexDirection: "row", gap: space.lg, alignItems: "stretch" },
   wideRow: { flexDirection: "row", gap: space.lg, alignItems: "stretch" },
   todo: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md, minHeight: 56 },
   check: { width: 28, height: 28, borderRadius: 8, borderWidth: 2, alignItems: "center", justifyContent: "center" },
