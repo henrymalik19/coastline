@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import type { BottomTabBarProps } from "expo-router/tabs";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { percent } from "../lib/format";
@@ -10,7 +11,10 @@ import { ProgressBar } from "./ProgressRing";
 /** Desktop web navigation: replaces the bottom tab bar on wide windows. */
 export function Sidebar({ state, descriptors, emitter, navigateToTab, icons }: BottomTabBarProps & { icons: Record<string, IconName> }) {
   const t = useTheme();
+  const router = useRouter();
   const { result, isSample } = usePlan();
+  const settingsRoute = state.routes.find((r) => r.name === "settings");
+  const focusedName = state.routes[state.index]?.name;
 
   return (
     <View role="navigation" aria-label="Main" style={[styles.bar, { backgroundColor: t.surface, borderRightColor: t.border }]}>
@@ -26,6 +30,7 @@ export function Sidebar({ state, descriptors, emitter, navigateToTab, icons }: B
 
       <View style={{ gap: 2 }}>
         {state.routes.map((route, index) => {
+          if (route.name === "settings" || !(route.name in icons)) return null;
           const focused = index === state.index;
           const { options } = descriptors[route.key]!;
           const label = options.title ?? route.name;
@@ -54,6 +59,27 @@ export function Sidebar({ state, descriptors, emitter, navigateToTab, icons }: B
       </View>
 
       <View style={{ flex: 1 }} />
+
+      {settingsRoute ? (
+        <Pressable
+          onPress={() => {
+            // always land on the settings index, even if a sub-page was open
+            if (focusedName === "settings") router.navigate("/settings");
+            else navigateToTab(settingsRoute.key);
+          }}
+          role="link"
+          aria-current={focusedName === "settings" ? "page" : undefined}
+          accessibilityLabel="Settings"
+          style={(s) => {
+            const hovered = (s as typeof s & { hovered?: boolean }).hovered;
+            const on = focusedName === "settings";
+            return [styles.item, { backgroundColor: on ? t.accentSoft : s.pressed || hovered ? t.surface2 : "transparent", marginBottom: -space.md }];
+          }}
+        >
+          <Icon name="gear" size={20} color={focusedName === "settings" ? t.accent : t.text2} />
+          <Text style={[type.body, { color: focusedName === "settings" ? t.accent : t.text2, fontWeight: focusedName === "settings" ? "600" : "500" }]}>Settings</Text>
+        </Pressable>
+      ) : null}
 
       <View style={[styles.summary, { backgroundColor: t.surface2 }]}>
         <View style={styles.between}>

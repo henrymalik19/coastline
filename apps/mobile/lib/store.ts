@@ -46,6 +46,7 @@ export const useStore = create<AppState>()(
       update: (fn) => {
         const draft = structuredClone(get().plan);
         fn(draft);
+        syncGoalSteps(draft);
         set({ plan: draft, updatedAt: now() });
       },
       setPlan: (plan) => set({ plan, updatedAt: now() }),
@@ -99,6 +100,20 @@ export const useStore = create<AppState>()(
     },
   ),
 );
+
+/** Every goal has exactly one plan step; new goals go just before "taxable" (as in the prototype). */
+export function syncGoalSteps(p: PlanState): void {
+  const ids = p.goals.map((g) => `goal:${g.id}` as const);
+  const steps = p.plan.steps.filter((s) => !s.startsWith("goal:") || ids.includes(s as `goal:${string}`));
+  for (const id of ids) {
+    if (steps.includes(id)) continue;
+    const t = steps.indexOf("taxable");
+    steps.splice(t < 0 ? steps.length : t, 0, id);
+  }
+  p.plan.steps = steps;
+}
+
+export const newId = () => Math.random().toString(36).slice(2, 9);
 
 /** "YYYY-MM" for a date (check-ins and to-dos are keyed by month). */
 export const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;

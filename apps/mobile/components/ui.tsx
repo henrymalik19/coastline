@@ -1,19 +1,43 @@
 import type { ReactNode } from "react";
-import { Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { useRouter } from "expo-router";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLayout } from "../lib/layout";
-import { CONTENT_MAX_WIDTH, CONTENT_MAX_WIDTH_WIDE, radius, space, type, useTheme } from "../lib/theme";
+import { CONTENT_MAX_WIDTH, CONTENT_MAX_WIDTH_WIDE, FORM_MAX_WIDTH, radius, space, type, useTheme } from "../lib/theme";
+import { Icon } from "./Icon";
 
 /**
  * Scrolling page with a large title and safe-area padding. On the web the content
  * fills the available width (capped on huge monitors); native tablets keep a
  * phone-width column.
  */
-export function Screen({ title, subtitle, children, right }: { title: string; subtitle?: string; children: ReactNode; right?: ReactNode }) {
+export function Screen({
+  title, subtitle, children, right, narrow, back, hideSettings,
+}: {
+  title: string; subtitle?: string; children: ReactNode; right?: ReactNode;
+  /** Forms and text: cap at a readable width instead of filling the screen. */
+  narrow?: boolean;
+  /** Show a back button (sub-pages). */
+  back?: boolean;
+  hideSettings?: boolean;
+}) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
   const { sidebar, gutter } = useLayout();
   const web = Platform.OS === "web";
+  const router = useRouter();
+  const maxWidth = narrow ? FORM_MAX_WIDTH : web ? CONTENT_MAX_WIDTH_WIDE : CONTENT_MAX_WIDTH;
+  const headerRight = (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+      {right}
+      {/* phones have no sidebar, so settings lives in the header */}
+      {!sidebar && !hideSettings ? (
+        <Pressable role="link" accessibilityLabel="Settings" hitSlop={8} onPress={() => router.push("/settings")} style={{ padding: 6 }}>
+          <Icon name="gear" size={22} color={t.text2} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: t.bg }}
@@ -24,13 +48,24 @@ export function Screen({ title, subtitle, children, right }: { title: string; su
         alignItems: "center",
       }}
     >
-      <View style={{ width: "100%", maxWidth: web ? CONTENT_MAX_WIDTH_WIDE : CONTENT_MAX_WIDTH, gap: space.lg }}>
+      <View style={{ width: "100%", maxWidth, gap: space.lg }}>
+        {back ? (
+          <Pressable
+            role="link"
+            accessibilityLabel="Back"
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/settings"))}
+            style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start", marginLeft: -6, marginBottom: -8 }}
+          >
+            <Icon name="back" size={20} color={t.accent} />
+            <Text style={[type.label, { color: t.accent }]}>Back</Text>
+          </Pressable>
+        ) : null}
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
-            <Text accessibilityRole="header" style={[type.title, { color: t.text }]}>{title}</Text>
+            <Text role="heading" aria-level={1} style={[type.title, { color: t.text }]}>{title}</Text>
             {subtitle ? <Text style={[type.body, { color: t.text3, marginTop: 2 }]}>{subtitle}</Text> : null}
           </View>
-          {right}
+          {headerRight}
         </View>
         {children}
       </View>

@@ -77,3 +77,5 @@ export const CONTENT_MAX_WIDTH = 560;
  * ultra-wide monitors it stops labels and numbers drifting thousands of px apart.
  */
 export const CONTENT_MAX_WIDTH_WIDE = 1680;
+/** Forms and text pages: a readable column, centered. */
+export const FORM_MAX_WIDTH = 760;
