@@ -6,7 +6,7 @@
  */
 import { PERIODS, type PayFreq, type PlanState } from "@coastfi/engine";
 import { z } from "zod";
-import { defaultPlanState, PlanStateError, PlanStateSchema } from "./index";
+import { defaultPlanState, PlanStateError, PlanStateSchema } from "./schemas";
 
 export const CheckinSchema = z.object({
   /** "YYYY-MM" */
