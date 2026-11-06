@@ -30,7 +30,21 @@ export type Income = {
   pretax?: number;
   match?: number;
   fullMatch?: boolean;
+  /**
+   * How take-home (`net`) is set for a job: "auto" = gross − 401(k) − taxes − deductions
+   * (computed in the app), "manual" = typed from a pay stub. Missing = manual.
+   */
+  netMode?: "auto" | "manual";
+  /** Taxes withheld per check, from a pay stub (auto mode). */
+  taxes?: PayTaxes;
+  /** Other paycheck deductions, per check (auto mode). */
+  deductions?: PayDeduction[];
 };
+
+export type PayTaxes = { federal: number; state: number; socialSecurity: number; medicare: number };
+
+export type PayDeductionKind = "health" | "dentalVision" | "lifeDisability" | "union" | "other";
+export type PayDeduction = { id: string; kind: PayDeductionKind; amount: number };
 
 export type BudgetItem = {
   id: string;

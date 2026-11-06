@@ -35,6 +35,9 @@ export const IncomeSchema = z.object({
   pretax: nonNeg.optional(),
   match: nonNeg.optional(),
   fullMatch: z.boolean().optional(),
+  netMode: z.enum(["auto", "manual"]).optional(),
+  taxes: z.object({ federal: nonNeg, state: nonNeg, socialSecurity: nonNeg, medicare: nonNeg }).optional(),
+  deductions: z.array(z.object({ id, kind: z.enum(["health", "dentalVision", "lifeDisability", "union", "other"]), amount: nonNeg })).optional(),
 });
 
 export const BudgetItemSchema = z.object({ id, name: z.string(), amount: money, inRetirement: z.boolean(), group: z.string().optional(), essential: z.boolean().optional() });

@@ -1,11 +1,13 @@
-import { PERIODS, resolveIncome, type Income, type IncomeKind, type PayFreq } from "@coastfi/engine";
+import { PERIODS, resolveIncome, type Income, type IncomeKind, type PayFreq, type PayTaxes } from "@coastfi/engine";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money, percent } from "../lib/format";
 import { HELP } from "../lib/help";
+import { DEDUCTION_KINDS, paycheck, withAutoNet } from "../lib/paycheck";
 import { MATCH_PRESETS } from "../lib/presets";
+import { estimatePaycheckTaxes } from "../lib/tax";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { Button, DateField, FieldRow, IconButton, NumberInput, Segmented, TextField } from "./form";
+import { Button, DateField, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "./form";
 import { AddChip, MasterDetail } from "./MasterDetail";
 import { Card, Divider } from "./ui";
 import { confirm } from "../lib/confirm";
@@ -32,7 +34,7 @@ const NON_JOB = { matchMode: "usd" as const, pretax: 0, match: 0, fullMatch: tru
 export function newIncome(kind: IncomeKind): Income {
   const name = INCOME_KINDS.find((k) => k.value === kind)!.name;
   return kind === "job"
-    ? { id: newId(), name, kind, freq: "biweekly", net: 0, matchMode: "pct", gross: 0, contribPct: 0.04, matchRate1: 1, matchUpTo1: 0.03, matchRate2: 0.5, matchUpTo2: 0.02 }
+    ? { id: newId(), name, kind, freq: "biweekly", net: 0, netMode: "auto", matchMode: "pct", gross: 0, contribPct: 0.04, matchRate1: 1, matchUpTo1: 0.03, matchRate2: 0.5, matchUpTo2: 0.02, taxes: { federal: 0, state: 0, socialSecurity: 0, medicare: 0 }, deductions: [] }
     : { id: newId(), name, kind, freq: "monthly", net: 0, ...NON_JOB };
 }
 
@@ -63,144 +65,262 @@ export function IncomeSummary({ inc, marginalTax }: { inc: Income; marginalTax: 
   );
 }
 
-/** One income source: type, schedule, amount, and (for jobs) 401(k) + employer match. */
+/** One income source. Jobs: gross pay, then deductions like a pay stub, then take-home (calculated or typed). */
 export function IncomeEditor({
   inc, onChange, onRemove, marginalTax, bare,
 }: { inc: Income; onChange: (patch: Partial<Income>) => void; onRemove?: () => void; marginalTax: number; /** No card around it (inside a pane). */ bare?: boolean }) {
   const t = useTheme();
   const kind = inc.kind ?? "job";
   const isJob = kind === "job";
-  const [custom, setCustom] = useState(false);
-  const preset = MATCH_PRESETS.find(
-    (m) => (inc.matchRate1 ?? 0) === m.r1 && (inc.matchUpTo1 ?? 0) === m.u1 && (inc.matchRate2 ?? 0) === m.r2 && (inc.matchUpTo2 ?? 0) === m.u2,
-  );
-  const amountHelp = kind === "business" ? HELP.businessAmount : kind === "rental" ? HELP.rentalAmount : kind === "other" ? HELP.otherAmount : HELP.takeHome;
+  const auto = isJob && inc.netMode === "auto";
+  // every change to a job in auto mode recalculates take-home
+  const change = (patch: Partial<Income>) => onChange(withAutoNet(inc, patch));
+  const amountHelp = kind === "business" ? HELP.businessAmount : kind === "rental" ? HELP.rentalAmount : HELP.otherAmount;
 
   return (
     <Wrap bare={bare}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
         <View style={{ flex: 1 }}>
-          <TextField label="Income name" placeholder="e.g. Acme Corp" value={inc.name} onChange={(v) => onChange({ name: v })} />
+          <TextField label="Income name" placeholder="e.g. Acme Corp" value={inc.name} onChange={(v) => change({ name: v })} />
         </View>
-        {onRemove ? <IconButton icon="trash" label={`Remove ${inc.name || "this income"}`} onPress={onRemove} /> : null}
+        {onRemove ? <IconButton icon="trash" color={t.bad} label={`Remove ${inc.name || "this income"}`} onPress={onRemove} /> : null}
       </View>
       <Segmented
         label="Type of income"
         options={INCOME_KINDS.map((k) => ({ value: k.value, label: k.label }))}
         value={kind}
-        onChange={(v) => onChange(v === "job" ? { kind: v, matchMode: "pct" } : { kind: v, ...NON_JOB })}
+        onChange={(v) => change(v === "job" ? { kind: v, matchMode: "pct", netMode: "auto" } : { kind: v, ...NON_JOB })}
       />
 
       <View style={{ gap: space.xs, marginTop: space.xs }}>
         <Text style={[type.label, { color: t.text2 }]}>{isJob ? "How often are you paid?" : "How often does it come in?"}</Text>
-        <Segmented label="Frequency" options={FREQS} value={inc.freq} onChange={(v) => onChange({ freq: v })} />
+        <Segmented label="Frequency" options={FREQS} value={inc.freq} onChange={(v) => change({ freq: v })} />
       </View>
-      <FieldRow
-        label={isJob ? "Take-home per paycheck" : `Amount you keep ${inc.freq === "monthly" ? "per month" : "each time"}`}
-        hint={isJob ? "What lands in your bank account" : "After taxes and costs"}
-        info={amountHelp}
-      >
-        <NumberInput kind="money" label={isJob ? "Take-home per paycheck" : "Amount you keep"} value={inc.net} onChange={(v) => onChange({ net: v })} />
-      </FieldRow>
       {inc.freq === "weekly" || inc.freq === "biweekly" ? (
-        <>
-          <Divider />
-          <FieldRow label={isJob ? "Next payday" : "Next payment date"} hint="Finds your 3-paycheck months" info={HELP.nextPayday}>
-            <DateField label="Next payday" value={inc.nextPayday} onChange={(v) => onChange({ nextPayday: v })} />
-          </FieldRow>
-        </>
+        <FieldRow label={isJob ? "Next payday" : "Next payment date"} hint="Finds your 3-paycheck months" info={HELP.nextPayday}>
+          <DateField label="Next payday" value={inc.nextPayday} onChange={(v) => change({ nextPayday: v })} />
+        </FieldRow>
       ) : null}
 
       {isJob ? (
-        <View style={{ gap: space.xs, marginTop: space.sm }}>
+        <JobPay inc={inc} auto={auto} change={change} marginalTax={marginalTax} />
+      ) : (
+        <FieldRow label={`Amount you keep ${inc.freq === "monthly" ? "per month" : "each time"}`} hint="After taxes and costs" info={amountHelp}>
+          <NumberInput kind="money" label="Amount you keep" value={inc.net} onChange={(v) => change({ net: v })} />
+        </FieldRow>
+      )}
+    </Wrap>
+  );
+}
+
+function SubHeading({ children, right }: { children: string; right?: ReactNode }) {
+  const t = useTheme();
+  return (
+    <View style={[styles.between, { marginTop: space.md, flexWrap: "wrap" }]}>
+      <Text style={[type.overline, { color: t.text3 }]}>{children}</Text>
+      {right}
+    </View>
+  );
+}
+
+/** Gross → deductions (401(k), taxes, other) → take-home, like a pay stub. */
+function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean; change: (p: Partial<Income>) => void; marginalTax: number }) {
+  const t = useTheme();
+  const [custom, setCustom] = useState(false);
+  const pay = paycheck(inc);
+  const P = PERIODS[inc.freq];
+  const taxes = inc.taxes ?? { federal: 0, state: 0, socialSecurity: 0, medicare: 0 };
+  const setTax = (k: keyof PayTaxes, v: number) => change({ taxes: { ...taxes, [k]: v } });
+  const deductions = inc.deductions ?? [];
+  const preset = MATCH_PRESETS.find(
+    (m) => (inc.matchRate1 ?? 0) === m.r1 && (inc.matchUpTo1 ?? 0) === m.u1 && (inc.matchRate2 ?? 0) === m.r2 && (inc.matchUpTo2 ?? 0) === m.u2,
+  );
+
+  return (
+    <View style={{ gap: space.xs }}>
+      <SubHeading>Pay</SubHeading>
+      <FieldRow label="Gross pay per paycheck" hint="Before anything is taken out" info={HELP.gross}>
+        <NumberInput kind="money" label="Gross pay per paycheck" value={inc.gross ?? 0} onChange={(v) => change({ gross: v })} />
+      </FieldRow>
+
+      <SubHeading>Deductions</SubHeading>
+
+      {/* 401(k) + match */}
+      <View style={[styles.group, { borderColor: t.border }]}>
+        <View style={[styles.between, { flexWrap: "wrap" }]}>
+          <Text style={[type.heading, { color: t.text }]}>401(k)</Text>
+          <Segmented
+            label="How to enter 401(k)"
+            options={[{ value: "pct", label: "% of pay" }, { value: "usd", label: "$ per check" }]}
+            value={inc.matchMode}
+            onChange={(v) => change({ matchMode: v })}
+          />
+        </View>
+        {inc.matchMode === "pct" ? (
+          <>
+            <FieldRow label="You put in" hint={(inc.gross ?? 0) > 0 ? `${money(pay.k401)} per check` : "% of gross pay"} info={HELP.contribPct}>
+              <NumberInput kind="percent" label="Your 401(k) percent" value={inc.contribPct ?? 0} max={1} onChange={(v) => change({ contribPct: v })} />
+            </FieldRow>
+            <FieldRow label="Your employer's match" info={HELP.match} stacked>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+                {MATCH_PRESETS.map((m) => {
+                  const on = !custom && preset?.label === m.label;
+                  return (
+                    <Pressable
+                      key={m.label}
+                      role="radio"
+                      aria-checked={on}
+                      onPress={() => { setCustom(false); change({ matchRate1: m.r1, matchUpTo1: m.u1, matchRate2: m.r2, matchUpTo2: m.u2 }); }}
+                      style={[styles.chip, { borderColor: on ? t.accent : t.border, backgroundColor: on ? t.accentSoft : t.surface }]}
+                    >
+                      <Text style={[type.caption, { color: on ? t.accent : t.text2, fontWeight: on ? "700" : "500" }]}>{m.label}</Text>
+                    </Pressable>
+                  );
+                })}
+                <Pressable
+                  role="radio"
+                  aria-checked={custom || !preset}
+                  onPress={() => setCustom(true)}
+                  style={[styles.chip, { borderColor: custom || !preset ? t.accent : t.border, backgroundColor: custom || !preset ? t.accentSoft : t.surface }]}
+                >
+                  <Text style={[type.caption, { color: custom || !preset ? t.accent : t.text2, fontWeight: custom || !preset ? "700" : "500" }]}>Something else</Text>
+                </Pressable>
+              </View>
+            </FieldRow>
+            {custom || !preset ? (
+              <View style={{ gap: space.sm, paddingBottom: space.sm }}>
+                <View style={styles.pair}>
+                  <Text style={[type.caption, { color: t.text2 }]}>They match</Text>
+                  <NumberInput kind="percent" width={92} stepper={false} label="Tier 1 match rate" value={inc.matchRate1 ?? 0} max={2} onChange={(v) => change({ matchRate1: v })} />
+                  <Text style={[type.caption, { color: t.text2 }]}>of the first</Text>
+                  <NumberInput kind="percent" width={92} stepper={false} label="Tier 1 percent of pay" value={inc.matchUpTo1 ?? 0} max={1} onChange={(v) => change({ matchUpTo1: v })} />
+                  <Text style={[type.caption, { color: t.text2 }]}>of pay</Text>
+                </View>
+                <View style={styles.pair}>
+                  <Text style={[type.caption, { color: t.text2 }]}>plus</Text>
+                  <NumberInput kind="percent" width={92} stepper={false} label="Tier 2 match rate" value={inc.matchRate2 ?? 0} max={2} onChange={(v) => change({ matchRate2: v })} />
+                  <Text style={[type.caption, { color: t.text2 }]}>of the next</Text>
+                  <NumberInput kind="percent" width={92} stepper={false} label="Tier 2 percent of pay" value={inc.matchUpTo2 ?? 0} max={1} onChange={(v) => change({ matchUpTo2: v })} />
+                  <Text style={[type.caption, { color: t.text3 }]}>(optional)</Text>
+                </View>
+              </View>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <FieldRow label="You put in per paycheck" info={HELP.contribPct}>
+              <NumberInput kind="money" label="Your 401(k) per paycheck" value={inc.pretax ?? 0} onChange={(v) => change({ pretax: v })} />
+            </FieldRow>
+            <FieldRow label="Employer match per paycheck" info={HELP.match}>
+              <NumberInput kind="money" label="Employer match per paycheck" value={inc.match ?? 0} onChange={(v) => change({ match: v })} />
+            </FieldRow>
+            <FieldRow label="Getting the full match?">
+              <Segmented
+                label="Getting the full match"
+                options={[{ value: "y", label: "Yes" }, { value: "n", label: "No" }]}
+                value={inc.fullMatch === false ? "n" : "y"}
+                onChange={(v) => change({ fullMatch: v === "y" })}
+              />
+            </FieldRow>
+          </>
+        )}
+        {(inc.matchMode === "pct" && (inc.gross ?? 0) > 0) || inc.matchMode === "usd" ? <IncomeSummary inc={inc} marginalTax={marginalTax} /> : null}
+      </View>
+
+      {/* taxes, from a pay stub (or an estimate) */}
+      {auto ? (
+        <View style={[styles.group, { borderColor: t.border }]}>
           <View style={[styles.between, { flexWrap: "wrap" }]}>
-            <Text style={[type.heading, { color: t.text }]}>401(k) & employer match</Text>
-            <Segmented
-              label="How to enter 401(k)"
-              options={[{ value: "pct", label: "% of pay" }, { value: "usd", label: "$ per check" }]}
-              value={inc.matchMode}
-              onChange={(v) => onChange({ matchMode: v })}
+            <Text style={[type.heading, { color: t.text }]}>Taxes</Text>
+            <Button
+              title="Fill in an estimate"
+              tone="ghost"
+              disabled={!((inc.gross ?? 0) > 0)}
+              onPress={() => change({ taxes: estimatePaycheckTaxes(inc.gross ?? 0, P, pay.k401 + pay.pretaxDeductions) })}
             />
           </View>
-          {inc.matchMode === "pct" ? (
-            <>
-              <FieldRow label="Gross pay per paycheck" hint="Before anything is taken out" info={HELP.gross}>
-                <NumberInput kind="money" label="Gross pay per paycheck" value={inc.gross ?? 0} onChange={(v) => onChange({ gross: v })} />
-              </FieldRow>
-              <Divider />
-              <FieldRow label="You put into your 401(k)" hint="% of gross pay" info={HELP.contribPct}>
-                <NumberInput kind="percent" label="Your 401(k) percent" value={inc.contribPct ?? 0} max={1} onChange={(v) => onChange({ contribPct: v })} />
-              </FieldRow>
-              <Divider />
-              <FieldRow label="Your employer's match" info={HELP.match} stacked>
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-                  {MATCH_PRESETS.map((m) => {
-                    const on = !custom && preset?.label === m.label;
-                    return (
-                      <Pressable
-                        key={m.label}
-                        role="radio"
-                        aria-checked={on}
-                        onPress={() => { setCustom(false); onChange({ matchRate1: m.r1, matchUpTo1: m.u1, matchRate2: m.r2, matchUpTo2: m.u2 }); }}
-                        style={[styles.chip, { borderColor: on ? t.accent : t.border, backgroundColor: on ? t.accentSoft : t.surface }]}
-                      >
-                        <Text style={[type.caption, { color: on ? t.accent : t.text2, fontWeight: on ? "700" : "500" }]}>{m.label}</Text>
-                      </Pressable>
-                    );
-                  })}
-                  <Pressable
-                    role="radio"
-                    aria-checked={custom || !preset}
-                    onPress={() => setCustom(true)}
-                    style={[styles.chip, { borderColor: custom || !preset ? t.accent : t.border, backgroundColor: custom || !preset ? t.accentSoft : t.surface }]}
-                  >
-                    <Text style={[type.caption, { color: custom || !preset ? t.accent : t.text2, fontWeight: custom || !preset ? "700" : "500" }]}>Something else</Text>
-                  </Pressable>
-                </View>
-              </FieldRow>
-              {custom || !preset ? (
-                <View style={{ gap: space.sm, paddingBottom: space.sm }}>
-                  <View style={styles.pair}>
-                    <Text style={[type.caption, { color: t.text2 }]}>They match</Text>
-                    <NumberInput kind="percent" width={92} stepper={false} label="Tier 1 match rate" value={inc.matchRate1 ?? 0} max={2} onChange={(v) => onChange({ matchRate1: v })} />
-                    <Text style={[type.caption, { color: t.text2 }]}>of the first</Text>
-                    <NumberInput kind="percent" width={92} stepper={false} label="Tier 1 percent of pay" value={inc.matchUpTo1 ?? 0} max={1} onChange={(v) => onChange({ matchUpTo1: v })} />
-                    <Text style={[type.caption, { color: t.text2 }]}>of pay</Text>
-                  </View>
-                  <View style={styles.pair}>
-                    <Text style={[type.caption, { color: t.text2 }]}>plus</Text>
-                    <NumberInput kind="percent" width={92} stepper={false} label="Tier 2 match rate" value={inc.matchRate2 ?? 0} max={2} onChange={(v) => onChange({ matchRate2: v })} />
-                    <Text style={[type.caption, { color: t.text2 }]}>of the next</Text>
-                    <NumberInput kind="percent" width={92} stepper={false} label="Tier 2 percent of pay" value={inc.matchUpTo2 ?? 0} max={1} onChange={(v) => onChange({ matchUpTo2: v })} />
-                    <Text style={[type.caption, { color: t.text3 }]}>(optional)</Text>
-                  </View>
-                </View>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <FieldRow label="Your 401(k) per paycheck">
-                <NumberInput kind="money" label="Your 401(k) per paycheck" value={inc.pretax ?? 0} onChange={(v) => onChange({ pretax: v })} />
-              </FieldRow>
-              <Divider />
-              <FieldRow label="Employer match per paycheck" info={HELP.match}>
-                <NumberInput kind="money" label="Employer match per paycheck" value={inc.match ?? 0} onChange={(v) => onChange({ match: v })} />
-              </FieldRow>
-              <Divider />
-              <FieldRow label="Getting the full match?">
-                <Segmented
-                  label="Getting the full match"
-                  options={[{ value: "y", label: "Yes" }, { value: "n", label: "No" }]}
-                  value={inc.fullMatch === false ? "n" : "y"}
-                  onChange={(v) => onChange({ fullMatch: v === "y" })}
-                />
-              </FieldRow>
-            </>
-          )}
-          {(inc.matchMode === "pct" && (inc.gross ?? 0) > 0) || inc.matchMode === "usd" ? <IncomeSummary inc={inc} marginalTax={marginalTax} /> : null}
+          <Text style={[type.caption, { color: t.text3 }]}>Copy these from a pay stub, per paycheck. The estimate assumes a single filer and about 4% state tax.</Text>
+          {(
+            [
+              ["federal", "Federal income tax"],
+              ["state", "State income tax"],
+              ["socialSecurity", "Social Security"],
+              ["medicare", "Medicare"],
+            ] as const
+          ).map(([k, label]) => (
+            <FieldRow key={k} label={label}>
+              <NumberInput kind="money" label={label} value={taxes[k]} onChange={(v) => setTax(k, v)} />
+            </FieldRow>
+          ))}
         </View>
       ) : null}
-    </Wrap>
+
+      {/* other deductions */}
+      {auto ? (
+        <View style={[styles.group, { borderColor: t.border }]}>
+          <Text style={[type.heading, { color: t.text }]}>Other deductions</Text>
+          {deductions.map((x, i) => {
+            const label = DEDUCTION_KINDS.find((k) => k.value === x.kind)?.label ?? "Other";
+            return (
+              <View key={x.id} style={styles.dedRow}>
+                <Text style={[type.body, { color: t.text, flex: 1 }]}>{label}</Text>
+                <NumberInput
+                  kind="money"
+                  label={`${label} per paycheck`}
+                  value={x.amount}
+                  onChange={(v) => change({ deductions: deductions.map((d, j) => (j === i ? { ...d, amount: v } : d)) })}
+                />
+                <IconButton icon="trash" color={t.bad} label={`Remove ${label}`} onPress={() => change({ deductions: deductions.filter((_, j) => j !== i) })} />
+              </View>
+            );
+          })}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+            {DEDUCTION_KINDS.filter((k) => k.value === "other" || !deductions.some((d) => d.kind === k.value)).map((k) => (
+              <Pressable
+                key={k.value}
+                role="button"
+                accessibilityLabel={`Add ${k.label}`}
+                onPress={() => change({ deductions: [...deductions, { id: newId(), kind: k.value, amount: 0 }] })}
+                style={[styles.chip, { borderColor: t.border, borderStyle: "dashed", backgroundColor: t.surface }]}
+              >
+                <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>+ {k.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={[type.caption, { color: t.text3 }]}>HSA contributions aren't listed here: they're savings, and your plan's HSA step handles them.</Text>
+        </View>
+      ) : null}
+
+      {/* the result */}
+      <View style={[styles.result, { backgroundColor: auto && pay.taxes === 0 && pay.gross > 0 ? t.warnSoft : t.accentSoft }]}>
+        <View style={styles.between}>
+          <View style={{ flex: 1 }}>
+            <Text style={[type.label, { color: t.text2 }]}>Take-home per paycheck</Text>
+            {auto ? (
+              <Text style={[type.caption, { color: t.text3 }]}>
+                {money(pay.gross)} − {money(pay.k401)} 401(k) − {money(pay.taxes)} taxes − {money(pay.deductions)} other
+              </Text>
+            ) : (
+              <Text style={[type.caption, { color: t.text3 }]}>Typed from your pay stub</Text>
+            )}
+          </View>
+          {auto ? (
+            <Text style={[type.stat, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(inc.net)}</Text>
+          ) : (
+            <NumberInput kind="money" label="Take-home per paycheck" value={inc.net} onChange={(v) => change({ net: v })} />
+          )}
+        </View>
+        {auto && pay.taxes === 0 && pay.gross > 0 ? (
+          <Text style={[type.caption, { color: t.text }]}>Add your taxes (or fill in an estimate); without them take-home is too high.</Text>
+        ) : null}
+        <ToggleRow
+          label="Type take-home from my pay stub instead"
+          hint="Skip itemizing taxes and deductions"
+          value={!auto}
+          onChange={(manual) => change(manual ? { netMode: "manual" } : { netMode: "auto" })}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -225,6 +345,9 @@ export function AddIncomeButtons({ onAdd, hasAny }: { onAdd: (inc: Income) => vo
 }
 
 const styles = StyleSheet.create({
+  group: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: space.md, gap: 2, marginTop: space.xs },
+  dedRow: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 52 },
+  result: { borderRadius: radius.md, padding: space.md, gap: space.xs, marginTop: space.sm },
   summary: { borderRadius: radius.md, padding: space.md, gap: space.xs, marginTop: space.xs },
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.sm },
   chip: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 8, minHeight: 36, justifyContent: "center" },

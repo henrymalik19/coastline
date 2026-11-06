@@ -31,7 +31,7 @@ export const MATCH_PRESETS = [
 export function freshPlan(): PlanState {
   const p = defaultPlanState();
   p.incomes = [
-    { id: newId(), name: "Main job", kind: "job", freq: "biweekly", net: 0, matchMode: "pct", gross: 0, contribPct: 0.04, matchRate1: 1, matchUpTo1: 0.03, matchRate2: 0.5, matchUpTo2: 0.02 },
+    { id: newId(), name: "Main job", kind: "job", freq: "biweekly", net: 0, netMode: "auto", matchMode: "pct", gross: 0, contribPct: 0.04, matchRate1: 1, matchUpTo1: 0.03, matchRate2: 0.5, matchUpTo2: 0.02, taxes: { federal: 0, state: 0, socialSecurity: 0, medicare: 0 }, deductions: [] },
   ];
   p.budget = BUDGET_PRESETS.map((b) => ({ id: newId(), name: b.name, group: b.group, amount: 0, inRetirement: b.inRetirement }));
   p.accounts = [
