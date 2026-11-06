@@ -1,24 +1,27 @@
 import { run, type MonthRow, type PlanState, type RunResult } from "@coastfi/engine";
-import { samplePlanState } from "@coastfi/schema";
 import { useMemo } from "react";
 import { money } from "./format";
+import { useStore } from "./store";
 import type { Theme } from "./theme";
 
-/**
- * Runs the engine for the current plan. Until onboarding/storage land (Phase 2)
- * this is the prototype's sample plan, and screens say so.
- */
+/** Today, as a stable Date that changes at most once a day (the engine never reads the clock). */
+function useToday(): Date {
+  const key = new Date().toDateString();
+  return useMemo(() => new Date(), [key]);
+}
+
+/** Runs the engine on the saved plan. Re-runs only when the plan changes. */
 export function usePlan(): { state: PlanState; result: RunResult; start: Date; isSample: boolean } {
-  return useMemo(() => {
-    const start = new Date(); // the UI injects the date; the engine never reads the clock
-    const state = samplePlanState();
-    return { state, result: run(state, start), start, isSample: true };
-  }, []);
+  const state = useStore((s) => s.plan);
+  const onboarded = useStore((s) => s.onboarded);
+  const start = useToday();
+  const result = useMemo(() => run(state, start), [state, start]);
+  return { state, result, start, isSample: !onboarded };
 }
 
 export type Todo = { key: string; title: string; detail?: string; amount?: number; color: string };
 
-/** This month's actions, in plan order. Formatting only; amounts come from the engine. */
+/** A month's actions, in plan order. Formatting only; amounts come from the engine. */
 export function monthTodos(m: MonthRow, t: Theme, marginalTax: number): Todo[] {
   const a = m.alloc;
   const out: Todo[] = [];

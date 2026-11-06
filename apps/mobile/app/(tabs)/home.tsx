@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Icon } from "../../components/Icon";
 import { ProgressRing } from "../../components/ProgressRing";
@@ -6,6 +5,7 @@ import { Card, Divider, Pill, Screen, SectionLabel, Stat, type Tone } from "../.
 import { ageLabel, money, monthLabel, percent } from "../../lib/format";
 import { useLayout } from "../../lib/layout";
 import { monthTodos, usePlan, type Todo } from "../../lib/plan";
+import { monthKey, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
 
 const oddsTone = (p: number): Tone => (p >= 0.8 ? "good" : p >= 0.6 ? "warn" : "bad");
@@ -18,6 +18,9 @@ export default function Home() {
   const d = o.d;
   const m0 = o.plan.months[0]!;
   const todos = monthTodos(m0, t, state.plan.marginalTax);
+  const mk = monthKey(start);
+  const done = useStore((s) => s.todoDone[mk]) ?? [];
+  const toggleTodo = useStore((s) => s.toggleTodo);
 
   const coastAge = o.crossing === null ? null : d.age + o.crossing;
   const coastAgeCons = o.crossingC === null ? null : d.age + o.crossingC;
@@ -87,7 +90,7 @@ export default function Home() {
       <Divider />
       {todos.map((td, i) => (
         <View key={td.key}>
-          <TodoRow todo={td} />
+          <TodoRow todo={td} done={done.includes(td.key)} onToggle={() => toggleTodo(mk, td.key)} />
           {i < todos.length - 1 ? <View style={{ marginLeft: 56 }}><Divider /></View> : null}
         </View>
       ))}
@@ -139,14 +142,13 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function TodoRow({ todo }: { todo: Todo }) {
+function TodoRow({ todo, done, onToggle }: { todo: Todo; done: boolean; onToggle: () => void }) {
   const t = useTheme();
-  const [done, setDone] = useState(false);
   return (
     <Pressable
-      onPress={() => setDone((v) => !v)}
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: done }}
+      onPress={onToggle}
+      role="checkbox"
+      aria-checked={done}
       accessibilityLabel={`${todo.title}${todo.amount ? `, ${money(todo.amount)}` : ""}`}
       style={({ pressed }) => [styles.todo, { backgroundColor: pressed ? t.surface2 : "transparent" }]}
     >
