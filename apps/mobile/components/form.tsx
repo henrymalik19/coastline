@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Switch, Text, TextInput, View, type ViewStyle } from "react-native";
 import { radius, space, type, useTheme } from "../lib/theme";
+import { formatDate, parseDate } from "../lib/dates";
+import { CalendarModal } from "./Calendar";
 import { Icon, type IconName } from "./Icon";
 
 /* ---------- number input ---------- */
@@ -201,39 +203,58 @@ export function TextField({
 }
 
 /**
- * YYYY-MM-DD field: keeps partial input while typing, saves only real dates
- * (or clears when emptied), and flags anything else on blur.
+ * Date field: type a date the way you normally would (11/20/2026, Nov 20, 2026-11-20…)
+ * or pick it from a calendar. Shows "Nov 20, 2026" when not editing; stores ISO.
  */
-export function DateField({ value, onChange, label, width = 150 }: { value?: string; onChange: (v: string | undefined) => void; label: string; width?: number }) {
+export function DateField({ value, onChange, label, width = 190 }: { value?: string; onChange: (v: string | undefined) => void; label: string; width?: number }) {
   const t = useTheme();
-  const [text, setText] = useState(value ?? "");
+  const [text, setText] = useState(formatDate(value));
   const [focused, setFocused] = useState(false);
-  const valid = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
+  const [bad, setBad] = useState(false);
+  const [picking, setPicking] = useState(false);
   useEffect(() => {
-    if (!focused) setText(value ?? "");
+    if (!focused) setText(formatDate(value));
   }, [value, focused]);
-  const bad = !focused && text !== "" && !valid(text);
+  const commit = () => {
+    setFocused(false);
+    if (!text.trim()) {
+      setBad(false);
+      onChange(undefined);
+      return;
+    }
+    const iso = parseDate(text);
+    if (iso) {
+      setBad(false);
+      onChange(iso);
+      setText(formatDate(iso));
+    } else setBad(true);
+  };
   return (
     <View style={{ gap: 2, alignItems: "flex-end" }}>
-      <View style={[styles.input, { width, borderColor: bad ? t.bad : focused ? t.accent : t.border, backgroundColor: t.surface2 }]}>
+      <View style={[styles.input, { width, borderColor: bad ? t.bad : focused ? t.accent : t.border, backgroundColor: t.surface2, paddingRight: 2 }]}>
         <TextInput
-          accessibilityLabel={`${label}, year-month-day`}
+          accessibilityLabel={label}
           value={text}
-          placeholder="YYYY-MM-DD"
+          placeholder="MM/DD/YYYY"
           placeholderTextColor={t.text3}
-          maxLength={10}
-          onChangeText={(s) => {
-            setText(s);
-            if (s === "") onChange(undefined);
-            else if (valid(s)) onChange(s);
-          }}
+          onChangeText={(s) => { setText(s); setBad(false); }}
           onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          inputMode="numeric"
-          style={[type.body, styles.inputText, { color: t.text, textAlign: "right" }, Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null]}
+          onBlur={commit}
+          onSubmitEditing={commit}
+          style={[type.body, styles.inputText, { color: t.text }, Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null]}
         />
+        <IconButton icon="calendar" label={`Pick ${label.toLowerCase()} from a calendar`} onPress={() => setPicking(true)} />
       </View>
-      {bad ? <Text style={[type.caption, { color: t.bad }]}>Use YYYY-MM-DD</Text> : null}
+      {bad ? <Text style={[type.caption, { color: t.bad }]}>Try a date like 11/20/2026</Text> : null}
+      {picking ? (
+        <CalendarModal
+          visible
+          title={label}
+          value={value}
+          onClose={() => setPicking(false)}
+          onPick={(iso) => { setBad(false); onChange(iso); setText(formatDate(iso)); }}
+        />
+      ) : null}
     </View>
   );
 }
