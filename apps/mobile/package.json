@@ -6,6 +6,7 @@
     "@coastfi/engine": "workspace:*",
     "@coastfi/schema": "workspace:*",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@supabase/supabase-js": "^2.119.0",
     "expo": "~58.0.23",
     "expo-constants": "~58.0.15",
     "expo-linking": "~58.0.16",
@@ -17,9 +18,10 @@
     "react-native-safe-area-context": "~5.11.1",
     "react-native-screens": "~4.30.1",
     "react-native-svg": "15.16.0",
+    "react-native-url-polyfill": "^4.0.0",
     "react-native-web": "^0.21.4",
-    "zustand": "^5.1.0",
-    "zod": "^4.1.0"
+    "zod": "^4.1.0",
+    "zustand": "^5.1.0"
   },
   "devDependencies": {
     "@types/react": "~19.3.0",
