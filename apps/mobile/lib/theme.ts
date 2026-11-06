@@ -1,49 +1,50 @@
 import { Platform, useColorScheme } from "react-native";
 
 /**
- * Design tokens. Colors follow the prototype's palette (categorical slots are
+ * Design tokens. Coastal look: sea-teal accent, sand (light) / night-ocean (dark)
+ * surfaces. Status and chart series colors are unchanged (categorical slots are
  * colorblind-validated, in chart stacking order). Spacing is on a 4pt grid.
  */
 const light = {
-  bg: "#f6f5f2",
-  surface: "#ffffff",
-  surface2: "#f0efeb",
-  border: "#e6e4de",
-  text: "#0b0b0b",
-  text2: "#52514e",
-  text3: "#7a7873",
-  accent: "#2a78d6",
-  accentSoft: "#e3eefb",
+  bg: "#f7f3ec",
+  surface: "#fffdf9",
+  surface2: "#f0eadf",
+  border: "#e7dfd2",
+  text: "#0d1a22",
+  text2: "#4b5862",
+  text3: "#5f6a72",
+  accent: "#0e7490",
+  accentSoft: "#dff1f4",
   good: "#1b7f3b",
   goodSoft: "#e2f3e7",
   warn: "#a86b00",
   warnSoft: "#fbf0dc",
   bad: "#c23b3a",
   badSoft: "#fbe5e4",
-  track: "#ebe9e4",
+  track: "#ece5d9",
   series: { k401: "#2a78d6", ira: "#eb6834", taxable: "#1baf7a", ef: "#eda100", debt: "#e87ba4", hsa: "#008300", goals: "#6250d6" },
-  shadow: "rgba(20, 20, 15, 0.06)",
+  shadow: "rgba(40, 30, 15, 0.07)",
 };
 
 type Palette = typeof light;
 
 const dark: Palette = {
-  bg: "#121211",
-  surface: "#1b1b1a",
-  surface2: "#252523",
-  border: "#2f2f2c",
-  text: "#f0efec",
-  text2: "#c3c2b7",
-  text3: "#929089",
-  accent: "#4a94ec",
-  accentSoft: "#1d2c40",
+  bg: "#0b1620",
+  surface: "#12202c",
+  surface2: "#1a2b39",
+  border: "#24384a",
+  text: "#eef3f6",
+  text2: "#b9c6cf",
+  text3: "#8a9aa6",
+  accent: "#38b2c9",
+  accentSoft: "#12313b",
   good: "#4cbc6c",
   goodSoft: "#17301f",
   warn: "#e0a63a",
   warnSoft: "#33270f",
   bad: "#e66767",
   badSoft: "#3a1b1b",
-  track: "#2a2a27",
+  track: "#1f3242",
   series: { k401: "#3987e5", ira: "#d95926", taxable: "#199e70", ef: "#c98500", debt: "#d55181", hsa: "#008300", goals: "#9085e9" },
   shadow: "rgba(0, 0, 0, 0.4)",
 };
