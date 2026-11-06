@@ -65,3 +65,24 @@ describe("income kinds, budget groups, check-ins", () => {
     expect(() => CheckinSchema.parse({ month: "Nov 2026", invested: 1, cash: 2, debt: 3, netWorth: 0, expectedNextInvested: 1 })).toThrow();
   });
 });
+
+describe("one-off adjustments", () => {
+  it("round-trip, and reject bad months / kinds / negative amounts", () => {
+    const s = defaultPlanState();
+    s.adjustments = [{ id: "a", month: "2027-01", kind: "expense", amount: 1500, note: "Car repair" }];
+    expect(parsePlanState(JSON.stringify(s))).toEqual(s);
+    for (const bad of [
+      { id: "a", month: "Jan 2027", kind: "expense", amount: 1, note: "" },
+      { id: "a", month: "2027-01", kind: "lottery", amount: 1, note: "" },
+      { id: "a", month: "2027-01", kind: "expense", amount: -5, note: "" },
+    ]) {
+      expect(() => parsePlanState({ ...s, adjustments: [bad] })).toThrow(PlanStateError);
+    }
+  });
+
+  it("plans saved before adjustments existed still load", () => {
+    const s = defaultPlanState();
+    delete (s as { adjustments?: unknown }).adjustments;
+    expect(parsePlanState(JSON.stringify(s)).adjustments).toBeUndefined();
+  });
+});

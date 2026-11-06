@@ -224,3 +224,70 @@ describe("snapshot: sample state", () => {
     }).toMatchSnapshot();
   });
 });
+
+describe("one-off adjustments and short months", () => {
+  // Nov 2026 start; monthly job $5,000 take-home; $3,000 budget; $10,000 cash
+  const base = (over: Partial<PlanState> = {}) =>
+    blank({
+      age: 32, retireAge: 60,
+      incomes: [{ id: "i", name: "Job", freq: "monthly", net: 5000, matchMode: "usd" }],
+      budget: [{ id: "b", name: "Living", amount: 3000, inRetirement: true }],
+      accounts: [{ id: "c", name: "Cash", type: "cash", balance: 10000 }],
+      limits: DEFAULT_LIMITS,
+      plan: { ...blank().plan, steps: ["highDebt", "taxable"] },
+      ...over,
+    });
+  const months = (s: PlanState) => simulatePlan(s, derive(s, START)).months;
+
+  it("an unexpected expense only changes its own month", () => {
+    const s = base({ adjustments: [{ id: "a", month: "2027-01", kind: "expense", amount: 1500, note: "Car repair" }] });
+    const [nov, dec, jan, feb] = months(s);
+    expect(jan!.adjExpense).toBe(1500);
+    expect(jan!.expenses).toBe(4500);
+    expect(jan!.alloc.taxable).toBe(500); // 5,000 − 3,000 − 1,500
+    for (const m of [nov!, dec!, feb!]) expect(m.alloc.taxable).toBe(2000);
+  });
+
+  it("lost pay and a bonus change that month's income", () => {
+    const s = base({
+      adjustments: [
+        { id: "l", month: "2026-12", kind: "incomeLoss", amount: 2000, note: "Unpaid week" },
+        { id: "g", month: "2027-03", kind: "incomeGain", amount: 4000, note: "Bonus" },
+      ],
+    });
+    const ms = months(s);
+    expect(ms[1]!.income).toBe(3000);
+    expect(ms[1]!.adjIncome).toBe(-2000);
+    expect(ms[4]!.income).toBe(9000);
+    expect(ms[4]!.alloc.taxable).toBe(6000);
+  });
+
+  it("a short month draws cash first, then goes on a card at your card's rate, which the plan pays off", () => {
+    const s = base({
+      debts: [{ id: "cc", name: "Visa", kind: "credit_card", balance: 0, apr: 0.25, minPayment: 0 }],
+      adjustments: [{ id: "a", month: "2026-12", kind: "expense", amount: 14000, note: "Medical" }],
+    });
+    const plan = simulatePlan(s, derive(s, START));
+    const dec = plan.months[1]!;
+    // Dec: 5,000 in − 3,000 budget − 14,000 = −12,000; cash (10,000 + Nov's 0 left) covers 10,000
+    expect(dec.shortfall).toBeCloseTo(12000, 6);
+    expect(dec.cash).toBe(0);
+    expect(dec.borrowed).toBeCloseTo(2000, 6);
+    expect(plan.events.some((e) => e.key === "borrowed" && e.m === 1)).toBe(true);
+    // high interest, so the highDebt step pays it down right away: Jan pays all but the
+    // interest + minimum (2,000 × 25%/12 ≈ $42 left), Feb finishes it
+    const jan = plan.months[2]!;
+    expect(jan.alloc.debt).toBeGreaterThan(1900);
+    expect(jan.debtTotal).toBeCloseTo((2000 * 0.25) / 12, 6);
+    expect(plan.events.find((e) => e.key === "debt:shortfall")?.m).toBe(3);
+  });
+
+  it("without a credit card listed, borrowing uses a typical 22% rate", () => {
+    const s = base({ accounts: [], adjustments: [{ id: "a", month: "2026-11", kind: "expense", amount: 3000, note: "" }] });
+    const nov = months(s)[0]!;
+    expect(nov.borrowed).toBeCloseTo(1000, 6);
+    // interest + 2% minimum the next month: 1,000 × (1 + 0.22/12) then pays max(25, 2%)
+    const dec = months(s)[1]!;
+    expect(dec.minPay).toBeCloseTo(Math.max(25, 1000 * (1 + 0.22 / 12) * 0.02), 6);
+  });
+});

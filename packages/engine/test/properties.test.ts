@@ -71,12 +71,16 @@ describe("determinism (property)", () => {
 
 type AnyRun = Record<string, unknown> & { whenBalance: (x: number) => number | null; whenCoastPct: (f: number) => number | null };
 
-function expectParity(s: PlanState) {
+function expectParity(input: PlanState) {
+  const s: PlanState = { ...input, adjustments: [] }; // the prototype has no one-off adjustments
   const ours = run(s, START) as unknown as AnyRun;
   // `payCut` is new in the port; when the prototype stays under the limit it is always 0.
-  for (const m of (ours.plan as { months: { payCut?: number }[] }).months) {
-    expect(m.payCut).toBe(0);
-    delete m.payCut;
+  // fields new in the port are always 0 on plans the prototype can run the same way
+  for (const m of (ours.plan as { months: Record<string, unknown>[] }).months) {
+    for (const k of ["payCut", "adjIncome", "adjExpense", "borrowed"]) {
+      expect(m[k]).toBe(0);
+      delete m[k];
+    }
   }
   const theirs = ref.run(structuredClone(s), START) as AnyRun;
   const strip = ({ whenBalance: _a, whenCoastPct: _b, ...rest }: AnyRun) => rest;
@@ -91,7 +95,8 @@ function expectParity(s: PlanState) {
  * parity is only expected when the prototype itself never exceeds the 401(k) limit.
  * In that case the two engines must agree exactly.
  */
-function refStaysUnder401kCap(s: PlanState): boolean {
+function refStaysUnder401kCap(input: PlanState): boolean {
+  const s: PlanState = { ...input, adjustments: [] };
   const run1 = (mode: "plan" | "current", extra: number) => {
     const d = ref.derive(structuredClone(s), START);
     return ref.simulatePlan(s, d, { mode, extraMonthly: extra }).months as { y: number; m: number; payPre: number; alloc: { k401: number } }[];
@@ -99,6 +104,7 @@ function refStaysUnder401kCap(s: PlanState): boolean {
   const extra = s.whatif.extra || 0;
   for (const months of [run1("plan", extra), run1("current", extra), run1(s.plan.projectWith, extra + 100)]) {
     const totals = new Map<number, { t: number; lastM: number }>();
+    if (months.some((m) => (m as unknown as { cash: number }).cash < -1e-6)) return false; // port borrows instead of going below $0
     for (const m of months) {
       const e = totals.get(m.y) ?? { t: 0, lastM: m.m };
       totals.set(m.y, { t: e.t + m.payPre + m.alloc.k401, lastM: m.m });
@@ -145,6 +151,23 @@ describe("parity with reference/engine.js", () => {
         expect(limitsFor(s.limits, y)).toEqual(ref.limitsFor(s.limits, y));
       }),
       { numRuns: 30 },
+    );
+  });
+});
+
+describe("short months (property)", () => {
+  it("cash never goes below $0: anything past your cash is borrowed on a card", () => {
+    fc.assert(
+      fc.property(stateArb, (s) => {
+        const { plan } = sim(s);
+        const startCash = s.accounts.filter((a) => a.type === "cash").reduce((t, a) => t + a.balance, 0);
+        for (const m of plan.months) {
+          expect(m.cash).toBeGreaterThanOrEqual(Math.min(0, startCash) - 1e-6);
+          expect(m.borrowed).toBeGreaterThanOrEqual(0);
+          expect(m.borrowed).toBeLessThanOrEqual(m.shortfall + 1e-6);
+        }
+      }),
+      { numRuns: 300 },
     );
   });
 });

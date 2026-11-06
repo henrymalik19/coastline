@@ -81,6 +81,14 @@ export const PlanSettingsSchema = z.object({
   projectWith: z.enum(["plan", "current"]),
 });
 
+export const AdjustmentSchema = z.object({
+  id,
+  month: z.string().regex(/^\d{4}-\d{2}$/, "Use YYYY-MM"),
+  kind: z.enum(["expense", "incomeLoss", "incomeGain"]),
+  amount: nonNeg,
+  note: z.string(),
+});
+
 export const WhatIfSchema = z.object({ extra: money, retDelta: rate, spendDelta: rate });
 
 export const PlanStateSchema = z.object({
@@ -103,6 +111,7 @@ export const PlanStateSchema = z.object({
   taxRate: rate.min(0).lt(1),
   contribGrowth: rate,
   whatif: WhatIfSchema,
+  adjustments: z.array(AdjustmentSchema).optional(),
 });
 
 /** A monthly check-in (its own table in Phase 3). */

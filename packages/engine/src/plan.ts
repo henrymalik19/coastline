@@ -2,6 +2,7 @@ import { BASE_CHECKS } from "./constants";
 import { limitsFor } from "./limits";
 import { checksInMonth } from "./paychecks";
 import type {
+  Adjustment,
   Alloc,
   Debt,
   Derived,
@@ -14,6 +15,11 @@ import type {
   SimulateOptions,
 } from "./types";
 import { num, sum } from "./util";
+
+/** Id of the synthetic debt created when a short month runs past your cash. */
+export const SHORTFALL_ID = "shortfall";
+/** Rate used for that debt when you have no credit card listed. */
+export const DEFAULT_CARD_APR = 0.22;
 
 /**
  * Month-by-month cash flow + priority waterfall, starting at `d.start`.
@@ -41,6 +47,13 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     minPayment: num(x.minPayment),
   }));
   const goals = (s.goals ?? []).map((g) => ({ ...g, saved: num(g.saved), target: num(g.target) }));
+
+  // one-off adjustments, by "YYYY-MM"
+  const adjByMonth = new Map<string, Adjustment[]>();
+  for (const a of s.adjustments ?? []) adjByMonth.set(a.month, [...(adjByMonth.get(a.month) ?? []), a]);
+  // a short month beyond your cash goes on a card at your card's rate (highest card APR, else a typical 22%)
+  const cardAprs = debts.filter((x) => x.kind === "credit_card" && x.apr > 0).map((x) => x.apr);
+  const cardApr = cardAprs.length ? Math.max(...cardAprs) : DEFAULT_CARD_APR;
   const efBase = d.monthlyExpenses;
 
   // Scheduled payroll 401(k) per month (before the annual cap), so the waterfall can
@@ -106,6 +119,17 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       income += payCut * (1 - mt);
     }
     ytd.k401 += payPre;
+
+    // one-off adjustments for this calendar month
+    let adjIncome = 0;
+    let adjExpense = 0;
+    for (const a of adjByMonth.get(`${y}-${String(mo + 1).padStart(2, "0")}`) ?? []) {
+      const v = Math.max(0, num(a.amount));
+      if (a.kind === "expense") adjExpense += v;
+      else if (a.kind === "incomeLoss") adjIncome -= v;
+      else if (a.kind === "incomeGain") adjIncome += v;
+    }
+    income += adjIncome;
     let futurePre = 0;
     for (let k = m + 1; k < months && (mo0 + k) % 12 !== 0; k++) futurePre += schedPre[k]!;
 
@@ -114,20 +138,35 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     for (const dt of debts) {
       if (dt.balance <= 0) continue;
       dt.balance *= 1 + dt.apr / 12;
-      const pay = Math.min(dt.minPayment, dt.balance);
+      // borrowed shortfall behaves like a card: minimum is 2% of the balance (at least $25)
+      const minimum = dt.id === SHORTFALL_ID ? Math.max(25, dt.balance * 0.02) : dt.minPayment;
+      const pay = Math.min(minimum, dt.balance);
       dt.balance -= pay;
       minPay += pay;
     }
-    const expenses = d.budgetTotal + minPay;
+    const expenses = d.budgetTotal + minPay + adjExpense;
     let avail = income - expenses + extraMonthly;
     const alloc: Alloc = {
       k401: 0, k401TakeHome: 0, k401Step: 0, matchGain: 0,
       ira: 0, taxable: 0, ef: 0, debt: 0, hsa: 0, goals: 0, leftover: 0,
     };
     let shortfall = 0;
+    let borrowed = 0;
     if (avail < 0) {
+      // a short month draws on cash first; anything beyond that goes on a credit card
       shortfall = -avail;
-      cash += avail;
+      const fromCash = Math.min(shortfall, Math.max(0, cash));
+      cash -= fromCash;
+      borrowed = shortfall - fromCash;
+      if (borrowed > 0) {
+        let card = debts.find((x) => x.id === SHORTFALL_ID);
+        if (!card) {
+          card = { id: SHORTFALL_ID, name: "Emergency credit card balance", kind: "credit_card", balance: 0, apr: cardApr, minPayment: 0 };
+          debts.push(card);
+        }
+        card.balance += borrowed;
+        mark("borrowed", m, "Short month put on a credit card");
+      }
       avail = 0;
     }
 
@@ -227,9 +266,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     if (starterTarget > 0 && cash >= starterTarget - 0.5) mark("starterEF", m, "Starter emergency fund done");
     if (fullTarget > 0 && cash >= fullTarget - 0.5) mark("fullEF", m, `Emergency fund full (${num(p.efMonths)} months)`);
     for (const dt of debts) {
-      if (dt.balance <= 0.5 && num((s.debts ?? []).find((x) => x.id === dt.id)?.balance) > 0) {
-        mark("debt:" + dt.id, m, `${dt.name} paid off`);
-      }
+      const startedOwing = dt.id === SHORTFALL_ID || num((s.debts ?? []).find((x) => x.id === dt.id)?.balance) > 0;
+      if (dt.balance <= 0.5 && startedOwing) mark("debt:" + dt.id, m, `${dt.name} paid off`);
     }
     if (debts.length && debts.every((x) => x.balance <= 0.5)) mark("debtFree", m, "Debt-free");
     for (const gl of goals) if (gl.target > 0 && gl.saved >= gl.target - 0.5) mark("goal:" + gl.id, m, `${gl.name} goal reached`);
@@ -245,7 +283,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     }
 
     out.push({
-      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payCut, shortfall,
+      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payCut, adjIncome, adjExpense, shortfall, borrowed,
       alloc,
       cash,
       debtTotal: sum(debts.map((x) => x.balance)),

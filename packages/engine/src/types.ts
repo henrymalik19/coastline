@@ -84,6 +84,18 @@ export type PlanSettings = {
 
 export type WhatIf = { extra: number; retDelta: number; spendDelta: number };
 
+/** One-off change to a single month: an unexpected bill, lost pay, or a bonus. */
+export type AdjustmentKind = "expense" | "incomeLoss" | "incomeGain";
+export type Adjustment = {
+  id: string;
+  /** "YYYY-MM" */
+  month: string;
+  kind: AdjustmentKind;
+  /** Positive dollars; the kind says which way it goes. */
+  amount: number;
+  note: string;
+};
+
 export type PlanState = {
   version: 2;
   age: number;
@@ -104,6 +116,8 @@ export type PlanState = {
   taxRate: number;
   contribGrowth: number;
   whatif: WhatIf;
+  /** One-off month changes (optional; missing = none). */
+  adjustments?: Adjustment[];
 };
 
 /* ---------- engine outputs ---------- */
@@ -180,7 +194,14 @@ export type MonthRow = {
   payMatch: number;
   /** Scheduled payroll 401(k) not deferred because the annual limit was reached (pre-tax $). */
   payCut: number;
+  /** One-off income change this month (+ bonus / − lost pay), already included in `income`. */
+  adjIncome: number;
+  /** One-off expenses this month, already included in `expenses`. */
+  adjExpense: number;
+  /** Money short this month (expenses beyond income). Covered from cash first, then `borrowed`. */
   shortfall: number;
+  /** Part of the shortfall that cash couldn't cover, added to a credit card balance. */
+  borrowed: number;
   alloc: Alloc;
   cash: number;
   debtTotal: number;

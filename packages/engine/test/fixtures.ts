@@ -123,6 +123,10 @@ export const stateArb: fc.Arbitrary<PlanState> = fc
     extra: fc.integer({ min: -500, max: 1000 }),
     retDelta: rate(-0.02, 0.02),
     spendDelta: rate(-0.2, 0.2),
+    adjustments: fc.array(
+      fc.record({ offset: fc.integer({ min: 0, max: 40 }), kind: fc.constantFrom("expense", "incomeLoss", "incomeGain" as const), amount: money(15000) }),
+      { maxLength: 4 },
+    ),
   })
   .map((r) => {
     const steps: StepKey[] = [...r.steps];
@@ -145,5 +149,9 @@ export const stateArb: fc.Arbitrary<PlanState> = fc
       },
       ret: r.ret, vol: r.vol, fee: r.fee, swr: r.swr, taxRate: r.taxRate, contribGrowth: r.contribGrowth,
       whatif: { extra: r.extra, retDelta: r.retDelta, spendDelta: r.spendDelta },
+      adjustments: r.adjustments.map((a, i) => {
+        const d = new Date(START.getFullYear(), START.getMonth() + a.offset, 1);
+        return { id: `adj${i}`, month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, kind: a.kind, amount: a.amount, note: "" };
+      }),
     } satisfies PlanState;
   });
