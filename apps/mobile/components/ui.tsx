@@ -21,7 +21,7 @@ export function Screen({ title, subtitle, children, right }: { title: string; su
         paddingTop: insets.top + (sidebar ? 40 : space.xl),
         paddingBottom: space.xxl,
         paddingHorizontal: gutter,
-        alignItems: web ? "stretch" : "center",
+        alignItems: "center",
       }}
     >
       <View style={{ width: "100%", maxWidth: web ? CONTENT_MAX_WIDTH_WIDE : CONTENT_MAX_WIDTH, gap: space.lg }}>

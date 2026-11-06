@@ -71,5 +71,9 @@ export function useTheme(): Theme {
 
 /** Max content width so the layout stays phone-shaped on tablets and the web. */
 export const CONTENT_MAX_WIDTH = 560;
-/** Web: content always fills the space next to the sidebar, on any monitor. */
-export const CONTENT_MAX_WIDTH_WIDE = undefined;
+/**
+ * Web: content fills the space next to the sidebar up to this width, then centers.
+ * Fills typical laptop/desktop screens (up to ~2000px windows) edge to edge; on
+ * ultra-wide monitors it stops labels and numbers drifting thousands of px apart.
+ */
+export const CONTENT_MAX_WIDTH_WIDE = 1680;
