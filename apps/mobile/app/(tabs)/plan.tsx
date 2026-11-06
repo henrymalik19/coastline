@@ -13,7 +13,7 @@ import { space, type, useTheme } from "../../lib/theme";
 export default function Plan() {
   const t = useTheme();
   const { twoColumn } = useLayout();
-  const { state, result: o, start, isSample } = usePlan();
+  const { state, result: o, start } = usePlan();
   const update = useStore((s) => s.update);
 
   const infos = state.plan.steps.map((k) => stepInfo(k, state, o, start)).filter((x): x is StepInfo => !!x);
@@ -117,7 +117,7 @@ export default function Plan() {
   );
 
   return (
-    <Screen title="Plan" subtitle="Where the next dollar goes" right={isSample ? <Pill tone="accent">Sample plan</Pill> : undefined}>
+    <Screen title="Plan" subtitle="Where the next dollar goes">
       {twoColumn ? (
         <View style={{ flexDirection: "row", gap: space.lg, alignItems: "flex-start" }}>
           {steps}

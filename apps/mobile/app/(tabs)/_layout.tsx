@@ -1,4 +1,5 @@
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
+import { useStore } from "../../lib/store";
 import { Platform, StyleSheet } from "react-native";
 import { Icon, type IconName } from "../../components/Icon";
 import { Sidebar } from "../../components/Sidebar";
@@ -16,6 +17,10 @@ const ICONS = { ...Object.fromEntries(TABS.map((t) => [t.name, t.icon])), settin
 export default function TabsLayout() {
   const t = useTheme();
   const wide = useIsWide();
+  const hydrated = useStore((s) => s.hydrated);
+  const onboarded = useStore((s) => s.onboarded);
+  // the app has nothing to show until setup is done (e.g. a bookmarked link on a fresh device)
+  if (hydrated && !onboarded) return <Redirect href="/onboarding" />;
   return (
     <Tabs
       // Desktop web: sidebar on the left. Phones (native and narrow web): bottom tabs.

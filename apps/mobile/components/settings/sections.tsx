@@ -1,5 +1,5 @@
 import type { AccountType } from "@coastfi/engine";
-import { defaultPlanState } from "@coastfi/schema";
+import { useRouter } from "expo-router";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Platform, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../../lib/confirm";
@@ -372,8 +372,8 @@ function DataSection() {
   const t = useTheme();
   const exportJson = useStore((s) => s.exportJson);
   const importJson = useStore((s) => s.importJson);
-  const resetToSample = useStore((s) => s.resetToSample);
   const startFresh = useStore((s) => s.startFresh);
+  const router = useRouter();
   const [text, setText] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -428,18 +428,17 @@ function DataSection() {
       {msg ? <Text role="status" style={[type.label, { color: msg.ok ? t.good : t.bad }]}>{msg.text}</Text> : null}
       <Group title="Start over">
         <View style={{ paddingVertical: space.sm, gap: space.md }}>
-          <Text style={[type.body, { color: t.text2 }]}>Check-ins are kept either way.</Text>
-          <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
-            <Button
-              title="Load sample plan"
-              onPress={async () => { if (await confirm("Load the sample plan?", "Your current plan will be replaced with sample data.", "Load sample")) resetToSample(); }}
-            />
-            <Button
-              title="Start from scratch"
-              tone="danger"
-              onPress={async () => { if (await confirm("Start from scratch?", "Your current plan will be cleared.", "Clear plan")) startFresh(defaultPlanState()); }}
-            />
-          </View>
+          <Text style={[type.body, { color: t.text2 }]}>Clears your plan and takes you back through setup. Your check-in history is kept.</Text>
+          <Button
+            title="Start from scratch"
+            tone="danger"
+            style={{ alignSelf: "flex-start" }}
+            onPress={async () => {
+              if (!(await confirm("Start from scratch?", "Your current plan will be cleared and you'll go through setup again. Download a backup first if you might want it back.", "Clear plan"))) return;
+              startFresh();
+              router.replace("/onboarding");
+            }}
+          />
         </View>
       </Group>
     </>

@@ -1,6 +1,6 @@
 import type { PlanState } from "@coastfi/engine";
 import { defaultPlanState } from "@coastfi/schema";
-import { newId } from "./store";
+import { newId } from "./id";
 
 /** Budget groups and items offered during setup (amounts start at 0; nothing is assumed). */
 export const BUDGET_PRESETS: { group: string; name: string; inRetirement: boolean }[] = [

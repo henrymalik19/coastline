@@ -17,7 +17,7 @@ export default function Home() {
   const router = useRouter();
   // `wide` = room for two cards side by side; stats go 4 or 2 per row
   const { twoColumn: wide, statColumns } = useLayout();
-  const { state, result: o, start, isSample } = usePlan();
+  const { state, result: o, start } = usePlan();
   const d = o.d;
   const m0 = o.plan.months[0]!;
   const todos = monthTodos(m0, t, state.plan.marginalTax);
@@ -114,17 +114,7 @@ export default function Home() {
 
   /* ---------- layout: dashboard on desktop web, single column on phones ---------- */
   return (
-    <Screen title="Coast FI" subtitle={monthLabel(start, 0, true)} right={isSample ? <Pill tone="accent">Sample plan</Pill> : undefined}>
-      {isSample ? (
-        <View style={[styles.banner, { backgroundColor: t.accentSoft }]}>
-          <Icon name="sparkle" size={20} color={t.accent} />
-          <View style={{ flex: 1, minWidth: 200 }}>
-            <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>You're looking at a sample plan</Text>
-            <Text style={[type.caption, { color: t.text2 }]}>Set up yours in about 5 minutes to see your real numbers.</Text>
-          </View>
-          <Button title="Set up my plan" tone="primary" onPress={() => router.push("/onboarding")} />
-        </View>
-      ) : null}
+    <Screen title="Coast FI" subtitle={monthLabel(start, 0, true)}>
       {wide ? (
         <>
           {stats}

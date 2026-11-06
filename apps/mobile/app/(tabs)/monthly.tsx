@@ -96,7 +96,7 @@ function MonthCard({ m, title, start, state }: { m: MonthRow; title: string; sta
 export default function Monthly() {
   const t = useTheme();
   const { twoColumn } = useLayout();
-  const { state, result: o, start, isSample } = usePlan();
+  const { state, result: o, start } = usePlan();
   const [selected, setSelected] = useState<number | null>(null);
   const [showTable, setShowTable] = useState(false);
 
@@ -113,7 +113,7 @@ export default function Monthly() {
   const sel = selected !== null ? data[selected] : null;
 
   return (
-    <Screen title="Monthly" subtitle="Your money, month by month" right={isSample ? <Pill tone="accent">Sample plan</Pill> : undefined}>
+    <Screen title="Monthly" subtitle="Your money, month by month">
       <View style={{ flexDirection: twoColumn ? "row" : "column", gap: space.lg, alignItems: "stretch" }}>
         {months[0] ? <MonthCard m={months[0]} title="This month" start={start} state={state} /> : null}
         {months[1] ? <MonthCard m={months[1]} title="Next month" start={start} state={state} /> : null}

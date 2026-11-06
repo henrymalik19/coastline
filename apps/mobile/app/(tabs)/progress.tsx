@@ -19,7 +19,7 @@ const TYPE_LABEL = { pretax: "Pre-tax", roth: "Roth", taxable: "Brokerage", hsa:
 export default function Progress() {
   const t = useTheme();
   const { twoColumn, statColumns } = useLayout();
-  const { state, result: o, start, isSample } = usePlan();
+  const { state, result: o, start } = usePlan();
   const update = useStore((s) => s.update);
   const checkins = useStore((s) => s.checkins);
   const logCheckin = useStore((s) => s.logCheckin);
@@ -289,7 +289,7 @@ export default function Progress() {
   );
 
   return (
-    <Screen title="Progress" subtitle="Track it, and keep the streak" right={isSample ? <Pill tone="accent">Sample plan</Pill> : undefined}>
+    <Screen title="Progress" subtitle="Track it, and keep the streak">
       <View style={{ flexDirection: statColumns === 4 ? "row" : "column", gap: space.lg }}>
         {freedom}
         {streakCard}

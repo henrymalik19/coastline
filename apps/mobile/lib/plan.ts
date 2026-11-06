@@ -11,12 +11,11 @@ function useToday(): Date {
 }
 
 /** Runs the engine on the saved plan. Re-runs only when the plan changes. */
-export function usePlan(): { state: PlanState; result: RunResult; start: Date; isSample: boolean } {
+export function usePlan(): { state: PlanState; result: RunResult; start: Date } {
   const state = useStore((s) => s.plan);
-  const onboarded = useStore((s) => s.onboarded);
   const start = useToday();
   const result = useMemo(() => run(state, start), [state, start]);
-  return { state, result, start, isSample: !onboarded };
+  return { state, result, start };
 }
 
 export type Todo = { key: string; title: string; detail?: string; amount?: number; color: string };

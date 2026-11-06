@@ -12,7 +12,7 @@ import { ProgressBar } from "./ProgressRing";
 export function Sidebar({ state, descriptors, emitter, navigateToTab, icons }: BottomTabBarProps & { icons: Record<string, IconName> }) {
   const t = useTheme();
   const router = useRouter();
-  const { result, isSample } = usePlan();
+  const { result } = usePlan();
   const settingsRoute = state.routes.find((r) => r.name === "settings");
   const focusedName = state.routes[state.index]?.name;
 
@@ -87,7 +87,6 @@ export function Sidebar({ state, descriptors, emitter, navigateToTab, icons }: B
           <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{percent(Math.min(result.progress, 9.99))}</Text>
         </View>
         <ProgressBar progress={result.progress} />
-        {isSample ? <Text style={[type.caption, { color: t.text3 }]}>Showing the sample plan</Text> : null}
       </View>
     </View>
   );

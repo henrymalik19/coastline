@@ -13,65 +13,30 @@ import { HealthcareSuggestion } from "../components/HealthcareSuggestion";
 import { ageLabel, money, percent } from "../lib/format";
 import { usePlan } from "../lib/plan";
 import { HELP } from "../lib/help";
-import { freshPlan } from "../lib/presets";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 
 const STEPS = ["you", "income", "budget", "money", "goals", "review"] as const;
-type Step = (typeof STEPS)[number] | "welcome";
+type Step = (typeof STEPS)[number];
 
 export default function Onboarding() {
   const t = useTheme();
   const router = useRouter();
-  const onboarded = useStore((s) => s.onboarded);
-  const startFresh = useStore((s) => s.startFresh);
-  const markWelcomeSeen = useStore((s) => s.markWelcomeSeen);
   const completeOnboarding = useStore((s) => s.completeOnboarding);
-  const [step, setStep] = useState<Step>("welcome");
-  const i = STEPS.indexOf(step as (typeof STEPS)[number]);
+  const [step, setStep] = useState<Step>("you");
+  const i = STEPS.indexOf(step);
 
-  const go = (s: Step) => setStep(s);
-  const next = () => go(STEPS[Math.min(STEPS.length - 1, i + 1)]!);
-  const back = () => (i <= 0 ? go("welcome") : go(STEPS[i - 1]!));
+  const next = () => setStep(STEPS[Math.min(STEPS.length - 1, i + 1)]!);
+  const back = () => setStep(STEPS[Math.max(0, i - 1)]!);
   const finish = () => {
     completeOnboarding();
-    markWelcomeSeen();
     router.replace("/home");
   };
 
-  if (step === "welcome") {
-    return (
-      <Screen title="Welcome to Coast FI" subtitle="See how close you are to never needing to invest another dollar" hideSettings maxWidth={880}>
-        <Card style={{ gap: space.md }}>
-          <Text style={[type.body, { color: t.text2 }]}>
-            Coast FI is the point where what you've already invested can grow into your full retirement number on its own. You'd only need to cover today's bills from then on.
-          </Text>
-          <Text style={[type.body, { color: t.text2 }]}>
-            Setup takes about 5 minutes. Everything is in today's dollars, the math is shown next to every result, and your data stays on this device.
-          </Text>
-        </Card>
-        <Choice
-          icon="sparkle"
-          title={onboarded ? "Walk through my plan again" : "Set up my plan"}
-          desc="Age, income, budget, balances and goals. About 5 minutes."
-          onPress={() => {
-            // replace the sample with a blank plan; never wipe entries you've already made
-            if (useStore.getState().isSampleData) startFresh(freshPlan());
-            markWelcomeSeen();
-            go("you");
-          }}
-          primary
-        />
-        <Choice icon="trend" title="Explore the sample plan first" desc="Look around with example numbers. Set up yours any time." onPress={() => { markWelcomeSeen(); router.replace("/home"); }} />
-        <Choice icon="database" title="Import a backup" desc="From this app or the original Coast FI prototype." onPress={() => { markWelcomeSeen(); router.replace("/settings/data"); }} />
-      </Screen>
-    );
-  }
-
-  const titles: Record<(typeof STEPS)[number], [string, string]> = {
-    you: ["About you", "Two ages and a healthcare estimate"],
-    income: ["Your income", "Paychecks and your 401(k) match"],
-    budget: ["Your monthly budget", "What life costs now, and what continues in retirement"],
+  const titles: Record<Step, [string, string]> = {
+    you: ["Welcome to Coast FI", "Let's start with you. Setup takes about 5 minutes."],
+    income: ["Your income", "Every source of money that comes in"],
+    budget: ["Your monthly budget", "What life costs now, and what you'll still pay after you retire"],
     money: ["What you have and owe", "Account balances and debts"],
     goals: ["Savings goals", "Optional: things you're saving up for"],
     review: ["Your Coast FI picture", "Here's where you stand"],
@@ -81,17 +46,16 @@ export default function Onboarding() {
   return (
     <Screen title={title} subtitle={subtitle} hideSettings maxWidth={1120} fill={step === "income" || step === "budget"}>
       <View style={{ gap: 6 }}>
-        <View style={styles.between}>
-          <Text style={[type.caption, { color: t.text3 }]}>Step {i + 1} of {STEPS.length}</Text>
-          {step !== "review" ? (
-            <Pressable role="button" onPress={finish} hitSlop={8}>
-              <Text style={[type.caption, { color: t.accent, fontWeight: "600" }]}>Skip setup</Text>
-            </Pressable>
-          ) : null}
-        </View>
+        <Text style={[type.caption, { color: t.text3 }]}>Step {i + 1} of {STEPS.length}</Text>
         <ProgressBar progress={(i + 1) / STEPS.length} />
       </View>
 
+      {step === "you" ? (
+        <Text style={[type.body, { color: t.text2 }]}>
+          Coast FI is the point where what you've already invested can grow into your full retirement number on its own, so you'd only need to cover today's bills.
+          Everything is in today's dollars, and your data stays on this device.
+        </Text>
+      ) : null}
       {step === "you" ? <YouStep /> : null}
       {step === "income" ? <IncomeStep /> : null}
       {step === "budget" ? <BudgetStep /> : null}
@@ -100,7 +64,7 @@ export default function Onboarding() {
       {step === "review" ? <ReviewStep /> : null}
 
       <View style={[styles.between, { marginTop: space.sm }]}>
-        <Button title="Back" icon="back" tone="ghost" onPress={back} />
+        {i > 0 ? <Button title="Back" icon="back" tone="ghost" onPress={back} /> : <View />}
         {step === "review" ? (
           <Button title="Go to my dashboard" tone="primary" onPress={finish} />
         ) : (
@@ -113,34 +77,6 @@ export default function Onboarding() {
 }
 
 /* ---------- pieces ---------- */
-
-function Choice({ icon, title, desc, onPress, primary }: { icon: "sparkle" | "trend" | "database"; title: string; desc: string; onPress: () => void; primary?: boolean }) {
-  const t = useTheme();
-  return (
-    <Pressable
-      role="button"
-      accessibilityLabel={`${title}. ${desc}`}
-      onPress={onPress}
-      style={(s) => {
-        const hovered = (s as typeof s & { hovered?: boolean }).hovered;
-        return [
-          styles.choice,
-          { backgroundColor: t.surface, borderColor: primary ? t.accent : t.border, borderWidth: primary ? 2 : StyleSheet.hairlineWidth, opacity: s.pressed ? 0.85 : 1 },
-          hovered ? { backgroundColor: t.surface2 } : null,
-        ];
-      }}
-    >
-      <View style={[styles.choiceIcon, { backgroundColor: primary ? t.accent : t.accentSoft }]}>
-        <Icon name={icon} size={20} color={primary ? "#fff" : t.accent} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={[type.heading, { color: t.text }]}>{title}</Text>
-        <Text style={[type.caption, { color: t.text3 }]}>{desc}</Text>
-      </View>
-      <Icon name="chevron" size={18} color={t.text3} />
-    </Pressable>
-  );
-}
 
 function Block({ children, hint }: { children: ReactNode; hint?: string }) {
   const t = useTheme();
@@ -307,8 +243,6 @@ function ReviewStep() {
 
 const styles = StyleSheet.create({
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.sm },
-  choice: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.lg, minHeight: 72 },
-  choiceIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
   chip: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 8, minHeight: 36, justifyContent: "center" },
   budgetRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },
   debtGrid: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
