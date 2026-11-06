@@ -1,4 +1,4 @@
-import { useColorScheme } from "react-native";
+import { Platform, useColorScheme } from "react-native";
 
 /**
  * Design tokens. Colors follow the prototype's palette (categorical slots are
@@ -49,6 +49,9 @@ const dark: Palette = {
 };
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
+
+/** SVG text doesn't inherit the page font on the web; give charts the system UI font. */
+export const CHART_FONT = Platform.OS === "web" ? "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" : undefined;
 export const radius = { sm: 8, md: 12, lg: 16, pill: 999 } as const;
 
 export const type = {

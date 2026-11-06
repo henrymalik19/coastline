@@ -4,7 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import Svg, { G, Line, Path, Rect, Text as SvgText } from "react-native-svg";
 import { money } from "../lib/format";
 import { niceTicks, total } from "../lib/chart";
-import { type, useTheme } from "../lib/theme";
+import { CHART_FONT, type, useTheme } from "../lib/theme";
 
 export type BarDatum = {
   key: string;
@@ -63,7 +63,7 @@ export function StackedBars({
     <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ height }} role="img" aria-label={label}>
       {width > 0 ? (
         <>
-          <Svg width={width} height={height}>
+          <Svg width={width} height={height} fontFamily={CHART_FONT}>
             {ticks.map((v) => (
               <G key={v}>
                 <Line x1={M.l} x2={width - M.r} y1={y(v)} y2={y(v)} stroke={t.border} strokeWidth={1} />
