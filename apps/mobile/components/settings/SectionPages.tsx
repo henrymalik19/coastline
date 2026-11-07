@@ -14,7 +14,11 @@ import { findSection, SECTION_SCREENS, SECTIONS } from "./sections";
 /** The "Your money" pages live in the Money tab; the rest stay in Settings. */
 export const MONEY_GROUP = "Your money";
 export type SectionBase = "/money" | "/settings";
-export const groupsFor = (base: SectionBase) => SECTIONS.filter((g) => (g.title === MONEY_GROUP) === (base === "/money"));
+// Settings has every page (Your money first); the old Money list keeps just its own
+export const groupsFor = (base: SectionBase) =>
+  base === "/settings"
+    ? [...SECTIONS.filter((g) => g.title === MONEY_GROUP), ...SECTIONS.filter((g) => g.title !== MONEY_GROUP)]
+    : SECTIONS.filter((g) => g.title === MONEY_GROUP);
 
 /** One-line summary under each page's name. */
 function useSummaries(): Record<string, string> {

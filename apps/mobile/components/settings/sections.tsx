@@ -41,13 +41,13 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
   {
     title: "Your money",
     items: [
-      { key: "retirementIncome", title: "Income in retirement", subtitle: "Social Security, pensions and other income after you stop working", icon: "calendar" },
       { key: "income", title: "Income", subtitle: "Jobs, business, rental and other income", icon: "wallet" },
       { key: "budget", title: "Monthly budget", subtitle: "Now on the Budget tab", icon: "card", hidden: true },
       { key: "savings", title: "Monthly savings", subtitle: "Now on the Budget tab", icon: "target", hidden: true },
       { key: "accounts", title: "Accounts", subtitle: "Balances you've saved and invested", icon: "database" },
       { key: "debts", title: "Debts", subtitle: "Balances, interest rates and minimums", icon: "card" },
       { key: "goals", title: "Savings goals", subtitle: "Each goal becomes a step in your plan", icon: "target" },
+      { key: "retirementIncome", title: "Income in retirement", subtitle: "Social Security, pensions and other income after you stop working", icon: "calendar" },
     ],
   },
   {

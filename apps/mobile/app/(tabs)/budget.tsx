@@ -484,6 +484,10 @@ export default function Budget() {
               </Card>
             );
           })}
+          <Pressable role="link" onPress={() => router.push("/settings")} hitSlop={6} style={styles.link}>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Manage income, accounts, debts and goals</Text>
+            <Icon name="chevron" size={12} color={t.accent} />
+          </Pressable>
           <View style={styles.editRow}>
             <Button title="Add a group" icon="plus" onPress={addGroup} style={{ minHeight: 36 }} />
             <Button title={`Add to ${groupOrder(state.budget)[0] ?? UNGROUPED}`} icon="plus" tone="ghost" onPress={() => addItem(groupOrder(state.budget)[0] ?? UNGROUPED)} style={{ minHeight: 36 }} />

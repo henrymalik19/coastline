@@ -10,7 +10,7 @@ import { Card, Divider, Pill, Screen, SectionLabel, Stat, type Tone } from "../.
 import { ageLabel, money, monthLabel, percent } from "../../lib/format";
 import { useLayout } from "../../lib/layout";
 import { monthTodos, shortfallText, usePlan, type Todo } from "../../lib/plan";
-import { netWorth } from "../../lib/networth";
+import { NetWorthCard } from "../../components/MoneyCards";
 import { monthKey, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
 
@@ -128,13 +128,6 @@ export default function Home() {
       hint="Of retirement spending, today"
       info="What you've invested divided by one day of retirement spending: how many days of not working you've already paid for."
     />,
-    <Stat
-      key="worth"
-      label="Net worth"
-      value={money(netWorth(d, state))}
-      hint="What you own minus what you owe"
-      info="Investments, cash, property and money saved toward goals, minus all your debts. See the breakdown on the Money tab."
-    />,
   ];
   const statRows: (typeof statCards)[] = [];
   for (let i = 0; i < statCards.length; i += statColumns) statRows.push(statCards.slice(i, i + statColumns));
@@ -217,11 +210,13 @@ export default function Home() {
             {hero}
             {thisMonth}
           </View>
+          <NetWorthCard />
         </>
       ) : (
         <>
           {hero}
           {stats}
+          <NetWorthCard />
           {thisMonth}
         </>
       )}

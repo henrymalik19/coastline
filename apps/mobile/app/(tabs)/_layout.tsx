@@ -9,7 +9,6 @@ import { useTheme } from "../../lib/theme";
 const TABS: { name: string; title: string; icon: IconName }[] = [
   { name: "home", title: "Home", icon: "home" },
   { name: "plan", title: "Plan", icon: "plan" },
-  { name: "money", title: "Money", icon: "wallet" },
   { name: "budget", title: "Budget", icon: "card" },
   { name: "progress", title: "Progress", icon: "trend" },
 ];
@@ -56,6 +55,8 @@ export default function TabsLayout() {
       {/* Settings: not in the bottom tab bar (gear in the header on phones; sidebar item on desktop) */}
       {/* note: `href: null` would make the route redirect away in this expo-router version */}
       {/* the old Monthly tab: still reachable from Plan → Forecast, no longer in the tab bar */}
+      {/* Money: its pages moved to Settings → Your money; old links still open them */}
+      <Tabs.Screen name="money" options={{ title: "Money", tabBarButton: () => null, tabBarItemStyle: { display: "none" } }} />
       <Tabs.Screen name="monthly" options={{ title: "Monthly", tabBarButton: () => null, tabBarItemStyle: { display: "none" } }} />
       <Tabs.Screen name="emergency" options={{ title: "Emergency mode", tabBarButton: () => null, tabBarItemStyle: { display: "none" } }} />
       <Tabs.Screen name="settings" options={{ title: "Settings", tabBarButton: () => null, tabBarItemStyle: { display: "none" } }} />
