@@ -508,6 +508,16 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     expect(m0.plannedShort).toBeCloseTo(500, 9);
   });
 
+  it("a 401(k) loan repaid from a paycheck follows the real paydays (3-paycheck months repay more)", () => {
+    const s = blank({
+      incomes: [{ id: "j", name: "Job", freq: "biweekly", net: 3000, nextPayday: "2026-11-13", matchMode: "usd", deductions: [{ id: "x", kind: "k401_loan", amount: 243.69, debtId: "l" }] }],
+      debts: [{ id: "l", name: "401(k) loan", kind: "k401_loan", balance: 25000, apr: 0, minPayment: 528.45, payroll: true, minimumOnly: true }],
+    });
+    const m = simulatePlan(s, derive(s, START)).months;
+    expect(m[0]!.loanBack).toBeCloseTo(243.69 * 2, 6); // Nov 2026: 2 paydays
+    expect(m[5]!.loanBack).toBeCloseTo(243.69 * 3, 6); // Apr 2027: 3 paydays
+  });
+
   it("401(k) loan repayments go back into your 401(k)", () => {
     const s = blank({
       incomes: [{ ...job, net: 8000 }],

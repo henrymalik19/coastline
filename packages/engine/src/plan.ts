@@ -103,6 +103,10 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   // A job's 401(k) / HSA per paycheck can change by month ("pay401:<job id>", "payhsa:<job id>"):
   // $0 for Nov–Dec, then back on in January. Without a change it's what the job says today.
   const perCheck = (inc: Derived["incomes"][number], kind: "k401" | "hsa", month: string): number => payPerCheck(p, inc, kind, month);
+  const loanPerCheck = new Map<string, { i: number; amount: number }>();
+  d.incomes.forEach((inc, i) => {
+    for (const x of inc.deductions ?? []) if (x.debtId && num(x.amount) > 0) loanPerCheck.set(x.debtId, { i, amount: num(x.amount) });
+  });
   const ymOf = (absMo: number) => `${y0 + Math.floor(absMo / 12)}-${String((absMo % 12) + 1).padStart(2, "0")}`;
   // Scheduled payroll 401(k) per month (before the annual cap), so the waterfall can
   // leave room for the paychecks still to come this year.
@@ -300,16 +304,20 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     let loanBack = 0;
     const isLoan = (x: Debt) => x.kind === "k401_loan";
     for (const dt of debts) {
+      // a loan repaid from a paycheck: the real deduction this month (per check × this month's paydays),
+      // not the monthly average, so it matches the take-home it comes out of
+      const fromPay = dt.payroll ? loanPerCheck.get(dt.id) : undefined;
+      const base = fromPay ? fromPay.amount * (checks[fromPay.i] ?? 0) : dt.minPayment;
       // escrow (property tax + insurance) is part of the payment but not the loan, and it never ends
       const esc = dt.payroll ? 0 : Math.min(Math.max(0, num(dt.escrow)), dt.minPayment);
       if (dt.balance <= 0) {
-        if (dt.payroll) payrollFreed += dt.minPayment;
+        if (dt.payroll) payrollFreed += base;
         else minPay += esc;
         continue;
       }
       dt.balance *= 1 + rateIn(dt, monthStr) / 12;
       // borrowed shortfall behaves like a card: minimum is 2% of the balance (at least $25)
-      const minimum = dt.id === SHORTFALL_ID ? Math.max(25, dt.balance * 0.02) : dt.minPayment - esc;
+      const minimum = dt.id === SHORTFALL_ID ? Math.max(25, dt.balance * 0.02) : base - esc;
       const pay = Math.min(minimum, dt.balance);
       dt.balance -= pay;
       if (isLoan(dt)) loanBack += pay;
