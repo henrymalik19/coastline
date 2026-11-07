@@ -163,12 +163,9 @@ export function budgetView(
       const a = Math.max(0, num(e.assigned?.[c.key]));
       // what went out: typed in by hand, else from transactions, else (money that moves by itself) what was assigned
       const fromTx = act?.spent[c.key];
-      const cardIsTracked = !!tx && Object.values(tx.cards).includes(c.key);
-      const sp =
-        e.spent?.[c.key] !== undefined ? num(e.spent[c.key])
-        : fromTx !== undefined ? fromTx
-        : c.moves && !cardIsTracked ? a
-        : 0;
+      // what went out: from transactions (a payment, a transfer to the account), or an amount typed in
+      // before transactions existed. Assigned money stays available until it actually goes.
+      const sp = e.spent?.[c.key] !== undefined ? num(e.spent[c.key]) : fromTx ?? 0;
       const funded = act?.cardFunded[c.key] ?? 0;
       const carried = carry[c.key] ?? 0;
       const available = carried + a + funded - sp;

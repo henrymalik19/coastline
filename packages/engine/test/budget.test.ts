@@ -31,8 +31,9 @@ describe("monthly budget", () => {
     const nov = budgetView(b, cats, "2026-11");
     expect(nov.readyToAssign).toBeCloseTo(1000 + 4000 - 2800 - (2500 + 500) /* assigned in later months */, 9);
     expect(nov.lines.food!.available).toBeCloseTo(100, 9);
-    expect(nov.lines["acct:ira"]!.spent).toBeCloseTo(300, 9); // moved to the IRA by itself
-    expect(nov.lines["acct:ira"]!.available).toBe(0);
+    // assigned to the IRA but not moved yet (no transfer recorded): it stays available
+    expect(nov.lines["acct:ira"]!.spent).toBe(0);
+    expect(nov.lines["acct:ira"]!.available).toBeCloseTo(300, 9);
     const dec = budgetView(b, cats, "2026-12");
     expect(dec.lines.food!.carried).toBeCloseTo(100, 9);
     expect(dec.lines.food!.available).toBeCloseTo(-100, 9); // 100 + 500 − 700
@@ -43,7 +44,7 @@ describe("monthly budget", () => {
     expect(jan.lines.rent!.carried).toBeCloseTo(2000, 9);
     // every dollar is accounted for: ready to assign + what's sitting in categories = cash you still have
     const cashIn = 1000 + 12000;
-    const spentAll = 400 + 2000 + 300 + 700;
+    const spentAll = 400 + 2000 + 700;
     const sitting = Object.values(jan.lines).reduce((a, l) => a + Math.max(0, l.available), 0);
     expect(jan.readyToAssign + sitting).toBeCloseTo(cashIn - spentAll, 9);
   });

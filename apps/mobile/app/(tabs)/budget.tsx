@@ -402,7 +402,7 @@ export default function Budget() {
                 <FormRow label="Assigned" hint={c.target > 0.5 ? `Plan: ${money(c.target)}` : undefined}>
                   <InlineMoney label={`${label(c)} assigned in ${nameOf(month)}`} value={l.assigned} onChange={(v) => setAssigned(c.key, v)} />
                 </FormRow>
-                <FormRow label={c.moves ? "Paid" : "Spent"} hint={explicitSpent ? "Includes an amount from before transactions" : c.moves ? "Counts as paid when assigned, or from transfers" : "From transactions"}>
+                <FormRow label={c.moves ? "Paid" : "Spent"} hint={explicitSpent ? "Includes an amount from before transactions" : c.moves ? "From the payment or transfer you record" : "From transactions"}>
                   <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(l.spent)}</Text>
                 </FormRow>
                 <FormRow label="Available" hint={l.carried > 0.5 ? `${money(l.carried)} carried over` : (l.funded ?? 0) > 0.5 ? `+${money(l.funded ?? 0)} from card spending` : undefined}>
@@ -466,13 +466,13 @@ export default function Budget() {
             <Text style={[type.caption, { color: t.text3 }]}>
               {l.carried > 0.5 ? `${money(l.carried)} carried over from last month. ` : ""}
               {c.kind === "saving" && c.moves
-                ? "Counts as moved to the account when assigned (change Paid if you moved a different amount). Your plan uses what you assign here."
+                ? "Stays available until you record the transfer to the account (Transaction → Transfer). Your plan uses what you assign here."
                 : c.kind === "saving"
                   ? "Stays here and builds up. Your plan uses what you assign here."
                   : c.kind === "debt" && cards[c.key.slice(5)] !== undefined
                     ? `Spending on this card moves money here from its categories${(l.funded ?? 0) > 0.5 ? ` (${money(l.funded ?? 0)} this month)` : ""}, so the payment is covered. Assign more to pay down what you already owe. A payment (a transfer from checking) spends it.`
                     : c.kind === "debt"
-                    ? "Minimum plus any extra. What you assign beyond the minimum is your extra payment in the plan."
+                    ? "Minimum plus any extra. Stays available until you record the payment (a transaction with this category). What you assign beyond the minimum is your extra payment in the plan."
                     : c.kind === "bill"
                       ? "Builds up each month until the bill is due."
                       : "What you don't spend carries over to next month."}
@@ -564,7 +564,7 @@ export default function Budget() {
             <Button title={`Add to ${groupOrder(state.budget)[0] ?? UNGROUPED}`} icon="plus" tone="ghost" onPress={() => addItem(groupOrder(state.budget)[0] ?? UNGROUPED)} style={{ minHeight: 36 }} />
           </View>
           <Text style={[type.caption, { color: t.text3 }]}>
-            Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number. Bills come from repeating savings goals and debt payments from Debts; tap one to change it there. Transactions and bank import come next; for now, enter what you spent per category.
+            Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number. Bills come from repeating savings goals and debt payments from Debts; tap one to change it there. Spent and paid come from the transactions you record.
           </Text>
           <Button
             title="Start the budget over"
