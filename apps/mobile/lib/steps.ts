@@ -346,3 +346,37 @@ export function milestones(o: RunResult, s: PlanState): Milestone[] {
   if (fk) items.push({ m: fk, text: "Full FIRE number reached", big: true });
   return items.sort((a, b) => a.m - b.m);
 }
+
+/** What you plan to put in each month, by plan account (from steps with a set amount a month). */
+export type PlannedSaving = { key: string; label: string; amount: number; steps: string[] };
+
+const SAVING_LABELS: Record<string, string> = {
+  starterEF: "Emergency fund",
+  fullEF: "Emergency fund",
+  highDebt: "Extra on debt",
+  lowDebt: "Extra on debt",
+  hsa: "HSA",
+  ira: "IRA",
+  k401: "401(k)",
+  taxable: "Brokerage",
+};
+
+/** Steps that fill the same account share one monthly plan (both emergency fund steps, both debt steps). */
+export function savingKeyOf(step: string): string {
+  return step === "starterEF" || step === "fullEF" ? "cash" : step === "highDebt" || step === "lowDebt" ? "debt" : step;
+}
+
+export function plannedSavings(s: PlanState): PlannedSaving[] {
+  const amounts = s.plan.amounts ?? {};
+  const out: PlannedSaving[] = [];
+  for (const step of s.plan.steps) {
+    const v = amounts[step];
+    if (v === undefined) continue;
+    const key = savingKeyOf(step);
+    const have = out.find((x) => x.key === key);
+    if (have) { have.steps.push(step); continue; }
+    const g = step.startsWith("goal:") ? s.goals.find((x) => "goal:" + x.id === step) : undefined;
+    out.push({ key, label: g ? g.name : SAVING_LABELS[step] ?? step, amount: v, steps: [step] });
+  }
+  return out;
+}

@@ -14,6 +14,7 @@ import { netWorth } from "../../../lib/networth";
 import { dueLabel, everyLabel } from "../../../components/RecurringGoalFields";
 import { usePlan } from "../../../lib/plan";
 import { monthKey } from "../../../lib/store";
+import { SavingsPlan } from "../../../components/SavingsPlan";
 import { space, type, useTheme } from "../../../lib/theme";
 
 const typeLabel = (k: AccountType) => ACCOUNT_TYPES.find((x) => x.value === k)?.label ?? k;
@@ -61,6 +62,7 @@ export default function MoneyOverview() {
         <Text style={[type.heading, { color: t.text, flex: 1 }]}>{leftover < 0 ? "Short in a normal month" : "Left over in a normal month"}</Text>
         <Text style={[type.stat, { color: leftover < 0 ? t.bad : t.good, fontVariant: ["tabular-nums"] }]}>{money(leftover)}</Text>
       </View>
+      <SavingsPlan leftover={leftover} />
     </Section>
   );
 

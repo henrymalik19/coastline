@@ -184,8 +184,8 @@ export type PlanSettings = {
    */
   shares?: Record<string, number>;
   /**
-   * A set amount per month for a step (dollars, by step key): it gets at most this much and the rest goes
-   * on to the next steps. Takes the place of a share. Missing = no set amount.
+   * Your monthly plan for a step (dollars, by step key): each month it gets this much first, before the
+   * other steps (if there is that much left after the budget), and no more. Missing = no set amount.
    */
   amounts?: Record<string, number>;
   /**

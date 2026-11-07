@@ -414,10 +414,11 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       };
       // a payroll deduction, once set, keeps coming out of every paycheck: it goes first from then on
       if (payrollSteps) for (const k of ["k401", "hsa"] as const) if (started[k] && order.includes(k)) doStep(k);
-      // a month you changed by hand goes first: that step gets the amount you set (if it is there)
+      // a monthly plan (or a month you changed by hand) goes first: that step gets the amount you set,
+      // if it is there, and doesn't take more from the waterfall
       const handSet = new Set<string>();
       for (const step of order) {
-        const v = amountsBy[step]?.[monthStr];
+        const v = amountsBy[step]?.[monthStr] ?? amounts[step];
         if (v === undefined || !(v >= 0)) continue;
         handSet.add(step);
         const held = Math.max(0, avail - v);
@@ -429,13 +430,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         if (avail <= 1e-9) break;
         if (handSet.has(step)) continue;
         // a step with a share gets only that part of what's left; the rest goes on to the next steps
-        // or a set amount per month (this month's change if there is one): the rest goes on too
         const share = shares[step];
-        const amt = amounts[step];
-        const held =
-          amt !== undefined && amt >= 0
-            ? Math.max(0, avail - amt)
-            : share !== undefined && share >= 0 && share < 1 ? avail * (1 - share) : 0;
+        const held = share !== undefined && share >= 0 && share < 1 ? avail * (1 - share) : 0;
         avail -= held;
         doStep(step);
         avail += held;

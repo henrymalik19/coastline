@@ -17,6 +17,7 @@ import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, IconButton, InfoTip, NumberInput, TextField, Toggle } from "./form";
 import { Icon } from "./Icon";
 import { AddChip, MasterDetail, useFillPage, useTwoPane } from "./MasterDetail";
+import { SavingsPlan } from "./SavingsPlan";
 import { Card, Pill } from "./ui";
 
 /** Key of the read-only "Debt payments" group (not a real budget group). */
@@ -208,6 +209,7 @@ export function BudgetEditor() {
         </View>
         <Text style={[type.stat, { color: leftover < 0 ? t.bad : t.good, fontVariant: ["tabular-nums"] }]}>{money(leftover)}/mo</Text>
       </View>
+      <SavingsPlan leftover={leftover} />
       <Pressable role="button" aria-expanded={showDetails} onPress={() => setShowDetails((v) => !v)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
         <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{showDetails ? "Hide details" : "Details"}</Text>
         <View style={{ transform: [{ rotate: showDetails ? "90deg" : "0deg" }] }}>
@@ -247,6 +249,7 @@ export function BudgetEditor() {
           </View>
         </View>
       </View>
+      <View style={{ maxWidth: 420 }}><SavingsPlan leftover={leftover} /></View>
       <Text style={[type.caption, { color: t.text3 }]}>
         {leftover < 0
           ? "Your budget is more than you bring home in a normal month. Coasting only works once today's bills are covered."

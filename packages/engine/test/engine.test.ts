@@ -498,6 +498,19 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     expect(dec!.alloc.taxable).toBeCloseTo(6000 - 500, 6);
   });
 
+  it("a monthly plan goes first, even for a later step, and takes no more", () => {
+    const s = blank({
+      limits: DEFAULT_LIMITS,
+      incomes: [{ ...job, net: 10000 }],
+      budget: spending,
+      plan: { ...blank().plan, efMonths: 6, steps: ["fullEF", "ira", "taxable"], amounts: { ira: 500 } },
+    });
+    const m = simulatePlan(s, derive(s, START)).months;
+    expect(m[0]!.alloc.ira).toBeCloseTo(500, 6);
+    expect(m[0]!.alloc.ef).toBeCloseTo(5500, 6);
+    expect(m[1]!.alloc.ira).toBeCloseTo(500, 6);
+  });
+
   it("a month changed by hand goes first, even for a later step", () => {
     const s = blank({
       limits: DEFAULT_LIMITS,

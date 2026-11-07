@@ -26,6 +26,29 @@ export function AccountsForecast({ state, o, start }: Props) {
   const [open, setOpen] = useState<string | null>(null);
   const [more, setMore] = useState(false);
   const [edit, setEdit] = useState<string | null>(null);
+  const [planOpen, setPlanOpen] = useState<string | null>(null);
+  const amounts = state.plan.amounts ?? {};
+  // the steps a monthly plan for this account applies to (none for paycheck-set accounts)
+  const stepsFor = (key: AccountKey): string[] => {
+    const inOrder = (ks: string[]) => ks.filter((k) => order.includes(k as never));
+    if (key === "k401" || key === "other") return [];
+    if (key === "hsa") return state.plan.hsaPayroll !== false ? [] : inOrder(["hsa"]);
+    if (key === "cash") return inOrder(["starterEF", "fullEF"]);
+    if (key === "debt") return inOrder(["highDebt", "lowDebt"]);
+    return inOrder([key]);
+  };
+  const setPlan = (steps: string[], v: number | undefined) =>
+    update((p) => {
+      const next = { ...(p.plan.amounts ?? {}) };
+      const sh = { ...(p.plan.shares ?? {}) };
+      for (const k of steps) {
+        delete sh[k];
+        if (v === undefined) delete next[k];
+        else next[k] = Math.max(0, v);
+      }
+      p.plan.amounts = Object.keys(next).length ? next : undefined;
+      p.plan.shares = Object.keys(sh).length ? sh : undefined;
+    });
   const pl = o.plan;
   const d = o.d;
   const all = accountForecasts(state, d, pl, d.r);
@@ -118,6 +141,38 @@ export function AccountsForecast({ state, o, start }: Props) {
               Today is {a.accounts.map((x) => `${x.name.trim() || "Unnamed account"} ${money(x.balance)}`).join(" + ")}.{k === "cash" ? "" : " Wrong account here? Change what it counts as under Money → Accounts."}
             </Text>
           ) : null}
+          {(() => {
+            const ks = stepsFor(k);
+            if (!ks.length) return null;
+            const planned = ks.map((x) => amounts[x]).find((v) => v !== undefined);
+            const isPlanOpen = planOpen === k;
+            return (
+              <View style={{ gap: 6 }}>
+                <Pressable role="button" aria-expanded={isPlanOpen} onPress={() => setPlanOpen(isPlanOpen ? null : k)} hitSlop={6} style={styles.link}>
+                  <Text style={[type.caption, { color: planned !== undefined ? t.accent : t.text3, fontWeight: "700" }]}>
+                    {planned !== undefined ? `Monthly plan: ${money(planned)} a month` : "Monthly plan: whatever's left after earlier steps"}
+                  </Text>
+                  <View style={{ transform: [{ rotate: isPlanOpen ? "90deg" : "0deg" }] }}>
+                    <Icon name="chevron" size={12} color={t.text3} />
+                  </View>
+                </Pressable>
+                {isPlanOpen ? (
+                  <View style={styles.editRow}>
+                    <NumberInput kind="money" label={`${label(k)}, monthly plan`} value={planned ?? 0} width={140} step={50} onChange={(v) => setPlan(ks, v)} />
+                    <Text style={[type.caption, { color: t.text3 }]}>a month</Text>
+                    {planned !== undefined ? (
+                      <Pressable role="button" onPress={() => { setPlan(ks, undefined); setPlanOpen(null); }} hitSlop={6}>
+                        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Use whatever's left</Text>
+                      </Pressable>
+                    ) : null}
+                    <Text style={[type.caption, { color: t.text3, width: "100%" }]}>
+                      Goes in every month before your other steps (if there's that much left after your budget), and no more; the rest goes to your other steps. Change single months below. It shows as savings on your budget.
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })()}
           <Text style={[type.caption, { color: t.text2 }]}>
             <Text style={{ color: t.text, fontWeight: "600" }}>This month: {isDebt ? `${money(m0a.total)} extra` : money(m0a.total)}</Text>
             {m0a.total > 0.5 && !isDebt && k !== "cash" ? ` (${parts(m0a, k)})` : ""}

@@ -99,7 +99,7 @@ export default function Plan() {
       <View style={{ padding: space.lg, paddingBottom: space.md, gap: 4 }}>
         <SectionLabel>Your steps</SectionLabel>
         <Text style={[type.body, { color: t.text2 }]}>
-          Each month, what's left after your budget and debt payments fills step 1, then step 2, and so on. To do two at once, give a step a set amount a month (or a share): the rest goes to the next steps at the same time. Amounts and dates are for your numbers. Use the arrows to change the order. The dates between steps show when each one starts.
+          Each month, what's left after your budget and debt payments fills step 1, then step 2, and so on. To do several at once, give a step a set amount a month (it goes first, every month) or a share of what's left. Amounts and dates are for your numbers. Use the arrows to change the order. The dates between steps show when each one starts.
         </Text>
       </View>
       <Divider />
