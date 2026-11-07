@@ -4,8 +4,28 @@
     {
       "name": "mobile-web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@coastfi/mobile", "exec", "expo", "start", "--web", "--port", "8081"],
+      "runtimeArgs": [
+        "--filter",
+        "@coastfi/mobile",
+        "exec",
+        "expo",
+        "start",
+        "--web",
+        "--port",
+        "8081"
+      ],
       "port": 8081
+    },
+    {
+      "name": "mobile-web-hosted",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@coastfi/mobile",
+        "dev:hosted",
+        "8082"
+      ],
+      "port": 8082
     }
   ]
 }

@@ -34,7 +34,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run lib"
+    "test": "vitest run lib",
+    "dev:hosted": "node scripts/dev-hosted.mjs"
   },
   "private": true
 }

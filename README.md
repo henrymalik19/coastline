@@ -41,3 +41,23 @@ the limit; there the two engines agree exactly.
 ## Backups
 
 Settings → Backup & restore downloads (web) or shares (phone) a JSON backup of your plan and check-ins, and restores it. Only this app's own backups are accepted.
+
+## Accounts & sync (Supabase)
+
+- **Local:** `pnpm db:start` runs Supabase in Docker on ports 553xx (API 55321, Studio 55323,
+  test mailbox 55324). `apps/mobile/.env` points the dev app at it. Sign-in codes land in the
+  test mailbox, nothing is really sent. `pnpm db:reset` wipes it.
+- **Hosted:** project `Coastline` (`jrhmmybfzwxumpbliycu`). `apps/mobile/.env.production`
+  (git-ignored, public values only) is used by production builds;
+  `pnpm --filter @coastfi/mobile dev:hosted` runs the web app against it on port 8082.
+- Migrations: `npx supabase db push --remote`. Don't `config push` the local `config.toml` to
+  the hosted project: it carries local-only values (1s email interval, MFA off, no SMTP) and
+  would overwrite the hosted settings. Change hosted auth settings in the dashboard.
+- Hosted auth settings (set in the dashboard): email OTP length 6; the "Magic Link" and
+  "Confirm signup" templates use `supabase/templates/code.html` (subject "Your Coastline
+  sign-in code"); custom SMTP via Resend (`smtp.resend.com:465`, user `resend`).
+
+> **TODO before opening to other users:** sign-in emails are sent from
+> `noreply@send.jobrx.ai`, borrowed from the JobRx Resend domain. Verify a Coastline domain
+> in Resend and change the sender in Supabase → Authentication → Emails → SMTP Settings.
+> Also set the auth Site URL to the real app URL.
