@@ -278,10 +278,11 @@ type PayYear = { year: number; from: string; job: string; what: string; base: nu
 function payrollYears(kind: "k401" | "hsa", s: PlanState, o: RunResult, start: Date): PayYear[] {
   const d = o.d;
   const jobs = d.incomes.map((x, i) => ({ x, i })).filter(({ x }) => (x.kind ?? "job") === "job");
+  // the job you actually put money in from first; then one with a match or employer money
   const j =
     (kind === "k401"
-      ? jobs.find(({ x }) => x.pretax > 0 || x.match > 0 || x.matchMode === "pct")
-      : jobs.find(({ x }) => (x.hsaPre ?? 0) > 0 || (x.hsaEmployer ?? 0) > 0)) ?? jobs[0];
+      ? jobs.find(({ x }) => x.pretax > 0) ?? jobs.find(({ x }) => x.match > 0) ?? jobs.find(({ x }) => x.matchMode === "pct" && (x.contribPct ?? 0) > 0)
+      : jobs.find(({ x }) => (x.hsaPre ?? 0) > 0) ?? jobs.find(({ x }) => (x.hsaEmployer ?? 0) > 0)) ?? jobs[0];
   if (!j) return [];
   const cost = kind === "k401" ? k401Cost(s.plan.marginalTax, d.rothShare) : 1;
   const extraIn = (m: MonthRow) => (kind === "k401" ? m.alloc.k401Step / cost : m.alloc.hsa);

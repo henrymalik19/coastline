@@ -25,6 +25,8 @@ type Row = {
   status: string;
   /** A to-do for it (e.g. what to set per paycheck). */
   tip?: string;
+  /** Something to fill in for an exact answer. */
+  tip2?: string;
   color: string;
   done?: boolean;
 };
@@ -58,7 +60,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       name: "Emergency fund",
       value: `${money(cash, { whole: true })} of ${money(pl.fullTarget, { whole: true })}`,
       progress: Math.min(1, cash / pl.fullTarget),
-      status: full ? "Full" : ev("fullEF") !== undefined ? `Full by ${when(ev("fullEF"))}` : "Not full in the plan yet",
+      status: `${state.plan.efMonths} months of expenses (${money(pl.fullTarget / Math.max(1, state.plan.efMonths), { whole: true })}/mo) · ${full ? "Full" : ev("fullEF") !== undefined ? `full by ${when(ev("fullEF"))}` : "not full in the plan yet"}`,
       color: t.good,
       done: full,
     });
@@ -71,7 +73,10 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
     if (!yr?.limit) continue;
     const before = start.getMonth() === 0 ? 0 : k === "k401" ? c?.k401 ?? pl.ytdBefore?.k401 ?? 0 : k === "hsa" ? c?.hsa ?? pl.ytdBefore?.hsa ?? 0 : c?.ira ?? 0;
     const yearIn = (k === "hsa" ? yr.total : yr.employee) + before;
-    const maxed = pl.maxedYears[k].includes(y0) || yearIn >= yr.limit - 1;
+    const maxed = yearIn >= yr.limit - 1;
+    // the plan filled the room it sees, but it only counts this year from today (nothing entered for earlier months)
+    const partYear = !maxed && pl.maxedYears[k].includes(y0);
+    const notEntered = start.getMonth() > 0 && !c && k === "ira";
     const nextYear = a.years.find((y) => y.year === y0 + 1);
     const nextMaxed = pl.maxedYears[k].includes(y0 + 1);
     const nothing = yearIn < 0.5 && a.start < 0.5;
@@ -81,7 +86,14 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       name: k === "ira" ? "IRA" : BUCKET_LABELS[k],
       value: `${money(yearIn, { whole: true })} of ${money(yr.limit, { whole: true })}`,
       progress: Math.min(1, yearIn / yr.limit),
-      status: maxed ? `Maxed in ${y0}` : `${money(Math.max(0, yr.limit - yearIn), { whole: true })} of room left in ${y0}${nextYear ? ` · ${y0 + 1}: ${nextMaxed ? "maxed" : `about ${money(nextYear.employee || nextYear.total, { whole: true })}`}` : ""}`,
+      status:
+        (maxed
+          ? `Maxed in ${y0}`
+          : partYear
+            ? `${y0}: the plan fills the room it sees from ${monthLabel(start, 0)} on`
+            : `${money(Math.max(0, yr.limit - yearIn), { whole: true })} of room left in ${y0}`) +
+        (nextYear ? ` · ${y0 + 1}: ${nextMaxed ? "maxed" : `about ${money(nextYear.employee || nextYear.total, { whole: true })}`}` : ""),
+      tip2: notEntered ? `Add what's already in your IRA for ${y0} (Settings → Your money → Accounts) to see your real room.` : undefined,
       tip: k === "k401" || (k === "hsa" && state.plan.hsaPayroll !== false) ? tipFor(k) : undefined,
       color: t.series[k],
       done: maxed,
@@ -97,7 +109,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       key: k,
       name: k === "taxable" ? "Brokerage" : "Other investments",
       value: money(a.start, { whole: true }),
-      status: later !== undefined ? `About ${money(later, { whole: true })} at Coast FI (${monthLabel(start, coastM!)})` : "Today",
+      status: later !== undefined ? `Today · projected about ${money(later, { whole: true })} by Coast FI (${monthLabel(start, coastM!)}), at your assumed return` : "Today",
       color: k === "taxable" ? t.series.taxable : t.text3,
     });
   }
@@ -151,6 +163,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
               {r.progress !== undefined ? <ProgressBar progress={r.progress} color={r.color} /> : null}
               <Text style={[type.caption, { color: r.done ? t.good : t.text3, fontWeight: r.done ? "700" : "400" }]}>{r.status}</Text>
               {r.tip ? <Text style={[type.caption, { color: t.accent }]}>{r.tip}</Text> : null}
+              {r.tip2 ? <Text style={[type.caption, { color: t.warn }]}>{r.tip2}</Text> : null}
             </View>
             <Icon name="chevron" size={14} color={t.text3} />
           </Pressable>
