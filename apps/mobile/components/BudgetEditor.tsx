@@ -2,7 +2,7 @@ import { nextDue, setAsideFor, type BudgetItem } from "@coastfi/engine";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../lib/confirm";
-import { groupOf, moveGroup, moveItem, UNGROUPED } from "../lib/budgetOrder";
+import { groupOf, mergeGroup, moveGroup, moveItem, moveToGroup, UNGROUPED } from "../lib/budgetOrder";
 import { debtLabel } from "../lib/debts";
 import { paycheckFor } from "../lib/loans";
 import { monthKey } from "../lib/store";
@@ -74,10 +74,14 @@ export function BudgetEditor() {
   const current = onDebts || onSet ? undefined : groups.find((g) => g.name === selected) ?? groups[0];
   const retireMonthly = state.budget.filter((b) => b.inRetirement).reduce((a, b) => a + b.amount, 0);
 
-  const addGroup = () => {
+  const newGroupName = () => {
     const existing = new Set(groups.map((g) => g.name));
     let name = "New group";
     for (let n = 2; existing.has(name); n++) name = `New group ${n}`;
+    return name;
+  };
+  const addGroup = () => {
+    const name = newGroupName();
     const id = newId();
     update((p) => { p.budget.push({ id, name: "", amount: 0, inRetirement: true, group: name }); });
     setSelected(name);
@@ -95,6 +99,7 @@ export function BudgetEditor() {
   const renameGroup = (from: string, to: string) => {
     update((p) => { p.budget.forEach((b) => { if (groupOf(b) === from) b.group = to; }); });
     setSelected(to);
+    setNotice(null);
   };
   const removeGroup = async (group: string, count: number) => {
     if (await confirm(`Remove "${group}"?`, `This removes the group and its ${count} item${count === 1 ? "" : "s"}.`, "Remove"))
@@ -233,7 +238,19 @@ export function BudgetEditor() {
         ) : current ? (
           <View>
             <View style={styles.headRow}>
-              <GroupName key={current.name} name={current.name} onRename={(to) => renameGroup(current.name, to)} onRemove={() => removeGroup(current.name, current.rows.length)} />
+              <GroupName
+                key={current.name}
+                name={current.name}
+                onRename={(to) => renameGroup(current.name, to)}
+                onRemove={() => removeGroup(current.name, current.rows.length)}
+                others={groups.map((g) => g.name).filter((g) => g !== current.name)}
+                onMerge={(into) => {
+                  const n = current.rows.length;
+                  update((p) => { p.budget = mergeGroup(p.budget, current.name, into); });
+                  setSelected(into);
+                  setNotice(`Merged ${current.name} into ${into} (${n} item${n === 1 ? "" : "s"}).`);
+                }}
+              />
               <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(current.subtotal)}/mo</Text>
               <IconButton
                 icon={reorder ? "check" : "sliders"}
@@ -325,6 +342,13 @@ export function BudgetEditor() {
                 key={item.id}
                 item={item}
                 group={current.name}
+                groups={groups.map((g) => g.name)}
+                onMoveTo={(to) => {
+                  const target = to === NEW_GROUP ? newGroupName() : to;
+                  setEditing(null);
+                  update((p) => { p.budget = moveToGroup(p.budget, index, target); });
+                  setNotice(`Moved "${item.name || "item"}" to ${target}.${to === NEW_GROUP ? " Rename it with ✎." : ""}`);
+                }}
                 reorder={reorder ? { up: i > 0, down: i < current.rows.length - 1, move: (by) => update((p) => { p.budget = moveItem(p.budget, index, by); }) } : undefined}
                 editing={editing === item.id}
                 compact={compact}
@@ -400,7 +424,14 @@ function Suggestions({
 }
 
 /** Group name: read-only with an ✎ button; edit mode shows a field, ✓ (or Enter) to save and the delete button. */
-function GroupName({ name, onRename, onRemove }: { name: string; onRename: (to: string) => void; onRemove: () => void }) {
+function GroupName({
+  name, onRename, onRemove, others, onMerge,
+}: {
+  name: string; onRename: (to: string) => void; onRemove: () => void;
+  /** The other groups, to merge this one into. */
+  others: string[];
+  onMerge: (into: string) => void;
+}) {
   const t = useTheme();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(name);
@@ -418,7 +449,8 @@ function GroupName({ name, onRename, onRemove }: { name: string; onRename: (to: 
     );
   }
   return (
-    <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space.xs }}>
+    <View style={{ flex: 1, minWidth: 0, gap: space.sm }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
       <View style={{ flex: 1, minWidth: 0 }}>
         <TextInput
           autoFocus
@@ -437,6 +469,48 @@ function GroupName({ name, onRename, onRemove }: { name: string; onRename: (to: 
       <IconButton icon="check" color={t.accent} label="Save group name" onPress={save} />
       <IconButton icon="trash" color={t.bad} label={`Remove group ${name}`} onPress={() => { setEditing(false); onRemove(); }} />
     </View>
+    {others.length ? (
+      <View style={{ gap: 6 }}>
+        <Text style={[type.caption, { color: t.text3 }]}>Or merge it into another group (its items move there):</Text>
+        <View style={styles.chips}>
+          {others.map((g) => (
+            <Pressable
+              key={g}
+              role="button"
+              accessibilityLabel={`Merge ${name} into ${g}`}
+              onPress={() => { setEditing(false); onMerge(g); }}
+              style={[styles.chip, { borderColor: t.border, backgroundColor: t.surface }]}
+            >
+              <Text style={[type.caption, { color: t.text, fontWeight: "600" }]}>{g}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    ) : null}
+    </View>
+  );
+}
+
+const NEW_GROUP = "\u0000new";
+
+/** "Move to" chips for an item: every other group, plus a new one. */
+function MoveTo({ current, groups, what, onPick }: { current: string; groups: string[]; what: string; onPick: (group: string) => void }) {
+  const t = useTheme();
+  const others = groups.filter((g) => g !== current);
+  return (
+    <View style={{ gap: 6, paddingTop: space.xs }}>
+      <Text style={[type.caption, { color: t.text3 }]}>Move to</Text>
+      <View style={styles.chips}>
+        {others.map((g) => (
+          <Pressable key={g} role="button" accessibilityLabel={`Move ${what} to ${g}`} onPress={() => onPick(g)} style={[styles.chip, { borderColor: t.border, backgroundColor: t.surface }]}>
+            <Text style={[type.caption, { color: t.text, fontWeight: "600" }]}>{g}</Text>
+          </Pressable>
+        ))}
+        <Pressable role="button" accessibilityLabel={`Move ${what} to a new group`} onPress={() => onPick(NEW_GROUP)} style={[styles.chip, { borderColor: t.border, borderStyle: "dashed" }]}>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>+ New group</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -446,9 +520,12 @@ export const budgetCols = (compact: boolean) =>
 
 /** One budget item: read-only text by default; ✎ turns it into inputs, ✓ finishes. */
 function BudgetRow({
-  item, group, editing, compact, onEdit, onDone, onChange, onRemove, reorder,
+  item, group, editing, compact, onEdit, onDone, onChange, onRemove, reorder, groups, onMoveTo,
 }: {
   item: BudgetItem; group: string; editing: boolean; compact: boolean;
+  /** All group names, and moving this item to one of them (or a new group). */
+  groups: string[];
+  onMoveTo: (group: string) => void;
   /** Reorder mode: up/down arrows instead of the edit button. */
   reorder?: { up: boolean; down: boolean; move: (by: -1 | 1) => void };
   onEdit: () => void; onDone: () => void; onChange: (patch: Partial<BudgetItem>) => void; onRemove: () => void;
@@ -464,6 +541,7 @@ function BudgetRow({
   const done = <IconButton icon="check" color={t.accent} label={`Done editing ${name}`} onPress={onDone} />;
   const del = <IconButton icon="trash" color={t.bad} label={`Remove ${name}`} onPress={onRemove} />;
   const toggle = <Toggle label={`Still pay ${name} after you retire`} value={item.inRetirement} onChange={(v) => onChange({ inRetirement: v })} />;
+  const moveTo = <MoveTo current={group} groups={groups} what={name} onPick={onMoveTo} />;
 
   if (editing && compact) {
     // phones: name on its own line, then amount + retirement switch
@@ -479,6 +557,24 @@ function BudgetRow({
           {toggle}
           <Text style={[type.caption, { color: t.text2, flex: 1 }]}>{item.inRetirement ? "Still pay after I retire" : "Stops when I retire"}</Text>
         </View>
+        {moveTo}
+      </View>
+    );
+  }
+  if (editing) {
+    // wide screens: the inputs on one line, "Move to" underneath
+    return (
+      <View style={{ backgroundColor: t.accentSoft, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border, paddingBottom: space.sm }}>
+        <View style={[styles.row, { borderBottomWidth: 0 }]}>
+          {nameField}
+          <NumberInput kind="money" width={w.amount} label={`${name} per month`} value={item.amount} onChange={(v) => onChange({ amount: v })} />
+          <View style={{ width: w.retire, alignItems: "center" }}>{toggle}</View>
+          <View style={[styles.actions, { width: w.actions }]}>
+            {done}
+            {del}
+          </View>
+        </View>
+        <View style={{ paddingHorizontal: space.lg }}>{moveTo}</View>
       </View>
     );
   }
@@ -535,6 +631,8 @@ const styles = StyleSheet.create({
   figure: { flexDirection: "row", alignItems: "center" },
   result: { borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, marginLeft: "auto" },
   debtNote: { borderRadius: radius.sm, padding: space.md },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chip: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6, minHeight: 32, justifyContent: "center" },
   hint: { flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: radius.sm, paddingVertical: space.xs, paddingLeft: space.md, paddingRight: space.xs, flexWrap: "wrap" },
   reorderBar: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.lg, marginBottom: space.sm, paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.sm },
   moveBtn: { minHeight: 34, paddingHorizontal: space.md },

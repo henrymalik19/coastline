@@ -1,33 +1,23 @@
 import type { BudgetItem, Goal } from "@coastfi/engine";
-import { groupOf } from "./budgetOrder";
 import { newId } from "./id";
 
 /**
- * Budget hints from item names: a better group, or "this is something you save up for".
+ * Budget hints from item names: "this is something you save up for" (make it a goal).
  * Built-in word lists only (instant, private). Nothing changes until the user taps.
  */
 
-type GroupRule = { group: string; words: string[]; /** other groups where it also belongs */ also?: string[] };
-
-const GROUP_RULES: GroupRule[] = [
-  { group: "Housing", words: ["rent", "mortgage", "hoa", "utilities", "electric", "water bill", "sewer", "trash", "renter", "homeowner", "home insurance", "repairs", "maintenance", "lawn"] },
-  { group: "Food", words: ["grocer", "dining", "restaurant", "takeout", "take-out", "doordash", "uber eats", "coffee", "starbucks", "lunch", "snacks"] },
-  { group: "Transportation", words: ["gas & transit", "fuel", "gasoline", "parking", "toll", "uber", "lyft", "transit", "metro", "bus pass", "train", "car insurance", "auto insurance", "car wash", "oil change"], also: ["Car", "Auto"] },
-  { group: "Bills", words: ["phone", "internet", "wifi", "wi-fi", "cable", "cell", "netflix", "spotify", "hulu", "disney", "hbo", "youtube", "apple music", "icloud", "prime", "peacock", "paramount", "patreon", "subscription"], also: ["Subscriptions", "Utilities", "Entertainment"] },
-  { group: "Health", words: ["gym", "fitness", "doctor", "dentist", "pharmacy", "prescription", "medical", "therapy", "copay", "vision"], also: ["Personal", "Medical"] },
-  { group: "Family", words: ["childcare", "daycare", "tuition", "school", "kids", "baby", "diapers", "allowance", "babysit"], also: ["Kids", "Children"] },
-  { group: "Pets", words: ["pet", "vet", "dog", "cat food", "grooming"], also: ["Family"] },
-  { group: "Giving", words: ["donation", "charity", "tithe", "church"] },
-];
 
 /** Things people save up for. `recurring` ones come around again (yearly by default). */
 const GOAL_RULES: { words: string[]; recurring: boolean; december?: boolean }[] = [
-  { words: ["christmas", "holiday gifts", "holidays", "gifts"], recurring: true, december: true },
-  { words: ["vacation", "trip", "travel", "birthday", "property tax", "registration", "annual", "yearly", "sinking"], recurring: true },
+  { words: ["birthday"], recurring: true },
+  { words: ["christmas", "holiday", "gift"], recurring: true, december: true },
+  { words: ["vacation", "trip", "travel", "property tax", "registration", "annual", "yearly", "sinking"], recurring: true },
   { words: ["wedding", "down payment", "house fund", "new car", "car fund", "savings", "save for", "fund"], recurring: false },
 ];
 
-const has = (name: string, word: string) => new RegExp(`(^|[^a-z])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(name.toLowerCase());
+/** Whole-word match (a trailing "s" allowed): "fund" matches "Car fund", not "Funding". */
+const has = (name: string, word: string) =>
+  new RegExp(`(^|[^a-z])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}s?(?![a-z])`).test(name.toLowerCase());
 
 export type Suggestion =
   | { kind: "group"; item: BudgetItem; group: string }
@@ -41,11 +31,9 @@ export function suggestFor(item: BudgetItem): Suggestion | null {
     const g = GOAL_RULES.find((r) => r.words.some((w) => has(n, w)));
     if (g) return { kind: "goal", item, recurring: g.recurring, december: !!g.december };
   }
-  const rule = GROUP_RULES.find((r) => r.words.some((w) => has(n, w)));
-  if (!rule) return null;
-  const current = groupOf(item).toLowerCase();
-  if ([rule.group, ...(rule.also ?? [])].some((x) => x.toLowerCase() === current)) return null;
-  return { kind: "group", item, group: rule.group };
+  // group suggestions were dropped: they scattered items into lots of tiny groups.
+  // Moving items and merging groups is up to you (Budget → edit an item / rename a group).
+  return null;
 }
 
 /** "YYYY-MM" for the next December, or 12 months from `today` (a UI default only). */

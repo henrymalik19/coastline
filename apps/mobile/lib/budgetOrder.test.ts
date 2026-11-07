@@ -1,6 +1,6 @@
 import type { BudgetItem } from "@coastfi/engine";
 import { describe, expect, it } from "vitest";
-import { groupOrder, moveGroup, moveItem } from "./budgetOrder";
+import { groupOrder, mergeGroup, moveGroup, moveItem, moveToGroup } from "./budgetOrder";
 
 const item = (id: string, group?: string): BudgetItem => ({ id, name: id, amount: 0, inRetirement: true, group });
 const ids = (xs: BudgetItem[]) => xs.map((x) => x.id).join(",");
@@ -28,5 +28,23 @@ describe("budget order", () => {
   it("skips over other groups' items when they're interleaved", () => {
     const mixed = [item("a", "X"), item("b", "Y"), item("c", "X")];
     expect(ids(moveItem(mixed, 2, -1))).toBe("c,b,a");
+  });
+});
+
+describe("moving items between groups", () => {
+  const items = [item("rent", "Housing"), item("power", "Housing"), item("food", "Food"), item("gym", "Health"), item("vet", "Pets")];
+
+  it("moves an item to the end of another group", () => {
+    const out = moveToGroup(items, 3, "Personal");
+    expect(ids(out)).toBe("rent,power,food,vet,gym");
+    expect(out.find((x) => x.id === "gym")!.group).toBe("Personal");
+    expect(ids(moveToGroup(items, 2, "Housing"))).toBe("rent,power,food,gym,vet");
+  });
+
+  it("merges a small group into another to condense", () => {
+    const out = mergeGroup(items, "Pets", "Housing");
+    expect(ids(out)).toBe("rent,power,vet,food,gym");
+    expect(groupOrder(out)).toEqual(["Housing", "Food", "Health"]);
+    expect(mergeGroup(items, "Food", "Food")).toBe(items);
   });
 });

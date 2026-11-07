@@ -33,3 +33,26 @@ export function moveItem(items: BudgetItem[], index: number, by: -1 | 1): Budget
   [out[index], out[j]] = [out[j]!, out[index]!];
   return out;
 }
+
+/** Move an item into another group (it goes to the end of that group; a new group goes last). */
+export function moveToGroup(items: BudgetItem[], index: number, group: string): BudgetItem[] {
+  const item = items[index];
+  const name = group.trim();
+  if (!item || !name || groupOf(item) === name) return items;
+  const rest = items.filter((_, i) => i !== index);
+  const moved = { ...item, group: name };
+  const last = rest.map((b, i) => (groupOf(b) === name ? i : -1)).filter((i) => i >= 0).at(-1);
+  if (last === undefined) return [...rest, moved];
+  return [...rest.slice(0, last + 1), moved, ...rest.slice(last + 1)];
+}
+
+/** Merge one group into another: its items join the end of the other group, in their order. */
+export function mergeGroup(items: BudgetItem[], from: string, into: string): BudgetItem[] {
+  if (from === into) return items;
+  const moving = items.filter((b) => groupOf(b) === from).map((b) => ({ ...b, group: into }));
+  if (!moving.length) return items;
+  const rest = items.filter((b) => groupOf(b) !== from);
+  const last = rest.map((b, i) => (groupOf(b) === into ? i : -1)).filter((i) => i >= 0).at(-1);
+  if (last === undefined) return [...rest, ...moving];
+  return [...rest.slice(0, last + 1), ...moving, ...rest.slice(last + 1)];
+}
