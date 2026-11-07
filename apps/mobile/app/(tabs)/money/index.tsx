@@ -33,7 +33,7 @@ export default function MoneyOverview() {
   const setAsideNow = state.goals.reduce((a, g) => a + setAsideFor(g, monthKey(start)), 0);
   const leftover = d.leanMonthly - d.budgetTotal - d.debtMins - setAsideNow;
   const goals = state.goals ?? [];
-  // what you set per account this month (Money → Monthly savings, or on each account)
+  // what you set per account this month (the Budget tab, or on each account)
   const planned = plannedSavings(state, monthKey(start)).reduce((a, x) => a + x.amount, 0);
   const savers = plannedSavings(state, monthKey(start)).filter((x) => x.amount > 0.5).length;
   const retire = (state.retirementIncome ?? []).filter((x) => x.monthly > 0);
@@ -56,9 +56,9 @@ export default function MoneyOverview() {
   );
 
   const monthCard = (
-    <Section title="Each month" edit="/money/budget" editLabel="Budget">
+    <Section title="Each month" edit="/budget" editLabel="Budget">
       <Line label="Take-home" value={money(d.leanMonthly)} href="/money/income" hint={`${state.incomes.length} income source${state.incomes.length === 1 ? "" : "s"}`} />
-      <Line label="Budget" value={`− ${money(d.budgetTotal)}`} href="/money/budget" hint={`${state.budget.length} items`} />
+      <Line label="Budget" value={`− ${money(d.budgetTotal)}`} href="/budget" hint={`${state.budget.length} categories`} />
       {d.debtMins > 0 ? <Line label="Debt payments" value={`− ${money(d.debtMins)}`} href="/money/debts" /> : null}
       {setAsideNow > 0 ? <Line label="Set aside" value={`− ${money(setAsideNow)}`} href="/money/goals" hint="Recurring goals, this month" /> : null}
       <Divider />
@@ -70,7 +70,7 @@ export default function MoneyOverview() {
         label="Monthly savings"
         hint={planned > 0.5 ? `To ${savers} account${savers === 1 ? "" : "s"} and goal${savers === 1 ? "" : "s"} you set` : "Set how much goes to each account"}
         value={planned > 0.5 ? `− ${money(planned)}` : "Set ›"}
-        href="/money/savings"
+        href="/budget"
       />
       {planned > 0.5 ? (
         <Line label={leftover - planned < 0 ? "Short" : "Left for your plan steps"} value={money(leftover - planned)} />

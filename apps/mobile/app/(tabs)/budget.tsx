@@ -6,7 +6,11 @@
 import { budgetCategories, budgetView, type BudgetCategory, type BudgetLine } from "@coastfi/engine";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Button, NumberInput } from "../../components/form";
+import { Button, NumberInput, Select, TextField, ToggleRow } from "../../components/form";
+import { MonthlyAmount } from "../../components/ScheduleEditor";
+import { groupOf, groupOrder, moveGroup, moveItem, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
+import { newId } from "../../lib/store";
+import { useRouter } from "expo-router";
 import { Icon } from "../../components/Icon";
 import { Card, Divider, Pill, Screen, SectionLabel } from "../../components/ui";
 import { confirm } from "../../lib/confirm";
@@ -35,6 +39,11 @@ export default function Budget() {
   const thisMonth = monthKey(start);
   const [month, setMonth] = useState(thisMonth);
   const [open, setOpen] = useState<string | null>(null);
+  const [groupOpen, setGroupOpen] = useState<string | null>(null);
+  const [moveTo, setMoveTo] = useState<string>("");
+  const [moveAmt, setMoveAmt] = useState(0);
+  const [groupDraft, setGroupDraft] = useState("");
+  const router = useRouter();
   const b = state.budgetPlan;
   const cats = useMemo(() => budgetCategories(state, result.d, actual, start, month), [state, result, actual, start, month]);
   const view = budgetView(b, cats, month);
@@ -72,6 +81,46 @@ export default function Budget() {
     edit((e) => {
       const a = { ...(e.assigned ?? {}) };
       for (const c of cats) if (a[c.key] === undefined && c.target > 0.005) a[c.key] = Math.round(c.target * 100) / 100;
+      e.assigned = a;
+    });
+  const itemIndex = (id: string) => state.budget.findIndex((x) => x.id === id);
+  const editItem = (id: string, patch: Partial<(typeof state.budget)[number]>) =>
+    update((p) => {
+      const i = p.budget.findIndex((x) => x.id === id);
+      if (i >= 0) p.budget[i] = { ...p.budget[i]!, ...patch };
+    });
+  const addItem = (group: string) => {
+    const id = newId();
+    update((p) => {
+      const last = p.budget.map((x, i) => (groupOf(x) === group ? i : -1)).filter((i) => i >= 0).at(-1) ?? p.budget.length - 1;
+      p.budget.splice(last + 1, 0, { id, name: "", amount: 0, inRetirement: true, group });
+    });
+    setOpen(id);
+  };
+  const addGroup = () => {
+    // (the new group opens with its name ready to change)
+    const names = new Set(groupOrder(state.budget));
+    let name = "New group";
+    for (let n = 2; names.has(name); n++) name = `New group ${n}`;
+    addItem(name);
+    setGroupOpen(name);
+    setGroupDraft(name);
+  };
+  const renameGroup = (from: string, to: string) =>
+    update((p) => {
+      const name = to.trim();
+      if (!name) return;
+      p.budget.forEach((x) => { if (groupOf(x) === from) x.group = name; });
+      p.debts.forEach((x) => { if (x.budgetGroup === from) x.budgetGroup = name; });
+      p.goals.forEach((x) => { if (x.budgetGroup === from) x.budgetGroup = name; });
+    });
+  /** Move money between two categories this month. */
+  const moveMoney = (from: string, to: string, amount: number) =>
+    edit((e) => {
+      const a = { ...(e.assigned ?? {}) };
+      const take = Math.max(0, Math.min(amount, a[from] ?? 0));
+      a[from] = (a[from] ?? 0) - take;
+      a[to] = (a[to] ?? 0) + take;
       e.assigned = a;
     });
   const startBudget = () =>
@@ -178,13 +227,73 @@ export default function Budget() {
     );
   };
 
+  /** Change the category itself: name, plan amount, group, order (spending); target (savings); links (bills, debts). */
+  const categoryEditor = (c: BudgetCategory) => {
+    if (c.kind === "spending") {
+      const it = state.budget.find((x) => x.id === c.key);
+      if (!it) return null;
+      const idx = itemIndex(it.id);
+      const groups = groupOrder(state.budget);
+      return (
+        <View style={[styles.catBox, { borderTopColor: t.border }]}>
+          <Text style={[type.overline, { color: t.text3 }]}>Category</Text>
+          <TextField label="Name" placeholder="e.g. Groceries" value={it.name} onChange={(v) => editItem(it.id, { name: v })} />
+          <View style={styles.editRow}>
+            <Text style={[type.caption, { color: t.text2, width: 70 }]}>Each month</Text>
+            <NumberInput kind="money" label={`${it.name || "Item"} planned each month`} value={it.amount} width={140} step={25} onChange={(v) => editItem(it.id, { amount: v })} />
+            <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 120 }]}>What your plan expects; "Fill from plan" assigns it.</Text>
+          </View>
+          <ToggleRow label="Still paid after you retire" hint="Counts toward your retirement number" value={it.inRetirement} onChange={(v) => editItem(it.id, { inRetirement: v })} />
+          <ToggleRow label="Essential" hint="Kept when emergency mode cuts to essentials" value={it.essential !== false} onChange={(v) => editItem(it.id, { essential: v })} />
+          <View style={styles.editRow}>
+            <Text style={[type.caption, { color: t.text2, width: 70 }]}>Group</Text>
+            <View style={{ flex: 1, minWidth: 160 }}>
+              <Select label="Group" value={groupOf(it)} options={groups.map((g) => ({ value: g, label: g }))} onChange={(g) => update((p) => { p.budget = moveToGroup(p.budget, itemIndex(it.id), g); })} />
+            </View>
+          </View>
+          <View style={styles.editRow}>
+            <Button title="Up" icon="up" tone="ghost" disabled={idx <= 0 || groupOf(state.budget[idx - 1]!) !== groupOf(it)} onPress={() => update((p) => { p.budget = moveItem(p.budget, itemIndex(it.id), -1); })} style={{ minHeight: 36 }} />
+            <Button title="Down" icon="down" tone="ghost" disabled={idx >= state.budget.length - 1 || groupOf(state.budget[idx + 1]!) !== groupOf(it)} onPress={() => update((p) => { p.budget = moveItem(p.budget, itemIndex(it.id), 1); })} style={{ minHeight: 36 }} />
+            <Button
+              title="Delete"
+              icon="trash"
+              tone="danger"
+              onPress={async () => {
+                if (await confirm(`Delete "${it.name || "this category"}"?`, "It comes off your budget and your plan.", "Delete")) {
+                  setOpen(null);
+                  update((p) => { p.budget = p.budget.filter((x) => x.id !== it.id); });
+                }
+              }}
+              style={{ minHeight: 36 }}
+            />
+          </View>
+        </View>
+      );
+    }
+    if (c.kind === "saving")
+      return (
+        <View style={[styles.catBox, { borderTopColor: t.border }]}>
+          <Text style={[type.overline, { color: t.text3 }]}>Plan for this account</Text>
+          <MonthlyAmount k={c.key} label={label(c)} note={c.moves ? undefined : "Cash can go past your emergency fund goal if you plan it."} />
+          <Text style={[type.caption, { color: t.text3 }]}>Sets what "Fill from plan" assigns here each month, and what the forecast expects after this month.</Text>
+        </View>
+      );
+    const isBill = c.kind === "bill";
+    return (
+      <Pressable role="link" onPress={() => router.push(isBill ? "/money/goals" : "/money/debts")} hitSlop={6} style={styles.link}>
+        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{isBill ? "Change this bill (Savings goals)" : "Change this debt (Debts)"}</Text>
+        <Icon name="chevron" size={12} color={t.accent} />
+      </Pressable>
+    );
+  };
+
   const line = (c: BudgetCategory) => {
     const l = view.lines[c.key]!;
     const isOpen = open === c.key;
     const explicitSpent = entry?.spent?.[c.key] !== undefined;
     return (
       <View key={c.key}>
-        <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => setOpen(isOpen ? null : c.key)} style={({ pressed }) => [styles.row, pressed ? { backgroundColor: t.surface2 } : null]}>
+        <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); setMoveAmt(0); setMoveTo(""); }} style={({ pressed }) => [styles.row, pressed ? { backgroundColor: t.surface2 } : null]}>
           <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
             <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{label(c)}</Text>
             <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
@@ -211,6 +320,33 @@ export default function Budget() {
             {l.available < -0.005 ? (
               <Button title={`Cover ${money(-l.available)} from ready to assign`} tone="primary" onPress={() => setAssigned(c.key, l.assigned - l.available)} style={{ minHeight: 36, alignSelf: "flex-start" }} />
             ) : null}
+            {l.assigned > 0.005 ? (
+              <View style={styles.editRow}>
+                <Text style={[type.caption, { color: t.text2, width: 70 }]}>Move</Text>
+                <NumberInput kind="money" label={`Amount to move from ${label(c)}`} value={moveAmt} width={120} step={25} onChange={setMoveAmt} />
+                <View style={{ minWidth: 150, flex: 1 }}>
+                  <Select
+                    label="Move to"
+                    value={moveTo}
+                    options={[{ value: "", label: "Pick a category" }, ...cats.filter((x) => x.key !== c.key).map((x) => ({ value: x.key, label: label(x), hint: x.group }))]}
+                    onChange={setMoveTo}
+                  />
+                </View>
+                <Button
+                  title="Move"
+                  disabled={!moveTo}
+                  onPress={() => {
+                    // nothing typed: move what's available
+                    const amt = Math.min(moveAmt > 0 ? moveAmt : Math.max(0, l.available), l.assigned);
+                    moveMoney(c.key, moveTo, amt);
+                    setMoveTo("");
+                    setMoveAmt(0);
+                  }}
+                  style={{ minHeight: 36 }}
+                />
+              </View>
+            ) : null}
+            {categoryEditor(c)}
             <Text style={[type.caption, { color: t.text3 }]}>
               {l.carried > 0.5 ? `${money(l.carried)} carried over from last month. ` : ""}
               {c.kind === "saving" && c.moves
@@ -240,12 +376,37 @@ export default function Budget() {
             const assigned = g.cats.reduce((a, c) => a + view.lines[c.key]!.assigned, 0);
             return (
               <Card key={g.name} padded={false}>
-                <View style={[styles.groupHead, { borderBottomColor: t.border }]}>
-                  <SectionLabel>{g.name}</SectionLabel>
+                <Pressable
+                  role="button"
+                  disabled={g.kind !== "spending"}
+                  aria-expanded={groupOpen === g.name}
+                  accessibilityLabel={`${g.name} group${g.kind === "spending" ? ": rename, reorder or add a category" : ""}`}
+                  onPress={() => { setGroupOpen(groupOpen === g.name ? null : g.name); setGroupDraft(g.name); }}
+                  style={[styles.groupHead, { borderBottomColor: t.border }]}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <SectionLabel>{g.name}</SectionLabel>
+                    {g.kind === "spending" ? <Icon name="edit" size={12} color={t.text3} /> : null}
+                  </View>
                   <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]}>
                     {money(assigned)} assigned · <Text style={{ color: avail < -0.5 ? t.bad : t.text2, fontWeight: "700" }}>{money(avail)} available</Text>
                   </Text>
-                </View>
+                </Pressable>
+                {groupOpen === g.name && g.kind === "spending" ? (
+                  <View style={[styles.editor, { backgroundColor: t.surface2, marginTop: space.md }]}>
+                    <View style={styles.editRow}>
+                      <View style={{ flex: 1, minWidth: 160 }}>
+                        <TextField label="Group name" value={groupDraft} onChange={setGroupDraft} />
+                      </View>
+                      <Button title="Rename" disabled={!groupDraft.trim() || groupDraft.trim() === g.name} onPress={() => { renameGroup(g.name, groupDraft); setGroupOpen(groupDraft.trim()); }} style={{ minHeight: 36 }} />
+                    </View>
+                    <View style={styles.editRow}>
+                      <Button title="Add a category" icon="plus" onPress={() => addItem(g.name)} style={{ minHeight: 36 }} />
+                      <Button title="Earlier" icon="up" tone="ghost" disabled={groupOrder(state.budget)[0] === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, -1); })} style={{ minHeight: 36 }} />
+                      <Button title="Later" icon="down" tone="ghost" disabled={groupOrder(state.budget).at(-1) === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, 1); })} style={{ minHeight: 36 }} />
+                    </View>
+                  </View>
+                ) : null}
                 {g.cats.map((c, n) => (
                   <View key={c.key}>
                     {n > 0 ? <Divider /> : null}
@@ -255,8 +416,12 @@ export default function Budget() {
               </Card>
             );
           })}
+          <View style={styles.editRow}>
+            <Button title="Add a group" icon="plus" onPress={addGroup} style={{ minHeight: 36 }} />
+            <Button title={`Add to ${groupOrder(state.budget)[0] ?? UNGROUPED}`} icon="plus" tone="ghost" onPress={() => addItem(groupOrder(state.budget)[0] ?? UNGROUPED)} style={{ minHeight: 36 }} />
+          </View>
           <Text style={[type.caption, { color: t.text3 }]}>
-            Categories come from your budget, bills (repeating goals), debts and savings. Add or rename them under Money. Transactions and bank import come next; for now, enter what you spent per category.
+            Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number. Bills come from repeating savings goals and debt payments from Debts; tap one to change it there. Transactions and bank import come next; for now, enter what you spent per category.
           </Text>
           <Button
             title="Start the budget over"
@@ -286,4 +451,6 @@ const styles = StyleSheet.create({
   pill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, minWidth: 72, alignItems: "flex-end" },
   editor: { gap: space.sm, marginHorizontal: space.md, marginBottom: space.md, padding: space.md, borderRadius: radius.md },
   editRow: { flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" },
+  catBox: { gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm, marginTop: 2 },
+  link: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" },
 });

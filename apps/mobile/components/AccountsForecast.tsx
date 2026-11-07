@@ -155,8 +155,8 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
               <Text style={[type.caption, { color: schedule[k]?.length ? t.accent : t.text2, fontWeight: "700" }]}>
                 {schedule[k]?.length ? planText(k).replace("Your plan: ", "Monthly amount: ") : "Monthly amount: none set, so it gets what your steps give it"}
               </Text>
-              <Pressable role="link" onPress={() => router.push("/money/savings")} hitSlop={6} style={styles.link}>
-                <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change it (Money → Monthly savings)</Text>
+              <Pressable role="link" onPress={() => router.push("/budget")} hitSlop={6} style={styles.link}>
+                <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change it (Budget tab)</Text>
                 <Icon name="chevron" size={12} color={t.accent} />
               </Pressable>
             </>
@@ -272,14 +272,14 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
         </>
       ) : null}
       {line("Take-home", money(row0.income))}
-      {line("Budget", `− ${money(Math.max(0, row0.expenses - row0.minPay - row0.setAside))}`, { href: "/money/budget" })}
+      {line("Budget", `− ${money(Math.max(0, row0.expenses - row0.minPay - row0.setAside))}`, { href: "/budget" })}
       {row0.minPay > 0.5 ? line("Debt payments", `− ${money(row0.minPay)}`, { href: "/money/debts", hint: escrowNow > 0.5 ? `includes ${money(escrowNow)} escrow` : undefined }) : null}
       {row0.setAside > 0.5 ? line("Set aside for recurring goals", `− ${money(row0.setAside)}`, { href: "/money/goals" }) : null}
       {line("Left after bills", money(row0.available), { strong: true, color: row0.available < 0 ? t.bad : t.text })}
       <View style={[styles.rule, { backgroundColor: t.border }]} />
       <Text style={[type.caption, { color: t.text3 }]}>Your plan</Text>
       {mine.length ? mine.map((x) => line(label(x.k).replace(" (what you owe)", isDebt(x.k) ? " (extra)" : ""), `− ${money(x.ask)}`)) : (
-        <Text style={[type.caption, { color: t.text3 }]}>Nothing set yet. Set amounts under Money → Monthly savings.</Text>
+        <Text style={[type.caption, { color: t.text3 }]}>Nothing set yet. Assign amounts on the Budget tab.</Text>
       )}
       {row0.plannedShort > 0.5
         ? line("Short this month", money(-row0.plannedShort), { strong: true, color: t.bad, hint: "Your plan asks for more than is left after bills. Lower an amount, or move one to a later month." })
@@ -512,7 +512,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
                 </Text>
                 <Icon name="down" size={14} color={t.text2} />
               </Pressable>
-              <Pressable role="link" accessibilityLabel="Set monthly amounts (Money, Monthly savings)" onPress={() => router.push("/money/savings")} hitSlop={6} style={[styles.chip, { borderColor: t.accent, backgroundColor: t.accentSoft, flexDirection: "row", alignItems: "center", gap: 4 }]}>
+              <Pressable role="link" accessibilityLabel="Set monthly amounts (Budget tab)" onPress={() => router.push("/budget")} hitSlop={6} style={[styles.chip, { borderColor: t.accent, backgroundColor: t.accentSoft, flexDirection: "row", alignItems: "center", gap: 4 }]}>
                 <Icon name="plus" size={12} color={t.accent} />
                 <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{compact ? "Set" : "Set amounts"}</Text>
               </Pressable>

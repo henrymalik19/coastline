@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../../lib/confirm";
@@ -15,7 +15,6 @@ import { ContributionsCard } from "../ContributionsCard";
 import { RetirementIncomeEditor } from "../RetirementIncomeEditor";
 import { GoalEditor } from "../GoalEditor";
 import { BudgetEditor } from "../BudgetEditor";
-import { SavingsEditor } from "../SavingsEditor";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "../form";
 import { Icon, type IconName } from "../Icon";
 import { IncomesEditor } from "../IncomeEditor";
@@ -28,7 +27,7 @@ import { HealthcareSuggestion } from "../HealthcareSuggestion";
 /* ---------- registry ---------- */
 
 type SectionKey = "account" | "appearance" | "profile" | "retirementIncome" | "income" | "budget" | "savings" | "accounts" | "debts" | "goals" | "assumptions" | "limits" | "data";
-type SectionMeta = { key: SectionKey; title: string; subtitle: string; icon: IconName };
+type SectionMeta = { key: SectionKey; title: string; subtitle: string; icon: IconName; /** Not listed (moved elsewhere; old links still work). */ hidden?: boolean };
 
 export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
   {
@@ -44,8 +43,8 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
     items: [
       { key: "retirementIncome", title: "Income in retirement", subtitle: "Social Security, pensions and other income after you stop working", icon: "calendar" },
       { key: "income", title: "Income", subtitle: "Jobs, business, rental and other income", icon: "wallet" },
-      { key: "budget", title: "Monthly budget", subtitle: "Monthly spending by group (debt payments go under Debts)", icon: "card" },
-      { key: "savings", title: "Monthly savings", subtitle: "How much goes to each account each month", icon: "target" },
+      { key: "budget", title: "Monthly budget", subtitle: "Now on the Budget tab", icon: "card", hidden: true },
+      { key: "savings", title: "Monthly savings", subtitle: "Now on the Budget tab", icon: "target", hidden: true },
       { key: "accounts", title: "Accounts", subtitle: "Balances you've saved and invested", icon: "database" },
       { key: "debts", title: "Debts", subtitle: "Balances, interest rates and minimums", icon: "card" },
       { key: "goals", title: "Savings goals", subtitle: "Each goal becomes a step in your plan", icon: "target" },
@@ -546,8 +545,9 @@ export const SECTION_SCREENS: Record<SectionKey, ComponentType> = {
   profile: Profile,
   retirementIncome: () => <RetirementIncomeSection />,
   income: IncomeSection,
-  budget: BudgetSection,
-  savings: SavingsEditor,
+  // moved to the Budget tab
+  budget: () => <Redirect href="/budget" />,
+  savings: () => <Redirect href="/budget" />,
   accounts: AccountsSection,
   debts: DebtsSection,
   goals: GoalsSection,

@@ -51,7 +51,7 @@ export function SectionIndex({ base, title, subtitle }: { base: SectionBase; tit
         <View key={group.title} style={{ gap: space.sm }}>
           {groups.length > 1 ? <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.xs }]}>{group.title}</Text> : null}
           <Card padded={false}>
-            {group.items.map((s, i) => (
+            {group.items.filter((s) => !s.hidden).map((s, i) => (
               <View key={s.key}>
                 <Pressable
                   role="link"

@@ -115,7 +115,7 @@ export default function Plan() {
           </Pressable>
         ) : (
           <Text style={[compact ? type.caption : type.body, { color: t.text2 }]}>
-            Whatever your monthly savings (Money → Monthly savings) don't use fills step 1, then step 2, and so on. To fund two steps at once, give one a share of what's left. Tap a step for its details, to split what's left, or to change the order. The dates between steps show when each one starts.
+            Whatever your budget doesn't assign to savings or debts fills step 1, then step 2, and so on. To fund two steps at once, give one a share of what's left. Tap a step for its details, to split what's left, or to change the order. The dates between steps show when each one starts.
           </Text>
         )}
       </View>
@@ -383,7 +383,7 @@ function SplitPicker({ label, share, amount, changed, allowAmount, onChange }: {
           {custom ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" }}>
               <NumberInput kind="money" label={`${label}, amount a month`} value={amount} width={140} step={100} onChange={(v) => onChange({ amount: v })} />
-              <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 160 }]}>a month. Change single months under Money → Monthly savings.</Text>
+              <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 160 }]}>a month. Change single months on the Budget tab.</Text>
             </View>
           ) : null}
         </View>

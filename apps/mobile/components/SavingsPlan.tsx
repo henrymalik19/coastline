@@ -17,7 +17,7 @@ export function SavingsPlan({ leftover }: { leftover: number }) {
   const items = plannedSavings(state, `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`).filter((x) => x.amount > 0.5);
   if (!items.length)
     return (
-      <Pressable role="link" onPress={() => router.push("/money/savings")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+      <Pressable role="link" onPress={() => router.push("/budget")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
         <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Set how much goes to savings each month ›</Text>
       </Pressable>
     );
@@ -36,8 +36,8 @@ export function SavingsPlan({ leftover }: { leftover: number }) {
         <Text style={[type.caption, { color: t.text, fontWeight: "700", flex: 1 }]}>{rest < 0 ? "Short of your saving plan" : "Left for your other steps"}</Text>
         <Text style={[type.label, { color: rest < 0 ? t.bad : t.good, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(rest)}</Text>
       </View>
-      <Pressable role="button" onPress={() => router.push("/money/savings")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
-        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change monthly savings ›</Text>
+      <Pressable role="button" onPress={() => router.push("/budget")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change it on the Budget tab ›</Text>
       </Pressable>
     </View>
   );
