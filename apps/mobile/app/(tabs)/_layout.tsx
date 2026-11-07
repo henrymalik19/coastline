@@ -32,6 +32,8 @@ export default function TabsLayout() {
         tabBarActiveTintColor: t.accent,
         tabBarInactiveTintColor: t.text3,
         tabBarLabelStyle: { fontSize: 11, lineHeight: 14, fontWeight: "600" },
+        // five tabs share the width; a long label (or big phone text) must never widen the bar
+        tabBarItemStyle: { minWidth: 0, overflow: "hidden" },
         tabBarStyle: {
           backgroundColor: t.surface,
           borderTopColor: t.border,
