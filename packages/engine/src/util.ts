@@ -31,6 +31,17 @@ export function pct(sorted: ArrayLike<number>, p: number): number {
   return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (i - lo);
 }
 
+/** "YYYY-MM" plus n months. */
+export function addMonths(ym: string, n: number): string {
+  const k = Number(ym.slice(0, 4)) * 12 + Number(ym.slice(5, 7)) - 1 + n;
+  return `${Math.floor(k / 12)}-${String((k % 12) + 1).padStart(2, "0")}`;
+}
+
+/** Whole months from "YYYY-MM" `a` to `b` (negative if b is earlier). */
+export function monthsBetween(a: string, b: string): number {
+  return Number(b.slice(0, 4)) * 12 + Number(b.slice(5, 7)) - (Number(a.slice(0, 4)) * 12 + Number(a.slice(5, 7)));
+}
+
 /** "YYYY-MM-DD" to UTC epoch ms, or null. */
 export function parseDate(s: string | undefined | null): number | null {
   if (!s) return null;

@@ -5,6 +5,8 @@ import { confirm } from "../lib/confirm";
 import { groupOf, moveGroup, moveItem, UNGROUPED } from "../lib/budgetOrder";
 import { debtLabel } from "../lib/debts";
 import { paycheckFor } from "../lib/loans";
+import { goalFromItem, suggestFor, type Suggestion } from "../lib/budgetSuggest";
+import { dueLabel, everyLabel } from "./RecurringGoalFields";
 import { money } from "../lib/format";
 import { HELP } from "../lib/help";
 import { useLayout } from "../lib/layout";
@@ -18,6 +20,8 @@ import { Card, Pill } from "./ui";
 
 /** Key of the read-only "Debt payments" group (not a real budget group). */
 const DEBT_KEY = "\u0000debts";
+/** Key of the read-only "Set aside" group (recurring goals). */
+const SET_KEY = "\u0000setaside";
 
 /** Groups in the order they first appear; items without a group go under "Other". */
 function grouped(items: BudgetItem[]) {
@@ -45,6 +49,7 @@ export function BudgetEditor() {
   const fillPage = useFillPage();
   const [showDetails, setShowDetails] = useState(false);
   const [reorder, setReorder] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const paneWidth = twoPane ? contentWidth - 270 - space.md : contentWidth;
   const compact = paneWidth < 560;
   const cols = budgetCols(compact);
@@ -57,11 +62,15 @@ export function BudgetEditor() {
   const debtRows = state.debts.filter((x) => x.balance > 0 && x.minPayment > 0 && !x.payroll);
   const payrollLoans = state.debts.filter((x) => x.balance > 0 && x.payroll);
   const onDebts = selected === DEBT_KEY && debtRows.length > 0;
+  // recurring goals are set aside every month, like a bill: shown read-only too
+  const setRows = state.goals.filter((g) => g.recurring && g.target > 0);
+  const onSet = selected === SET_KEY && setRows.length > 0;
   useEffect(() => {
     if (selected === DEBT_KEY && debtRows.length > 0) return;
+    if (selected === SET_KEY && setRows.length > 0) return;
     if (!selected || !groups.some((g) => g.name === selected)) setSelected(groups[0]?.name);
-  }, [names, debtRows.length]); // eslint-disable-line react-hooks/exhaustive-deps
-  const current = onDebts ? undefined : groups.find((g) => g.name === selected) ?? groups[0];
+  }, [names, debtRows.length, setRows.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const current = onDebts || onSet ? undefined : groups.find((g) => g.name === selected) ?? groups[0];
   const retireMonthly = state.budget.filter((b) => b.inRetirement).reduce((a, b) => a + b.amount, 0);
 
   const addGroup = () => {
@@ -93,7 +102,7 @@ export function BudgetEditor() {
 
   // what's left each month once the budget and debt minimums are paid (engine numbers, normal month)
   const d = result.d;
-  const leftover = d.leanMonthly - d.budgetTotal - d.debtMins;
+  const leftover = d.leanMonthly - d.budgetTotal - d.debtMins - d.setAsideMonthly;
   const figure = (label: string, value: string, sign?: "−" | "=") => (
     <View style={styles.figure}>
       {sign ? <Text style={[type.heading, { color: t.text3, marginRight: space.sm }]}>{sign}</Text> : null}
@@ -111,6 +120,7 @@ export function BudgetEditor() {
           <Text style={[type.label, { color: t.text2 }]}>{leftover < 0 ? "Short each month" : "Left over to save"}</Text>
           <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]} numberOfLines={2}>
             {money(d.leanMonthly)} take-home − {money(d.budgetTotal)} budget{d.debtMins > 0 ? ` − ${money(d.debtMins)} debts` : ""}
+            {d.setAsideMonthly > 0 ? ` − ${money(d.setAsideMonthly, { whole: true })} set aside` : ""}
           </Text>
         </View>
         <Text style={[type.stat, { color: leftover < 0 ? t.bad : t.good, fontVariant: ["tabular-nums"] }]}>{money(leftover)}/mo</Text>
@@ -145,6 +155,7 @@ export function BudgetEditor() {
         {figure("Take-home (normal month)", money(d.leanMonthly))}
         {figure("Budget", money(d.budgetTotal), "−")}
         {figure("Debt minimums", money(d.debtMins), "−")}
+        {d.setAsideMonthly > 0 ? figure("Set aside", money(d.setAsideMonthly, { whole: true }), "−") : null}
         <View style={[styles.figure, styles.result, { backgroundColor: leftover < 0 ? t.badSoft : t.goodSoft }]}>
           <Text style={[type.heading, { color: t.text3, marginRight: space.sm }]}>=</Text>
           <View>
@@ -178,8 +189,9 @@ export function BudgetEditor() {
       items={[
         ...groups.map((g) => ({ key: g.name, title: g.name, subtitle: `${g.rows.length} item${g.rows.length === 1 ? "" : "s"}`, value: money(g.subtotal) })),
         ...(debtRows.length ? [{ key: DEBT_KEY, title: "Debt payments", subtitle: "From your debts", value: money(d.debtMins) }] : []),
+        ...(setRows.length ? [{ key: SET_KEY, title: "Set aside", subtitle: "Recurring goals", value: money(d.setAsideMonthly, { whole: true }) }] : []),
       ]}
-      selected={onDebts ? DEBT_KEY : current?.name}
+      selected={onDebts ? DEBT_KEY : onSet ? SET_KEY : current?.name}
       onSelect={setSelected}
       listFooter={<Button title="Add group" icon="plus" tone="ghost" onPress={addGroup} style={{ alignSelf: "flex-start" }} />}
       chipAdd={<AddChip label="Group" onPress={addGroup} />}
@@ -190,7 +202,19 @@ export function BudgetEditor() {
         </>
       }
       detailHead={
-        onDebts ? (
+        onSet ? (
+          <View>
+            <View style={styles.headRow}>
+              <Text role="heading" aria-level={2} style={[type.heading, { color: t.text, flex: 1 }]}>Set aside</Text>
+              <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(d.setAsideMonthly, { whole: true })}/mo</Text>
+            </View>
+            <View style={[styles.cols, { paddingHorizontal: space.lg, paddingBottom: space.sm }]}>
+              <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Goal</Text>
+              <Text style={[type.overline, { color: t.text3, width: cols.amount, textAlign: "right" }]}>Monthly</Text>
+              <View style={{ width: cols.actions }} />
+            </View>
+          </View>
+        ) : onDebts ? (
           <View>
             <View style={styles.headRow}>
               <Text role="heading" aria-level={2} style={[type.heading, { color: t.text, flex: 1 }]}>Debt payments</Text>
@@ -235,7 +259,20 @@ export function BudgetEditor() {
         ) : undefined
       }
       detail={
-        onDebts
+        onSet
+          ? setRows.map((g) => (
+              <View key={g.id} style={[styles.row, { borderBottomColor: t.border }]}>
+                <View style={{ flex: 1, minWidth: 0, paddingVertical: 4 }}>
+                  <Text numberOfLines={2} style={[type.body, { color: t.text }]}>{g.name || "Goal"}</Text>
+                  <Text style={[type.caption, { color: t.text3 }]}>
+                    {money(g.target)} {everyLabel(g.recurring!.every)} · next due {dueLabel(g.recurring!.due)}
+                  </Text>
+                </View>
+                <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(g.target / g.recurring!.every, { whole: true })}</Text>
+                <View style={[styles.actions, { width: cols.actions }]} />
+              </View>
+            ))
+          : onDebts
           ? debtRows.map((x) => {
               const link = paycheckFor(state, x.id);
               const from = link
@@ -255,7 +292,28 @@ export function BudgetEditor() {
               );
             })
           : current
-          ? current.rows.map(({ item, index }, i) => (
+          ? [
+              !reorder ? (
+                <Suggestions
+                  key="suggestions"
+                  items={current.rows.map((r) => r.item)}
+                  notice={notice}
+                  onDismissNotice={() => setNotice(null)}
+                  onMove={(id, group) => update((p) => { const b = p.budget.find((x) => x.id === id); if (b) b.group = group; })}
+                  onGoal={(id, recurring, december) => {
+                    const b = state.budget.find((x) => x.id === id);
+                    if (!b) return;
+                    const goal = goalFromItem(b, recurring, december);
+                    update((p) => {
+                      p.budget = p.budget.filter((x) => x.id !== id);
+                      p.goals.push(goal);
+                    });
+                    setNotice(`"${goal.name}" is now a ${recurring ? "recurring " : ""}savings goal (${money(goal.target)}${recurring ? " a year" : ""}). Check the amount under Savings goals.`);
+                  }}
+                  onDismiss={(id) => update((p) => { const b = p.budget.find((x) => x.id === id); if (b) b.noSuggest = true; })}
+                />
+              ) : null,
+              ...current.rows.map(({ item, index }, i) => (
               <BudgetRow
                 key={item.id}
                 item={item}
@@ -268,16 +326,69 @@ export function BudgetEditor() {
                 onChange={(patch) => update((p) => { p.budget[index] = { ...p.budget[index]!, ...patch }; })}
                 onRemove={() => { setEditing(null); update((p) => { p.budget.splice(index, 1); }); }}
               />
-            ))
+            )),
+            ]
           : null
       }
-      detailFooter={onDebts ? (
+      detailFooter={onSet ? (
+        <Text style={[type.caption, { color: t.text3, padding: space.sm }]}>
+          Your recurring goals, set aside a little each month so they're ready when due. The plan catches up if you're behind. Change them under Savings goals.
+        </Text>
+      ) : onDebts ? (
         <Text style={[type.caption, { color: t.text3, padding: space.sm }]}>
           These come from your debts, so they're counted once. Change them on the Debts page.
           {payrollLoans.length ? " 401(k) loan repayments aren't listed: they come out of your paycheck, before take-home." : ""}
         </Text>
       ) : current ? <Button title={`Add item to ${current.name}`} icon="plus" tone="ghost" onPress={() => addItem(current.name)} style={{ alignSelf: "flex-start" }} /> : undefined}
     />
+  );
+}
+
+/** Hints for the items in a group: a better group, or "this is something you save up for". */
+function Suggestions({
+  items, notice, onDismissNotice, onMove, onGoal, onDismiss,
+}: {
+  items: BudgetItem[];
+  notice: string | null;
+  onDismissNotice: () => void;
+  onMove: (id: string, group: string) => void;
+  onGoal: (id: string, recurring: boolean, december: boolean) => void;
+  onDismiss: (id: string) => void;
+}) {
+  const t = useTheme();
+  const list = items.map(suggestFor).filter((x): x is Suggestion => !!x).slice(0, 3);
+  if (!list.length && !notice) return null;
+  return (
+    <View style={{ gap: space.xs, paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.xs }}>
+      {notice ? (
+        <View style={[styles.hint, { backgroundColor: t.goodSoft }]}>
+          <Text style={[type.caption, { color: t.text, flex: 1 }]}>{notice}</Text>
+          <IconButton icon="check" label="OK" onPress={onDismissNotice} />
+        </View>
+      ) : null}
+      {list.map((sg) => {
+        const name = sg.item.name.trim();
+        return (
+          <View key={sg.item.id} style={[styles.hint, { backgroundColor: t.accentSoft }]}>
+            <Icon name="sparkle" size={16} color={t.accent} />
+            <Text style={[type.caption, { color: t.text, flex: 1 }]}>
+              {sg.kind === "group"
+                ? `"${name}" usually goes under ${sg.group}.`
+                : sg.recurring
+                  ? `"${name}" sounds like something you save up for each year. As a recurring goal it's set aside monthly and ready when due.`
+                  : `"${name}" sounds like something you're saving up for. As a goal it gets its own step in your plan.`}
+            </Text>
+            <Button
+              title={sg.kind === "group" ? `Move` : "Make it a goal"}
+              tone="primary"
+              onPress={() => (sg.kind === "group" ? onMove(sg.item.id, sg.group) : onGoal(sg.item.id, sg.recurring, sg.december))}
+              style={{ minHeight: 32, paddingHorizontal: space.md }}
+            />
+            <IconButton icon="close" label={`Dismiss suggestion for ${name}`} onPress={() => onDismiss(sg.item.id)} />
+          </View>
+        );
+      })}
+    </View>
   );
 }
 
@@ -417,6 +528,7 @@ const styles = StyleSheet.create({
   figure: { flexDirection: "row", alignItems: "center" },
   result: { borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, marginLeft: "auto" },
   debtNote: { borderRadius: radius.sm, padding: space.md },
+  hint: { flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: radius.sm, paddingVertical: space.xs, paddingLeft: space.md, paddingRight: space.xs, flexWrap: "wrap" },
   reorderBar: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.lg, marginBottom: space.sm, paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.sm },
   moveBtn: { minHeight: 34, paddingHorizontal: space.md },
   tip: { width: "100%", padding: space.md, borderRadius: radius.sm, overflow: "hidden" },

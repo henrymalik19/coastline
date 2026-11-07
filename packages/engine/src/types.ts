@@ -65,6 +65,8 @@ export type BudgetItem = {
   group?: string;
   /** Kept when emergency mode cuts spending to essentials. Missing = essential (nothing is cut by surprise). */
   essential?: boolean;
+  /** The user dismissed the app's suggestion for this item (better group / make it a goal). Display only. */
+  noSuggest?: boolean;
 };
 /** "property": what a home or rental is worth. Counts in net worth, not as invested money for Coast FI. */
 export type AccountType = "pretax" | "roth" | "taxable" | "hsa" | "cash" | "property";
@@ -104,7 +106,19 @@ export type RetirementIncome = {
   /** Age it starts. */
   startAge: number;
 };
-export type Goal = { id: string; name: string; target: number; saved: number };
+/**
+ * A savings goal. One-time goals are a step in the plan. Recurring goals (holidays, yearly
+ * insurance) are set aside every month like a bill, spent when due, then start again.
+ */
+export type Goal = { id: string; name: string; target: number; saved: number; recurring?: RecurringGoal };
+export type RecurringGoal = {
+  /** Months between due dates (12 = yearly, 6, 3). */
+  every: number;
+  /** Next due month, "YYYY-MM". */
+  due: string;
+  /** Keeps happening after you retire (adds to retirement spending). Missing = yes. */
+  inRetirement?: boolean;
+};
 export type LimitsRow = {
   year: number;
   k401: number;
@@ -248,6 +262,8 @@ export type Derived = {
   rothShare: number;
   /** Employer HSA contributions per year, all jobs. */
   hsaEmployerAnnual: number;
+  /** Recurring goals' average monthly set-aside (target ÷ months between due dates). */
+  setAsideMonthly: number;
 };
 
 export type Alloc = {
@@ -282,6 +298,8 @@ export type MonthRow = {
   payRoth: number;
   /** Employer HSA contribution this month. */
   payHsaEmployer: number;
+  /** Set aside this month for recurring goals (included in `expenses`). */
+  setAside: number;
   /** Scheduled payroll 401(k) not deferred because the annual limit was reached (pre-tax $). */
   payCut: number;
   /** One-off income change this month (+ bonus / − lost pay), already included in `income`. */

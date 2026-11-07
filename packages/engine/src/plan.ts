@@ -14,7 +14,7 @@ import type {
   PlanState,
   SimulateOptions,
 } from "./types";
-import { num, sum } from "./util";
+import { addMonths, monthsBetween, num, sum } from "./util";
 
 /** Id of the synthetic debt created when a short month runs past your cash. */
 export const SHORTFALL_ID = "shortfall";
@@ -68,7 +68,12 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     apr: num(x.apr),
     minPayment: num(x.minPayment),
   }));
-  const goals = (s.goals ?? []).map((g) => ({ ...g, saved: num(g.saved), target: num(g.target) }));
+  const goals = (s.goals ?? []).map((g) => ({
+    ...g,
+    saved: num(g.saved),
+    target: num(g.target),
+    recurring: g.recurring && num(g.recurring.every) > 0 ? { ...g.recurring, every: Math.round(num(g.recurring.every)) } : undefined,
+  }));
 
   // one-off adjustments, by "YYYY-MM"
   // emergency mode: waterfall paused (and optionally essentials-only spending / no payroll 401(k)) through 'until'
@@ -197,7 +202,22 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       else minPay += pay;
     }
     income += payrollFreed;
-    const expenses = (inEmergency && em!.essentialsOnly ? essentialBudget : d.budgetTotal) + minPay + adjExpense;
+    // recurring goals: set aside what's still needed ÷ months left (so a late start catches up),
+    // spend it in the due month, then start again for the next due date
+    let setAside = 0;
+    for (const gl of goals) {
+      const r = gl.recurring;
+      if (!r || gl.target <= 0) continue;
+      while (r.due < monthStr) r.due = addMonths(r.due, r.every); // a due date already past
+      const put = Math.max(0, gl.target - gl.saved) / (monthsBetween(monthStr, r.due) + 1);
+      gl.saved += put;
+      setAside += put;
+      if (r.due === monthStr) {
+        gl.saved = Math.max(0, gl.saved - gl.target);
+        r.due = addMonths(r.due, r.every);
+      }
+    }
+    const expenses = (inEmergency && em!.essentialsOnly ? essentialBudget : d.budgetTotal) + minPay + adjExpense + setAside;
     let avail = income - expenses + extraMonthly;
     const alloc: Alloc = {
       k401: 0, k401TakeHome: 0, k401Step: 0, matchGain: 0,
@@ -304,7 +324,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
           avail = 0;
         } else if (step.startsWith("goal:")) {
           const gl = goals.find((x) => "goal:" + x.id === step);
-          if (gl) {
+          if (gl && !gl.recurring) {
             const put = Math.min(avail, Math.max(0, gl.target - gl.saved));
             gl.saved += put;
             avail -= put;
@@ -324,7 +344,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       if (dt.balance <= 0.5 && startedOwing) mark("debt:" + dt.id, m, `${dt.name} paid off`);
     }
     if (debts.length && debts.every((x) => x.balance <= 0.5)) mark("debtFree", m, "Debt-free");
-    for (const gl of goals) if (gl.target > 0 && gl.saved >= gl.target - 0.5) mark("goal:" + gl.id, m, `${gl.name} goal reached`);
+    for (const gl of goals) if (!gl.recurring && gl.target > 0 && gl.saved >= gl.target - 0.5) mark("goal:" + gl.id, m, `${gl.name} goal reached`);
     for (const k of ["hsa", "ira", "taxable"] as const) if (alloc[k] > 0.5 && firstFund[k] === undefined) firstFund[k] = m;
     if (alloc.k401Step > 0.5 && firstFund.k401 === undefined) firstFund.k401 = m;
     if (alloc.matchGain > 0.5) mark("match", m, "Full employer match captured");
@@ -337,7 +357,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     }
 
     out.push({
-      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payRoth, payHsaEmployer, payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency,
+      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payRoth, payHsaEmployer, setAside, payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency,
       alloc,
       cash,
       debtTotal: sum(debts.map((x) => x.balance)),

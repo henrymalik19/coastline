@@ -11,6 +11,7 @@ import { money, percent } from "../../../lib/format";
 import { useLayout } from "../../../lib/layout";
 import { paycheckFor } from "../../../lib/loans";
 import { netWorth } from "../../../lib/networth";
+import { dueLabel, everyLabel } from "../../../components/RecurringGoalFields";
 import { usePlan } from "../../../lib/plan";
 import { space, type, useTheme } from "../../../lib/theme";
 
@@ -26,7 +27,7 @@ export default function MoneyOverview() {
   const cash = d.bal.cash;
   const property = d.bal.property ?? 0;
   const worth = netWorth(d, state);
-  const leftover = d.leanMonthly - d.budgetTotal - d.debtMins;
+  const leftover = d.leanMonthly - d.budgetTotal - d.debtMins - d.setAsideMonthly;
   const goals = state.goals ?? [];
   const retire = (state.retirementIncome ?? []).filter((x) => x.monthly > 0);
   const debts = state.debts.filter((x) => x.balance > 0);
@@ -52,6 +53,7 @@ export default function MoneyOverview() {
       <Line label="Take-home" value={money(d.leanMonthly)} href="/money/income" hint={`${state.incomes.length} income source${state.incomes.length === 1 ? "" : "s"}`} />
       <Line label="Budget" value={`− ${money(d.budgetTotal)}`} href="/money/budget" hint={`${state.budget.length} items`} />
       {d.debtMins > 0 ? <Line label="Debt payments" value={`− ${money(d.debtMins)}`} href="/money/debts" /> : null}
+      {d.setAsideMonthly > 0 ? <Line label="Set aside" value={`− ${money(d.setAsideMonthly, { whole: true })}`} href="/money/goals" hint="Recurring goals" /> : null}
       <Divider />
       <View style={[styles.line, { paddingVertical: space.sm }]}>
         <Text style={[type.heading, { color: t.text, flex: 1 }]}>{leftover < 0 ? "Short each month" : "Left over to save"}</Text>
@@ -91,7 +93,12 @@ export default function MoneyOverview() {
         goals.map((g) => (
           <View key={g.id} style={{ gap: 6, paddingVertical: space.xs }}>
             <View style={styles.line}>
-              <Text style={[type.body, { color: t.text, flex: 1 }]} numberOfLines={1}>{g.name || "Goal"}</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{g.name || "Goal"}</Text>
+                {g.recurring ? (
+                  <Text style={[type.caption, { color: t.text3 }]}>{everyLabel(g.recurring.every)} · due {dueLabel(g.recurring.due)}</Text>
+                ) : null}
+              </View>
               <Text style={[type.label, { color: t.text2, fontVariant: ["tabular-nums"] }]}>
                 {money(g.saved)} of {money(g.target)}
               </Text>

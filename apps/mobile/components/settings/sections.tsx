@@ -11,6 +11,7 @@ import { radius, space, type, useTheme } from "../../lib/theme";
 import { AccountPanel } from "../AccountPanel";
 import { AccountsEditor } from "../AccountsEditor";
 import { RetirementIncomeEditor } from "../RetirementIncomeEditor";
+import { RecurringGoalFields } from "../RecurringGoalFields";
 import { BudgetEditor } from "../BudgetEditor";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "../form";
 import { Icon, type IconName } from "../Icon";
@@ -234,7 +235,7 @@ function GoalsSection() {
   return (
     <>
       <Text style={[type.body, { color: t.text2 }]}>
-        Things you're saving up for: a house deposit, a car, a wedding. Change their priority on the Plan tab.
+        Things you're saving up for: a house deposit, a car, a wedding. Change their priority on the Plan tab. Turn on "Repeats" for things that come around again, like holidays or a yearly bill.
       </Text>
       <EmergencyFundNote />
       {state.goals.length === 0 ? <Empty text="No goals yet" /> : null}
@@ -260,6 +261,7 @@ function GoalsSection() {
               </FieldRow>,
             ]}
           </Rows>
+          <RecurringGoalFields goal={g} onChange={(patch) => update((p) => { p.goals[i] = { ...p.goals[i]!, ...patch }; })} />
         </ItemCard>
       ))}
       <Button title="Add goal" icon="plus" onPress={() => update((p) => { p.goals.push({ id: newId(), name: "", target: 5000, saved: 0 }); })} style={{ alignSelf: "flex-start" }} />

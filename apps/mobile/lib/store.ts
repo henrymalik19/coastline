@@ -113,7 +113,8 @@ export const useStore = create<AppState>()(
 
 /** Every goal has exactly one plan step; new goals go just before "taxable" (as in the prototype). */
 export function syncGoalSteps(p: PlanState): void {
-  const ids = p.goals.map((g) => `goal:${g.id}` as const);
+  // recurring goals are set aside like a bill, not a step in the plan
+  const ids = p.goals.filter((g) => !g.recurring).map((g) => `goal:${g.id}` as const);
   const steps = p.plan.steps.filter((s) => !s.startsWith("goal:") || ids.includes(s as `goal:${string}`));
   for (const id of ids) {
     if (steps.includes(id)) continue;

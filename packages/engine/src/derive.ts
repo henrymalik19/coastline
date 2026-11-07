@@ -21,12 +21,16 @@ export function derive(s: PlanState, startDate: Date): Derived {
   const budgetTotal = sum(budget.map((b) => b.amount));
   // payroll-repaid debts (paycheck 401(k) loans) are already out of take-home, so they aren't budget costs
   const debtMins = sum((s.debts ?? []).filter((d) => num(d.balance) > 0 && !d.payroll).map((d) => d.minPayment));
-  const monthlyExpenses = budgetTotal + debtMins;
+  // recurring goals are set aside every month, like a bill
+  const recurring = (s.goals ?? []).filter((g) => g.recurring && num(g.target) > 0 && num(g.recurring.every) > 0);
+  const setAsideMonthly = sum(recurring.map((g) => num(g.target) / num(g.recurring!.every)));
+  const setAsideRetired = sum(recurring.filter((g) => g.recurring!.inRetirement !== false).map((g) => num(g.target) / num(g.recurring!.every)));
+  const monthlyExpenses = budgetTotal + debtMins + setAsideMonthly;
   // essentials: items not explicitly marked non-essential, plus debt minimums
-  const essentialExpenses = sum(budget.filter((b) => b.essential !== false).map((b) => b.amount)) + debtMins;
+  const essentialExpenses = sum(budget.filter((b) => b.essential !== false).map((b) => b.amount)) + debtMins + setAsideMonthly;
 
   const retireMonthly =
-    (sum(budget.filter((b) => b.inRetirement).map((b) => b.amount)) + num(s.healthcare)) * (1 + (w.spendDelta || 0));
+    (sum(budget.filter((b) => b.inRetirement).map((b) => b.amount)) + num(s.healthcare) + setAsideRetired) * (1 + (w.spendDelta || 0));
   const years = Math.max(0, Math.round(s.retireAge - s.age));
 
   // income in retirement: the yearly total once everything has started, plus the savings
@@ -72,5 +76,6 @@ export function derive(s: PlanState, startDate: Date): Derived {
     retireBridge,
     rothShare,
     hsaEmployerAnnual: sum(incomes.map((i) => Math.max(0, num(i.hsaEmployer)))),
+    setAsideMonthly,
   };
 }

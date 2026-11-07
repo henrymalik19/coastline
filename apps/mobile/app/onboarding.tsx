@@ -8,6 +8,7 @@ import { EmergencyFundNote, looksLikeEmergencyFund } from "../components/Emergen
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField } from "../components/form";
 import { Icon } from "../components/Icon";
 import { RetirementIncomeEditor } from "../components/RetirementIncomeEditor";
+import { RecurringGoalFields } from "../components/RecurringGoalFields";
 import { useFillPage } from "../components/MasterDetail";
 import { ProgressBar, ProgressRing } from "../components/ProgressRing";
 import { IncomesEditor } from "../components/IncomeEditor";
@@ -209,7 +210,7 @@ function GoalsStep() {
   const update = useStore((s) => s.update);
   return (
     <>
-      <Text style={[type.body, { color: t.text2 }]}>A house deposit, a car, a wedding… Each goal becomes a step in your plan, just before investing in a brokerage. Totally optional.</Text>
+      <Text style={[type.body, { color: t.text2 }]}>A house deposit, a car, a wedding… Each goal becomes a step in your plan, just before investing in a brokerage. Things that come around again (holidays, a yearly bill) can repeat. Totally optional.</Text>
       <EmergencyFundNote linkToSettings={false} />
       {state.goals.map((g, i) => (
         <Card key={g.id} style={{ gap: space.sm }}>
@@ -226,6 +227,7 @@ function GoalsStep() {
             <Labeled label="Target"><NumberInput kind="money" width="100%" label={`${g.name} target`} value={g.target} min={0} onChange={(v) => update((p) => { p.goals[i]!.target = v; })} /></Labeled>
             <Labeled label="Saved so far"><NumberInput kind="money" width="100%" label={`${g.name} saved`} value={g.saved} min={0} onChange={(v) => update((p) => { p.goals[i]!.saved = v; })} /></Labeled>
           </View>
+          <RecurringGoalFields goal={g} onChange={(patch) => update((p) => { p.goals[i] = { ...p.goals[i]!, ...patch }; })} />
         </Card>
       ))}
       <Button title="Add a goal" icon="plus" onPress={() => update((p) => { p.goals.push({ id: newId(), name: "", target: 5000, saved: 0 }); })} style={{ alignSelf: "flex-start" }} />

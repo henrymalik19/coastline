@@ -475,3 +475,40 @@ describe("payroll-repaid debts (paycheck 401(k) loans)", () => {
     expect(plan.events.find((e) => e.key === "debt:k")!.m).toBe(3);
   });
 });
+
+describe("recurring goals (holidays, yearly bills)", () => {
+  const base = (over: Partial<PlanState> = {}) =>
+    blank({ incomes: [{ id: "i", name: "Job", freq: "monthly", net: 3000, matchMode: "usd" }], ...over });
+
+  it("sets aside an equal share each month and spends it when due", () => {
+    // START is Nov 2026; due Dec 2026 with $1,200 and nothing saved → catch up over 2 months
+    const s = base({ goals: [{ id: "x", name: "Christmas", target: 1200, saved: 0, recurring: { every: 12, due: "2026-12" } }] });
+    const plan = simulatePlan(s, derive(s, START));
+    expect(plan.months[0]!.setAside).toBeCloseTo(600, 9); // Nov: 1200 / 2 months left
+    expect(plan.months[1]!.setAside).toBeCloseTo(600, 9); // Dec: the rest, then it's spent
+    expect(plan.months[2]!.setAside).toBeCloseTo(100, 9); // from Jan: 1200 / 12 toward next Dec
+    expect(plan.months[0]!.expenses).toBeCloseTo(600, 9);
+    expect(plan.months[2]!.goals.find((g) => g.id === "x")!.saved).toBeCloseTo(100, 9);
+  });
+
+  it("saving ahead lowers later months; it's never a waterfall step or a 'reached' event", () => {
+    const s = base({
+      goals: [{ id: "x", name: "Trip", target: 1200, saved: 600, recurring: { every: 12, due: "2027-10" } }],
+      plan: { ...blank().plan, steps: ["goal:x", "taxable"] },
+    });
+    const plan = simulatePlan(s, derive(s, START));
+    expect(plan.months[0]!.setAside).toBeCloseTo(600 / 12, 9); // 600 left over 12 months (Nov..Oct)
+    expect(plan.months[0]!.alloc.goals).toBe(0);
+    expect(plan.events.some((e) => e.key === "goal:x")).toBe(false);
+  });
+
+  it("adds to monthly costs and (unless turned off) to retirement spending", () => {
+    const g = { id: "x", name: "Insurance", target: 600, saved: 0, recurring: { every: 6, due: "2027-03" } };
+    const on = derive(base({ goals: [g] }), START);
+    expect(on.setAsideMonthly).toBe(100);
+    expect(on.monthlyExpenses).toBe(100);
+    expect(on.retireMonthly).toBe(100);
+    const off = derive(base({ goals: [{ ...g, recurring: { ...g.recurring, inRetirement: false } }] }), START);
+    expect(off.retireMonthly).toBe(0);
+  });
+});

@@ -44,7 +44,15 @@ export const IncomeSchema = z.object({
   hsaEmployer: nonNeg.optional(),
 });
 
-export const BudgetItemSchema = z.object({ id, name: z.string(), amount: money, inRetirement: z.boolean(), group: z.string().optional(), essential: z.boolean().optional() });
+export const BudgetItemSchema = z.object({
+  id,
+  name: z.string(),
+  amount: money,
+  inRetirement: z.boolean(),
+  group: z.string().optional(),
+  essential: z.boolean().optional(),
+  noSuggest: z.boolean().optional(),
+});
 export const AccountTypeSchema = z.enum(["pretax", "roth", "taxable", "hsa", "cash", "property"]);
 export const AccountSchema = z.object({
   id,
@@ -74,7 +82,15 @@ export const RetirementIncomeSchema = z.object({
   monthly: nonNeg,
   startAge: z.number().min(0).max(120),
 });
-export const GoalSchema = z.object({ id, name: z.string(), target: nonNeg, saved: nonNeg });
+export const GoalSchema = z.object({
+  id,
+  name: z.string(),
+  target: nonNeg,
+  saved: nonNeg,
+  recurring: z
+    .object({ every: z.number().int().min(1).max(60), due: z.string().regex(MONTH_RE, "Use YYYY-MM"), inRetirement: z.boolean().optional() })
+    .optional(),
+});
 export const LimitsRowSchema = z.object({
   year: z.number().int(),
   k401: nonNeg,

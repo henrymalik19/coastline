@@ -77,7 +77,7 @@ function expectParity(input: PlanState) {
   // `payCut` is new in the port; when the prototype stays under the limit it is always 0.
   // fields new in the port are always 0 on plans the prototype can run the same way
   for (const m of (ours.plan as { months: Record<string, unknown>[] }).months) {
-    for (const k of ["payCut", "adjIncome", "adjExpense", "borrowed", "payRoth", "payHsaEmployer"]) {
+    for (const k of ["payCut", "adjIncome", "adjExpense", "borrowed", "payRoth", "payHsaEmployer", "setAside"]) {
       expect(m[k]).toBe(0);
       delete m[k];
     }    expect(m.emergency).toBe(false);
@@ -91,7 +91,7 @@ function expectParity(input: PlanState) {
   expect((od.bal as Record<string, number>).property).toBe(0);
   delete (od.bal as Record<string, number>).property;
   // new in the port (no Roth 401(k), employer HSA or retirement income on these plans)
-  for (const k of ["retireIncomeAnnual", "retireBridge", "rothShare", "hsaEmployerAnnual"]) {
+  for (const k of ["retireIncomeAnnual", "retireBridge", "rothShare", "hsaEmployerAnnual", "setAsideMonthly"]) {
     expect(od[k]).toBe(0);
     delete od[k];
   }
