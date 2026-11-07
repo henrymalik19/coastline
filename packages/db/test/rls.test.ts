@@ -28,7 +28,8 @@ const plan = (marker: string) => ({ version: 2, marker });
 describe.skipIf(!env)("row-level security (local Supabase)", () => {
   const url = env?.API_URL ?? "";
   const anonKey = env?.ANON_KEY ?? "";
-  const admin = createClient(url, env?.SERVICE_ROLE_KEY ?? "", { auth: { persistSession: false } });
+  // a skipped describe still runs its body, so only build the client when the stack is up (CI has none)
+  const admin = env ? createClient(url, env.SERVICE_ROLE_KEY!, { auth: { persistSession: false } }) : (null as unknown as SupabaseClient);
   const users: { id: string; client: SupabaseClient }[] = [];
 
   async function newUser() {
