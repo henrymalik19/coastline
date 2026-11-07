@@ -135,6 +135,8 @@ export function budgetScheduleMonths(s: Pick<PlanState, "debts" | "goals" | "bud
     for (const [key, v] of Object.entries(e.assigned ?? {})) {
       let amount: number | undefined;
       if (key.startsWith(ACCOUNT_KEY)) amount = Math.max(0, num(v));
+      // a kind with no account yet ("ira", "taxable", "hsa", "cash")
+      else if (key === "cash" || key === "ira" || key === "hsa" || key === "taxable") amount = Math.max(0, num(v));
       else if (key.startsWith("goal:")) {
         // repeating goals set aside on their own; one-time goals get what you assigned
         const g = (s.goals ?? []).find((y) => "goal:" + y.id === key);

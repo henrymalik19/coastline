@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetCategories, budgetView, derive, simulatePlan, type BudgetState, type PlanState } from "../src";
+import { budgetCategories, budgetScheduleMonths, budgetView, derive, simulatePlan, type BudgetState, type PlanState } from "../src";
 import { START } from "./fixtures";
 
 const blank = (over: Partial<PlanState> = {}): PlanState => ({
@@ -100,5 +100,9 @@ describe("monthly budget", () => {
     expect(by("acct:ira2")!.target).toBe(50); // its own amount
     expect(by("acct:k")).toBeUndefined(); // the 401(k) is set per paycheck
     expect(by("goal:car")!.kind).toBe("saving");
+    // a plan step with no account yet still gets a line (brokerage here); one with an account doesn't
+    expect(by("taxable")).toMatchObject({ kind: "saving", name: "Brokerage (no account yet)", moves: true });
+    expect(by("ira")).toBeUndefined();
+    expect(budgetScheduleMonths({ debts: [], goals: [], budgetPlan: { start: "2026-11", startCash: 0, months: { "2026-11": { assigned: { taxable: 400 } } } } })).toEqual({ taxable: { "2026-11": 400 } });
   });
 });

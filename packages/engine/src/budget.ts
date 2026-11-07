@@ -105,6 +105,18 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
     firstOfKind.add(kind);
     out.push({ key: ACCOUNT_KEY + a.id, group: "Savings", name: a.name || "Account", kind: "saving", target, moves: kind !== "cash" });
   }
+  // a plan step with no account yet (an IRA you haven't opened): still a line, so you can budget for it
+  const steps = s.plan?.steps ?? [];
+  const kinds: { kind: "cash" | "ira" | "hsa" | "taxable"; name: string; wanted: boolean }[] = [
+    { kind: "cash", name: "Emergency fund", wanted: steps.includes("starterEF") || steps.includes("fullEF") },
+    { kind: "ira", name: "IRA", wanted: steps.includes("ira") },
+    { kind: "hsa", name: "HSA", wanted: steps.includes("hsa") && !!s.plan?.hsaEligible && s.plan?.hsaPayroll === false },
+    { kind: "taxable", name: "Brokerage", wanted: steps.includes("taxable") },
+  ];
+  for (const k of kinds) {
+    if (!k.wanted || firstOfKind.has(k.kind)) continue;
+    out.push({ key: k.kind, group: "Savings", name: `${k.name} (no account yet)`, kind: "saving", target: scheduleAmount(s.plan, k.kind, month) ?? planned(k.kind), moves: k.kind !== "cash" });
+  }
   for (const g of s.goals ?? [])
     if (!g.recurring) out.push({ key: "goal:" + g.id, group: "Savings goals", name: g.name || "Goal", kind: "saving", target: scheduleAmount(s.plan, "goal:" + g.id, month) ?? planned("goal:" + g.id), moves: false });
   return out;

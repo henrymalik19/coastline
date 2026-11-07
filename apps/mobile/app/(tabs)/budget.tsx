@@ -52,7 +52,7 @@ export default function Budget() {
   const txns = useStore((s) => s.txns);
   const cards = useMemo(() => cardMap(state), [state]);
   const view = budgetView(b, cats, month, { txns, cards });
-  const [adding, setAdding] = useState<{ txn?: Txn; categoryId?: string } | null>(null);
+  const [adding, setAdding] = useState<{ txn?: Txn; categoryId?: string; kind?: "out" | "in"; amount?: number } | null>(null);
   const monthTxns = txns.filter((x) => !x.deleted && x.date.startsWith(month));
   const accts = budgetAccounts(state);
   const i = between(thisMonth, month);
@@ -208,21 +208,36 @@ export default function Budget() {
       </View>
       <Divider />
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" }}>
-        <View style={{ flex: 1, minWidth: 140 }}>
+        <View style={{ flex: 1, minWidth: 160 }}>
           <Text style={[type.label, { color: t.text }]}>Income received</Text>
           <Text style={[type.caption, { color: t.text3 }]}>
-            {expected > 0.5 ? `Expected about ${money(expected)} this month` : "What came in this month"}
+            Money in, filed to ready to assign{expected > 0.5 ? ` · about ${money(expected)} expected` : ""}
             {month === b.start ? ` · plus the ${money(b.startCash)} cash you started with` : ""}
           </Text>
+          {(entry?.income ?? 0) > 0.005 ? (
+            <Text style={[type.caption, { color: t.text3 }]}>
+              Includes {money(entry!.income!)} entered before transactions.{" "}
+              <Text role="button" onPress={() => setIncome(undefined)} style={{ color: t.accent, fontWeight: "700" }}>Remove it</Text>
+            </Text>
+          ) : null}
         </View>
-        {entry?.income === undefined && expected > 0.5 ? (
-          <Button title={`Got ${money(expected)}`} icon="check" onPress={() => setIncome(Math.round(expected * 100) / 100)} style={{ minHeight: 36 }} />
-        ) : null}
-        <NumberInput kind="money" label={`Income received in ${nameOf(month)}`} value={entry?.income ?? 0} width={140} step={100} onChange={(v) => setIncome(v)} />
+        <Text style={[type.heading, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(view.income)}</Text>
+        <Button
+          title="Add income"
+          icon="plus"
+          onPress={() => setAdding({ kind: "in", categoryId: "ready", amount: Math.max(0, Math.round((expected - view.income) * 100) / 100) })}
+          style={{ minHeight: 36 }}
+        />
       </View>
     </Card>
   );
 
+  const COLW = compact ? 64 : 104;
+  const num = (v: number, color: string, bold = false) => (
+    <Text style={[type.caption, { width: COLW, textAlign: "right", color, fontWeight: bold ? "700" : "500", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
+      {money(v, { whole: compact && Math.abs(v) >= 1000 })}
+    </Text>
+  );
   const pill = (l: BudgetLine, c: BudgetCategory) => {
     const over = l.available < -0.005;
     const under = !over && c.target > 0.5 && l.assigned + 0.5 < c.target && c.kind !== "saving";
@@ -230,7 +245,7 @@ export default function Budget() {
     const fg = over ? t.bad : under ? t.warn : l.available > 0.5 ? t.good : t.text3;
     return (
       <View style={[styles.pill, { backgroundColor: bg }]}>
-        <Text style={[type.caption, { color: fg, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(l.available)}</Text>
+        <Text style={[type.caption, { color: fg, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(l.available, { whole: compact && Math.abs(l.available) >= 1000 })}</Text>
       </View>
     );
   };
@@ -302,14 +317,10 @@ export default function Budget() {
     return (
       <View key={c.key}>
         <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); setMoveAmt(0); setMoveTo(""); }} style={({ pressed }) => [styles.row, pressed ? { backgroundColor: t.surface2 } : null]}>
-          <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-            <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{label(c)}</Text>
-            <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
-              {money(l.assigned)} assigned · {money(l.spent)} {c.moves ? "paid" : "spent"}{(l.funded ?? 0) > 0.5 ? ` · +${money(l.funded ?? 0)} from card spending` : ""}
-              {c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5 ? ` · plan ${money(c.target)}` : ""}
-            </Text>
-          </View>
-          {pill(l, c)}
+          <Text style={[type.body, { color: t.text, flex: 1, minWidth: 0 }]} numberOfLines={1}>{label(c)}</Text>
+          {num(l.assigned, t.text2)}
+          {num(l.spent, t.text2)}
+          <View style={{ width: COLW, alignItems: "flex-end" }}>{pill(l, c)}</View>
         </Pressable>
         {isOpen ? (
           <View style={[styles.editor, { backgroundColor: t.surface2 }]}>
@@ -320,11 +331,21 @@ export default function Budget() {
                 <Button title={`Plan: ${money(c.target)}`} tone="ghost" onPress={() => setAssigned(c.key, Math.round(c.target * 100) / 100)} style={{ minHeight: 36 }} />
               ) : null}
             </View>
-            <View style={styles.editRow}>
-              <Text style={[type.caption, { color: t.text2, width: 70 }]}>{c.moves ? "Paid" : "Spent"}</Text>
-              <NumberInput kind="money" label={`${label(c)} ${c.moves ? "paid" : "spent"} in ${nameOf(month)}`} value={l.spent} width={140} step={25} onChange={(v) => setSpent(c.key, v)} />
-              {explicitSpent && c.moves ? <Button title="Same as assigned" tone="ghost" onPress={() => setSpent(c.key, undefined)} style={{ minHeight: 36 }} /> : null}
-            </View>
+            {c.moves ? (
+              // money that leaves by itself (a debt payment, a transfer to an investment): counts as paid when assigned
+              <View style={styles.editRow}>
+                <Text style={[type.caption, { color: t.text2, width: 70 }]}>Paid</Text>
+                <NumberInput kind="money" label={`${label(c)} paid in ${nameOf(month)}`} value={l.spent} width={140} step={25} onChange={(v) => setSpent(c.key, v)} />
+                {explicitSpent ? <Button title="Same as assigned" tone="ghost" onPress={() => setSpent(c.key, undefined)} style={{ minHeight: 36 }} /> : null}
+              </View>
+            ) : (
+              <View style={styles.editRow}>
+                <Text style={[type.caption, { color: t.text2, width: 70 }]}>Spent</Text>
+                <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(l.spent)}</Text>
+                <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 140 }]}>From this month&apos;s transactions{explicitSpent ? " (plus an amount entered before transactions)" : ""}.</Text>
+                {explicitSpent ? <Button title="Remove that amount" tone="ghost" onPress={() => setSpent(c.key, undefined)} style={{ minHeight: 36 }} /> : null}
+              </View>
+            )}
             {l.available < -0.005 ? (
               <Button title={`Cover ${money(-l.available)} from ready to assign`} tone="primary" onPress={() => setAssigned(c.key, l.assigned - l.available)} style={{ minHeight: 36, alignSelf: "flex-start" }} />
             ) : null}
@@ -411,9 +432,16 @@ export default function Budget() {
             {!accts.length ? <Text style={[type.caption, { color: t.text3 }]}>Add a cash account or credit card under Money to track transactions.</Text> : null}
             <Text style={[type.caption, { color: t.text3 }]}>Tap an account for its transactions. A credit card missing here? Set its type to Credit card under Money → Debts.</Text>
           </Card>
+          <View style={[styles.colHead, { paddingHorizontal: space.lg }]}>
+            <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Category</Text>
+            {["Assigned", "Spent", "Available"].map((h) => (
+              <Text key={h} style={[type.overline, { color: t.text3, width: COLW, textAlign: "right" }]}>{h}</Text>
+            ))}
+          </View>
           {groups.map((g) => {
             const avail = g.cats.reduce((a, c) => a + view.lines[c.key]!.available, 0);
             const assigned = g.cats.reduce((a, c) => a + view.lines[c.key]!.assigned, 0);
+            const spent = g.cats.reduce((a, c) => a + view.lines[c.key]!.spent, 0);
             return (
               <Card key={g.name} padded={false}>
                 <Pressable
@@ -424,13 +452,13 @@ export default function Budget() {
                   onPress={() => { setGroupOpen(groupOpen === g.name ? null : g.name); setGroupDraft(g.name); }}
                   style={[styles.groupHead, { borderBottomColor: t.border }]}
                 >
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                    <SectionLabel>{g.name}</SectionLabel>
+                  <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text style={[type.overline, { color: t.text2, flexShrink: 1 }]} numberOfLines={1}>{g.name}</Text>
                     {g.kind === "spending" ? <Icon name="edit" size={12} color={t.text3} /> : null}
                   </View>
-                  <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]}>
-                    {money(assigned)} assigned · <Text style={{ color: avail < -0.5 ? t.bad : t.text2, fontWeight: "700" }}>{money(avail)} available</Text>
-                  </Text>
+                  {num(assigned, t.text3, true)}
+                  {num(spent, t.text3, true)}
+                  {num(avail, avail < -0.5 ? t.bad : t.text2, true)}
                 </Pressable>
                 {groupOpen === g.name && g.kind === "spending" ? (
                   <View style={[styles.editor, { backgroundColor: t.surface2, marginTop: space.md }]}>
@@ -481,7 +509,7 @@ export default function Budget() {
           <Text style={[type.body, { color: t.text2 }]}>Your budget starts in {nameOf(b.start)}.</Text>
         </Card>
       )}
-      {adding ? <TxnForm txn={adding.txn} categoryId={adding.categoryId} onClose={() => setAdding(null)} /> : null}
+      {adding ? <TxnForm txn={adding.txn} categoryId={adding.categoryId} initialKind={adding.kind} initialAmount={adding.amount} onClose={() => setAdding(null)} /> : null}
       {month === thisMonth && i === 0 ? <View style={{ height: 1 }} /> : <Pill tone="neutral">{i > 0 ? "A future month: assign ahead if you like" : "A past month"}</Pill>}
     </Screen>
   );
@@ -490,9 +518,10 @@ export default function Budget() {
 const styles = StyleSheet.create({
   monthBar: { flexDirection: "row", alignItems: "center", gap: space.md },
   navBtn: { borderWidth: 1, borderRadius: 999, width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  groupHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm, flexWrap: "wrap", paddingHorizontal: space.lg, paddingVertical: space.md, borderBottomWidth: StyleSheet.hairlineWidth },
-  row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
-  pill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, minWidth: 72, alignItems: "flex-end" },
+  groupHead: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, borderBottomWidth: StyleSheet.hairlineWidth },
+  row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },
+  pill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, alignItems: "flex-end" },
+  colHead: { flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: -space.sm },
   editor: { gap: space.sm, marginHorizontal: space.md, marginBottom: space.md, padding: space.md, borderRadius: radius.md },
   editRow: { flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" },
   acctRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: 6 },

@@ -18,12 +18,15 @@ import { Button, IconButton, Segmented, Select } from "./form";
 
 type Kind = "out" | "in" | "transfer";
 
-export function TxnForm({ txn, accountId, categoryId, onClose }: {
+export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount, onClose }: {
   /** Change this one; missing = a new transaction. */
   txn?: Txn;
   /** Starting account / category for a new one. */
   accountId?: string;
   categoryId?: string;
+  /** For a new one: money in or out, and an amount to start from (e.g. the expected paycheck). */
+  initialKind?: "out" | "in";
+  initialAmount?: number;
   onClose: () => void;
 }) {
   const t = useTheme();
@@ -40,8 +43,8 @@ export function TxnForm({ txn, accountId, categoryId, onClose }: {
   ];
   const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? tracking.find((a) => a.id === id)?.name ?? "Account";
 
-  const [kind, setKind] = useState<Kind>(txn ? (txn.transferAccountId ? "transfer" : txn.amount > 0 ? "in" : "out") : "out");
-  const [amount, setAmount] = useState(Math.abs(txn?.amount ?? 0));
+  const [kind, setKind] = useState<Kind>(txn ? (txn.transferAccountId ? "transfer" : txn.amount > 0 ? "in" : "out") : initialKind ?? "out");
+  const [amount, setAmount] = useState(Math.abs(txn?.amount ?? initialAmount ?? 0));
   const [payee, setPayee] = useState(txn?.payee ?? "");
   const [cat, setCat] = useState(txn?.categoryId ?? categoryId ?? "");
   const [acct, setAcct] = useState(txn?.accountId ?? accountId ?? accounts[0]?.id ?? "");
@@ -49,7 +52,7 @@ export function TxnForm({ txn, accountId, categoryId, onClose }: {
   const [date, setDate] = useState(txn?.date ?? isoDay(new Date()));
   const [memo, setMemo] = useState(txn?.memo ?? "");
   const [cleared, setCleared] = useState(txn ? txn.cleared !== "uncleared" : false);
-  const [amountText, setAmountText] = useState(txn ? String(Math.abs(txn.amount)) : "");
+  const [amountText, setAmountText] = useState(txn ? String(Math.abs(txn.amount)) : initialAmount ? String(initialAmount) : "");
   const [picking, setPicking] = useState(false);
   const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const dateText = date === isoDay(new Date()) ? "Today" : `${MON[Number(date.slice(5, 7)) - 1]} ${Number(date.slice(8, 10))}, ${date.slice(0, 4)}`;
