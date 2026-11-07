@@ -10,7 +10,7 @@ export { limitsFor, DEFAULT_LIMITS } from "./limits";
 export { derive } from "./derive";
 export { simulatePlan, scheduleAmount, isHighInterest, paysExtra, rateIn, k401Cost, nextDue, setAsideFor, SHORTFALL_ID, DEFAULT_CARD_APR } from "./plan";
 export { project, fireNumber, coastNumberAt, coastCrossing } from "./project";
-export { accountPlanKey, mergeAccountSchedules, ACCOUNT_KEY, PAY401, PAYHSA } from "./schedule";
+export { accountPlanKey, mergeAccountSchedules, payPerCheck, ACCOUNT_KEY, PAY401, PAYHSA } from "./schedule";
 export { accountForecasts, accountGroup, type AccountForecast, type AccountMonth, type AccountYear, type AccountKey } from "./forecast";
 export { monteCarlo } from "./montecarlo";
 export { run, MC_SEED } from "./run";

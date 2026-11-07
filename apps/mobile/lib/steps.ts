@@ -2,7 +2,7 @@
  * Plan-step status for the Plan tab (port of the prototype's stepInfo/renderPlan).
  * Reads engine output only; no money math beyond display.
  */
-import { BUCKET_LABELS, scheduleAmount, isHighInterest, k401Cost, limitsFor, paysExtra, PERIODS, STEP_LABELS, type MonthRow, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
+import { BUCKET_LABELS, payPerCheck, scheduleAmount, isHighInterest, k401Cost, limitsFor, paysExtra, PERIODS, STEP_LABELS, type MonthRow, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
 import { debtLabel } from "./debts";
 import { money, monthLabel, percent } from "./format";
 
@@ -190,7 +190,7 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
         const what = step === "k401" ? "401(k)" : "HSA";
         meta =
           `From ${first!.from}: set ${first!.job}'s ${what} to ${first!.what}` +
-          (first!.base > 0.5 ? ` (you put in ${money(first!.base, { whole: true })} now, +${money(first!.perCheck, { whole: true })})` : "") +
+          (first!.base > 0.5 ? ` (${first!.changed ? "your change has it at" : "you put in"} ${money(first!.base, { whole: true })}${first!.changed ? " then" : " now"}, +${money(first!.perCheck, { whole: true })})` : "") +
           ` · ${first!.year}: ${first!.summary}` +
           (rest.length ? ` · ${rest[0]!.year}: ${rest[0]!.what}, ${rest[0]!.summary}` : "");
         ctx.schedule = years.map((r, i) => ({ m: i, label: `${r.year} (from ${r.from})`, amount: 0, text: `${r.what} · ${r.summary}` }));
@@ -269,7 +269,7 @@ function contributionRoom(s: PlanState, start: Date, step: "ira" | "hsa", firstM
   return `${c.year}: ${money(left)} of ${money(cap)} left · until Apr 15, ${c.year + 1}${missed}`;
 }
 
-type PayYear = { year: number; from: string; job: string; what: string; base: number; perCheck: number; summary: string };
+type PayYear = { year: number; from: string; job: string; what: string; base: number; perCheck: number; summary: string; /** your own paycheck change is in effect then */ changed: boolean };
 
 /**
  * For each year a payroll step (401(k) or HSA) runs: the steady amount per check to set (and from when),
@@ -286,7 +286,13 @@ function payrollYears(kind: "k401" | "hsa", s: PlanState, o: RunResult, start: D
   const cost = kind === "k401" ? k401Cost(s.plan.marginalTax, d.rothShare) : 1;
   const extraIn = (m: MonthRow) => (kind === "k401" ? m.alloc.k401Step / cost : m.alloc.hsa);
   // what you put in per check now (for the 401(k), after the full-match raise if the plan does it)
-  const base = kind === "k401" ? j.x.pretax + (j.x.fullMatch ? 0 : j.x.gapPre) : Math.max(0, j.x.hsaPre ?? 0);
+  const today = kind === "k401" ? j.x.pretax + (j.x.fullMatch ? 0 : j.x.gapPre) : Math.max(0, j.x.hsaPre ?? 0);
+  // ...or what your own changes have it at that month (Money → Income → the job)
+  const ymOf = (m: MonthRow) => `${m.y}-${String(m.mo + 1).padStart(2, "0")}`;
+  const own = (m: MonthRow) => payPerCheck(s.plan, j.x, kind, ymOf(m));
+  const todayRaw = kind === "k401" ? j.x.pretax : Math.max(0, j.x.hsaPre ?? 0);
+  const changedAt = (m: MonthRow) => Math.abs(own(m) - todayRaw) > 0.005;
+  const baseAt = (m: MonthRow) => (changedAt(m) ? own(m) : today);
   const gross = kind === "k401" && j.x.matchMode === "pct" ? j.x.gross ?? 0 : 0;
   const y0 = start.getFullYear();
   const known = s.contributed && s.contributed.year === y0 ? s.contributed : undefined;
@@ -320,11 +326,12 @@ function payrollYears(kind: "k401" | "hsa", s: PlanState, o: RunResult, start: D
       : before && !known && !guessed
         ? `about ${money(total, { whole: true })} from here to December (add what's in so far under Money → Accounts)`
         : `about ${money(total, { whole: true })} of the ${money(cap, { whole: true })} limit${firstAt > 0 ? " (starts part way through the year)" : ""}${guessed ? " (assumes this year's earlier paychecks put in what they do now; enter the real amount under Money → Accounts)" : ""}`;
+    const base = baseAt(rows[firstAt]!);
     const what =
       gross > 0
         ? `about ${Math.round(((base + perCheck) / gross) * 100)}% of pay (${money(base + perCheck, { whole: true })}/check)`
         : `about ${money(base + perCheck, { whole: true })}/check`;
-    out.push({ year, from: monthLabel(start, rows[firstAt]!.m), job: j.x.name || "your job", what, base, perCheck, summary });
+    out.push({ year, from: monthLabel(start, rows[firstAt]!.m), job: j.x.name || "your job", what, base: baseAt(rows[firstAt]!), perCheck, summary, changed: changedAt(rows[firstAt]!) });
   }
   return out;
 }

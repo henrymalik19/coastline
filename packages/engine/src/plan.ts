@@ -3,7 +3,8 @@ import { limitsFor } from "./limits";
 import { checksInMonth } from "./paychecks";
 import type { Adjustment, Alloc, Debt, Derived, FundKey, MonthRow, PlanEvent, PlanResult, PlanSettings, PlanState, SimulateOptions, Goal, RecurringGoal, Limits } from "./types";
 import { addMonths, monthsBetween, num, sum } from "./util";
-import { mergeAccountSchedules, PAY401, PAYHSA, scheduleAmount } from "./schedule";
+import { mergeAccountSchedules, PAY401, PAYHSA, payPerCheck, scheduleAmount } from "./schedule";
+import { matchFor } from "./match";
 export { scheduleAmount } from "./schedule";
 
 /** Id of the synthetic debt created when a short month runs past your cash. */
@@ -96,10 +97,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
 
   // A job's 401(k) / HSA per paycheck can change by month ("pay401:<job id>", "payhsa:<job id>"):
   // $0 for Nov–Dec, then back on in January. Without a change it's what the job says today.
-  const perCheck = (inc: Derived["incomes"][number], kind: "k401" | "hsa", month: string): number => {
-    const v = scheduleAmount(p, (kind === "k401" ? PAY401 : PAYHSA) + inc.id, month);
-    return v !== undefined ? v : kind === "k401" ? num(inc.pretax) : Math.max(0, num(inc.hsaPre));
-  };
+  const perCheck = (inc: Derived["incomes"][number], kind: "k401" | "hsa", month: string): number => payPerCheck(p, inc, kind, month);
   const ymOf = (absMo: number) => `${y0 + Math.floor(absMo / 12)}-${String((absMo % 12) + 1).padStart(2, "0")}`;
   // Scheduled payroll 401(k) per month (before the annual cap), so the waterfall can
   // leave room for the paychecks still to come this year.
@@ -212,7 +210,12 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       const roth = Math.min(1, Math.max(0, num(inc.rothShare)));
       payPre += pre * c * g;
       // the match follows what you put in (never more than today's)
-      payMatch += (pre === pre0 ? num(inc.match) : pre0 > 0 ? num(inc.match) * Math.min(1, pre / pre0) : 0) * c * g;
+      // (exact from the match formula when the job is set as a % of pay)
+      const matchNow =
+        pre === pre0 ? num(inc.match)
+        : inc.matchMode === "pct" && num(inc.gross) > 0 ? matchFor(num(inc.gross), pre / num(inc.gross), inc)
+        : pre0 > 0 ? num(inc.match) * Math.min(1, pre / pre0) : 0;
+      payMatch += matchNow * c * g;
       payRoth += pre * c * g * roth;
       // putting in less comes back as take-home (after tax if pre-tax); more comes out of it
       if (pre !== pre0) income += (pre0 - pre) * c * g * k401Cost(mt, roth);

@@ -209,7 +209,12 @@ export type PlanSettings = {
 };
 
 /** From this month ("YYYY-MM") on, this much a month. */
-export type ScheduleEntry = { from: string; amount: number };
+export type ScheduleEntry = {
+  from: string;
+  amount: number;
+  /** Paycheck changes only: a share of gross pay per check (0.06 = 6%) instead of a dollar amount. */
+  pct?: number;
+};
 
 export type WhatIf = { extra: number; retDelta: number; spendDelta: number };
 

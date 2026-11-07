@@ -51,12 +51,14 @@ export function useSchedule(k: string) {
   return { list, set, oneOffs, setMonth };
 }
 
-export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared, perCheck, base }: {
+export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared, perCheck, base, gross }: {
   k: string; label: string; unit?: string; note?: string; onCleared?: () => void;
   /** A paycheck amount (401(k), HSA): per check, set on the job, not from what's left. */
   perCheck?: boolean;
   /** What a new change starts at (today's per-check amount). */
   base?: number;
+  /** Gross pay per check: lets a paycheck change be a % of pay. */
+  gross?: number;
 }) {
   const t = useTheme();
   const { start } = usePlan();
@@ -74,8 +76,30 @@ export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared, perChe
         <View key={e.from + n} style={[styles.row, e === current ? { borderLeftWidth: 3, borderLeftColor: t.accent, paddingLeft: 6 } : null]}>
           <Text style={[type.caption, { color: t.text2, width: 36 }]}>From</Text>
           <MonthField label={`${label}: change starts`} value={e.from} width={150} onChange={(v) => set(list.map((x, j) => (j === n ? { ...x, from: v } : x)))} />
-          <NumberInput kind="money" label={`${label} from ${monthName(e.from)}`} value={e.amount} width={130} step={100} onChange={(v) => set(list.map((x, j) => (j === n ? { ...x, amount: v } : x)))} />
-          <Text style={[type.caption, { color: t.text3 }]}>{unit}</Text>
+          {e.pct !== undefined && gross ? (
+            <>
+              <NumberInput kind="percent" label={`${label} from ${monthName(e.from)}, % of pay`} value={e.pct} width={110} max={1} onChange={(v) => set(list.map((x, j) => (j === n ? { ...x, pct: v, amount: Math.round(gross * v * 100) / 100 } : x)))} />
+              <Text style={[type.caption, { color: t.text3 }]}>of pay ≈ {money(gross * e.pct)}{unit}</Text>
+            </>
+          ) : (
+            <>
+              <NumberInput kind="money" label={`${label} from ${monthName(e.from)}`} value={e.amount} width={130} step={perCheck ? 25 : 100} onChange={(v) => set(list.map((x, j) => (j === n ? { ...x, amount: v } : x)))} />
+              <Text style={[type.caption, { color: t.text3 }]}>{unit}</Text>
+            </>
+          )}
+          {perCheck && gross ? (
+            <Pressable
+              role="button"
+              accessibilityLabel={e.pct !== undefined ? "Use a dollar amount" : "Use a percent of pay"}
+              onPress={() => set(list.map((x, j) => (j === n ? (x.pct !== undefined ? { from: x.from, amount: x.amount } : { ...x, pct: Math.round((x.amount / gross) * 1000) / 1000 }) : x)))}
+              hitSlop={6}
+              style={[styles.unitSwitch, { borderColor: t.border }]}
+            >
+              <Text style={[type.caption, { color: e.pct === undefined ? t.accent : t.text3, fontWeight: "700" }]}>$</Text>
+              <Text style={[type.caption, { color: t.text3 }]}>/</Text>
+              <Text style={[type.caption, { color: e.pct !== undefined ? t.accent : t.text3, fontWeight: "700" }]}>%</Text>
+            </Pressable>
+          ) : null}
           {e === current ? <Text style={[type.overline, { color: t.accent }]}>Now</Text> : null}
           <IconButton icon="trash" label={`Remove the change from ${monthName(e.from)}`} onPress={() => set(list.filter((_, j) => j !== n))} />
         </View>
@@ -189,13 +213,13 @@ export function MonthlyAmount({ k, label, unit = "a month", note, shared }: { k:
  * A job's 401(k) or HSA per paycheck, changed by month: "$0/check from Nov 2026 → $860/check from Jan 2027".
  * Without changes it's the amount above, every paycheck.
  */
-export function PaycheckChanges({ k, label, base }: { k: string; label: string; base: number }) {
+export function PaycheckChanges({ k, label, base, gross }: { k: string; label: string; base: number; gross?: number }) {
   const t = useTheme();
   const { list, oneOffs } = useSchedule(k);
   const [open, setOpen] = useState(false);
   const singles = Object.keys(oneOffs).length;
   const text = list.length
-    ? list.map((e) => `${money(e.amount)}/check from ${monthName(e.from)}`).join(" → ") + (singles ? ` · ${singles} one-month change${singles === 1 ? "" : "s"}` : "")
+    ? list.map((e) => `${e.pct !== undefined && gross ? `${+(e.pct * 100).toFixed(2)}% of pay` : money(e.amount)}/check from ${monthName(e.from)}`).join(" → ").replace(/% of pay\/check/g, "% of pay") + (singles ? ` · ${singles} one-month change${singles === 1 ? "" : "s"}` : "")
     : singles ? `${singles} one-month change${singles === 1 ? "" : "s"}` : "Same every paycheck. Pausing or changing it later?";
   return (
     <View style={{ gap: 6 }}>
@@ -204,7 +228,8 @@ export function PaycheckChanges({ k, label, base }: { k: string; label: string; 
         <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}> {open ? "Hide" : list.length || singles ? "Change" : "Change by month"}</Text>
         <Icon name="chevron" size={12} color={t.accent} />
       </Pressable>
-      {open ? <ScheduleEditor k={k} label={label} unit="/check" perCheck base={base} /> : null}
+      {open ? <ScheduleEditor k={k} label={label} unit="/check" perCheck base={base} gross={gross && gross > 0 ? gross : undefined} /> : null}
+      {open && !(gross && gross > 0) ? <Text style={[type.caption, { color: t.text3 }]}>Add this job's gross pay per check to set changes as a % of pay.</Text> : null}
     </View>
   );
 }
@@ -223,6 +248,7 @@ export function PayrollNote({ what }: { what: string }) {
 
 const styles = StyleSheet.create({
   link: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" },
+  unitSwitch: { flexDirection: "row", gap: 3, borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
   box: { borderRadius: radius.md, padding: space.sm, gap: 4 },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" },
 });

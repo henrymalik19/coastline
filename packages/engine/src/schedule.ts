@@ -33,6 +33,25 @@ export function accountGroup(a: Pick<Account, "name" | "type" | "counts">): Plan
 export const PAY401 = "pay401:";
 export const PAYHSA = "payhsa:";
 
+/**
+ * A job's 401(k) or HSA per paycheck in a month: a one-month change, else the change in effect (a dollar
+ * amount, or a share of gross pay when the job has one), else what the job says today.
+ */
+export function payPerCheck(
+  p: Pick<PlanSettings, "schedule" | "scheduleMonths">,
+  inc: { id: string; pretax?: number; hsaPre?: number; gross?: number },
+  kind: "k401" | "hsa",
+  month: string,
+): number {
+  const key = (kind === "k401" ? PAY401 : PAYHSA) + inc.id;
+  const one = p.scheduleMonths?.[key]?.[month];
+  if (one !== undefined) return Math.max(0, num(one));
+  let e: ScheduleEntry | undefined;
+  for (const x of [...(p.schedule?.[key] ?? [])].sort((a, b) => (a.from < b.from ? -1 : 1))) if (x.from <= month) e = x;
+  if (e) return e.pct !== undefined && num(inc.gross) > 0 ? num(inc.gross) * Math.max(0, num(e.pct)) : Math.max(0, num(e.amount));
+  return kind === "k401" ? num(inc.pretax) : Math.max(0, num(inc.hsaPre));
+}
+
 /** Prefix of an account's own monthly amount in the schedule ("acct:<id>"). */
 export const ACCOUNT_KEY = "acct:";
 

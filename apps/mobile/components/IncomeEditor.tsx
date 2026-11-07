@@ -264,8 +264,8 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
           </>
         )}
         {(inc.matchMode === "pct" && (inc.gross ?? 0) > 0) || inc.matchMode === "usd" ? <IncomeSummary inc={inc} marginalTax={marginalTax} /> : null}
-        {(inc.pretax ?? 0) > 0 || (state.plan.schedule?.[PAY401 + inc.id]?.length ?? 0) > 0 ? (
-          <PaycheckChanges k={PAY401 + inc.id} label={`${inc.name || "This job"} 401(k)`} base={inc.pretax ?? 0} />
+        {resolveIncome(inc).pretax > 0 || (state.plan.schedule?.[PAY401 + inc.id]?.length ?? 0) > 0 ? (
+          <PaycheckChanges k={PAY401 + inc.id} label={`${inc.name || "This job"} 401(k)`} base={resolveIncome(inc).pretax} gross={inc.gross} />
         ) : null}
         <FieldRow label="Roth 401(k)" hint={rothHint(inc.rothShare ?? 0)} info={HELP.roth401k}>
           <NumberInput kind="percent" label="Share of your 401(k) that goes to Roth" value={inc.rothShare ?? 0} max={1} onChange={(v) => change({ rothShare: v || undefined })} />
@@ -280,7 +280,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
           <NumberInput kind="money" label="Your HSA contribution per paycheck" value={inc.hsaPre ?? 0} onChange={(v) => change({ hsaPre: v || undefined })} />
         </FieldRow>
         {(inc.hsaPre ?? 0) > 0 || (state.plan.schedule?.[PAYHSA + inc.id]?.length ?? 0) > 0 ? (
-          <PaycheckChanges k={PAYHSA + inc.id} label={`${inc.name || "This job"} HSA`} base={inc.hsaPre ?? 0} />
+          <PaycheckChanges k={PAYHSA + inc.id} label={`${inc.name || "This job"} HSA`} base={inc.hsaPre ?? 0} gross={inc.gross} />
         ) : null}
         <FieldRow label="Your employer puts in" hint="Per year. Free money that counts toward your HSA limit" info={HELP.hsaEmployer}>
           <NumberInput kind="money" label="Employer HSA contribution per year" value={inc.hsaEmployer ?? 0} onChange={(v) => change({ hsaEmployer: v || undefined })} />

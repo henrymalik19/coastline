@@ -130,7 +130,7 @@ export const PlanSettingsSchema = z.object({
   shares: z.record(z.string(), z.number().min(0).max(1)).optional(),
   amounts: z.record(z.string(), z.number().min(0)).optional(),
   amountsBy: z.record(z.string(), z.record(z.string(), z.number().min(0))).optional(),
-  schedule: z.record(z.string(), z.array(z.object({ from: z.string().regex(/^\d{4}-\d{2}$/), amount: z.number().min(0) }))).optional(),
+  schedule: z.record(z.string(), z.array(z.object({ from: z.string().regex(/^\d{4}-\d{2}$/), amount: z.number().min(0), pct: z.number().min(0).max(1).optional() }))).optional(),
   scheduleMonths: z.record(z.string(), z.record(z.string(), z.number().min(0))).optional(),
 });
 

@@ -10,6 +10,7 @@ import {
   setAsideFor,
   limitsFor,
   mergeAccountSchedules,
+  payPerCheck,
   matchFor,
   project,
   resolveIncome,
@@ -600,6 +601,20 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     // one month at $400: the match scales with it
     expect(m[3]!.payPre).toBeCloseTo(400, 6);
     expect(m[3]!.payMatch).toBeCloseTo(200, 6);
+  });
+
+  it("a paycheck change can be a % of pay; with a % match formula the match follows it exactly", () => {
+    const s = blank({
+      limits: DEFAULT_LIMITS,
+      incomes: [{ ...job, net: 6000, gross: 10000, matchMode: "pct" as const, contribPct: 0.03, matchRate1: 1, matchUpTo1: 0.04 }],
+      plan: { ...blank().plan, marginalTax: 0.25, schedule: { "pay401:i": [{ from: "2026-12", amount: 0, pct: 0.06 }] } },
+    });
+    const m = simulatePlan(s, derive(s, START)).months;
+    expect(m[0]!.payPre).toBeCloseTo(300, 6); // 3% today
+    expect(m[0]!.payMatch).toBeCloseTo(300, 6);
+    expect(m[1]!.payPre).toBeCloseTo(600, 6); // 6% from December
+    expect(m[1]!.payMatch).toBeCloseTo(400, 6); // the match stops at 4%
+    expect(payPerCheck(s.plan, { id: "i", pretax: 300, gross: 10000 }, "k401", "2027-03")).toBeCloseTo(600, 9);
   });
 
   it("each account has its own monthly amount; the plan adds them up by kind", () => {
