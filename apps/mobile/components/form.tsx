@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Switch, Text, TextInput, View, type ViewStyle } from "react-native";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { formatDate, parseDate } from "../lib/dates";
-import { CalendarModal } from "./Calendar";
+import { CalendarModal, MonthModal } from "./Calendar";
 import { Icon, type IconName } from "./Icon";
 
 /* ---------- number input ---------- */
@@ -256,6 +256,29 @@ export function DateField({ value, onChange, label, width = 190 }: { value?: str
         />
       ) : null}
     </View>
+  );
+}
+
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Month field: shows "Nov 2027" and opens a month + year picker. Stores "YYYY-MM". */
+export function MonthField({ value, onChange, label, width = 160 }: { value?: string; onChange: (v: string) => void; label: string; width?: number }) {
+  const t = useTheme();
+  const [picking, setPicking] = useState(false);
+  const shown = value ? `${MONTH_SHORT[Number(value.slice(5, 7)) - 1]} ${value.slice(0, 4)}` : "Pick a month";
+  return (
+    <>
+      <Pressable
+        role="button"
+        accessibilityLabel={`${label}: ${shown}. Change`}
+        onPress={() => setPicking(true)}
+        style={[styles.input, { width, borderColor: t.border, backgroundColor: t.surface2, paddingRight: 8, justifyContent: "space-between" }]}
+      >
+        <Text style={[type.body, { color: value ? t.text : t.text3 }]}>{shown}</Text>
+        <Icon name="calendar" size={18} color={t.text2} />
+      </Pressable>
+      {picking ? <MonthModal visible title={label} value={value} onClose={() => setPicking(false)} onPick={onChange} /> : null}
+    </>
   );
 }
 

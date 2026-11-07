@@ -8,7 +8,7 @@ import { HELP } from "../lib/help";
 import { paycheckFor } from "../lib/loans";
 import { newId } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { Button, DateField, FieldRow, IconButton, NumberInput, TextField, ToggleRow } from "./form";
+import { Button, FieldRow, IconButton, MonthField, NumberInput, TextField, ToggleRow } from "./form";
 import { Card, Divider } from "./ui";
 
 /** The paycheck that repays a debt, in the shape DebtEditor's `paidFrom` wants. */
@@ -130,7 +130,7 @@ export function DebtEditor({
                 <NumberInput kind="percent" label={`${debtLabel(debt)} intro rate`} value={debt.promoApr ?? 0} max={1} onChange={(v) => onChange({ promoApr: v })} />
               </FieldRow>
               <FieldRow label="Last month at the intro rate" hint={`Then ${percent(debt.apr, 1).replace(/\.0%$/, "%")} (the rate above). The plan pays it off before then when it can.`}>
-                <DateField label={`${debtLabel(debt)} intro rate ends`} value={debt.promoUntil ? `${debt.promoUntil}-01` : undefined} onChange={(v) => onChange({ promoUntil: v ? v.slice(0, 7) : monthsFromNow(12) })} />
+                <MonthField label={`${debtLabel(debt)} intro rate ends`} value={debt.promoUntil} onChange={(v) => onChange({ promoUntil: v })} />
               </FieldRow>
             </View>
           ) : null}

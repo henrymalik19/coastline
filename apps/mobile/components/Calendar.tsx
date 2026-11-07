@@ -83,6 +83,61 @@ export function CalendarModal({
   );
 }
 
+/** Month + year picker: a year with ‹ › and the 12 months as a grid. Picks "YYYY-MM". */
+export function MonthModal({
+  visible, value, onPick, onClose, title,
+}: { visible: boolean; value?: string; onPick: (ym: string) => void; onClose: () => void; title: string }) {
+  const t = useTheme();
+  const now = new Date();
+  const [year, setYear] = useState(value ? Number(value.slice(0, 4)) : now.getFullYear());
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const rows = [0, 1, 2, 3].map((r) => [0, 1, 2].map((c) => r * 3 + c));
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close month picker">
+        <Pressable onPress={() => {}} style={[styles.sheet, { backgroundColor: t.surface, borderColor: t.border, gap: space.sm }]} role="dialog" aria-label={title}>
+          <Text style={[type.label, { color: t.text3 }]}>{title}</Text>
+          <View style={styles.head}>
+            <NavButton icon="back" label="Previous year" onPress={() => setYear((y) => y - 1)} />
+            <Text style={[type.heading, { color: t.text }]} aria-live="polite">{year}</Text>
+            <NavButton icon="chevron" label="Next year" onPress={() => setYear((y) => y + 1)} />
+          </View>
+          {rows.map((r, ri) => (
+            <View key={ri} style={{ flexDirection: "row", gap: space.sm }}>
+              {r.map((mi) => {
+                const ym = `${year}-${String(mi + 1).padStart(2, "0")}`;
+                const on = ym === value;
+                const current = ym === thisMonth;
+                return (
+                  <Pressable
+                    key={mi}
+                    role="button"
+                    aria-selected={on}
+                    accessibilityLabel={`${MONTHS[mi]} ${year}${current ? ", this month" : ""}`}
+                    onPress={() => { onPick(ym); onClose(); }}
+                    style={(st) => {
+                      const hovered = (st as typeof st & { hovered?: boolean }).hovered;
+                      return [
+                        styles.monthCell,
+                        { backgroundColor: on ? t.accent : st.pressed || hovered ? t.surface2 : "transparent", borderColor: current && !on ? t.accent : t.border },
+                      ];
+                    }}
+                  >
+                    <Text style={[type.label, { color: on ? "#fff" : t.text, fontWeight: on || current ? "700" : "500" }]}>{MONTHS[mi]!.slice(0, 3)}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
+          <View style={[styles.head, { justifyContent: "flex-end" }]}>
+            <TextButton title="Cancel" color={t.text2} onPress={onClose} />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 function NavButton({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
   const t = useTheme();
   return (
@@ -110,4 +165,5 @@ const styles = StyleSheet.create({
   dow: { flex: 1, textAlign: "center", paddingVertical: 4 },
   cell: { flex: 1, aspectRatio: 1, maxHeight: 44 },
   day: { alignItems: "center", justifyContent: "center", borderRadius: 999, borderWidth: 1.5 },
+  monthCell: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: radius.sm, borderWidth: 1 },
 });
