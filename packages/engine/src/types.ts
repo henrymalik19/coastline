@@ -93,6 +93,8 @@ export type Debt = {
    * so it lowers the balance without coming out of the budget.
    */
   payroll?: boolean;
+  /** Budget group the payment is listed under (display only; missing = "Debt payments"). */
+  budgetGroup?: string;
 };
 
 /** Money that starts coming in after you stop working (today's dollars, per month). */
@@ -110,7 +112,15 @@ export type RetirementIncome = {
  * A savings goal. One-time goals are a step in the plan. Recurring goals (holidays, yearly
  * insurance) are set aside every month like a bill, spent when due, then start again.
  */
-export type Goal = { id: string; name: string; target: number; saved: number; recurring?: RecurringGoal };
+export type Goal = {
+  id: string;
+  name: string;
+  target: number;
+  saved: number;
+  recurring?: RecurringGoal;
+  /** Budget group a recurring goal's set-aside is listed under (display only; missing = "Set aside"). */
+  budgetGroup?: string;
+};
 export type RecurringGoal = {
   /** Months between due dates (12 = yearly, 6, 3). */
   every: number;

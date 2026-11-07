@@ -1,5 +1,5 @@
-import { monthsBetween, nextDue, setAsideFor, type BudgetItem, type Goal, type MonthRow } from "@coastfi/engine";
-import { useEffect, useState } from "react";
+import { monthsBetween, nextDue, setAsideFor, type BudgetItem, type Debt, type Goal, type MonthRow } from "@coastfi/engine";
+import { useEffect, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../lib/confirm";
 import { groupOf, mergeGroup, moveAmong, moveGroup, moveItem, moveToGroup, UNGROUPED } from "../lib/budgetOrder";
@@ -23,6 +23,8 @@ import { Card, Pill } from "./ui";
 const DEBT_KEY = "\u0000debts";
 /** Key of the read-only "Set aside" group (recurring goals). */
 const SET_KEY = "\u0000setaside";
+const DEBT_LABEL = "Debt payments";
+const SET_LABEL = "Set aside";
 
 /** Groups in the order they first appear; items without a group go under "Other". */
 function grouped(items: BudgetItem[]) {
@@ -60,12 +62,20 @@ export function BudgetEditor() {
   const names = groups.map((g) => g.name).join("|");
   // debt payments come from Debts: shown here as a read-only group so the budget lists everything
   // (a 401(k) loan repaid from a paycheck is already out of take-home, so it isn't a budget cost)
-  const debtRows = state.debts.filter((x) => x.balance > 0 && x.minPayment > 0 && !x.payroll);
+  const thisMonthKey = monthKey(start);
+  const isDebtRow = (x: Debt) => x.balance > 0 && x.minPayment > 0 && !x.payroll;
+  const isSetRow = (g: Goal) => !!g.recurring && g.target > 0;
+  // a debt payment or set-aside can be listed under one of your groups instead (still read-only)
+  const groupNames = new Set(groups.map((g) => g.name));
+  const placed = (x: { budgetGroup?: string }) => !!x.budgetGroup && groupNames.has(x.budgetGroup);
+  const debtRows = state.debts.filter((x) => isDebtRow(x) && !placed(x));
   const payrollLoans = state.debts.filter((x) => x.balance > 0 && x.payroll);
   const onDebts = selected === DEBT_KEY && debtRows.length > 0;
   // recurring goals are set aside every month, like a bill: shown read-only too
-  const setRows = state.goals.filter((g) => g.recurring && g.target > 0);
+  const setRows = state.goals.filter((g) => isSetRow(g) && !placed(g));
   const onSet = selected === SET_KEY && setRows.length > 0;
+  const placedDebts = (group: string) => state.debts.filter((x) => isDebtRow(x) && x.budgetGroup === group);
+  const placedGoals = (group: string) => state.goals.filter((g) => isSetRow(g) && g.budgetGroup === group);
   useEffect(() => {
     if (selected === DEBT_KEY && debtRows.length > 0) return;
     if (selected === SET_KEY && setRows.length > 0) return;
@@ -96,21 +106,67 @@ export function BudgetEditor() {
     });
     setEditing(id); // a new item opens ready to fill in
   };
+  /** Point debts/goals listed under `from` at `to` (undefined = back to Debt payments / Set aside). */
+  const regroupLinked = (p: { debts: Debt[]; goals: Goal[] }, from: string, to: string | undefined) => {
+    for (const x of [...p.debts, ...p.goals]) {
+      if (x.budgetGroup !== from) continue;
+      if (to) x.budgetGroup = to;
+      else delete x.budgetGroup;
+    }
+  };
   const renameGroup = (from: string, to: string) => {
-    update((p) => { p.budget.forEach((b) => { if (groupOf(b) === from) b.group = to; }); });
+    update((p) => {
+      p.budget.forEach((b) => { if (groupOf(b) === from) b.group = to; });
+      regroupLinked(p, from, to);
+    });
     setSelected(to);
     setNotice(null);
   };
   const removeGroup = async (group: string, count: number) => {
-    if (await confirm(`Remove "${group}"?`, `This removes the group and its ${count} item${count === 1 ? "" : "s"}.`, "Remove"))
-      update((p) => { p.budget = p.budget.filter((b) => groupOf(b) !== group); });
+    const linked = placedDebts(group).length + placedGoals(group).length;
+    if (await confirm(`Remove "${group}"?`, `This removes the group and its ${count} item${count === 1 ? "" : "s"}.${linked ? " Debt payments and set-asides listed here go back to their own groups." : ""}`, "Remove"))
+      update((p) => {
+        p.budget = p.budget.filter((b) => groupOf(b) !== group);
+        regroupLinked(p, group, undefined);
+      });
+  };
+  /** List a debt payment or set-aside under a group (or back in its own group). */
+  const place = (kind: "debt" | "goal", id: string, group: string | undefined) => {
+    update((p) => {
+      const x = kind === "debt" ? p.debts.find((d) => d.id === id) : p.goals.find((g) => g.id === id);
+      if (!x) return;
+      if (group) x.budgetGroup = group;
+      else delete x.budgetGroup;
+    });
+    const home = kind === "debt" ? "Debt payments" : "Set aside";
+    setNotice(`Moved to ${group ?? home}. It's still counted once and changes on the ${kind === "debt" ? "Debts" : "Savings goals"} page.`);
+  };
+  const debtFrom = (x: Debt) => {
+    const link = paycheckFor(state, x.id);
+    return link
+      ? `From your ${link.income.name || "job"} paycheck (${money(link.deduction.amount)} per check)`
+      : x.promoUntil
+        ? "Debt payment · minimum, intro rate"
+        : "Debt payment · minimum";
   };
 
   // debts and recurring goals reorder in their own lists (the same order shows on Debts / Savings goals)
   const moveDebt = (id: string, by: -1 | 1) =>
-    update((p) => { p.debts = moveAmong(p.debts, id, by, (x) => x.balance > 0 && x.minPayment > 0 && !x.payroll); });
+    update((p) => { p.debts = moveAmong(p.debts, id, by, (x) => isDebtRow(x) && !placed(x)); });
   const moveGoal = (id: string, by: -1 | 1) =>
-    update((p) => { p.goals = moveAmong(p.goals, id, by, (g) => !!g.recurring && g.target > 0); });
+    update((p) => { p.goals = moveAmong(p.goals, id, by, (g) => isSetRow(g) && !placed(g)); });
+  const noticeBox = notice ? (
+    <View key="notice" style={{ paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.xs }}>
+      <View style={[styles.hint, { backgroundColor: t.goodSoft }]}>
+        <Text style={[type.caption, { color: t.text, flex: 1 }]}>{notice}</Text>
+        <IconButton icon="check" label="OK" onPress={() => setNotice(null)} />
+      </View>
+    </View>
+  ) : null;
+  const debtHomeTotal =debtRows.reduce((a, x) => a + x.minPayment, 0);
+  const setHomeTotal = setRows.reduce((a, g) => a + setAsideFor(g, thisMonthKey), 0);
+  const linkedTotal = (group: string) =>
+    placedDebts(group).reduce((a, x) => a + x.minPayment, 0) + placedGoals(group).reduce((a, g) => a + setAsideFor(g, thisMonthKey), 0);
   const reorderPill = (
     <Pressable
       role="button"
@@ -214,9 +270,12 @@ export function BudgetEditor() {
       header={header}
       listTitle="Groups"
       items={[
-        ...groups.map((g) => ({ key: g.name, title: g.name, subtitle: `${g.rows.length} item${g.rows.length === 1 ? "" : "s"}`, value: money(g.subtotal) })),
-        ...(debtRows.length ? [{ key: DEBT_KEY, title: "Debt payments", subtitle: "From your debts", value: money(d.debtMins) }] : []),
-        ...(setRows.length ? [{ key: SET_KEY, title: "Set aside", subtitle: "Recurring goals", value: money(setAsideNow) }] : []),
+        ...groups.map((g) => {
+          const n = g.rows.length + placedDebts(g.name).length + placedGoals(g.name).length;
+          return { key: g.name, title: g.name, subtitle: `${n} item${n === 1 ? "" : "s"}`, value: money(g.subtotal + linkedTotal(g.name)) };
+        }),
+        ...(debtRows.length ? [{ key: DEBT_KEY, title: "Debt payments", subtitle: "From your debts", value: money(debtHomeTotal) }] : []),
+        ...(setRows.length ? [{ key: SET_KEY, title: "Set aside", subtitle: "Recurring goals", value: money(setHomeTotal) }] : []),
       ]}
       selected={onDebts ? DEBT_KEY : onSet ? SET_KEY : current?.name}
       onSelect={setSelected}
@@ -233,7 +292,7 @@ export function BudgetEditor() {
           <View>
             <View style={styles.headRow}>
               <Text role="heading" aria-level={2} style={[type.heading, { color: t.text, flex: 1 }]}>Set aside</Text>
-              <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(setAsideNow)}/mo</Text>
+              <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(setHomeTotal)}/mo</Text>
               {setRows.length > 1 ? reorderPill : null}
             </View>
             <View style={[styles.cols, { paddingHorizontal: space.lg, paddingBottom: space.sm }]}>
@@ -246,7 +305,7 @@ export function BudgetEditor() {
           <View>
             <View style={styles.headRow}>
               <Text role="heading" aria-level={2} style={[type.heading, { color: t.text, flex: 1 }]}>Debt payments</Text>
-              <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(d.debtMins)}/mo</Text>
+              <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(debtHomeTotal)}/mo</Text>
               {debtRows.length > 1 ? reorderPill : null}
             </View>
             <View style={[styles.cols, { paddingHorizontal: space.lg, paddingBottom: space.sm }]}>
@@ -266,12 +325,12 @@ export function BudgetEditor() {
                 others={groups.map((g) => g.name).filter((g) => g !== current.name)}
                 onMerge={(into) => {
                   const n = current.rows.length;
-                  update((p) => { p.budget = mergeGroup(p.budget, current.name, into); });
+                  update((p) => { p.budget = mergeGroup(p.budget, current.name, into); regroupLinked(p, current.name, into); });
                   setSelected(into);
                   setNotice(`Merged ${current.name} into ${into} (${n} item${n === 1 ? "" : "s"}).`);
                 }}
               />
-              <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(current.subtotal)}/mo</Text>
+              <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(current.subtotal + linkedTotal(current.name))}/mo</Text>
               {reorderPill}
             </View>
             {reorder ? (
@@ -296,43 +355,35 @@ export function BudgetEditor() {
       }
       detail={
         onSet
-          ? setRows.map((g, i) => (
-              <SetAsideRow
-                key={g.id}
-                goal={g}
-                months={actual.months}
-                start={start}
-                thisMonth={thisMonth}
-                cols={cols}
-                reorder={reorder ? { up: i > 0, down: i < setRows.length - 1, move: (by) => moveGoal(g.id, by) } : undefined}
-              />
-            ))
+          ? [
+              noticeBox,
+              ...setRows.map((g, i) => (
+                <SetAsideRow
+                  key={g.id}
+                  goal={g}
+                  months={actual.months}
+                  start={start}
+                  thisMonth={thisMonth}
+                  cols={cols}
+                  reorder={reorder ? { up: i > 0, down: i < setRows.length - 1, move: (by) => moveGoal(g.id, by) } : undefined}
+                  moveTo={<MoveTo current={SET_LABEL} groups={[...groupNames]} what={g.name || "goal"} allowNew={false} onPick={(to) => place("goal", g.id, to)} />}
+                />
+              )),
+            ]
           : onDebts
-          ? debtRows.map((x, i) => {
-              const link = paycheckFor(state, x.id);
-              const from = link
-                ? `From your ${link.income.name || "job"} paycheck (${money(link.deduction.amount)} per check)`
-                : x.promoUntil
-                  ? "Minimum payment · intro rate"
-                  : "Minimum payment";
-              return (
-                <View key={x.id} style={[styles.row, { borderBottomColor: t.border }]}>
-                  <View style={{ flex: 1, minWidth: 0, paddingVertical: 4 }}>
-                    <Text numberOfLines={2} style={[type.body, { color: t.text }]}>{debtLabel(x)}</Text>
-                    <Text style={[type.caption, { color: t.text3 }]}>{from}</Text>
-                  </View>
-                  <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(x.minPayment)}</Text>
-                  {reorder ? (
-                    <View style={[styles.actions, { width: 84 }]}>
-                      <IconButton icon="up" label={`Move ${debtLabel(x)} up`} disabled={i === 0} onPress={() => moveDebt(x.id, -1)} />
-                      <IconButton icon="down" label={`Move ${debtLabel(x)} down`} disabled={i === debtRows.length - 1} onPress={() => moveDebt(x.id, 1)} />
-                    </View>
-                  ) : (
-                    <View style={[styles.actions, { width: cols.actions }]} />
-                  )}
-                </View>
-              );
-            })
+          ? [
+              noticeBox,
+              ...debtRows.map((x, i) => (
+                <DebtPaymentRow
+                  key={x.id}
+                  debt={x}
+                  from={debtFrom(x)}
+                  cols={cols}
+                  reorder={reorder ? { up: i > 0, down: i < debtRows.length - 1, move: (by) => moveDebt(x.id, by) } : undefined}
+                  moveTo={<MoveTo current={DEBT_LABEL} groups={[...groupNames]} what={debtLabel(x)} allowNew={false} onPick={(to) => place("debt", x.id, to)} />}
+                />
+              )),
+            ]
           : current
           ? [
               !reorder ? (
@@ -376,16 +427,38 @@ export function BudgetEditor() {
                 onRemove={() => { setEditing(null); update((p) => { p.budget.splice(index, 1); }); }}
               />
             )),
+              ...placedDebts(current.name).map((x) => (
+                <DebtPaymentRow
+                  key={x.id}
+                  debt={x}
+                  from={debtFrom(x)}
+                  cols={cols}
+                  inGroup
+                  moveTo={<MoveTo current={current.name} groups={[...groupNames, DEBT_LABEL]} what={debtLabel(x)} allowNew={false} onPick={(to) => place("debt", x.id, to === DEBT_LABEL ? undefined : to)} />}
+                />
+              )),
+              ...placedGoals(current.name).map((g) => (
+                <SetAsideRow
+                  key={g.id}
+                  goal={g}
+                  months={actual.months}
+                  start={start}
+                  thisMonth={thisMonth}
+                  cols={cols}
+                  inGroup
+                  moveTo={<MoveTo current={current.name} groups={[...groupNames, SET_LABEL]} what={g.name || "goal"} allowNew={false} onPick={(to) => place("goal", g.id, to === SET_LABEL ? undefined : to)} />}
+                />
+              )),
             ]
           : null
       }
       detailFooter={onSet ? (
         <Text style={[type.caption, { color: t.text3, padding: space.sm }]}>
-          Your recurring goals, set aside a little each month so they're ready when due. The plan catches up if you're behind. Change them under Savings goals.
+          Your recurring goals, set aside a little each month so they're ready when due. The plan catches up if you're behind. Change them under Savings goals. Tap one to list it under another group.
         </Text>
       ) : onDebts ? (
         <Text style={[type.caption, { color: t.text3, padding: space.sm }]}>
-          These come from your debts, so they're counted once. Change them on the Debts page.
+          These come from your debts, so they're counted once. Change them on the Debts page. Tap one to list it under another group (like a mortgage under Housing).
           {payrollLoans.length ? " 401(k) loan repayments aren't listed: they come out of your paycheck, before take-home." : ""}
         </Text>
       ) : current ? <Button title={`Add item to ${current.name}`} icon="plus" tone="ghost" onPress={() => addItem(current.name)} style={{ alignSelf: "flex-start" }} /> : undefined}
@@ -398,10 +471,14 @@ export function BudgetEditor() {
  * straight from the plan, so catch-up months and "already set aside" months show as they are.
  */
 function SetAsideRow({
-  goal: g, months, start, thisMonth, cols, reorder,
+  goal: g, months, start, thisMonth, cols, reorder, moveTo, inGroup,
 }: {
   goal: Goal; months: MonthRow[]; start: Date; thisMonth: string; cols: ReturnType<typeof budgetCols>;
   reorder?: { up: boolean; down: boolean; move: (by: -1 | 1) => void };
+  /** "Move to" chips, shown when the row is open. */
+  moveTo?: ReactNode;
+  /** Listed inside one of your groups: leave room for its After-you-retire column. */
+  inGroup?: boolean;
 }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
@@ -431,6 +508,7 @@ function SetAsideRow({
           </Text>
         </View>
         <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(now)}</Text>
+        {inGroup && cols.retire ? <View style={{ width: cols.retire }} /> : null}
         {reorder ? (
           <View style={[styles.actions, { width: 84 }]}>
             <IconButton icon="up" label={`Move ${g.name || "goal"} up`} disabled={!reorder.up} onPress={() => reorder.move(-1)} />
@@ -459,8 +537,54 @@ function SetAsideRow({
           <Text style={[type.caption, { color: t.text3, marginTop: 4 }]}>
             Each month sets aside what's still needed ÷ months left, so it evens out if you start late or save extra. After it's spent, it starts again.
           </Text>
+          {moveTo}
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/** A debt's payment, read-only (it comes from Debts). Tap to list it under another group. */
+function DebtPaymentRow({
+  debt: x, from, cols, reorder, moveTo, inGroup,
+}: {
+  debt: Debt; from: string; cols: ReturnType<typeof budgetCols>;
+  reorder?: { up: boolean; down: boolean; move: (by: -1 | 1) => void };
+  moveTo: ReactNode;
+  inGroup?: boolean;
+}) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const name = debtLabel(x);
+  return (
+    <View style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border, backgroundColor: open ? t.accentSoft : "transparent" }}>
+      <Pressable
+        role="button"
+        aria-expanded={open}
+        accessibilityLabel={`${name}: ${money(x.minPayment)} a month. Move to another group`}
+        onPress={() => setOpen((o) => !o)}
+        style={[styles.row, { borderBottomWidth: 0 }]}
+      >
+        <View style={{ flex: 1, minWidth: 0, paddingVertical: 4 }}>
+          <Text numberOfLines={2} style={[type.body, { color: t.text }]}>{name}</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>{from}</Text>
+        </View>
+        <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(x.minPayment)}</Text>
+        {inGroup && cols.retire ? <View style={{ width: cols.retire }} /> : null}
+        {reorder ? (
+          <View style={[styles.actions, { width: 84 }]}>
+            <IconButton icon="up" label={`Move ${name} up`} disabled={!reorder.up} onPress={() => reorder.move(-1)} />
+            <IconButton icon="down" label={`Move ${name} down`} disabled={!reorder.down} onPress={() => reorder.move(1)} />
+          </View>
+        ) : (
+          <View style={[styles.actions, { width: cols.actions }]}>
+            <View style={{ transform: [{ rotate: open ? "90deg" : "0deg" }] }}>
+              <Icon name="chevron" size={16} color={t.text3} />
+            </View>
+          </View>
+        )}
+      </Pressable>
+      {open ? <View style={{ paddingHorizontal: space.lg, paddingBottom: space.md }}>{moveTo}</View> : null}
     </View>
   );
 }
@@ -584,7 +708,9 @@ function GroupName({
 const NEW_GROUP = "\u0000new";
 
 /** "Move to" chips for an item: every other group, plus a new one. */
-function MoveTo({ current, groups, what, onPick }: { current: string; groups: string[]; what: string; onPick: (group: string) => void }) {
+function MoveTo({
+  current, groups, what, onPick, allowNew = true,
+}: { current: string; groups: string[]; what: string; onPick: (group: string) => void; allowNew?: boolean }) {
   const t = useTheme();
   const others = groups.filter((g) => g !== current);
   return (
@@ -596,9 +722,11 @@ function MoveTo({ current, groups, what, onPick }: { current: string; groups: st
             <Text style={[type.caption, { color: t.text, fontWeight: "600" }]}>{g}</Text>
           </Pressable>
         ))}
-        <Pressable role="button" accessibilityLabel={`Move ${what} to a new group`} onPress={() => onPick(NEW_GROUP)} style={[styles.chip, { borderColor: t.border, borderStyle: "dashed" }]}>
-          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>+ New group</Text>
-        </Pressable>
+        {allowNew ? (
+          <Pressable role="button" accessibilityLabel={`Move ${what} to a new group`} onPress={() => onPick(NEW_GROUP)} style={[styles.chip, { borderColor: t.border, borderStyle: "dashed" }]}>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>+ New group</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );

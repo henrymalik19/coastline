@@ -74,6 +74,7 @@ export const DebtSchema = z.object({
   promoUntil: z.string().regex(MONTH_RE, "Use YYYY-MM").optional(),
   minimumOnly: z.boolean().optional(),
   payroll: z.boolean().optional(),
+  budgetGroup: z.string().optional(),
 });
 export const RetirementIncomeSchema = z.object({
   id,
@@ -95,6 +96,7 @@ export const GoalSchema = z.object({
       paidThrough: z.string().regex(MONTH_RE, "Use YYYY-MM").optional(),
     })
     .optional(),
+  budgetGroup: z.string().optional(),
 });
 export const LimitsRowSchema = z.object({
   year: z.number().int(),
