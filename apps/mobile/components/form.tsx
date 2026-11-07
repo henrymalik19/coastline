@@ -357,8 +357,13 @@ export function Segmented<T extends string>({
 
 /** A dropdown: shows the choice, opens a list. Saves room where a Segmented row would wrap. */
 export function Select<T extends string>({
-  options, value, onChange, label,
-}: { options: { value: T; label: string; hint?: string }[]; value: T; onChange: (v: T) => void; label: string }) {
+  options, value, onChange, label, plain, placeholder,
+}: {
+  options: { value: T; label: string; hint?: string }[]; value: T; onChange: (v: T) => void; label: string;
+  /** No box: right-aligned text and a chevron, for list rows. */
+  plain?: boolean;
+  placeholder?: string;
+}) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
   const cur = options.find((o) => o.value === value);
@@ -369,10 +374,10 @@ export function Select<T extends string>({
         aria-haspopup="listbox"
         accessibilityLabel={`${label}: ${cur?.label ?? "none"}. Change`}
         onPress={() => setOpen(true)}
-        style={[styles.select, { borderColor: t.border, backgroundColor: t.surface2 }]}
+        style={plain ? styles.selectPlain : [styles.select, { borderColor: t.border, backgroundColor: t.surface2 }]}
       >
-        <Text style={[type.body, { color: t.text, flex: 1 }]} numberOfLines={1}>{cur?.label ?? "Pick one"}</Text>
-        <Icon name="down" size={16} color={t.text2} />
+        <Text style={[type.body, { color: cur && cur.value ? t.text : t.text3, flex: 1, textAlign: plain ? "right" : "left" }]} numberOfLines={1}>{cur && cur.value ? cur.label : placeholder ?? cur?.label ?? "Pick one"}</Text>
+        <Icon name={plain ? "chevron" : "down"} size={plain ? 14 : 16} color={t.text3} />
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel={`Close ${label}`}>
@@ -457,6 +462,7 @@ export function IconButton({ icon, label, onPress, disabled, color }: { icon: Ic
 }
 
 const styles = StyleSheet.create({
+  selectPlain: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44, flex: 1 },
   select: { flexDirection: "row", alignItems: "center", gap: space.sm, borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: space.md, minHeight: 44 },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: space.lg },
   sheet: { width: "100%", maxWidth: 380, borderRadius: radius.lg, borderWidth: 1, paddingVertical: space.md },

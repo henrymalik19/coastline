@@ -1,5 +1,6 @@
 import { accountGroup, type Account, type AccountType, type PlanAccount } from "@coastfi/engine";
 import { useState } from "react";
+import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { confirm } from "../lib/confirm";
 import { HELP } from "../lib/help";
@@ -52,6 +53,7 @@ export function AccountsEditor() {
   const t = useTheme();
   const { state, start } = usePlan();
   const update = useStore((s) => s.update);
+  const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
   const thisMonth = monthKey(start);
   const [reorder, setReorder] = useState(false);
@@ -125,11 +127,26 @@ export function AccountsEditor() {
                       <IconButton icon="down" label={`Move ${name} down`} disabled={i === accounts.length - 1} onPress={() => move(i, 1)} />
                     </View>
                   ) : (
-                    <NumberInput kind="money" label={`${name} balance`} value={a.balance} onChange={(v) => update((p) => { p.accounts[i]!.balance = v; })} />
+                    state.budgetPlan?.registers?.[a.id] ? (
+                      <Pressable role="link" accessibilityLabel={`${name} register`} onPress={() => router.push(`/money/register?account=${a.id}`)} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                        <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(a.balance)}</Text>
+                        <Icon name="chevron" size={14} color={t.accent} />
+                      </Pressable>
+                    ) : (
+                      <NumberInput kind="money" label={`${name} balance`} value={a.balance} onChange={(v) => update((p) => { p.accounts[i]!.balance = v; })} />
+                    )
                   )}
                 </View>
                 {isOpen ? (
                   <View style={{ gap: space.sm, paddingBottom: space.md, paddingLeft: 26 }}>
+                    {a.type === "cash" ? (
+                      <Pressable role="link" onPress={() => router.push(`/money/register?account=${a.id}`)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}>
+                        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>
+                          {state.budgetPlan?.registers?.[a.id] ? "Transactions (the balance comes from them)" : "Transactions"}
+                        </Text>
+                        <Icon name="chevron" size={12} color={t.accent} />
+                      </Pressable>
+                    ) : null}
                     {ck === "payroll" ? (
                       <PayrollNote what={accountGroup(a) === "k401" ? "401(k)" : "HSA"} />
                     ) : ck ? (

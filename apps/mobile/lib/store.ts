@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { PlanState } from "@coastfi/engine";
-import { CheckinSchema, PlanStateSchema, type Checkin } from "@coastfi/schema";
+import { transferPair, type PlanState, type Txn } from "@coastfi/engine";
+import { CheckinSchema, PlanStateSchema, TxnSchema, type Checkin } from "@coastfi/schema";
+import { applyRegisterBalances, budgetAccounts, ensureRegister } from "./register";
 import { z } from "zod";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -16,6 +17,8 @@ export { newId } from "./id";
 export type AppState = {
   plan: PlanState;
   checkins: Checkin[];
+  /** Transactions in your budget accounts (deleted ones kept as tombstones so deletions sync). */
+  txns: Txn[];
   /** False until setup is finished; until then the app opens setup. */
   onboarded: boolean;
   /** Ticked to-dos per month: { "2026-11": ["debt", "ira"] } */
@@ -28,6 +31,13 @@ export type AppState = {
   setPlan: (plan: PlanState) => void;
   toggleTodo: (month: string, key: string) => void;
   logCheckin: (c: Checkin) => void;
+  /** Add or change a transaction (and the other side of a transfer). Balances follow. */
+  saveTxn: (t: Omit<Txn, "updatedAt">, today: string) => void;
+  deleteTxn: (id: string) => void;
+  /** Delete every transaction (starting the budget over). */
+  clearTxns: () => void;
+  /** Merge transactions from another device: the newer copy of each wins. */
+  mergeTxns: (incoming: Txn[]) => void;
   completeOnboarding: () => void;
   /** Restore a backup made by this app. Throws a readable error. */
   importJson: (text: string) => void;
@@ -43,6 +53,7 @@ export const useStore = create<AppState>()(
     (set, get) => ({
       plan: freshPlan(),
       checkins: [],
+      txns: [],
       onboarded: false,
       todoDone: {},
       updatedAt: 0,
@@ -65,6 +76,59 @@ export const useStore = create<AppState>()(
         const rest = get().checkins.filter((x) => x.month !== c.month);
         set({ checkins: [...rest, c].sort((a, b) => a.month.localeCompare(b.month)), updatedAt: now() });
       },
+      saveTxn: (input, today) => {
+        const t: Txn = { ...input, updatedAt: now() };
+        const others = get().txns.filter((x) => x.id !== t.id);
+        const old = get().txns.find((x) => x.id === t.id);
+        let list = [...others, t];
+        // a transfer: keep the other side in step (or remove it when it stops being a transfer)
+        const pairId = t.transferId ?? old?.transferId;
+        // (only between budget accounts; a transfer out to the IRA or a loan just spends from its category)
+        const bothBudget = !!t.transferAccountId && budgetAccounts(get().plan).some((a) => a.id === t.transferAccountId);
+        if (t.transferAccountId && bothBudget) {
+          const pair = transferPair({ ...t, transferId: pairId ?? t.id + ":t" });
+          if (pair) {
+            const linked = { ...t, transferId: pair.id };
+            list = [...list.filter((x) => x.id !== pair.id && x.id !== t.id), linked, { ...pair, updatedAt: t.updatedAt }];
+          }
+        } else if (pairId) {
+          list = list.map((x) => (x.id === pairId ? { ...x, deleted: true, updatedAt: t.updatedAt } : x));
+        }
+        const plan = structuredClone(get().plan);
+        ensureRegister(plan, t.accountId, today);
+        if (bothBudget) ensureRegister(plan, t.transferAccountId!, today);
+        applyRegisterBalances(plan, list);
+        set({ txns: list, plan, updatedAt: now() });
+      },
+      deleteTxn: (id) => {
+        const t = get().txns.find((x) => x.id === id);
+        if (!t) return;
+        const stamp = now();
+        const list = get().txns.map((x) => (x.id === id || (t.transferId && x.id === t.transferId) ? { ...x, deleted: true, updatedAt: stamp } : x));
+        const plan = structuredClone(get().plan);
+        applyRegisterBalances(plan, list);
+        set({ txns: list, plan, updatedAt: stamp });
+      },
+      clearTxns: () => {
+        const stamp = now();
+        set({ txns: get().txns.map((x) => (x.deleted ? x : { ...x, deleted: true, updatedAt: stamp })), updatedAt: stamp });
+      },
+      mergeTxns: (incoming) => {
+        const by = new Map(get().txns.map((x) => [x.id, x]));
+        let changed = false;
+        for (const t of incoming) {
+          const mine = by.get(t.id);
+          if (!mine || t.updatedAt > mine.updatedAt) {
+            by.set(t.id, t);
+            changed = true;
+          }
+        }
+        if (!changed) return;
+        const list = [...by.values()];
+        const plan = structuredClone(get().plan);
+        applyRegisterBalances(plan, list);
+        set({ txns: list, plan });
+      },
       completeOnboarding: () => set({ onboarded: true, updatedAt: now() }),
       importJson: (text) => {
         let raw: unknown;
@@ -73,16 +137,17 @@ export const useStore = create<AppState>()(
         } catch {
           throw new Error("That isn't a Coastline backup file.");
         }
-        const r = raw as { app?: string; plan?: unknown; checkins?: unknown };
+        const r = raw as { app?: string; plan?: unknown; checkins?: unknown; txns?: unknown };
         if (!r || typeof r !== "object" || r.app !== "coastfi" || !r.plan) throw new Error("That isn't a Coastline backup file.");
         const plan = PlanStateSchema.safeParse(r.plan);
         if (!plan.success) throw new Error("The backup is damaged or from an incompatible version.");
         const checkins = z.array(CheckinSchema).safeParse(r.checkins ?? []);
-        set({ plan: plan.data, checkins: checkins.success ? checkins.data : [], onboarded: true, updatedAt: now() });
+        const txns = z.array(TxnSchema).safeParse(r.txns ?? []);
+        set({ plan: plan.data, checkins: checkins.success ? checkins.data : [], txns: txns.success ? txns.data : [], onboarded: true, updatedAt: now() });
       },
       exportJson: () => {
-        const { plan, checkins } = get();
-        return JSON.stringify({ app: "coastfi", exportedAt: new Date().toISOString(), plan, checkins }, null, 2);
+        const { plan, checkins, txns } = get();
+        return JSON.stringify({ app: "coastfi", exportedAt: new Date().toISOString(), plan, checkins, txns: txns.filter((t) => !t.deleted) }, null, 2);
       },
       startFresh: () => set({ plan: freshPlan(), onboarded: false, todoDone: {}, updatedAt: now() }),
     }),
@@ -90,7 +155,7 @@ export const useStore = create<AppState>()(
       name: "coastfi.app",
       version: 1,
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: ({ plan, checkins, onboarded, todoDone, updatedAt }) => ({ plan, checkins, onboarded, todoDone, updatedAt }),
+      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt }),
       // never trust stored data blindly: validate, and fall back to a blank plan
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState> & { isSampleData?: boolean; seenWelcome?: boolean };
@@ -102,6 +167,7 @@ export const useStore = create<AppState>()(
           plan: ok.success && !wasSample ? ok.data : current.plan,
           onboarded: !!p.onboarded,
           checkins: Array.isArray(p.checkins) ? p.checkins : [],
+          txns: (() => { const r = z.array(TxnSchema).safeParse(p.txns ?? []); return r.success ? r.data : []; })(),
           todoDone: p.todoDone && typeof p.todoDone === "object" ? p.todoDone : {},
           updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : 0,
         };

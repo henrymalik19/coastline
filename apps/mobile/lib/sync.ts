@@ -6,8 +6,9 @@
  * - Conflicts: last write wins by the edit time (`updatedAt`), enforced again by the database.
  * - Other devices' changes arrive live (realtime) and on app focus.
  */
+import type { Txn } from "@coastfi/engine";
 import type { Checkin } from "@coastfi/schema";
-import { CheckinSchema, PlanStateSchema } from "@coastfi/schema";
+import { CheckinSchema, PlanStateSchema, TxnSchema } from "@coastfi/schema";
 import type { RealtimeChannel, Session } from "@supabase/supabase-js";
 import { AppState, Platform } from "react-native";
 import { create } from "zustand";
@@ -69,6 +70,65 @@ const fromRow = (r: CheckinRow): Checkin | null => {
   return parsed.success ? parsed.data : null;
 };
 
+/* ---------- transactions: their own table, row by row ---------- */
+type TxnRow = {
+  id: string; account_id: string; date: string; amount: number | string; payee: string | null; memo: string | null;
+  category_id: string | null; splits: Txn["splits"] | null; transfer_account_id: string | null; transfer_id: string | null;
+  cleared: Txn["cleared"]; source: Txn["source"]; import_id: string | null; deleted: boolean; client_updated_at: number | string;
+};
+const txnToRow = (t: Txn) => ({
+  id: t.id, account_id: t.accountId, date: t.date, amount: t.amount, payee: t.payee ?? null, memo: t.memo ?? null,
+  category_id: t.categoryId ?? null, splits: t.splits ?? null, transfer_account_id: t.transferAccountId ?? null,
+  transfer_id: t.transferId ?? null, cleared: t.cleared, source: t.source, import_id: t.importId ?? null,
+  deleted: !!t.deleted, client_updated_at: t.updatedAt,
+});
+const txnFromRow = (r: TxnRow): Txn | null => {
+  const parsed = TxnSchema.safeParse({
+    id: r.id, accountId: r.account_id, date: String(r.date).slice(0, 10), amount: Number(r.amount),
+    payee: r.payee ?? undefined, memo: r.memo ?? undefined, categoryId: r.category_id ?? undefined,
+    splits: r.splits ?? undefined, transferAccountId: r.transfer_account_id ?? undefined, transferId: r.transfer_id ?? undefined,
+    cleared: r.cleared, source: r.source, importId: r.import_id ?? undefined, updatedAt: Number(r.client_updated_at),
+    deleted: r.deleted || undefined,
+  });
+  return parsed.success ? parsed.data : null;
+};
+/** False once the server says it has no transactions table yet (sync keeps working without it). */
+let txnTable = true;
+/** Edit time of the newest transaction already uploaded. */
+let txnPushedThrough = 0;
+const missingTable = (e: unknown) => /PGRST205|42P01|does not exist|Could not find the table/i.test(String((e as { message?: string; code?: string })?.message ?? "") + String((e as { code?: string })?.code ?? ""));
+
+async function pushTxns(): Promise<void> {
+  if (!supabase || !txnTable) return;
+  const changed = useStore.getState().txns.filter((t) => t.updatedAt > txnPushedThrough);
+  if (!changed.length) return;
+  const res = await supabase.from("transactions").upsert(changed.map(txnToRow), { onConflict: "user_id,id" });
+  if (res.error) {
+    if (missingTable(res.error)) {
+      txnTable = false;
+      return;
+    }
+    throw res.error;
+  }
+  txnPushedThrough = Math.max(txnPushedThrough, ...changed.map((t) => t.updatedAt));
+}
+
+async function pullTxns(userId: string): Promise<void> {
+  if (!supabase || !txnTable) return;
+  const res = await supabase.from("transactions").select("*").eq("user_id", userId);
+  if (res.error) {
+    if (missingTable(res.error)) {
+      txnTable = false;
+      return;
+    }
+    throw res.error;
+  }
+  const remote = ((res.data ?? []) as TxnRow[]).map(txnFromRow).filter((t): t is Txn => !!t);
+  applyingRemote = true;
+  useStore.getState().mergeTxns(remote);
+  applyingRemote = false;
+}
+
 let started = false;
 let applyingRemote = false;
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -95,6 +155,7 @@ async function push(): Promise<void> {
       const ci = await supabase.from("checkins").upsert(s.checkins.map(toRow), { onConflict: "user_id,month" });
       if (ci.error) throw ci.error;
     }
+    await pushTxns();
     setSync({ status: "synced", lastSyncedAt: Date.now(), error: undefined });
   } catch (e) {
     setSync(isNetworkError(e) ? { status: "offline" } : { status: "error", error: String((e as Error)?.message ?? e) });
@@ -141,6 +202,7 @@ export async function syncNow(): Promise<void> {
     ]);
     if (planRes.error) throw planRes.error;
     if (ciRes.error) throw ciRes.error;
+    await pullTxns(userId);
     const remote = planRes.data;
     const remoteCheckins = ((ciRes.data ?? []) as CheckinRow[]).map(fromRow).filter((c): c is Checkin => !!c);
     const local = useStore.getState();
@@ -183,6 +245,9 @@ async function onSignedIn(session: Session) {
       const row = payload.new as PlanRow | undefined;
       if (row && row.client_updated_at > useStore.getState().updatedAt) void syncNow();
     })
+    .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `user_id=eq.${session.user.id}` }, () => {
+      void pullTxns(session.user.id).catch(() => undefined);
+    })
     .subscribe();
 }
 
@@ -204,7 +269,7 @@ export function startSync() {
   // upload changes made on this device
   useStore.subscribe((s, prev) => {
     if (applyingRemote) return;
-    if (s.updatedAt !== prev.updatedAt || s.todoDone !== prev.todoDone || s.checkins !== prev.checkins) schedulePush();
+    if (s.updatedAt !== prev.updatedAt || s.todoDone !== prev.todoDone || s.checkins !== prev.checkins || s.txns !== prev.txns) schedulePush();
   });
   // catch up when the app comes back to the foreground or the network returns
   AppState.addEventListener("change", (st) => st === "active" && void syncNow());

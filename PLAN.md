@@ -350,6 +350,8 @@ The import is read-only on the YNAB side and can be re-run: it updates rows it c
 - Registers for budget accounts, quick add, splits, transfers (budget ↔ budget, and budget → tracking, which counts as saving), reconcile. Supabase tables with RLS and an offline queue.
 - ✅ Activity comes from transactions; a transfer to the IRA counts as that month's IRA saving; an RLS test for every new table; a transaction added offline syncs later.
 
+- *Built (first pass):* transactions with registers for cash accounts and credit cards (existing accounts and debts; an untyped debt named like a card counts as one), quick add (spent / money in / transfer, payee remembers its category), reconcile, envelope credit cards, and the Budget tab's Spent from transactions. Registered balances come from transactions. Stored on the device and synced row by row to `transactions` (migration `20261107180000_transactions.sql`; sync skips it quietly until the table exists). Not yet: splits in the form, transfers updating tracking-account balances.
+
 **Phase 8: imports (3–4 days)**
 - CSV import with saved column mappings and de-duplication. YNAB import through an Edge Function (§10.5).
 - ✅ Re-importing the same file or YNAB budget creates no duplicates; the token never reaches the client; a sample YNAB budget imports with categories, months and transactions intact.

@@ -3,7 +3,9 @@
  * categories (budget items, bills, debt payments, savings), what you don't spend carries into next
  * month, and what you assign to savings and debts is what the plan counts as done that month.
  */
-import { budgetCategories, budgetView, type BudgetCategory, type BudgetLine } from "@coastfi/engine";
+import { budgetCategories, budgetView, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
+import { TxnForm } from "../../components/TxnForm";
+import { budgetAccounts, cardMap } from "../../lib/register";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, NumberInput, Select, TextField, ToggleRow } from "../../components/form";
@@ -36,6 +38,7 @@ export default function Budget() {
   const compact = contentWidth < 600;
   const { state, result, actual, start } = usePlan();
   const update = useStore((s) => s.update);
+  const clearTxns = useStore((s) => s.clearTxns);
   const thisMonth = monthKey(start);
   const [month, setMonth] = useState(thisMonth);
   const [open, setOpen] = useState<string | null>(null);
@@ -46,7 +49,12 @@ export default function Budget() {
   const router = useRouter();
   const b = state.budgetPlan;
   const cats = useMemo(() => budgetCategories(state, result.d, actual, start, month), [state, result, actual, start, month]);
-  const view = budgetView(b, cats, month);
+  const txns = useStore((s) => s.txns);
+  const cards = useMemo(() => cardMap(state), [state]);
+  const view = budgetView(b, cats, month, { txns, cards });
+  const [adding, setAdding] = useState<{ txn?: Txn; categoryId?: string } | null>(null);
+  const monthTxns = txns.filter((x) => !x.deleted && x.date.startsWith(month));
+  const accts = budgetAccounts(state);
   const i = between(thisMonth, month);
   const expected = i >= 0 ? actual.months[i]?.income ?? 0 : 0;
   const entry = b?.months?.[month];
@@ -297,7 +305,7 @@ export default function Budget() {
           <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
             <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{label(c)}</Text>
             <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
-              {money(l.assigned)} assigned · {money(l.spent)} {c.moves ? "paid" : "spent"}
+              {money(l.assigned)} assigned · {money(l.spent)} {c.moves ? "paid" : "spent"}{(l.funded ?? 0) > 0.5 ? ` · +${money(l.funded ?? 0)} from card spending` : ""}
               {c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5 ? ` · plan ${money(c.target)}` : ""}
             </Text>
           </View>
@@ -346,6 +354,21 @@ export default function Budget() {
                 />
               </View>
             ) : null}
+            {(() => {
+              const list = monthTxns.filter((x) => x.categoryId === c.key || x.splits?.some((y) => y.categoryId === c.key) || (c.kind === "debt" && x.accountId === c.key.slice(5) && !!x.transferAccountId));
+              return (
+                <View style={{ gap: 4 }}>
+                  {list.slice(0, 8).map((x) => (
+                    <Pressable key={x.id} role="button" onPress={() => setAdding({ txn: x })} style={styles.acctRow}>
+                      <Text style={[type.caption, { color: t.text2, flex: 1 }]} numberOfLines={1}>{x.date.slice(5).replace("-", "/")} · {x.payee || "Transaction"}</Text>
+                      <Text style={[type.caption, { color: x.amount > 0 ? t.good : t.text, fontVariant: ["tabular-nums"] }]}>{x.amount > 0 ? "+" : "−"}{money(Math.abs(x.amount))}</Text>
+                    </Pressable>
+                  ))}
+                  {list.length > 8 ? <Text style={[type.caption, { color: t.text3 }]}>and {list.length - 8} more</Text> : null}
+                  <Button title="Add a transaction here" icon="plus" tone="ghost" onPress={() => setAdding({ categoryId: c.key })} style={{ minHeight: 34, alignSelf: "flex-start" }} />
+                </View>
+              );
+            })()}
             {categoryEditor(c)}
             <Text style={[type.caption, { color: t.text3 }]}>
               {l.carried > 0.5 ? `${money(l.carried)} carried over from last month. ` : ""}
@@ -353,7 +376,9 @@ export default function Budget() {
                 ? "Counts as moved to the account when assigned (change Paid if you moved a different amount). Your plan uses what you assign here."
                 : c.kind === "saving"
                   ? "Stays here and builds up. Your plan uses what you assign here."
-                  : c.kind === "debt"
+                  : c.kind === "debt" && cards[c.key.slice(5)] !== undefined
+                    ? `Spending on this card moves money here from its categories${(l.funded ?? 0) > 0.5 ? ` (${money(l.funded ?? 0)} this month)` : ""}, so the payment is covered. Assign more to pay down what you already owe. A payment (a transfer from checking) spends it.`
+                    : c.kind === "debt"
                     ? "Minimum plus any extra. What you assign beyond the minimum is your extra payment in the plan."
                     : c.kind === "bill"
                       ? "Builds up each month until the bill is due."
@@ -371,6 +396,21 @@ export default function Budget() {
       {view.started ? (
         <>
           {rtaCard}
+          <Card style={{ gap: space.sm }}>
+            <View style={[styles.editRow, { justifyContent: "space-between" }]}>
+              <SectionLabel>Accounts</SectionLabel>
+              <Button title="Add a transaction" icon="plus" tone="primary" onPress={() => setAdding({})} style={{ minHeight: 36 }} />
+            </View>
+            {accts.map((a) => (
+              <Pressable key={a.id} role="link" accessibilityLabel={`${a.name} register`} onPress={() => router.push(`/money/register?account=${a.id}`)} style={styles.acctRow}>
+                <Text style={[type.body, { color: t.text, flex: 1 }]} numberOfLines={1}>{a.name}</Text>
+                <Text style={[type.body, { color: a.balance < 0 ? t.text2 : t.text, fontVariant: ["tabular-nums"] }]}>{a.kind === "card" ? `${money(-a.balance)} owed` : money(a.balance)}</Text>
+                <Icon name="chevron" size={14} color={t.text3} />
+              </Pressable>
+            ))}
+            {!accts.length ? <Text style={[type.caption, { color: t.text3 }]}>Add a cash account or credit card under Money to track transactions.</Text> : null}
+            <Text style={[type.caption, { color: t.text3 }]}>Tap an account for its transactions. A credit card missing here? Set its type to Credit card under Money → Debts.</Text>
+          </Card>
           {groups.map((g) => {
             const avail = g.cats.reduce((a, c) => a + view.lines[c.key]!.available, 0);
             const assigned = g.cats.reduce((a, c) => a + view.lines[c.key]!.assigned, 0);
@@ -428,7 +468,10 @@ export default function Budget() {
             tone="ghost"
             icon="trash"
             onPress={async () => {
-              if (await confirm("Start the budget over?", "Everything you assigned, spent and received in the budget is cleared. Your plan, accounts and budget items stay.", "Start over")) update((p) => { delete p.budgetPlan; });
+              if (await confirm("Start the budget over?", "Everything you assigned, spent and received in the budget is cleared, and so are its transactions. Account balances stay as they are now. Your plan, accounts and budget items stay.", "Start over")) {
+                update((p) => { delete p.budgetPlan; });
+                clearTxns();
+              }
             }}
             style={{ alignSelf: "flex-start", minHeight: 36 }}
           />
@@ -438,6 +481,7 @@ export default function Budget() {
           <Text style={[type.body, { color: t.text2 }]}>Your budget starts in {nameOf(b.start)}.</Text>
         </Card>
       )}
+      {adding ? <TxnForm txn={adding.txn} categoryId={adding.categoryId} onClose={() => setAdding(null)} /> : null}
       {month === thisMonth && i === 0 ? <View style={{ height: 1 }} /> : <Pill tone="neutral">{i > 0 ? "A future month: assign ahead if you like" : "A past month"}</Pill>}
     </Screen>
   );
@@ -451,6 +495,7 @@ const styles = StyleSheet.create({
   pill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, minWidth: 72, alignItems: "flex-end" },
   editor: { gap: space.sm, marginHorizontal: space.md, marginBottom: space.md, padding: space.md, borderRadius: radius.md },
   editRow: { flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" },
+  acctRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: 6 },
   catBox: { gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm, marginTop: 2 },
   link: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" },
 });
