@@ -5,7 +5,7 @@
  */
 import { accountForecasts, BUCKET_LABELS, scheduleAmount, type AccountForecast, type AccountKey, type PlanState, type RunResult, type ScheduleEntry } from "@coastfi/engine";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { debtLabel } from "../lib/debts";
 import { money, monthLabel } from "../lib/format";
@@ -45,6 +45,9 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
   const router = useRouter();
   const [sel, setSel] = useState<AccountKey | null>(null);
   const [showCheck, setShowCheck] = useState(false);
+  const gridRef = useRef<unknown>(null);
+  const hRef = useRef<{ scrollTo: (o: { x: number; animated: boolean }) => void } | null>(null);
+  const xRef = useRef(0);
   const { twoColumn } = useLayout();
   const [planOpen, setPlanOpen] = useState<string | null>(null);
   const [span, setSpan] = useState(12);
@@ -433,8 +436,24 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
       {bodyRows}
     </>
   );
+  // scroll the table sideways a couple of accounts at a time (the scrollbars are hidden)
+  const step = COL * 4;
+  const scrollSide = (dir: -1 | 1) => {
+    if (web) {
+      const el = gridRef.current as { scrollLeft: number; scrollWidth: number; clientWidth: number; scrollTo?: (o: object) => void } | null;
+      if (!el) return;
+      const target = Math.max(0, Math.min(el.scrollWidth - el.clientWidth, el.scrollLeft + dir * step));
+      el.scrollTo?.({ left: target, behavior: "smooth" });
+      // some browsers skip smooth scrolling: make sure it lands
+      setTimeout(() => { if (Math.abs(el.scrollLeft - target) > 2) el.scrollLeft = target; }, 450);
+    } else {
+      xRef.current = Math.max(0, xRef.current + dir * step);
+      hRef.current?.scrollTo({ x: xRef.current, animated: true });
+    }
+  };
   const grid = web ? (
     <View
+      ref={gridRef as never}
       {...({ dataSet: { ledger: "1" } } as object)}
       style={[{ overflow: "auto" as never, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border }, fill ? { flex: 1, minHeight: 0 } : { maxHeight: 620 }]}
     >
@@ -442,7 +461,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
     </View>
   ) : (
     <ScrollView style={fill ? { flex: 1 } : { maxHeight: 620 }}>
-      <ScrollView horizontal>
+      <ScrollView horizontal ref={hRef as never} onScroll={(e) => { xRef.current = e.nativeEvent.contentOffset.x; }} scrollEventThrottle={64}>
         <View>{gridInner}</View>
       </ScrollView>
     </ScrollView>
@@ -477,6 +496,15 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
         <View style={[styles.editRow, { justifyContent: "space-between" }]}>
           <SectionLabel>Accounts</SectionLabel>
           <View style={styles.editRow}>
+            <View style={[styles.arrows, { borderColor: t.border }]}>
+              <Pressable role="button" accessibilityLabel="Scroll the table left" onPress={() => scrollSide(-1)} hitSlop={4} style={styles.arrow}>
+                <Icon name="back" size={16} color={t.accent} />
+              </Pressable>
+              <View style={{ width: StyleSheet.hairlineWidth, alignSelf: "stretch", backgroundColor: t.border }} />
+              <Pressable role="button" accessibilityLabel="Scroll the table right" onPress={() => scrollSide(1)} hitSlop={4} style={styles.arrow}>
+                <Icon name="chevron" size={16} color={t.accent} />
+              </Pressable>
+            </View>
             {[12, 24, 36, 60].map((n) => (
               <Pressable key={n} role="radio" aria-checked={span === n} onPress={() => setSpan(n)} hitSlop={6} style={[styles.chip, { borderColor: span === n ? t.accent : t.border, backgroundColor: span === n ? t.accentSoft : t.surface }]}>
                 <Text style={[type.caption, { color: span === n ? t.accent : t.text2, fontWeight: "700" }]}>{n} mo</Text>
@@ -542,6 +570,8 @@ const styles = StyleSheet.create({
   editor: { borderWidth: 1, borderRadius: radius.md, padding: space.sm, gap: space.sm },
   tr: { flexDirection: "row", alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: 5 },
   monthCol: { width: 92 },
+  arrows: { flexDirection: "row", borderWidth: 1, borderRadius: 999, overflow: "hidden" },
+  arrow: { paddingHorizontal: 12, paddingVertical: 5, alignItems: "center", justifyContent: "center" },
   summary: { flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: 8 },
   gr: { flexDirection: "row", alignItems: "stretch", minHeight: 32 },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },

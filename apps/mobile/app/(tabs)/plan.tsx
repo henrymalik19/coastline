@@ -243,7 +243,7 @@ export default function Plan() {
   return (
     // header and the Steps / Accounts switch stay put; the content scrolls under them, and the
     // accounts table fills the rest of the screen (scrolling inside, both ways)
-    <Screen title="Plan" subtitle="Your path to Coast FI" fill>
+    <Screen title="Plan" subtitle="Your path to Coast FI" fill maxWidth={100000}>
       <View style={{ maxWidth: 360 }}>
         <Segmented
           label="Plan view"
