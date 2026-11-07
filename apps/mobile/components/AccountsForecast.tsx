@@ -1,7 +1,7 @@
 /**
  * Every account the plan adds to, like a spreadsheet: what goes in each month (and from where), this
- * year against the limit, and the balance ahead. Each account can have its own schedule ("from Apr 2027:
- * $3,500 a month"), and any single month can be changed. Cards or a table, same numbers.
+ * year against the limit, and the balance ahead. View only: monthly amounts are set under Money →
+ * Monthly savings (and paychecks under Income).
  */
 import { accountForecasts, BUCKET_LABELS, scheduleAmount, type AccountForecast, type AccountKey, type PlanState, type RunResult, type ScheduleEntry } from "@coastfi/engine";
 import { useRouter } from "expo-router";
@@ -78,31 +78,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
     return BUCKET_LABELS[k as "k401" | "hsa" | "taxable"];
   };
 
-  /* ---------- changing the schedule ---------- */
   const sorted = (list: ScheduleEntry[]) => [...list].sort((a, b) => (a.from < b.from ? -1 : 1));
-  const setEntries = (k: AccountKey, list: ScheduleEntry[] | undefined) =>
-    update((p) => {
-      const next = { ...(p.plan.schedule ?? {}) };
-      if (list && list.length) next[k] = sorted(list);
-      else delete next[k];
-      p.plan.schedule = Object.keys(next).length ? next : undefined;
-    });
-  const setOneOff = (k: AccountKey, month: string, v: number | undefined) =>
-    update((p) => {
-      const next = { ...(p.plan.scheduleMonths ?? {}) };
-      const row = { ...(next[k] ?? {}) };
-      if (v === undefined) delete row[month];
-      else row[month] = Math.max(0, v);
-      if (Object.keys(row).length) next[k] = row;
-      else delete next[k];
-      p.plan.scheduleMonths = Object.keys(next).length ? next : undefined;
-    });
-  /** From this month on (until your next change): replaces an entry on the same month. */
-  const setFrom = (k: AccountKey, month: string, v: number) => {
-    const list = (schedule[k] ?? []).filter((e) => e.from !== month);
-    setEntries(k, [...list, { from: month, amount: Math.max(0, v) }]);
-    if (oneOffs[k]?.[month] !== undefined) setOneOff(k, month, undefined);
-  };
   const planText = (k: AccountKey) => {
     const list = sorted(schedule[k] ?? []);
     if (!list.length) return "Your plan: follows your steps";
@@ -121,51 +97,15 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
       m.employer > 0.5 ? `${money(m.employer)} from your employer` : "",
     ].filter(Boolean).join(" · ");
 
-  const editorFor = (k: AccountKey, i: number) => {
-    const a = all.find((x) => x.key === k)!;
-    const month = ym(start, i);
-    const own = oneOffs[k]?.[month];
-    return (
-      <MonthEditor
-        key={k + month}
-        title={`${label(k)} · ${monthLabel(start, i)}`}
-        unit={isDebt(k) ? "extra a month" : "a month"}
-        initial={own ?? scheduleAmount(state.plan, k, month) ?? a.months[i]!.plan}
-        changed={own !== undefined}
-        onJust={(v) => { setOneOff(k, month, v); setEdit(null); }}
-        onFrom={(v) => { setFrom(k, month, v); setEdit(null); }}
-        onUndo={() => { setOneOff(k, month, undefined); setEdit(null); }}
-        onCancel={() => setEdit(null)}
-      />
-    );
-  };
-
-  /** Tappable amount for a month (plain text for paycheck-set accounts). */
+  /** The amount for a month (accent when it's a one-month change). */
   const amountCell = (a: AccountForecast, i: number, width: number) => {
     const k = a.key;
     const m = a.months[i]!;
     const month = ym(start, i);
     const changed = oneOffs[k]?.[month] !== undefined;
     const value = isDebt(k) ? m.paycheck + m.plan : m.total;
-    if (!schedulable(k))
-      return <Text style={[type.caption, { color: t.text, width, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(value)}</Text>;
-    return (
-      <Pressable role="button" accessibilityLabel={`Change ${label(k)} for ${monthLabel(start, i)}`} onPress={() => setEdit(edit && edit.k === k && edit.i === i ? null : { k, i })} hitSlop={4} style={{ width, alignItems: "flex-end" }}>
-        <Text style={[type.caption, { color: changed ? t.accent : t.text, fontWeight: changed ? "700" : "500", fontVariant: ["tabular-nums"], textDecorationLine: "underline", textDecorationColor: t.border }]}>{money(value)}</Text>
-      </Pressable>
-    );
+    return <Text style={[type.caption, { color: changed ? t.accent : t.text, fontWeight: changed ? "700" : "500", width, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(value)}</Text>;
   };
-
-  /* ---------- the schedule editor (shared with the emergency fund goal) ---------- */
-  const scheduleEditor = (k: AccountKey) => (
-    <ScheduleEditor
-      k={k}
-      label={label(k)}
-      unit={isDebt(k) ? "extra/mo" : "/mo"}
-      note={k === "cash" ? "Cash can go past your emergency fund goal if you plan it." : undefined}
-      onCleared={() => setPlanOpen(null)}
-    />
-  );
 
   /* ---------- an account's details (opened from its column) ---------- */
   const card = (a: AccountForecast) => {
@@ -210,7 +150,10 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
               <Text style={[type.caption, { color: schedule[k]?.length ? t.accent : t.text2, fontWeight: "700" }]}>
                 {schedule[k]?.length ? planText(k).replace("Your plan: ", "Monthly amount: ") : "Monthly amount: none set, so it gets what your steps give it"}
               </Text>
-              {scheduleEditor(k)}
+              <Pressable role="link" onPress={() => router.push("/money/savings")} hitSlop={6} style={styles.link}>
+                <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change it (Money → Monthly savings)</Text>
+                <Icon name="chevron" size={12} color={t.accent} />
+              </Pressable>
             </>
           ) : (
             <Pressable role="link" onPress={() => router.push(k === "other" ? "/money/accounts" : "/money/income")} hitSlop={6} style={styles.link}>
@@ -266,7 +209,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
             ) : null}
           </View>
           <Text style={[type.caption, { color: t.text3 }]}>
-            {schedulable(k) ? "Change single months in the table: tap an amount." : "Set per paycheck, so it's steady."}
+            {schedulable(k) ? "" : "Set per paycheck, so it's steady."}
             {k === "cash" ? " Cash also collects anything not given to a step." : ""}
             {a.invested ? ` Balances grow at your assumed ${(d.r * 100).toFixed(1)}% return after inflation.` : ""}
           </Text>
@@ -331,7 +274,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
       <View style={[styles.rule, { backgroundColor: t.border }]} />
       <Text style={[type.caption, { color: t.text3 }]}>Your plan</Text>
       {mine.length ? mine.map((x) => line(label(x.k).replace(" (what you owe)", isDebt(x.k) ? " (extra)" : ""), `− ${money(x.ask)}`)) : (
-        <Text style={[type.caption, { color: t.text3 }]}>Nothing planned yet. Open an account below and set a monthly amount.</Text>
+        <Text style={[type.caption, { color: t.text3 }]}>Nothing set yet. Set amounts under Money → Monthly savings.</Text>
       )}
       {row0.plannedShort > 0.5
         ? line("Short this month", money(-row0.plannedShort), { strong: true, color: t.bad, hint: "Your plan asks for more than is left after bills. Lower an amount, or move one to a later month." })
@@ -505,7 +448,11 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
       <View style={{ padding: compact ? space.sm : space.md, gap: space.sm }}>
         {compact && selected ? null : (
         <View style={[styles.editRow, { justifyContent: "space-between" }, compact ? { flexWrap: "nowrap" } : null]}>
-          {compact ? null : <SectionLabel>Accounts</SectionLabel>}
+          {compact ? null : <SectionLabel>Forecast</SectionLabel>}
+          <Pressable role="link" accessibilityLabel="Set monthly amounts (Money, Monthly savings)" onPress={() => router.push("/money/savings")} hitSlop={6} style={[styles.chip, { borderColor: t.accent, backgroundColor: t.accentSoft, flexDirection: "row", alignItems: "center", gap: 4 }]}>
+            <Icon name="plus" size={12} color={t.accent} />
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{compact ? "Set" : "Set amounts"}</Text>
+          </Pressable>
           <View style={[styles.editRow, compact ? { flexWrap: "nowrap", gap: 6 } : null]}>
             <View style={[styles.arrows, { borderColor: t.border }]}>
               <Pressable role="button" accessibilityLabel="Scroll the table left" onPress={() => scrollSide(-1)} hitSlop={4} style={styles.arrow}>
@@ -531,8 +478,8 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
         {!selected ? (
           <Text style={[type.caption, { color: t.text3 }]}>
             {compact
-              ? "Tap a name to set its monthly amount · ·3 = 3 checks"
-              : "Tap an account's name to set its monthly amount and see its forecast · tap an amount to change one month · ● has a plan · ·3 = 3-paycheck month · red = short"}
+              ? "Tap a name for details · ·3 = 3 paychecks · red = short"
+              : "Tap an account's name for its details · ● has a monthly amount · ·3 = 3-paycheck month · red = short"}
           </Text>
         ) : null}
       </View>
@@ -543,7 +490,6 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
         ) : (
           <View style={[{ paddingHorizontal: compact ? space.sm : space.md, paddingBottom: compact ? space.sm : space.md, gap: space.sm }, fill ? { flex: 1, minHeight: 0 } : null]}>
             {grid}
-            {edit ? editorFor(edit.k, edit.i) : null}
           </View>
         )}
         {twoColumn ? panel : null}

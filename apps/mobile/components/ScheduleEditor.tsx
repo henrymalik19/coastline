@@ -33,13 +33,26 @@ export function useSchedule(k: string) {
       else delete all[k];
       p.plan.schedule = Object.keys(all).length ? all : undefined;
     });
-  return { list, set };
+  const oneOffs = state.plan.scheduleMonths?.[k] ?? {};
+  /** One month only (undefined removes it). */
+  const setMonth = (month: string, v: number | undefined) =>
+    update((p) => {
+      const all = { ...(p.plan.scheduleMonths ?? {}) };
+      const row = { ...(all[k] ?? {}) };
+      if (v === undefined) delete row[month];
+      else row[month] = Math.max(0, v);
+      if (Object.keys(row).length) all[k] = row;
+      else delete all[k];
+      p.plan.scheduleMonths = Object.keys(all).length ? all : undefined;
+    });
+  return { list, set, oneOffs, setMonth };
 }
 
 export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared }: { k: string; label: string; unit?: string; note?: string; onCleared?: () => void }) {
   const t = useTheme();
   const { start } = usePlan();
-  const { list, set } = useSchedule(k);
+  const { list, set, oneOffs, setMonth } = useSchedule(k);
+  const singles = Object.keys(oneOffs).sort();
   const last = list[list.length - 1];
   const nextFrom = last
     ? monthKey(new Date(Number(last.from.slice(0, 4)), Number(last.from.slice(5, 7)), 1))
@@ -55,12 +68,35 @@ export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared }: { k:
           <IconButton icon="trash" label={`Remove the change from ${monthName(e.from)}`} onPress={() => set(list.filter((_, j) => j !== n))} />
         </View>
       ))}
+      {singles.length ? <Text style={[type.caption, { color: t.text3, marginTop: 4 }]}>Just one month</Text> : null}
+      {singles.map((m) => (
+        <View key={"one" + m} style={styles.row}>
+          <Text style={[type.caption, { color: t.text2, width: 36 }]}>Only</Text>
+          <MonthField label={`${label}: one month`} value={m} width={150} onChange={(v) => { if (v === m) return; const amt = oneOffs[m]!; setMonth(m, undefined); setMonth(v, amt); }} />
+          <NumberInput kind="money" label={`${label} in ${monthName(m)} only`} value={oneOffs[m]!} width={130} step={100} onChange={(v) => setMonth(m, v)} />
+          <Text style={[type.caption, { color: t.text3 }]}>{unit.replace("/mo", "")}</Text>
+          <IconButton icon="trash" label={`Remove the ${monthName(m)} change`} onPress={() => setMonth(m, undefined)} />
+        </View>
+      ))}
       <View style={styles.row}>
         <Button title={list.length ? "Add a change" : "Set a monthly amount"} icon="plus" onPress={() => set([...list, { from: nextFrom, amount: last?.amount ?? 0 }])} style={{ minHeight: 36 }} />
-        {list.length ? <Button title="Follow my steps instead" tone="ghost" onPress={() => { set(undefined); onCleared?.(); }} style={{ minHeight: 36 }} /> : null}
+        {list.length ? (
+          <Button
+            title="Change one month"
+            tone="ghost"
+            onPress={() => {
+              // the first month after today without its own change
+              let d = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+              while (oneOffs[monthKey(d)] !== undefined) d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+              setMonth(monthKey(d), list.filter((e) => e.from <= monthKey(d)).pop()?.amount ?? 0);
+            }}
+            style={{ minHeight: 36 }}
+          />
+        ) : null}
+        {list.length || singles.length ? <Button title="Follow my steps instead" tone="ghost" onPress={() => { set(undefined); singles.forEach((m) => setMonth(m, undefined)); onCleared?.(); }} style={{ minHeight: 36 }} /> : null}
       </View>
       <Text style={[type.caption, { color: t.text3 }]}>
-        Each amount runs from its month until your next change. It goes in before your other steps, if there's that much left after your budget. Use $0 to stop.
+        Each amount runs from its month until your next change; a one-month change applies to that month only. It goes in before your other steps, if there's that much left after your budget. Use $0 to stop.
         {note ? ` ${note}` : ""} Shows as savings on your budget.
       </Text>
     </View>

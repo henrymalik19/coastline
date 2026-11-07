@@ -29,6 +29,7 @@ function useSummaries(): Record<string, string> {
     retirementIncome: retire.length ? `${retire.length} · ${money(result.d.retireIncomeAnnual / 12)}/mo` : "None added",
     income: state.incomes.length ? `${state.incomes.length} source${state.incomes.length > 1 ? "s" : ""} · ${money(result.d.leanMonthly)}/mo` : "None yet",
     budget: `${state.budget.length} items · ${money(result.d.budgetTotal)}/mo`,
+    savings: (() => { const n = Object.keys({ ...(state.plan.schedule ?? {}), ...(state.plan.scheduleMonths ?? {}) }).length; return n ? `${n} account${n > 1 ? "s" : ""} set · ${money(result.plan.months[0]?.plannedAsk ?? 0)}/mo` : "None set"; })(),
     accounts: `${state.accounts.length} accounts · ${money(result.d.invested + result.d.bal.cash)}`,
     debts: state.debts.length ? `${state.debts.length} · ${money(result.d.debtTotal)}` : "None",
     goals: state.goals.length ? `${state.goals.length} goal${state.goals.length > 1 ? "s" : ""}` : "None",

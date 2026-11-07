@@ -112,7 +112,7 @@ export default function Plan() {
           </Pressable>
         ) : (
           <Text style={[compact ? type.caption : type.body, { color: t.text2 }]}>
-            Whatever your plan doesn't assign (Accounts view) fills step 1, then step 2, and so on. To fund two steps at once, give one a share of what's left. Amounts and dates are for your numbers. Use the arrows to change the order. The dates between steps show when each one starts.
+            Whatever your monthly savings (Money → Monthly savings) don't use fills step 1, then step 2, and so on. To fund two steps at once, give one a share of what's left. Amounts and dates are for your numbers. Use the arrows to change the order. The dates between steps show when each one starts.
           </Text>
         )}
       </View>
@@ -270,7 +270,7 @@ export default function Plan() {
       <View style={{ maxWidth: 360 }}>
         <Segmented
           label="Plan view"
-          options={[{ value: "steps", label: "Steps" }, { value: "accounts", label: "Accounts" }]}
+          options={[{ value: "steps", label: "Steps" }, { value: "accounts", label: "Forecast" }]}
           value={tab}
           onChange={setTab}
         />
@@ -340,7 +340,7 @@ function SplitPicker({ label, share, amount, changed, allowAmount, onChange }: {
           {custom ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" }}>
               <NumberInput kind="money" label={`${label}, amount a month`} value={amount} width={140} step={100} onChange={(v) => onChange({ amount: v })} />
-              <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 160 }]}>a month. Change single months under Accounts.</Text>
+              <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 160 }]}>a month. Change single months under Money → Monthly savings.</Text>
             </View>
           ) : null}
         </View>
