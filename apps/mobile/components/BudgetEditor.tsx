@@ -1,10 +1,11 @@
-import type { BudgetItem } from "@coastfi/engine";
+import { nextDue, setAsideFor, type BudgetItem } from "@coastfi/engine";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../lib/confirm";
 import { groupOf, moveGroup, moveItem, UNGROUPED } from "../lib/budgetOrder";
 import { debtLabel } from "../lib/debts";
 import { paycheckFor } from "../lib/loans";
+import { monthKey } from "../lib/store";
 import { goalFromItem, suggestFor, type Suggestion } from "../lib/budgetSuggest";
 import { dueLabel, everyLabel } from "./RecurringGoalFields";
 import { money } from "../lib/format";
@@ -41,7 +42,7 @@ function grouped(items: BudgetItem[]) {
 /** Budget: groups on the right (pick one), that group's items on the left. Fills its container. */
 export function BudgetEditor() {
   const t = useTheme();
-  const { state, result } = usePlan();
+  const { state, result, start } = usePlan();
   const update = useStore((s) => s.update);
   // compact rows when the items pane itself is narrow (phones, or two panes on a mid-size window)
   const { contentWidth } = useLayout();
@@ -102,7 +103,10 @@ export function BudgetEditor() {
 
   // what's left each month once the budget and debt minimums are paid (engine numbers, normal month)
   const d = result.d;
-  const leftover = d.leanMonthly - d.budgetTotal - d.debtMins - d.setAsideMonthly;
+  // this month's set-aside, exactly (more if a goal is catching up, less if you saved ahead)
+  const thisMonth = monthKey(start);
+  const setAsideNow = state.goals.reduce((a, g) => a + setAsideFor(g, thisMonth), 0);
+  const leftover = d.leanMonthly - d.budgetTotal - d.debtMins - setAsideNow;
   const figure = (label: string, value: string, sign?: "−" | "=") => (
     <View style={styles.figure}>
       {sign ? <Text style={[type.heading, { color: t.text3, marginRight: space.sm }]}>{sign}</Text> : null}
@@ -120,7 +124,7 @@ export function BudgetEditor() {
           <Text style={[type.label, { color: t.text2 }]}>{leftover < 0 ? "Short each month" : "Left over to save"}</Text>
           <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]} numberOfLines={2}>
             {money(d.leanMonthly)} take-home − {money(d.budgetTotal)} budget{d.debtMins > 0 ? ` − ${money(d.debtMins)} debts` : ""}
-            {d.setAsideMonthly > 0 ? ` − ${money(d.setAsideMonthly, { whole: true })} set aside` : ""}
+            {setAsideNow > 0 ? ` − ${money(setAsideNow)} set aside` : ""}
           </Text>
         </View>
         <Text style={[type.stat, { color: leftover < 0 ? t.bad : t.good, fontVariant: ["tabular-nums"] }]}>{money(leftover)}/mo</Text>
@@ -155,7 +159,7 @@ export function BudgetEditor() {
         {figure("Take-home (normal month)", money(d.leanMonthly))}
         {figure("Budget", money(d.budgetTotal), "−")}
         {figure("Debt minimums", money(d.debtMins), "−")}
-        {d.setAsideMonthly > 0 ? figure("Set aside", money(d.setAsideMonthly, { whole: true }), "−") : null}
+        {setAsideNow > 0 ? figure("Set aside", money(setAsideNow), "−") : null}
         <View style={[styles.figure, styles.result, { backgroundColor: leftover < 0 ? t.badSoft : t.goodSoft }]}>
           <Text style={[type.heading, { color: t.text3, marginRight: space.sm }]}>=</Text>
           <View>
@@ -189,7 +193,7 @@ export function BudgetEditor() {
       items={[
         ...groups.map((g) => ({ key: g.name, title: g.name, subtitle: `${g.rows.length} item${g.rows.length === 1 ? "" : "s"}`, value: money(g.subtotal) })),
         ...(debtRows.length ? [{ key: DEBT_KEY, title: "Debt payments", subtitle: "From your debts", value: money(d.debtMins) }] : []),
-        ...(setRows.length ? [{ key: SET_KEY, title: "Set aside", subtitle: "Recurring goals", value: money(d.setAsideMonthly, { whole: true }) }] : []),
+        ...(setRows.length ? [{ key: SET_KEY, title: "Set aside", subtitle: "Recurring goals", value: money(setAsideNow) }] : []),
       ]}
       selected={onDebts ? DEBT_KEY : onSet ? SET_KEY : current?.name}
       onSelect={setSelected}
@@ -206,7 +210,7 @@ export function BudgetEditor() {
           <View>
             <View style={styles.headRow}>
               <Text role="heading" aria-level={2} style={[type.heading, { color: t.text, flex: 1 }]}>Set aside</Text>
-              <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(d.setAsideMonthly, { whole: true })}/mo</Text>
+              <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(setAsideNow)}/mo</Text>
             </View>
             <View style={[styles.cols, { paddingHorizontal: space.lg, paddingBottom: space.sm }]}>
               <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Goal</Text>
@@ -265,10 +269,13 @@ export function BudgetEditor() {
                 <View style={{ flex: 1, minWidth: 0, paddingVertical: 4 }}>
                   <Text numberOfLines={2} style={[type.body, { color: t.text }]}>{g.name || "Goal"}</Text>
                   <Text style={[type.caption, { color: t.text3 }]}>
-                    {money(g.target)} {everyLabel(g.recurring!.every)} · next due {dueLabel(g.recurring!.due)}
+                    {money(g.target)} {everyLabel(g.recurring!.every)} · next due {dueLabel(nextDue(g.recurring!, thisMonth))}
+                    {Math.abs(setAsideFor(g, thisMonth) - g.target / g.recurring!.every) > 0.005
+                      ? ` · usually ${money(g.target / g.recurring!.every)}/mo`
+                      : ""}
                   </Text>
                 </View>
-                <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(g.target / g.recurring!.every, { whole: true })}</Text>
+                <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(setAsideFor(g, thisMonth))}</Text>
                 <View style={[styles.actions, { width: cols.actions }]} />
               </View>
             ))

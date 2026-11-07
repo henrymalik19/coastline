@@ -1,19 +1,7 @@
 import { BASE_CHECKS } from "./constants";
 import { limitsFor } from "./limits";
 import { checksInMonth } from "./paychecks";
-import type {
-  Adjustment,
-  Alloc,
-  Debt,
-  Derived,
-  FundKey,
-  MonthRow,
-  PlanEvent,
-  PlanResult,
-  PlanSettings,
-  PlanState,
-  SimulateOptions,
-} from "./types";
+import type { Adjustment, Alloc, Debt, Derived, FundKey, MonthRow, PlanEvent, PlanResult, PlanSettings, PlanState, SimulateOptions, Goal, RecurringGoal } from "./types";
 import { addMonths, monthsBetween, num, sum } from "./util";
 
 /** Id of the synthetic debt created when a short month runs past your cash. */
@@ -27,6 +15,20 @@ export const DEFAULT_CARD_APR = 0.22;
  */
 export function isHighInterest(d: Pick<Debt, "apr" | "kind">, threshold: number): boolean {
   return d.kind !== "k401_loan" && d.apr >= threshold;
+}
+
+/** A recurring goal's next due month on or after `month` ("YYYY-MM"). */
+export function nextDue(r: Pick<RecurringGoal, "due" | "every">, month: string): string {
+  let due = r.due;
+  const every = Math.max(1, Math.round(num(r.every)));
+  while (due < month) due = addMonths(due, every);
+  return due;
+}
+
+/** What a recurring goal sets aside in `month`: what's still needed ÷ months left until it's due (that month included). */
+export function setAsideFor(g: Pick<Goal, "target" | "saved" | "recurring">, month: string): number {
+  if (!g.recurring || !(num(g.target) > 0)) return 0;
+  return Math.max(0, num(g.target) - num(g.saved)) / (monthsBetween(month, nextDue(g.recurring, month)) + 1);
 }
 
 /** Whether the plan puts extra money toward this debt (false = minimum payments only). */
@@ -208,8 +210,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     for (const gl of goals) {
       const r = gl.recurring;
       if (!r || gl.target <= 0) continue;
-      while (r.due < monthStr) r.due = addMonths(r.due, r.every); // a due date already past
-      const put = Math.max(0, gl.target - gl.saved) / (monthsBetween(monthStr, r.due) + 1);
+      r.due = nextDue(r, monthStr); // a due date already past moves to the next one
+      const put = setAsideFor(gl, monthStr);
       gl.saved += put;
       setAside += put;
       if (r.due === monthStr) {

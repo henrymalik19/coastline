@@ -7,6 +7,7 @@ import {
   isHighInterest,
   k401Cost,
   rateIn,
+  setAsideFor,
   limitsFor,
   matchFor,
   project,
@@ -510,5 +511,16 @@ describe("recurring goals (holidays, yearly bills)", () => {
     expect(on.retireMonthly).toBe(100);
     const off = derive(base({ goals: [{ ...g, recurring: { ...g.recurring, inRetirement: false } }] }), START);
     expect(off.retireMonthly).toBe(0);
+  });
+});
+
+describe("setAsideFor", () => {
+  it("is what's still needed ÷ months left, and rolls past due dates forward", () => {
+    const g = { target: 1200, saved: 0, recurring: { every: 12, due: "2026-12" } };
+    expect(setAsideFor(g, "2026-11")).toBe(600);
+    expect(setAsideFor({ ...g, saved: 300 }, "2026-11")).toBe(450);
+    expect(setAsideFor(g, "2027-01")).toBeCloseTo(100, 9); // next due Dec 2027
+    expect(setAsideFor({ target: 139, saved: 0, recurring: { every: 12, due: "2027-10" } }, "2026-11")).toBeCloseTo(139 / 12, 9);
+    expect(setAsideFor({ target: 500, saved: 0 }, "2026-11")).toBe(0);
   });
 });

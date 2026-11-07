@@ -1,4 +1,4 @@
-import type { AccountType } from "@coastfi/engine";
+import { nextDue, setAsideFor, type AccountType } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -13,6 +13,7 @@ import { paycheckFor } from "../../../lib/loans";
 import { netWorth } from "../../../lib/networth";
 import { dueLabel, everyLabel } from "../../../components/RecurringGoalFields";
 import { usePlan } from "../../../lib/plan";
+import { monthKey } from "../../../lib/store";
 import { space, type, useTheme } from "../../../lib/theme";
 
 const typeLabel = (k: AccountType) => ACCOUNT_TYPES.find((x) => x.value === k)?.label ?? k;
@@ -21,13 +22,14 @@ const pct = (v: number) => percent(v, 1).replace(/\.0%$/, "%");
 /** Money: where your money stands today. Each card opens its editor. */
 export default function MoneyOverview() {
   const t = useTheme();
-  const { state, result } = usePlan();
+  const { state, result, start } = usePlan();
   const { twoColumn } = useLayout();
   const d = result.d;
   const cash = d.bal.cash;
   const property = d.bal.property ?? 0;
   const worth = netWorth(d, state);
-  const leftover = d.leanMonthly - d.budgetTotal - d.debtMins - d.setAsideMonthly;
+  const setAsideNow = state.goals.reduce((a, g) => a + setAsideFor(g, monthKey(start)), 0);
+  const leftover = d.leanMonthly - d.budgetTotal - d.debtMins - setAsideNow;
   const goals = state.goals ?? [];
   const retire = (state.retirementIncome ?? []).filter((x) => x.monthly > 0);
   const debts = state.debts.filter((x) => x.balance > 0);
@@ -53,7 +55,7 @@ export default function MoneyOverview() {
       <Line label="Take-home" value={money(d.leanMonthly)} href="/money/income" hint={`${state.incomes.length} income source${state.incomes.length === 1 ? "" : "s"}`} />
       <Line label="Budget" value={`− ${money(d.budgetTotal)}`} href="/money/budget" hint={`${state.budget.length} items`} />
       {d.debtMins > 0 ? <Line label="Debt payments" value={`− ${money(d.debtMins)}`} href="/money/debts" /> : null}
-      {d.setAsideMonthly > 0 ? <Line label="Set aside" value={`− ${money(d.setAsideMonthly, { whole: true })}`} href="/money/goals" hint="Recurring goals" /> : null}
+      {setAsideNow > 0 ? <Line label="Set aside" value={`− ${money(setAsideNow)}`} href="/money/goals" hint="Recurring goals, this month" /> : null}
       <Divider />
       <View style={[styles.line, { paddingVertical: space.sm }]}>
         <Text style={[type.heading, { color: t.text, flex: 1 }]}>{leftover < 0 ? "Short each month" : "Left over to save"}</Text>
@@ -96,7 +98,7 @@ export default function MoneyOverview() {
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{g.name || "Goal"}</Text>
                 {g.recurring ? (
-                  <Text style={[type.caption, { color: t.text3 }]}>{everyLabel(g.recurring.every)} · due {dueLabel(g.recurring.due)}</Text>
+                  <Text style={[type.caption, { color: t.text3 }]}>{everyLabel(g.recurring.every)} · due {dueLabel(nextDue(g.recurring, monthKey(start)))}</Text>
                 ) : null}
               </View>
               <Text style={[type.label, { color: t.text2, fontVariant: ["tabular-nums"] }]}>

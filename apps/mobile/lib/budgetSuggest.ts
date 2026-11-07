@@ -52,7 +52,7 @@ export function suggestFor(item: BudgetItem): Suggestion | null {
 function nextDue(today: Date, december: boolean): string {
   const y = today.getFullYear();
   if (december) return `${today.getMonth() === 11 ? y + 1 : y}-12`;
-  const d = new Date(y, today.getMonth() + 12, 1);
+  const d = new Date(y, today.getMonth() + 11, 1); // 12 equal set-asides, counting this month
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 

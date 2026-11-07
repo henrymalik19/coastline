@@ -31,7 +31,7 @@ describe("budget suggestions", () => {
     const g = goalFromItem(item("Christmas gifts", "Personal", 100), true, true, new Date(2026, 10, 7));
     expect(g).toMatchObject({ name: "Christmas gifts", target: 1200, saved: 0, recurring: { every: 12, due: "2026-12" } });
     const v = goalFromItem(item("Vacation", "Personal", 250), true, false, new Date(2026, 10, 7));
-    expect(v.recurring!.due).toBe("2027-11");
+    expect(v.recurring!.due).toBe("2027-10");
     const w = goalFromItem(item("Wedding", "Family", 500), false, false);
     expect(w.recurring).toBeUndefined();
   });

@@ -30,7 +30,8 @@ export function RecurringGoalFields({ goal, onChange }: { goal: Goal; onChange: 
         label="Repeats"
         hint="Holidays, yearly insurance, annual trips: set aside a little each month, spend it when it's due"
         value={!!r}
-        onChange={(on) => onChange({ recurring: on ? { every: 12, due: monthsFromNow(12) } : undefined })}
+        // due 11 months out = 12 equal set-asides, counting this month
+        onChange={(on) => onChange({ recurring: on ? { every: 12, due: monthsFromNow(11) } : undefined })}
       />
       {r ? (
         <View style={{ gap: space.xs }}>
@@ -47,7 +48,7 @@ export function RecurringGoalFields({ goal, onChange }: { goal: Goal; onChange: 
           />
           {goal.target > 0 ? (
             <Text style={[type.caption, { color: t.text3 }]}>
-              About {money(goal.target / r.every, { whole: true })}/mo set aside ({money(goal.target)} {everyLabel(r.every)}). If you're behind, the plan catches up
+              Usually {money(goal.target / r.every)}/mo set aside ({money(goal.target)} {everyLabel(r.every)}). If you're behind, the plan catches up
               before {dueLabel(r.due)}; if you saved extra, later months ask for less. Update "saved so far" at your monthly check-in.
             </Text>
           ) : null}
