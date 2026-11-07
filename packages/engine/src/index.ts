@@ -10,7 +10,7 @@ export { limitsFor, DEFAULT_LIMITS } from "./limits";
 export { derive } from "./derive";
 export { simulatePlan, isHighInterest, paysExtra, rateIn, k401Cost, nextDue, setAsideFor, SHORTFALL_ID, DEFAULT_CARD_APR } from "./plan";
 export { project, fireNumber, coastNumberAt, coastCrossing } from "./project";
-export { accountForecasts, type AccountForecast, type AccountMonth, type AccountYear, type AccountKey } from "./forecast";
+export { accountForecasts, accountGroup, type AccountForecast, type AccountMonth, type AccountYear, type AccountKey } from "./forecast";
 export { monteCarlo } from "./montecarlo";
 export { run, MC_SEED } from "./run";
 export { addMonths, monthsBetween, mulberry32 } from "./util";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accountForecasts, derive, run } from "../src";
+import { accountForecasts, accountGroup, derive, run } from "../src";
 import { sampleState, START } from "./fixtures";
 
 describe("account forecasts", () => {
@@ -20,5 +20,17 @@ describe("account forecasts", () => {
     const inv = f.filter((a) => a.invested);
     const k = 24;
     expect(inv.reduce((a, x) => a + x.months[k - 1]!.balance, 0)).toBeCloseTo(o.projSeries[k]!, 2);
+  });
+});
+
+describe("accountGroup", () => {
+  it("uses what you picked, then the name, then the type", () => {
+    expect(accountGroup({ name: "Fidelity 401(k)", type: "pretax" })).toBe("k401");
+    expect(accountGroup({ name: "Traditional IRA", type: "pretax" })).toBe("ira");
+    expect(accountGroup({ name: "Roth 401(k)", type: "roth" })).toBe("k401");
+    expect(accountGroup({ name: "Old job plan", type: "pretax", counts: "other" })).toBe("other");
+    expect(accountGroup({ name: "Savings", type: "cash" })).toBe("cash");
+    expect(accountGroup({ name: "Home", type: "property" })).toBe(null);
+    expect(accountGroup({ name: "Irving Trust", type: "roth" })).toBe("ira");
   });
 });

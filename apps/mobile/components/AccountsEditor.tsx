@@ -1,4 +1,4 @@
-import type { Account, AccountType } from "@coastfi/engine";
+import { accountGroup, type Account, type AccountType, type PlanAccount } from "@coastfi/engine";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { confirm } from "../lib/confirm";
@@ -17,6 +17,13 @@ export const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: "hsa", label: "HSA" },
   { value: "cash", label: "Cash" },
   { value: "property", label: "Property" },
+];
+const COUNTS: { value: PlanAccount; label: string }[] = [
+  { value: "k401", label: "401(k)" },
+  { value: "ira", label: "IRA" },
+  { value: "hsa", label: "HSA" },
+  { value: "taxable", label: "Brokerage" },
+  { value: "other", label: "Other" },
 ];
 const typeLabel = (k: AccountType) => ACCOUNT_TYPES.find((x) => x.value === k)?.label ?? k;
 
@@ -117,6 +124,19 @@ export function AccountsEditor() {
                     <TextField label="Account name" placeholder="e.g. Fidelity 401(k)" value={a.name} onChange={(v) => update((p) => { p.accounts[i]!.name = v; })} />
                     <Segmented label="Account type" options={ACCOUNT_TYPES} value={a.type} onChange={(v) => update((p) => { p.accounts[i]!.type = v; })} />
                     <Text style={[type.caption, { color: t.text3 }]}>{HELP[a.type]}</Text>
+                    {a.type !== "cash" && a.type !== "property" ? (
+                      <>
+                        <Segmented
+                          label="Counts as"
+                          options={COUNTS}
+                          value={(accountGroup(a) ?? "other") as PlanAccount}
+                          onChange={(v) => update((p) => { p.accounts[i]!.counts = v; })}
+                        />
+                        <Text style={[type.caption, { color: t.text3 }]}>
+                          Which account it is on the Plan tab. The plan adds to your 401(k), IRA, HSA and brokerage; pick Other for accounts it doesn't add to (an old employer's plan, a pension, a rollover).
+                        </Text>
+                      </>
+                    ) : null}
                     <View style={[styles.row, { justifyContent: "space-between" }]}>
                       <View style={styles.row}>
                         <IconButton icon="up" label={`Move ${name} up`} disabled={i === 0} onPress={() => move(i, -1)} />

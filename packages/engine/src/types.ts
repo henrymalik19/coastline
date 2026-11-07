@@ -72,7 +72,17 @@ export type BudgetItem = {
 };
 /** "property": what a home or rental is worth. Counts in net worth, not as invested money for Coast FI. */
 export type AccountType = "pretax" | "roth" | "taxable" | "hsa" | "cash" | "property";
-export type Account = { id: string; name: string; type: AccountType; balance: number; plaidAccountId?: string };
+/** Which plan account a balance belongs to (the plan adds to 401(k), IRA, HSA and brokerage). */
+export type PlanAccount = "k401" | "ira" | "hsa" | "taxable" | "other";
+export type Account = {
+  id: string;
+  name: string;
+  type: AccountType;
+  balance: number;
+  plaidAccountId?: string;
+  /** What this account counts as in the plan. Missing = guessed from the name and type. */
+  counts?: PlanAccount;
+};
 /** What kind of debt this is. Display only; payoff math is the same for every kind. */
 export type DebtKind = "credit_card" | "car" | "student" | "mortgage" | "personal" | "medical" | "k401_loan" | "other";
 export type Debt = {

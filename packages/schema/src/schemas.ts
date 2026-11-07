@@ -61,6 +61,7 @@ export const AccountSchema = z.object({
   type: AccountTypeSchema,
   balance: money,
   plaidAccountId: z.string().optional(),
+  counts: z.enum(["k401", "ira", "hsa", "taxable", "other"]).optional(),
 });
 export const DebtKindSchema = z.enum(["credit_card", "car", "student", "mortgage", "personal", "medical", "k401_loan", "other"]);
 export const DebtSchema = z.object({

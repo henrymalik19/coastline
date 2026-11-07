@@ -70,8 +70,10 @@ export function AccountsForecast({ state, o, start }: Props) {
         : k.startsWith("goal:")
           ? `Goal: ${state.goals.find((g) => "goal:" + g.id === k)?.name ?? "Goal"}`
           : k === "ira"
-            ? "IRA (Roth)"
-            : BUCKET_LABELS[k as "k401" | "hsa" | "taxable"];
+            ? "IRA"
+            : k === "other"
+              ? "Other investments"
+              : BUCKET_LABELS[k as "k401" | "hsa" | "taxable"];
   // show accounts that have money or get some in the next two years
   const shown = all.filter((a) => a.start > 0.5 || a.months.slice(0, 24).some((m) => m.total > 0.5));
   const totalNow = shown.filter((a) => a.key !== "debt").reduce((s, a) => s + (a.months[0]?.total ?? 0), 0);
@@ -111,6 +113,11 @@ export function AccountsForecast({ state, o, start }: Props) {
       <View key={k}>
         <View style={{ padding: space.lg, gap: 6 }}>
           <Text style={[type.body, { color: t.text, fontWeight: "700" }]}>{label(k)}</Text>
+          {a.accounts.length > 1 || (a.accounts.length === 1 && a.accounts[0]!.name.trim() && a.accounts[0]!.name.trim() !== label(k)) ? (
+            <Text style={[type.caption, { color: t.text3 }]}>
+              Today is {a.accounts.map((x) => `${x.name.trim() || "Unnamed account"} ${money(x.balance)}`).join(" + ")}.{k === "cash" ? "" : " Wrong account here? Change what it counts as under Money → Accounts."}
+            </Text>
+          ) : null}
           <Text style={[type.caption, { color: t.text2 }]}>
             <Text style={{ color: t.text, fontWeight: "600" }}>This month: {isDebt ? `${money(m0a.total)} extra` : money(m0a.total)}</Text>
             {m0a.total > 0.5 && !isDebt && k !== "cash" ? ` (${parts(m0a, k)})` : ""}
@@ -119,7 +126,7 @@ export function AccountsForecast({ state, o, start }: Props) {
           {thisYear?.limit ? (
             <View style={{ gap: 4, maxWidth: 360 }}>
               <Text style={[type.caption, { color: t.text2 }]}>
-                {y0}: {money(yearIn, { whole: true })} of the {money(thisYear.limit, { whole: true })} limit{k === "hsa" ? " (yours + employer's)" : ""}
+                {y0}: {money(yearIn)} of the {money(thisYear.limit)} limit{k === "hsa" ? " (yours + employer's)" : ""}
                 {guessed ? (k === "ira" ? " · add what you've put in this year (Money → Accounts)" : " · counts this year's earlier paychecks at today's amounts") : ""}
               </Text>
               <ProgressBar progress={Math.min(1, yearIn / thisYear.limit)} color={t.good} />
@@ -129,7 +136,7 @@ export function AccountsForecast({ state, o, start }: Props) {
             {points.map((p) => (
               <View key={p.label} style={{ minWidth: 92 }}>
                 <Text style={[type.caption, { color: t.text3 }]}>{p.label}</Text>
-                <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(p.v, { whole: true })}</Text>
+                <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(p.v)}</Text>
               </View>
             ))}
             {paidOff ? (
@@ -175,7 +182,7 @@ export function AccountsForecast({ state, o, start }: Props) {
                       ) : (
                         <Text style={[type.caption, { color: t.text, width: 96, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{inText}</Text>
                       )}
-                      <Text style={[type.caption, { color: t.text2, width: 104, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(m.balance, { whole: true })}</Text>
+                      <Text style={[type.caption, { color: t.text2, width: 104, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(m.balance)}</Text>
                     </View>
                     {editing && step ? (
                       <View style={styles.editRow}>
