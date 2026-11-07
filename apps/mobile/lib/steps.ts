@@ -43,7 +43,14 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
       m: m.m,
       label: m.m === 0 ? `This month (${monthLabel(start, 0)})` : monthLabel(start, m.m),
       amount: pick(m),
-      note: m.extraCheck ? "3 paychecks this month" : m.shortfall > 0.5 ? "short month" : undefined,
+      note:
+        [m.extraCheck ? "3 paychecks" : "", m.shortfall > 0.5 ? "short month" : "", pick(m) <= 0.5 && !m.emergency
+            ? m.alloc.ira + m.alloc.hsa + m.alloc.k401Step > 0.5
+              ? "this month goes to retirement accounts first (new yearly limits)"
+              : "earlier steps use it all this month"
+            : "", m.emergency ? "emergency mode" : ""]
+          .filter(Boolean)
+          .join(" · ") || undefined,
     }));
   /**
    * This month's amount, and whether it changes month to month. Never an average: real months differ
@@ -127,7 +134,27 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
               const after = hi ? 0 : Math.max(0, ...highEnds.map((m) => m + 1));
               const from = Math.max(after, pl.months.findIndex((m, i) => i >= after && m.alloc.debt > 0.5));
               const avg = typical((m) => m.alloc.debt, from, last !== null ? last + 1 : undefined);
-              return `${list.map((x) => `${debtLabel(x)} ${money(x.balance)}`).join(", ")}${avg > 0 ? ` · ${pace((m) => m.alloc.debt, avg, from, " extra", last ?? undefined)}` : " · minimum payments only (no extra reaches this step)"} · ${last !== null ? "paid off " + when(last) : "not paid off within the plan"}`;
+              const paceText = avg > 0 ? ` · ${pace((m) => m.alloc.debt, avg, from, " extra", last ?? undefined)}` : " · minimum payments only (no extra reaches this step)";
+              // payoff order (highest rate first, as the plan pays them) with dates
+              const order = list
+                .map((x) => ({ x, end: ev("debt:" + x.id)?.m }))
+                .sort((a, b) => (a.end ?? 1e9) - (b.end ?? 1e9));
+              const orderText = order.map(({ x, end }) => `${debtLabel(x)} ${end !== undefined ? when(end) : "after the plan"}`).join(", ");
+              // each month: the debt that gets the extra (avalanche: highest rate still owed), and payoffs
+              if (ctx.schedule) {
+                const byRate = [...list].sort((a, b) => b.apr - a.apr);
+                ctx.schedule = ctx.schedule.map((r) => {
+                  const paid = order.filter(({ end }) => end === r.m).map(({ x }) => `${debtLabel(x)} paid off`);
+                  const target = byRate.find((x) => (ev("debt:" + x.id)?.m ?? 1e9) >= r.m);
+                  const notes = [
+                    r.amount > 0.5 && target ? `→ ${debtLabel(target)} (${percent(target.apr, 2).replace(/\.?0+%$/, "%")})` : "",
+                    ...paid,
+                    r.note ?? "",
+                  ].filter(Boolean);
+                  return { ...r, note: notes.join(" · ") || undefined };
+                });
+              }
+              return `${list.map((x) => `${debtLabel(x)} ${money(x.balance)}`).join(", ")}${paceText} · paid off in order: ${orderText}`;
             })(),
     };
   }

@@ -135,12 +135,18 @@ export function DebtEditor({
           ) : null}
         </>
       ) : null}
-      {kind.value === "student" ? (
+      {!paidFrom ? (
         <>
           <Divider />
           <ToggleRow
-            label="On income-driven repayment or PSLF"
-            hint="The plan pays only the minimum and never extra, since the rest may be forgiven"
+            label={kind.value === "student" ? "On income-driven repayment or PSLF" : "Only pay the minimum"}
+            hint={
+              kind.value === "student"
+                ? "The plan pays only the minimum and never extra, since the rest may be forgiven"
+                : kind.value === "mortgage"
+                  ? "Keep paying the regular payment and invest instead of paying it off early (common with a low rate)"
+                  : "The plan never puts extra toward this debt"
+            }
             value={!!debt.minimumOnly}
             onChange={(on) => onChange({ minimumOnly: on || undefined })}
           />
