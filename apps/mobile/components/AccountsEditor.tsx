@@ -168,7 +168,7 @@ export function AccountsEditor() {
                           onChange={(v) => update((p) => { p.accounts[i]!.counts = v; })}
                         />
                         <Text style={[type.caption, { color: t.text3 }]}>
-                          Which account it is on the Plan tab. The plan adds to your 401(k), IRA, HSA and brokerage; pick Other for accounts it doesn't add to (an old employer's plan, a pension, a rollover).
+                          Which account it is in your budget and forecast. The plan adds to your 401(k), IRA, HSA and brokerage; pick Other for accounts it doesn't add to (an old employer's plan, a pension, a rollover).
                         </Text>
                       </>
                     ) : null}

@@ -15,6 +15,7 @@ import { ContributionsCard } from "../ContributionsCard";
 import { RetirementIncomeEditor } from "../RetirementIncomeEditor";
 import { GoalEditor } from "../GoalEditor";
 import { BudgetEditor } from "../BudgetEditor";
+import { PlanSteps } from "../PlanSteps";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "../form";
 import { Icon, type IconName } from "../Icon";
 import { IncomesEditor } from "../IncomeEditor";
@@ -26,7 +27,7 @@ import { HealthcareSuggestion } from "../HealthcareSuggestion";
 
 /* ---------- registry ---------- */
 
-type SectionKey = "account" | "appearance" | "profile" | "retirementIncome" | "income" | "budget" | "savings" | "accounts" | "debts" | "goals" | "assumptions" | "limits" | "data";
+type SectionKey = "account" | "appearance" | "profile" | "retirementIncome" | "income" | "budget" | "savings" | "accounts" | "debts" | "goals" | "assumptions" | "priorities" | "limits" | "data";
 type SectionMeta = { key: SectionKey; title: string; subtitle: string; icon: IconName; /** Not listed (moved elsewhere; old links still work). */ hidden?: boolean };
 
 export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
@@ -53,6 +54,7 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
   {
     title: "How it's calculated",
     items: [
+      { key: "priorities", title: "Priority order", subtitle: "Where money your budget doesn't assign goes, step by step", icon: "plan" },
       { key: "assumptions", title: "Assumptions & plan rules", subtitle: "Returns, withdrawal rate, taxes, emergency fund", icon: "sliders" },
       { key: "limits", title: "Contribution limits", subtitle: "401(k), IRA and HSA limits by year", icon: "shield" },
     ],
@@ -263,7 +265,7 @@ function GoalsSection() {
   return (
     <>
       <Text style={[type.body, { color: t.text2 }]}>
-        Things you're saving up for: a house deposit, a car, a wedding. Change their priority on the Plan tab. Turn on "Repeats" for things that come around again, like holidays or a yearly bill.
+        Things you're saving up for: a house deposit, a car, a wedding. Change their priority under Settings → Priority order. Turn on "Repeats" for things that come around again, like holidays or a yearly bill.
       </Text>
       <EmergencyFundGoal />
       {state.goals.length === 0 ? <Empty text="No goals yet" /> : null}
@@ -551,6 +553,7 @@ export const SECTION_SCREENS: Record<SectionKey, ComponentType> = {
   accounts: AccountsSection,
   debts: DebtsSection,
   goals: GoalsSection,
+  priorities: () => <PlanSteps />,
   assumptions: AssumptionsSection,
   limits: LimitsSection,
   data: DataSection,

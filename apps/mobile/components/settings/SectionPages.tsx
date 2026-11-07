@@ -37,6 +37,7 @@ function useSummaries(): Record<string, string> {
     accounts: `${state.accounts.length} accounts · ${money(result.d.invested + result.d.bal.cash)}`,
     debts: state.debts.length ? `${state.debts.length} · ${money(result.d.debtTotal)}` : "None",
     goals: state.goals.length ? `${state.goals.length} goal${state.goals.length > 1 ? "s" : ""}` : "None",
+    priorities: `${state.plan.steps.length} steps · emergency fund, debts, retirement accounts`,
     assumptions: `${(state.ret * 100).toFixed(1)}% return · ${(state.swr * 100).toFixed(2)}% withdrawal`,
     limits: `${state.limits.length} years`,
     data: "Export, import, reset",

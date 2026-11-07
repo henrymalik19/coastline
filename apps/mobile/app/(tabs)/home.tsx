@@ -54,7 +54,7 @@ export default function Home() {
       return k === key;
     };
     const i = steps.findIndex(match);
-    return i < 0 ? undefined : `Plan step ${i + 1}`;
+    return i < 0 ? undefined : `Priority ${i + 1}`;
   };
 
   const coastAge = o.crossing === null ? null : d.age + o.crossing;

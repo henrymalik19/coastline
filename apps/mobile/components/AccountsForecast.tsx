@@ -22,6 +22,8 @@ type Props = {
   state: PlanState; o: RunResult; start: Date;
   /** Fill the height it's given (the table scrolls inside). */
   fill?: boolean;
+  /** Start on this account (from the overview). */
+  initialPick?: string;
 };
 
 // thin, quiet scrollbars for the table (web)
@@ -39,7 +41,7 @@ const ym = (start: Date, m: number) => {
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const monthName = (key: string) => `${MON[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
 
-export function AccountsForecast({ state, o, start, fill }: Props) {
+export function AccountsForecast({ state, o, start, fill, initialPick }: Props) {
   const t = useTheme();
   const update = useStore((s) => s.update);
   const router = useRouter();
@@ -88,7 +90,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
   // show accounts that have money or get some in the next two years
   const shown = all.filter((a) => a.start > 0.5 || a.months.slice(0, 24).some((m) => m.total > 0.5) || (schedule[a.key]?.length ?? 0) > 0);
   // which account the table shows: one at a time (phones start there), or all side by side
-  const [pickRaw, setPick] = useState<string | null>(null);
+  const [pickRaw, setPick] = useState<string | null>(initialPick ?? null);
   const [picking, setPicking] = useState(false);
   const pick = pickRaw === "all" || (pickRaw && shown.some((a) => a.key === pickRaw)) ? pickRaw : compact ? shown[0]?.key ?? "all" : "all";
   const cols = pick === "all" ? shown : shown.filter((a) => a.key === pick);

@@ -58,7 +58,7 @@ export function SavingsEditor() {
   return (
     <>
       <Text style={[type.body, { color: t.text2 }]}>
-        These come out of what's left after your budget and debt payments. You can also set them on each account (Money → Accounts) or goal. An account with no amount gets whatever your plan steps give it. These show as savings on your budget.
+        These come out of what's left after your budget and debt payments. You can also set them on each account (Money → Accounts) or goal. An account with no amount gets whatever your priority order gives it. These show as savings on your budget.
       </Text>
 
       <Card style={{ gap: 4 }}>
@@ -114,7 +114,7 @@ export function SavingsEditor() {
         </Card>
       ) : null}
       <Pressable role="link" onPress={() => router.push("/plan")} hitSlop={6} style={styles.link}>
-        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>See the forecast month by month (Plan → Forecast)</Text>
+        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>See the forecast month by month (Forecast)</Text>
         <Icon name="chevron" size={12} color={t.accent} />
       </Pressable>
     </>

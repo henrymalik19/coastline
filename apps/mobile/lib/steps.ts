@@ -67,7 +67,7 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
     if (!first) return "";
     const startsNow = from === 0 && rows[0]!.amount > 0.5;
     if (!varies) return startsNow ? `${money(first.amount)}/mo${what}` : `${money(first.amount)}/mo${what} from ${first.label}`;
-    return startsNow ? `${money(rows[0]!.amount)}${what} this month, varies by month (see Plan → Forecast)` : `starts ${first.label}, varies by month (see Plan → Forecast)`;
+    return startsNow ? `${money(rows[0]!.amount)}${what} this month, varies by month (see Forecast)` : `starts ${first.label}, varies by month (see Forecast)`;
   };
   // Coast FI month: after it, more investing is optional (it retires you earlier, it isn't needed)
   const coastM = o.crossing === null ? null : Math.round(o.crossing * 12);

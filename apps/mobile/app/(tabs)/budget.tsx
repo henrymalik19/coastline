@@ -402,12 +402,8 @@ export default function Budget() {
                 <FormRow label="Assigned" hint={c.target > 0.5 ? `Plan: ${money(c.target)}` : undefined}>
                   <InlineMoney label={`${label(c)} assigned in ${nameOf(month)}`} value={l.assigned} onChange={(v) => setAssigned(c.key, v)} />
                 </FormRow>
-                <FormRow label={c.moves ? "Paid" : "Spent"} hint={c.moves ? "Counts as paid when assigned" : explicitSpent ? "Includes an amount from before transactions" : "From transactions"}>
-                  {c.moves ? (
-                    <InlineMoney label={`${label(c)} paid in ${nameOf(month)}`} value={l.spent} onChange={(v) => setSpent(c.key, v)} />
-                  ) : (
-                    <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(l.spent)}</Text>
-                  )}
+                <FormRow label={c.moves ? "Paid" : "Spent"} hint={explicitSpent ? "Includes an amount from before transactions" : c.moves ? "Counts as paid when assigned, or from transfers" : "From transactions"}>
+                  <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(l.spent)}</Text>
                 </FormRow>
                 <FormRow label="Available" hint={l.carried > 0.5 ? `${money(l.carried)} carried over` : (l.funded ?? 0) > 0.5 ? `+${money(l.funded ?? 0)} from card spending` : undefined}>
                   <Text style={[type.body, { color: l.available < -0.005 ? t.bad : l.available > 0.5 ? t.good : t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(l.available)}</Text>
@@ -418,7 +414,7 @@ export default function Budget() {
                 {l.available < -0.005 ? <Chip title={`Cover ${money(-l.available)}`} tone="accent" icon="check" onPress={() => setAssigned(c.key, l.assigned - l.available)} /> : null}
                 <Chip title="Transaction" icon="plus" onPress={() => setAdding({ categoryId: c.key })} />
                 {l.assigned > 0.005 ? <Chip title={moveOpen ? "Cancel move" : "Move money"} onPress={() => setMoveOpen((v) => !v)} /> : null}
-                {explicitSpent ? <Chip title={c.moves ? "Same as assigned" : "Remove old amount"} onPress={() => setSpent(c.key, undefined)} /> : null}
+                {explicitSpent ? <Chip title="Remove old amount" onPress={() => setSpent(c.key, undefined)} /> : null}
               </View>
             </View>
             {moveOpen && l.assigned > 0.005 ? (

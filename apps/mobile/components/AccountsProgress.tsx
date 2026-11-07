@@ -1,0 +1,168 @@
+/**
+ * Accounts filling up: each account against its target (the emergency fund, this year's limit for the
+ * 401(k) / HSA / IRA, a goal) or its payoff (a debt), and when it gets there. Tap one for its month by
+ * month forecast.
+ */
+import { accountForecasts, BUCKET_LABELS, type AccountKey } from "@coastfi/engine";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { debtLabel } from "../lib/debts";
+import { money, monthLabel } from "../lib/format";
+import { usePlan } from "../lib/plan";
+import { stepInfo } from "../lib/steps";
+import { space, type, useTheme } from "../lib/theme";
+import { Icon } from "./Icon";
+import { ProgressBar } from "./ProgressRing";
+import { Card, Divider, SectionLabel } from "./ui";
+
+type Row = {
+  key: AccountKey;
+  name: string;
+  /** Right side: "$13,962 of $23,820", "$3,000 owed". */
+  value: string;
+  /** 0–1, or none (brokerage, debts). */
+  progress?: number;
+  /** When / how it gets there. */
+  status: string;
+  /** A to-do for it (e.g. what to set per paycheck). */
+  tip?: string;
+  color: string;
+  done?: boolean;
+};
+
+export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void }) {
+  const t = useTheme();
+  const { state, result, actual, start } = usePlan();
+  const d = result.d;
+  const pl = actual;
+  const fc = accountForecasts(state, d, pl, d.r);
+  const y0 = start.getFullYear();
+  const when = (m: number | undefined) => (m === undefined ? undefined : m <= 0 ? "this month" : monthLabel(start, m));
+  const ev = (key: string) => pl.events.find((e) => e.key === key)?.m;
+  const coastM = result.crossing === null ? null : Math.round(result.crossing * 12);
+  const c = state.contributed && state.contributed.year === y0 ? state.contributed : undefined;
+  const real = { ...result, plan: pl };
+  const tipFor = (step: "k401" | "hsa") => {
+    if (!state.plan.steps.includes(step)) return undefined;
+    const info = stepInfo(step, state, real, start);
+    const first = info?.meta.split(" · ")[0];
+    return first && /^From /.test(first) ? first : undefined;
+  };
+
+  const rows: Row[] = [];
+  // emergency fund
+  if (pl.fullTarget > 0) {
+    const cash = d.bal.cash;
+    const full = cash >= pl.fullTarget - 0.5;
+    rows.push({
+      key: "cash",
+      name: "Emergency fund",
+      value: `${money(cash, { whole: true })} of ${money(pl.fullTarget, { whole: true })}`,
+      progress: Math.min(1, cash / pl.fullTarget),
+      status: full ? "Full" : ev("fullEF") !== undefined ? `Full by ${when(ev("fullEF"))}` : "Not full in the plan yet",
+      color: t.good,
+      done: full,
+    });
+  }
+  // accounts with a yearly limit
+  for (const k of ["k401", "hsa", "ira"] as const) {
+    const a = fc.find((x) => x.key === k);
+    if (!a) continue;
+    const yr = a.years.find((y) => y.year === y0);
+    if (!yr?.limit) continue;
+    const before = start.getMonth() === 0 ? 0 : k === "k401" ? c?.k401 ?? pl.ytdBefore?.k401 ?? 0 : k === "hsa" ? c?.hsa ?? pl.ytdBefore?.hsa ?? 0 : c?.ira ?? 0;
+    const yearIn = (k === "hsa" ? yr.total : yr.employee) + before;
+    const maxed = pl.maxedYears[k].includes(y0) || yearIn >= yr.limit - 1;
+    const nextYear = a.years.find((y) => y.year === y0 + 1);
+    const nextMaxed = pl.maxedYears[k].includes(y0 + 1);
+    const nothing = yearIn < 0.5 && a.start < 0.5;
+    if (nothing && !(nextYear && nextYear.total > 0.5)) continue;
+    rows.push({
+      key: k,
+      name: k === "ira" ? "IRA" : BUCKET_LABELS[k],
+      value: `${money(yearIn, { whole: true })} of ${money(yr.limit, { whole: true })}`,
+      progress: Math.min(1, yearIn / yr.limit),
+      status: maxed ? `Maxed in ${y0}` : `${money(Math.max(0, yr.limit - yearIn), { whole: true })} of room left in ${y0}${nextYear ? ` · ${y0 + 1}: ${nextMaxed ? "maxed" : `about ${money(nextYear.employee || nextYear.total, { whole: true })}`}` : ""}`,
+      tip: k === "k401" || (k === "hsa" && state.plan.hsaPayroll !== false) ? tipFor(k) : undefined,
+      color: t.series[k],
+      done: maxed,
+    });
+  }
+  // investments without a limit
+  for (const k of ["taxable", "other"] as const) {
+    const a = fc.find((x) => x.key === k);
+    if (!a) continue;
+    const later = coastM !== null && coastM > 0 ? a.months[Math.min(coastM, a.months.length - 1)]?.balance : undefined;
+    if (a.start < 0.5 && !(later && later > 0.5)) continue;
+    rows.push({
+      key: k,
+      name: k === "taxable" ? "Brokerage" : "Other investments",
+      value: money(a.start, { whole: true }),
+      status: later !== undefined ? `About ${money(later, { whole: true })} at Coast FI (${monthLabel(start, coastM!)})` : "Today",
+      color: k === "taxable" ? t.series.taxable : t.text3,
+    });
+  }
+  // goals
+  for (const g of state.goals.filter((x) => !x.recurring && x.target > 0)) {
+    const done = g.saved >= g.target - 0.5;
+    const m = ev("goal:" + g.id);
+    rows.push({
+      key: ("goal:" + g.id) as AccountKey,
+      name: g.name || "Goal",
+      value: `${money(g.saved, { whole: true })} of ${money(g.target, { whole: true })}`,
+      progress: Math.min(1, g.saved / g.target),
+      status: done ? "Reached" : m !== undefined ? `Reached ${when(m)}` : "Not reached in the plan yet",
+      color: t.series.goals,
+      done,
+    });
+  }
+  // debts
+  for (const x of state.debts.filter((y) => y.balance > 0.5)) {
+    const m = ev("debt:" + x.id);
+    rows.push({
+      key: ("debt:" + x.id) as AccountKey,
+      name: debtLabel(x),
+      value: `${money(x.balance, { whole: true })} owed`,
+      status: m !== undefined ? `Paid off ${when(m)}` : x.payroll ? "Paid from your paycheck" : "Minimum payments",
+      color: t.series.debt,
+    });
+  }
+
+  return (
+    <Card padded={false}>
+      <View style={{ padding: space.lg, paddingBottom: space.sm, gap: 2 }}>
+        <SectionLabel>Accounts filling up</SectionLabel>
+        <Text style={[type.caption, { color: t.text3, marginTop: -space.xs }]}>Where each one stands and when it gets there. Tap one for its forecast.</Text>
+      </View>
+      {rows.map((r, i) => (
+        <View key={r.key}>
+          {i > 0 ? <View style={{ marginLeft: space.lg }}><Divider /></View> : null}
+          <Pressable
+            role="button"
+            accessibilityLabel={`${r.name}: ${r.value}. ${r.status}. Open its forecast`}
+            onPress={() => onOpen(r.key)}
+            style={({ pressed }) => [styles.row, pressed ? { backgroundColor: t.surface2 } : null]}
+          >
+            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+              <View style={styles.line}>
+                <View style={[styles.dot, { backgroundColor: r.color }]} />
+                <Text style={[type.body, { color: t.text, fontWeight: "600", flex: 1 }]} numberOfLines={1}>{r.name}</Text>
+                <Text style={[type.label, { color: t.text, fontVariant: ["tabular-nums"] }]}>{r.value}</Text>
+              </View>
+              {r.progress !== undefined ? <ProgressBar progress={r.progress} color={r.color} /> : null}
+              <Text style={[type.caption, { color: r.done ? t.good : t.text3, fontWeight: r.done ? "700" : "400" }]}>{r.status}</Text>
+              {r.tip ? <Text style={[type.caption, { color: t.accent }]}>{r.tip}</Text> : null}
+            </View>
+            <Icon name="chevron" size={14} color={t.text3} />
+          </Pressable>
+        </View>
+      ))}
+      {!rows.length ? <Text style={[type.caption, { color: t.text3, padding: space.lg }]}>Add your accounts and debts under Settings → Your money.</Text> : null}
+    </Card>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },
+  line: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+});

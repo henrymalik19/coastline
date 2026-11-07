@@ -164,7 +164,7 @@ export function plannedNow(s: PlanState, k: string, month: string): number | und
 
 /**
  * The short version: "Contributing [$500] a month". Changes over time (and single months) open the full
- * editor. No amount = the account gets whatever your plan steps give it.
+ * editor. No amount = the account gets whatever your priority order gives it.
  */
 export function MonthlyAmount({ k, label, unit = "a month", note, shared }: { k: string; label: string; unit?: string; note?: string; shared?: string }) {
   const t = useTheme();
@@ -179,7 +179,7 @@ export function MonthlyAmount({ k, label, unit = "a month", note, shared }: { k:
     <View style={{ gap: 6 }}>
       {!list.length && !singles ? (
         <View style={[styles.row, { justifyContent: "space-between" }]}>
-          <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 160 }]}>Monthly contribution: not set, so it gets whatever your plan steps give it.</Text>
+          <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 160 }]}>Monthly contribution: not set, so it gets whatever your priority order gives it.</Text>
           <Button title="Set an amount" icon="plus" onPress={() => set([{ from: now, amount: 0 }])} style={{ minHeight: 36 }} />
         </View>
       ) : simple && first ? (
