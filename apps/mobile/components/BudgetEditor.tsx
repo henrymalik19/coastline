@@ -2,7 +2,7 @@ import { monthsBetween, nextDue, setAsideFor, type BudgetItem, type Goal, type M
 import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../lib/confirm";
-import { groupOf, mergeGroup, moveGroup, moveItem, moveToGroup, UNGROUPED } from "../lib/budgetOrder";
+import { groupOf, mergeGroup, moveAmong, moveGroup, moveItem, moveToGroup, UNGROUPED } from "../lib/budgetOrder";
 import { debtLabel } from "../lib/debts";
 import { paycheckFor } from "../lib/loans";
 import { monthKey } from "../lib/store";
@@ -105,6 +105,24 @@ export function BudgetEditor() {
     if (await confirm(`Remove "${group}"?`, `This removes the group and its ${count} item${count === 1 ? "" : "s"}.`, "Remove"))
       update((p) => { p.budget = p.budget.filter((b) => groupOf(b) !== group); });
   };
+
+  // debts and recurring goals reorder in their own lists (the same order shows on Debts / Savings goals)
+  const moveDebt = (id: string, by: -1 | 1) =>
+    update((p) => { p.debts = moveAmong(p.debts, id, by, (x) => x.balance > 0 && x.minPayment > 0 && !x.payroll); });
+  const moveGoal = (id: string, by: -1 | 1) =>
+    update((p) => { p.goals = moveAmong(p.goals, id, by, (g) => !!g.recurring && g.target > 0); });
+  const reorderPill = (
+    <Pressable
+      role="button"
+      accessibilityLabel={reorder ? "Done reordering" : "Reorder"}
+      onPress={() => { setEditing(null); setReorder((r) => !r); }}
+      hitSlop={6}
+      style={[styles.reorderBtn, { borderColor: reorder ? t.accent : t.border, backgroundColor: reorder ? t.accentSoft : t.surface }]}
+    >
+      <Icon name={reorder ? "check" : "sliders"} size={14} color={t.accent} />
+      <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{reorder ? "Done" : "Reorder"}</Text>
+    </Pressable>
+  );
 
   // what's left each month once the budget and debt minimums are paid (engine numbers, normal month)
   const d = result.d;
@@ -216,11 +234,12 @@ export function BudgetEditor() {
             <View style={styles.headRow}>
               <Text role="heading" aria-level={2} style={[type.heading, { color: t.text, flex: 1 }]}>Set aside</Text>
               <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(setAsideNow)}/mo</Text>
+              {setRows.length > 1 ? reorderPill : null}
             </View>
             <View style={[styles.cols, { paddingHorizontal: space.lg, paddingBottom: space.sm }]}>
               <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Goal</Text>
               <Text style={[type.overline, { color: t.text3, width: cols.amount, textAlign: "right" }]}>Monthly</Text>
-              <View style={{ width: cols.actions }} />
+              <View style={{ width: reorder ? 84 : cols.actions }} />
             </View>
           </View>
         ) : onDebts ? (
@@ -228,11 +247,12 @@ export function BudgetEditor() {
             <View style={styles.headRow}>
               <Text role="heading" aria-level={2} style={[type.heading, { color: t.text, flex: 1 }]}>Debt payments</Text>
               <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(d.debtMins)}/mo</Text>
+              {debtRows.length > 1 ? reorderPill : null}
             </View>
             <View style={[styles.cols, { paddingHorizontal: space.lg, paddingBottom: space.sm }]}>
               <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Debt</Text>
               <Text style={[type.overline, { color: t.text3, width: cols.amount, textAlign: "right" }]}>Monthly</Text>
-              <View style={{ width: cols.actions }} />
+              <View style={{ width: reorder ? 84 : cols.actions }} />
             </View>
           </View>
         ) : current ? (
@@ -252,16 +272,7 @@ export function BudgetEditor() {
                 }}
               />
               <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(current.subtotal)}/mo</Text>
-              <Pressable
-                role="button"
-                accessibilityLabel={reorder ? "Done reordering" : "Reorder items and groups"}
-                onPress={() => { setEditing(null); setReorder((r) => !r); }}
-                hitSlop={6}
-                style={[styles.reorderBtn, { borderColor: reorder ? t.accent : t.border, backgroundColor: reorder ? t.accentSoft : t.surface }]}
-              >
-                <Icon name={reorder ? "check" : "sliders"} size={14} color={t.accent} />
-                <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{reorder ? "Done" : "Reorder"}</Text>
-              </Pressable>
+              {reorderPill}
             </View>
             {reorder ? (
               <View style={[styles.reorderBar, { backgroundColor: t.accentSoft }]}>
@@ -285,11 +296,19 @@ export function BudgetEditor() {
       }
       detail={
         onSet
-          ? setRows.map((g) => (
-              <SetAsideRow key={g.id} goal={g} months={actual.months} start={start} thisMonth={thisMonth} cols={cols} />
+          ? setRows.map((g, i) => (
+              <SetAsideRow
+                key={g.id}
+                goal={g}
+                months={actual.months}
+                start={start}
+                thisMonth={thisMonth}
+                cols={cols}
+                reorder={reorder ? { up: i > 0, down: i < setRows.length - 1, move: (by) => moveGoal(g.id, by) } : undefined}
+              />
             ))
           : onDebts
-          ? debtRows.map((x) => {
+          ? debtRows.map((x, i) => {
               const link = paycheckFor(state, x.id);
               const from = link
                 ? `From your ${link.income.name || "job"} paycheck (${money(link.deduction.amount)} per check)`
@@ -303,7 +322,14 @@ export function BudgetEditor() {
                     <Text style={[type.caption, { color: t.text3 }]}>{from}</Text>
                   </View>
                   <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(x.minPayment)}</Text>
-                  <View style={[styles.actions, { width: cols.actions }]} />
+                  {reorder ? (
+                    <View style={[styles.actions, { width: 84 }]}>
+                      <IconButton icon="up" label={`Move ${debtLabel(x)} up`} disabled={i === 0} onPress={() => moveDebt(x.id, -1)} />
+                      <IconButton icon="down" label={`Move ${debtLabel(x)} down`} disabled={i === debtRows.length - 1} onPress={() => moveDebt(x.id, 1)} />
+                    </View>
+                  ) : (
+                    <View style={[styles.actions, { width: cols.actions }]} />
+                  )}
                 </View>
               );
             })
@@ -372,9 +398,10 @@ export function BudgetEditor() {
  * straight from the plan, so catch-up months and "already set aside" months show as they are.
  */
 function SetAsideRow({
-  goal: g, months, start, thisMonth, cols,
+  goal: g, months, start, thisMonth, cols, reorder,
 }: {
   goal: Goal; months: MonthRow[]; start: Date; thisMonth: string; cols: ReturnType<typeof budgetCols>;
+  reorder?: { up: boolean; down: boolean; move: (by: -1 | 1) => void };
 }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
@@ -404,11 +431,18 @@ function SetAsideRow({
           </Text>
         </View>
         <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(now)}</Text>
-        <View style={[styles.actions, { width: cols.actions }]}>
-          <View style={{ transform: [{ rotate: open ? "90deg" : "0deg" }] }}>
-            <Icon name="chevron" size={16} color={t.text3} />
+        {reorder ? (
+          <View style={[styles.actions, { width: 84 }]}>
+            <IconButton icon="up" label={`Move ${g.name || "goal"} up`} disabled={!reorder.up} onPress={() => reorder.move(-1)} />
+            <IconButton icon="down" label={`Move ${g.name || "goal"} down`} disabled={!reorder.down} onPress={() => reorder.move(1)} />
           </View>
-        </View>
+        ) : (
+          <View style={[styles.actions, { width: cols.actions }]}>
+            <View style={{ transform: [{ rotate: open ? "90deg" : "0deg" }] }}>
+              <Icon name="chevron" size={16} color={t.text3} />
+            </View>
+          </View>
+        )}
       </Pressable>
       {open ? (
         <View style={{ paddingHorizontal: space.lg, paddingBottom: space.md, gap: 2 }}>

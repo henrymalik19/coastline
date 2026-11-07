@@ -34,6 +34,21 @@ export function moveItem(items: BudgetItem[], index: number, by: -1 | 1): Budget
   return out;
 }
 
+/**
+ * Move the entry with `id` one place up/down among only the entries `shown` picks (e.g. the debts
+ * the budget lists), swapping it with its visible neighbour. Others keep their places.
+ */
+export function moveAmong<T extends { id: string }>(list: T[], id: string, by: -1 | 1, shown: (x: T) => boolean): T[] {
+  const i = list.findIndex((x) => x.id === id);
+  if (i < 0) return list;
+  let j = i + by;
+  while (j >= 0 && j < list.length && !shown(list[j]!)) j += by;
+  if (j < 0 || j >= list.length) return list;
+  const out = [...list];
+  [out[i], out[j]] = [out[j]!, out[i]!];
+  return out;
+}
+
 /** Move an item into another group (it goes to the end of that group; a new group goes last). */
 export function moveToGroup(items: BudgetItem[], index: number, group: string): BudgetItem[] {
   const item = items[index];

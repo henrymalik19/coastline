@@ -1,6 +1,6 @@
 import type { BudgetItem } from "@coastfi/engine";
 import { describe, expect, it } from "vitest";
-import { groupOrder, mergeGroup, moveGroup, moveItem, moveToGroup } from "./budgetOrder";
+import { groupOrder, mergeGroup, moveAmong, moveGroup, moveItem, moveToGroup } from "./budgetOrder";
 
 const item = (id: string, group?: string): BudgetItem => ({ id, name: id, amount: 0, inRetirement: true, group });
 const ids = (xs: BudgetItem[]) => xs.map((x) => x.id).join(",");
@@ -28,6 +28,21 @@ describe("budget order", () => {
   it("skips over other groups' items when they're interleaved", () => {
     const mixed = [item("a", "X"), item("b", "Y"), item("c", "X")];
     expect(ids(moveItem(mixed, 2, -1))).toBe("c,b,a");
+  });
+});
+
+describe("moving among shown entries (debts, set-asides)", () => {
+  const list = [{ id: "car" }, { id: "k401" }, { id: "card" }, { id: "home" }];
+  const shown = (x: { id: string }) => x.id !== "k401"; // e.g. a payroll loan the budget doesn't list
+
+  it("swaps with the next shown neighbour, skipping hidden ones", () => {
+    expect(moveAmong(list, "card", -1, shown).map((x) => x.id).join(",")).toBe("card,k401,car,home");
+    expect(moveAmong(list, "card", 1, shown).map((x) => x.id).join(",")).toBe("car,k401,home,card");
+  });
+
+  it("doesn't move past the ends", () => {
+    expect(moveAmong(list, "car", -1, shown)).toBe(list);
+    expect(moveAmong(list, "home", 1, shown)).toBe(list);
   });
 });
 
