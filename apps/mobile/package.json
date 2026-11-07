@@ -35,7 +35,8 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "vitest run lib",
-    "dev:hosted": "node scripts/dev-hosted.mjs"
+    "dev:hosted": "node scripts/dev-hosted.mjs",
+    "build:web": "expo export -p web"
   },
   "private": true
 }

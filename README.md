@@ -61,3 +61,17 @@ Settings → Backup & restore downloads (web) or shares (phone) a JSON backup of
 > `noreply@send.jobrx.ai`, borrowed from the JobRx Resend domain. Verify a Coastline domain
 > in Resend and change the sender in Supabase → Authentication → Emails → SMTP Settings.
 > Also set the auth Site URL to the real app URL.
+
+## Web deploy (Vercel)
+
+Live at https://coastline-flax.vercel.app (Vercel project `coastline`). `vercel.json` builds the
+static web export (`pnpm --filter @coastfi/mobile build:web` → `apps/mobile/dist`) and sends every
+path to `index.html` so links like `/settings/account` work. The two public Supabase values are
+set as Vercel environment variables (Production and Preview). Data lives in Supabase; Vercel
+only serves the files.
+
+- Deploy by hand: `npx vercel deploy --prod`
+- Auto-deploy on push needs the Vercel GitHub app to have access to this repo, then
+  `npx vercel git connect`.
+- Supabase → Authentication → URL Configuration → Site URL is set to the Vercel address;
+  update it if you add a custom domain.
