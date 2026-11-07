@@ -1,4 +1,5 @@
 import { Platform, useColorScheme } from "react-native";
+import { useAppearance } from "./appearance";
 
 /**
  * Design tokens. Coastal look: sea-teal accent, sand (light) / night-ocean (dark)
@@ -69,7 +70,9 @@ export const type = {
 export type Theme = Palette & { scheme: "light" | "dark" };
 
 export function useTheme(): Theme {
-  const scheme = useColorScheme() === "dark" ? "dark" : "light";
+  const device = useColorScheme();
+  const choice = useAppearance((s) => s.appearance);
+  const scheme = choice === "system" ? (device === "dark" ? "dark" : "light") : choice;
   return { ...(scheme === "dark" ? dark : light), scheme };
 }
 

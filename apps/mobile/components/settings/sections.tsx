@@ -9,6 +9,7 @@ import { usePlan } from "../../lib/plan";
 import { newId, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
 import { AccountPanel } from "../AccountPanel";
+import { useAppearance } from "../../lib/appearance";
 import { AccountsEditor } from "../AccountsEditor";
 import { RetirementIncomeEditor } from "../RetirementIncomeEditor";
 import { GoalEditor } from "../GoalEditor";
@@ -24,7 +25,7 @@ import { HealthcareSuggestion } from "../HealthcareSuggestion";
 
 /* ---------- registry ---------- */
 
-type SectionKey = "account" | "profile" | "retirementIncome" | "income" | "budget" | "accounts" | "debts" | "goals" | "assumptions" | "limits" | "data";
+type SectionKey = "account" | "appearance" | "profile" | "retirementIncome" | "income" | "budget" | "accounts" | "debts" | "goals" | "assumptions" | "limits" | "data";
 type SectionMeta = { key: SectionKey; title: string; subtitle: string; icon: IconName };
 
 export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
@@ -33,6 +34,7 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
     items: [
       { key: "account", title: "Account & sync", subtitle: "Sign in to use your plan on every device", icon: "user" },
       { key: "profile", title: "You", subtitle: "Age, retirement age and health insurance", icon: "user" },
+      { key: "appearance", title: "Appearance", subtitle: "Light, dark, or match your device", icon: "sparkle" },
     ],
   },
   {
@@ -182,6 +184,29 @@ function AccountsSection() {
         Cash is your emergency fund. Everything else counts as invested. Tap an account to rename it, change its type, move it or remove it.
       </Text>
       <AccountsEditor />
+    </>
+  );
+}
+
+/* ---------- Appearance ---------- */
+
+function AppearanceSection() {
+  const t = useTheme();
+  const appearance = useAppearance((s) => s.appearance);
+  const setAppearance = useAppearance((s) => s.setAppearance);
+  return (
+    <>
+      <Card style={{ gap: space.md }}>
+        <Segmented
+          label="Appearance"
+          options={[{ value: "system", label: "Match device" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }]}
+          value={appearance}
+          onChange={setAppearance}
+        />
+        <Text style={[type.caption, { color: t.text3 }]}>
+          {appearance === "system" ? "Follows your phone or computer's setting." : "Saved on this device only."}
+        </Text>
+      </Card>
     </>
   );
 }
@@ -506,6 +531,7 @@ function DataSection() {
 
 export const SECTION_SCREENS: Record<SectionKey, ComponentType> = {
   account: () => <AccountPanel />,
+  appearance: AppearanceSection,
   profile: Profile,
   retirementIncome: () => <RetirementIncomeSection />,
   income: IncomeSection,

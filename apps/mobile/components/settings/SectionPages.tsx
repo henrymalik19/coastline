@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useAppearance } from "../../lib/appearance";
 import { money } from "../../lib/format";
 import { usePlan } from "../../lib/plan";
 import { syncConfigured } from "../../lib/supabase";
@@ -19,8 +20,10 @@ export const groupsFor = (base: SectionBase) => SECTIONS.filter((g) => (g.title 
 function useSummaries(): Record<string, string> {
   const { state, result } = usePlan();
   const syncEmail = useSync((s) => s.email);
+  const appearance = useAppearance((s) => s.appearance);
   const retire = state.retirementIncome ?? [];
   return {
+    appearance: { system: "Match device", light: "Light", dark: "Dark" }[appearance],
     account: syncConfigured ? (syncEmail ? `Signed in as ${syncEmail}` : "Not signed in") : "Saved on this device",
     profile: `Age ${state.age} · retire at ${state.retireAge}`,
     retirementIncome: retire.length ? `${retire.length} · ${money(result.d.retireIncomeAnnual / 12)}/mo` : "None added",
