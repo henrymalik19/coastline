@@ -96,3 +96,20 @@ describe("emergency mode settings", () => {
     expect(() => parsePlanState({ ...s, emergency: { ...s.emergency, until: "Feb 2027" } })).toThrow(PlanStateError);
   });
 });
+
+describe("the monthly budget and schedules", () => {
+  it("a plan with a budget, schedules, paycheck changes and registers round-trips", () => {
+    const s = defaultPlanState();
+    s.plan.schedule = { "acct:a": [{ from: "2026-11", amount: 500 }], "pay401:i": [{ from: "2027-01", amount: 0, pct: 0.06 }] };
+    s.plan.scheduleMonths = { cash: { "2026-12": 2000 } };
+    s.budgetPlan = {
+      start: "2026-11",
+      startCash: 13000,
+      months: { "2026-11": { income: 13000, assigned: { b1: 6000, "acct:a": 500 }, spent: { b1: 5800 } } },
+      registers: { a: { opening: 13000, since: "2026-11-07" } },
+    };
+    expect(parsePlanState(JSON.stringify(s))).toEqual(s);
+    // a month that isn't YYYY-MM is rejected
+    expect(() => parsePlanState({ ...s, budgetPlan: { ...s.budgetPlan, start: "Nov 2026" } })).toThrow(PlanStateError);
+  });
+});

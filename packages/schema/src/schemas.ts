@@ -178,16 +178,17 @@ export const PlanStateSchema = z.object({
   contributed: z.object({ year: z.number().int(), k401: nonNeg, ira: nonNeg, hsa: nonNeg }).optional(),
   budgetPlan: z
     .object({
-      start: z.string().regex(/^d{4}-d{2}$/),
+      start: z.string().regex(/^\d{4}-\d{2}$/),
       startCash: z.number(),
       months: z.record(
-        z.string().regex(/^d{4}-d{2}$/),
+        z.string().regex(/^\d{4}-\d{2}$/),
         z.object({
           assigned: z.record(z.string(), z.number().min(0)).optional(),
           spent: z.record(z.string(), z.number()).optional(),
           income: z.number().min(0).optional(),
         }),
       ),
+      registers: z.record(z.string(), z.object({ opening: z.number(), since: z.string() })).optional(),
     })
     .optional(),
 });

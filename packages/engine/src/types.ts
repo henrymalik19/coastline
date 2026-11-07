@@ -276,12 +276,43 @@ export type BudgetMonthEntry = {
   /** Income received this month. */
   income?: number;
 };
+/**
+ * A transaction in a budget account (checking, savings, a credit card). Amount: + money in, − money out.
+ * Category: a budget key, "ready" for income to assign, or none for a transfer between budget accounts.
+ */
+export type Txn = {
+  id: string;
+  /** A cash account's id, or a credit card's debt id. */
+  accountId: string;
+  /** "YYYY-MM-DD". */
+  date: string;
+  amount: number;
+  payee?: string;
+  memo?: string;
+  categoryId?: string;
+  splits?: { categoryId: string; amount: number; memo?: string }[];
+  /** The other account of a transfer (each side is its own transaction). */
+  transferAccountId?: string;
+  /** The id of the other side of a transfer. */
+  transferId?: string;
+  cleared: "uncleared" | "cleared" | "reconciled";
+  source: "manual" | "csv" | "ynab" | "plaid";
+  /** The bank's or file's id, so an import never adds the same one twice. */
+  importId?: string;
+  /** Edit time (ms): the newer copy wins when devices sync. */
+  updatedAt: number;
+  /** Deleted (kept so the deletion syncs). */
+  deleted?: boolean;
+};
+
 export type BudgetState = {
   /** First budgeted month, "YYYY-MM". */
   start: string;
   /** Cash in your budget accounts when you started (your first money to assign). */
   startCash: number;
   months: Record<string, BudgetMonthEntry>;
+  /** Where each budget account's register starts: its balance then (a card: − what you owed). */
+  registers?: Record<string, { opening: number; since: string }>;
 };
 
 export type Contributed = {

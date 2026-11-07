@@ -14,7 +14,8 @@
 import { accountForecasts } from "./forecast";
 import { paysExtra, setAsideFor } from "./plan";
 import { ACCOUNT_KEY, accountPlanKey, scheduleAmount } from "./schedule";
-import type { BudgetState, Derived, PlanResult, PlanState } from "./types";
+import type { BudgetState, Derived, PlanResult, PlanState, Txn } from "./types";
+import { txnActivity } from "./txn";
 import { addMonths, monthsBetween, num } from "./util";
 
 export type BudgetCategoryKind = "spending" | "bill" | "saving" | "debt";
@@ -43,6 +44,8 @@ export type BudgetLine = {
   available: number;
   carried: number;
   target: number;
+  /** Credit-card spending moved into this card's payment category this month. */
+  funded?: number;
 };
 
 export type BudgetView = {
@@ -111,7 +114,13 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
  * The budget for one month: every category's assigned, spent and available (with carry-over), and
  * what's ready to assign. `cats` says which keys exist and which move money out by themselves.
  */
-export function budgetView(b: BudgetState | undefined, cats: Pick<BudgetCategory, "key" | "moves" | "target">[], month: string): BudgetView {
+export function budgetView(
+  b: BudgetState | undefined,
+  cats: Pick<BudgetCategory, "key" | "moves" | "target">[],
+  month: string,
+  /** Transactions, and which accounts are credit cards (account id → its payment category). */
+  tx?: { txns: Txn[]; cards: Record<string, string> },
+): BudgetView {
   const empty: BudgetView = { month, started: false, income: 0, readyToAssign: 0, assigned: 0, spent: 0, overspentBefore: 0, assignedLater: 0, lines: {} };
   if (!b || month < b.start) {
     for (const c of cats) empty.lines[c.key] = { key: c.key, assigned: 0, spent: 0, available: 0, carried: 0, target: c.target };
@@ -124,22 +133,31 @@ export function budgetView(b: BudgetState | undefined, cats: Pick<BudgetCategory
   let view: BudgetView | null = null;
   for (let m = b.start; m <= month; m = addMonths(m, 1)) {
     const e = b.months?.[m] ?? {};
+    const act = tx ? txnActivity(tx.txns, m, tx.cards) : undefined;
     const lines: Record<string, BudgetLine> = {};
     let monthAssigned = 0;
     let monthSpent = 0;
     let monthOver = 0;
     for (const c of cats) {
       const a = Math.max(0, num(e.assigned?.[c.key]));
-      const sp = e.spent?.[c.key] !== undefined ? num(e.spent[c.key]) : c.moves ? a : 0;
+      // what went out: typed in by hand, else from transactions, else (money that moves by itself) what was assigned
+      const fromTx = act?.spent[c.key];
+      const cardIsTracked = !!tx && Object.values(tx.cards).includes(c.key);
+      const sp =
+        e.spent?.[c.key] !== undefined ? num(e.spent[c.key])
+        : fromTx !== undefined ? fromTx
+        : c.moves && !cardIsTracked ? a
+        : 0;
+      const funded = act?.cardFunded[c.key] ?? 0;
       const carried = carry[c.key] ?? 0;
-      const available = carried + a - sp;
-      lines[c.key] = { key: c.key, assigned: a, spent: sp, available, carried, target: c.target };
+      const available = carried + a + funded - sp;
+      lines[c.key] = { key: c.key, assigned: a, spent: sp, available, carried, target: c.target, funded };
       monthAssigned += a;
       monthSpent += sp;
       if (available < 0) monthOver += -available;
       carry[c.key] = Math.max(0, available);
     }
-    income += Math.max(0, num(e.income));
+    income += Math.max(0, num(e.income)) + (act?.income ?? 0);
     assigned += monthAssigned;
     if (m === month) {
       let later = 0;
@@ -147,7 +165,7 @@ export function budgetView(b: BudgetState | undefined, cats: Pick<BudgetCategory
       view = {
         month,
         started: true,
-        income: Math.max(0, num(e.income)),
+        income: Math.max(0, num(e.income)) + (act?.income ?? 0),
         readyToAssign: num(b.startCash) + income - assigned - overspent - later,
         assigned: monthAssigned,
         spent: monthSpent,
