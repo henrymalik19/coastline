@@ -125,6 +125,21 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   const hsaCost = 1 - mt; // a pre-tax payroll HSA dollar costs (1 − marginal) take-home
   const shares = p.shares ?? {};
   const started = { k401: false, hsa: false };
+  const amounts = p.amounts ?? {};
+  const amountsBy = p.amountsBy ?? {};
+  // Payroll caps aren't prorated: real paychecks have been putting money in since January. When we
+  // don't know how much, assume this year's earlier paychecks went in at today's amounts.
+  let ytdBefore: PlanResult["ytdBefore"];
+  if (payrollSteps && !(known && num(known.year) === y0)) {
+    for (let mo = 0; mo < mo0; mo++)
+      for (const inc of d.incomes) {
+        const c = checksInMonth(inc, y0, mo);
+        ytd.k401 += num(inc.pretax) * c;
+        if (hsaPayroll) ytd.hsa += Math.max(0, num(inc.hsaPre)) * c;
+      }
+    if (hsaPayroll) ytd.hsa += (d.hsaEmployerAnnual / 12) * mo0;
+    if (mo0 > 0) ytdBefore = { k401: ytd.k401, hsa: ytd.hsa };
+  }
   const out: MonthRow[] = [];
   const events: PlanEvent[] = [];
   const seen = new Set<string>();
@@ -177,7 +192,9 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     // Payroll deferrals stop at the annual 401(k) limit (as real payroll does). The
     // deferral that no longer happens comes back as take-home, after tax, and the
     // employer match on it stops too (no year-end true-up assumed).
-    const capK401Full = (L.k401 + (ageNow >= 50 ? L.k401Catch : 0)) * scale;
+    const kScale = payrollSteps ? 1 : scale;
+    const hScale = hsaPayroll ? 1 : scale;
+    const capK401Full = (L.k401 + (ageNow >= 50 ? L.k401Catch : 0)) * kScale;
     const payRoom = Math.max(0, capK401Full - ytd.k401);
     let payCut = 0;
     if (payPre > payRoom) {
@@ -199,7 +216,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     ytd.k401 += payPre;
 
     // employer HSA contributions count toward the year's HSA limit
-    const capHsaFull = ((p.hsaFamily ? L.hsaFamily : L.hsaSelf) + (ageNow >= 55 ? L.hsaCatch : 0)) * scale;
+    const capHsaFull = ((p.hsaFamily ? L.hsaFamily : L.hsaSelf) + (ageNow >= 55 ? L.hsaCatch : 0)) * hScale;
     const payHsaEmployer = Math.min(d.hsaEmployerAnnual / 12, Math.max(0, capHsaFull - ytd.hsa));
     ytd.hsa += payHsaEmployer;
     const hsaSched = sum(d.incomes.map((inc, i) => Math.max(0, num(inc.hsaPre)) * checks[i]! * g));
@@ -400,8 +417,13 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       for (const step of order) {
         if (avail <= 1e-9) break;
         // a step with a share gets only that part of what's left; the rest goes on to the next steps
+        // or a set amount per month (this month's change if there is one): the rest goes on too
         const share = shares[step];
-        const held = share !== undefined && share >= 0 && share < 1 ? avail * (1 - share) : 0;
+        const amt = amountsBy[step]?.[monthStr] ?? amounts[step];
+        const held =
+          amt !== undefined && amt >= 0
+            ? Math.max(0, avail - amt)
+            : share !== undefined && share >= 0 && share < 1 ? avail * (1 - share) : 0;
         avail -= held;
         doStep(step);
         avail += held;
@@ -427,7 +449,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     if (mo === 11 || m === months - 1) {
       if (ytd.k401 >= capK401Full - 1) maxedYears.k401.push(y);
       if (ytd.ira >= (L.ira + (ageNow >= 50 ? L.iraCatch : 0)) * scale - 1) maxedYears.ira.push(y);
-      if (p.hsaEligible && ytd.hsa >= ((p.hsaFamily ? L.hsaFamily : L.hsaSelf) + (ageNow >= 55 ? L.hsaCatch : 0)) * scale - 1) {
+      if (p.hsaEligible && ytd.hsa >= ((p.hsaFamily ? L.hsaFamily : L.hsaSelf) + (ageNow >= 55 ? L.hsaCatch : 0)) * hScale - 1) {
         maxedYears.hsa.push(y);
       }
     }
@@ -442,5 +464,5 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       post: payRoth + alloc.k401 * d.rothShare + payHsaEmployer + payHsa + alloc.hsa + alloc.ira + alloc.taxable,
     });
   }
-  return { months: out, events, firstFund, maxedYears, starterTarget, fullTarget, mode };
+  return { months: out, events, firstFund, maxedYears, starterTarget, fullTarget, mode, ...(ytdBefore ? { ytdBefore } : {}) };
 }

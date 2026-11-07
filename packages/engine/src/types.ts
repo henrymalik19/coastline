@@ -173,6 +173,13 @@ export type PlanSettings = {
    * goes on to the steps after it at the same time. Missing = 1 (one step at a time).
    */
   shares?: Record<string, number>;
+  /**
+   * A set amount per month for a step (dollars, by step key): it gets at most this much and the rest goes
+   * on to the next steps. Takes the place of a share. Missing = no set amount.
+   */
+  amounts?: Record<string, number>;
+  /** Changes to a step's set amount for single months: by step key, then "YYYY-MM" → dollars. */
+  amountsBy?: Record<string, Record<string, number>>;
 };
 
 export type WhatIf = { extra: number; retDelta: number; spendDelta: number };
@@ -384,6 +391,8 @@ export type PlanResult = {
   starterTarget: number;
   fullTarget: number;
   mode: ProjectWith;
+  /** Estimated payroll 401(k)/HSA put in this year before the plan starts (when not entered). */
+  ytdBefore?: { k401: number; hsa: number };
 };
 
 export type SimulateOptions = { mode?: ProjectWith; extraMonthly?: number; months?: number };

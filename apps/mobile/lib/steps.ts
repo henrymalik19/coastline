@@ -59,7 +59,9 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
   const pace = (pick: (m: MonthRow) => number, _avg: number, from = 0, what = "", to?: number) => {
     const rows = schedule(pick, from, to);
     ctx.schedule = rows;
-    const amounts = rows.map((r) => r.amount).filter((v) => v > 0.5);
+    // a smaller last month that finishes the step doesn't count as varying
+    const all = rows.map((r) => r.amount).filter((v) => v > 0.5);
+    const amounts = to !== undefined && all.length > 2 && all[all.length - 1]! < all[all.length - 2]! ? all.slice(0, -1) : all;
     const varies = amounts.length > 1 && Math.max(...amounts) - Math.min(...amounts) > 1;
     const first = rows.find((r) => r.amount > 0.5);
     if (!first) return "";
@@ -303,13 +305,15 @@ function payrollYears(kind: "k401" | "hsa", s: PlanState, o: RunResult, start: D
     // everything that counts toward the limit this year: your paychecks, the plan's extra, (HSA) your employer's
     let total = rows.reduce((a, m) => a + (kind === "k401" ? m.payPre + m.alloc.k401 : (m.payHsa ?? 0) + m.payHsaEmployer + m.alloc.hsa), 0);
     const before = year === y0 && start.getMonth() > 0; // months before today aren't in the plan
+    const guessed = before && !known ? o.plan.ytdBefore : undefined;
     if (before && known) total += kind === "k401" ? known.k401 : known.hsa;
+    else if (guessed) total += kind === "k401" ? guessed.k401 : guessed.hsa;
     const maxed = o.plan.maxedYears[kind].includes(year) || total >= cap - 1;
     const summary = maxed
       ? "maxes it"
-      : before && !known
+      : before && !known && !guessed
         ? `about ${money(total, { whole: true })} from here to December (add what's in so far under Money → Accounts)`
-        : `about ${money(total, { whole: true })} of the ${money(cap, { whole: true })} limit${firstAt > 0 ? " (starts part way through the year)" : ""}`;
+        : `about ${money(total, { whole: true })} of the ${money(cap, { whole: true })} limit${firstAt > 0 ? " (starts part way through the year)" : ""}${guessed ? " (assumes this year's earlier paychecks put in what they do now; enter the real amount under Money → Accounts)" : ""}`;
     const what =
       gross > 0
         ? `about ${Math.round(((base + perCheck) / gross) * 100)}% of pay (${money(base + perCheck, { whole: true })}/check)`

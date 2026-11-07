@@ -126,6 +126,8 @@ export const PlanSettingsSchema = z.object({
   payrollSteps: z.boolean().optional(),
   hsaPayroll: z.boolean().optional(),
   shares: z.record(z.string(), z.number().min(0).max(1)).optional(),
+  amounts: z.record(z.string(), z.number().min(0)).optional(),
+  amountsBy: z.record(z.string(), z.record(z.string(), z.number().min(0))).optional(),
 });
 
 export const AdjustmentSchema = z.object({

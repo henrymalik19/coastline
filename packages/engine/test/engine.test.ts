@@ -485,6 +485,32 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     expect(m0.alloc.taxable).toBeCloseTo(6000 * 0.3, 6);
   });
 
+  it("a step with a set amount a month gets that much (or a changed month's amount); the rest goes on", () => {
+    const s = blank({
+      incomes: [{ ...job, net: 10000 }],
+      budget: spending,
+      plan: { ...blank().plan, efMonths: 6, steps: ["fullEF", "taxable"], amounts: { fullEF: 2500 }, amountsBy: { fullEF: { "2026-12": 500 } } },
+    });
+    const [nov, dec] = simulatePlan(s, derive(s, START)).months;
+    expect(nov!.alloc.ef).toBeCloseTo(2500, 6);
+    expect(nov!.alloc.taxable).toBeCloseTo(6000 - 2500, 6);
+    expect(dec!.alloc.ef).toBeCloseTo(500, 6);
+    expect(dec!.alloc.taxable).toBeCloseTo(6000 - 500, 6);
+  });
+
+  it("payroll steps don't shrink this year's 401(k) limit: earlier paychecks count instead", () => {
+    // starts in November: Jan–Oct paychecks are assumed to have gone in at today's amount
+    const s = blank({ limits: DEFAULT_LIMITS, incomes: [{ ...job, net: 8000, pretax: 2000 }], plan: { ...blank().plan, payrollSteps: true } });
+    const p = simulatePlan(s, derive(s, START));
+    expect(p.ytdBefore?.k401).toBeCloseTo(20000, 9);
+    expect(p.months[0]!.payCut).toBe(0);
+    expect(p.months[1]!.payCut).toBe(0);
+    // a step starting in December gets the rest of the real yearly limit, not a prorated sliver
+    const L = DEFAULT_LIMITS.find((l) => l.year === 2026)!;
+    expect(p.months[1]!.payPre).toBeCloseTo(2000, 9);
+    expect(20000 + 4000).toBeLessThanOrEqual(L.k401);
+  });
+
   it("Roth 401(k) contributions go to the after-tax bucket and cost a full dollar", () => {
     const pre = blank({ limits: DEFAULT_LIMITS, incomes: [{ ...job, pretax: 500 }] });
     const roth = blank({ limits: DEFAULT_LIMITS, incomes: [{ ...job, pretax: 500, rothShare: 1 }] });
