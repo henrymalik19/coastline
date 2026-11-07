@@ -80,6 +80,7 @@ export const PlanSettingsSchema = z.object({
   efMonths: nonNeg,
   highApr: rate.min(0),
   marginalTax: rate.min(0).max(1),
+  marginalTaxManual: z.boolean().optional(),
   hsaEligible: z.boolean(),
   hsaFamily: z.boolean(),
   projectWith: z.enum(["plan", "current"]),

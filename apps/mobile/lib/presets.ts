@@ -35,7 +35,8 @@ export function freshPlan(): PlanState {
   ];
   p.budget = BUDGET_PRESETS.map((b) => ({ id: newId(), name: b.name, group: b.group, amount: 0, inRetirement: b.inRetirement }));
   p.accounts = [
-    { id: newId(), name: "401(k) / traditional IRA", type: "pretax", balance: 0 },
+    { id: newId(), name: "401(k)", type: "pretax", balance: 0 },
+    { id: newId(), name: "Traditional IRA", type: "pretax", balance: 0 },
     { id: newId(), name: "Roth IRA", type: "roth", balance: 0 },
     { id: newId(), name: "Brokerage", type: "taxable", balance: 0 },
     { id: newId(), name: "Savings / checking", type: "cash", balance: 0 },

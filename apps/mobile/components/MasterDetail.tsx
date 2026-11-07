@@ -4,13 +4,17 @@ import { useLayout } from "../lib/layout";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Card } from "./ui";
 
+/** Two panes side by side only when there is room; phones stack and let the page scroll. */
+export const useTwoPane = () => useLayout().contentWidth >= 640;
+
 export type MasterItem = { key: string; title: string; subtitle?: string; value?: string };
 
 /**
  * Two-pane editor that fills its container's height:
  * - wide: detail on the left, a list of items on the right (click to switch)
- * - narrow: the list becomes a chip row above the detail
- * Only the panes scroll (scroll indicators hidden); the page itself doesn't.
+ * - narrow (phones): the list becomes a chip row above the detail, and the page scrolls
+ *   normally instead of squeezing the items into a small inner scroll box.
+ * Wide: only the panes scroll (scroll indicators hidden); the page itself doesn't.
  */
 export function MasterDetail({
   header, items, selected, onSelect, listTitle, listFooter, chipAdd, detailHead, detail, detailFooter, empty, label,
@@ -33,8 +37,7 @@ export function MasterDetail({
   label: string;
 }) {
   const t = useTheme();
-  const { contentWidth } = useLayout();
-  const twoPane = contentWidth >= 640;
+  const twoPane = useTwoPane();
 
   const list = twoPane ? (
     <Card padded={false} style={styles.listPane}>
@@ -92,15 +95,19 @@ export function MasterDetail({
   );
 
   const pane = (
-    <Card padded={false} style={{ flex: 1, minHeight: 0, minWidth: 0 }}>
+    <Card padded={false} style={twoPane ? { flex: 1, minHeight: 0, minWidth: 0 } : undefined}>
       {items.length === 0 && empty ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: space.xl, gap: space.md }}>{empty}</View>
+        <View style={{ flex: twoPane ? 1 : undefined, alignItems: "center", justifyContent: "center", padding: space.xl, gap: space.md }}>{empty}</View>
       ) : (
         <>
           {detailHead ? <View style={[styles.head, { borderBottomColor: t.border }]}>{detailHead}</View> : null}
-          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            {detail}
-          </ScrollView>
+          {twoPane ? (
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {detail}
+            </ScrollView>
+          ) : (
+            <View>{detail}</View>
+          )}
           {detailFooter ? <View style={[styles.foot, { borderTopColor: t.border }]}>{detailFooter}</View> : null}
         </>
       )}
@@ -108,7 +115,7 @@ export function MasterDetail({
   );
 
   return (
-    <View style={{ flex: 1, minHeight: 440, gap: space.md }}>
+    <View style={twoPane ? { flex: 1, minHeight: 440, gap: space.md } : { gap: space.md }}>
       {header}
       {twoPane ? (
         <View style={{ flex: 1, minHeight: 0, flexDirection: "row", gap: space.md }}>

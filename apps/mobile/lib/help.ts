@@ -49,7 +49,7 @@ export const HELP = {
   efMonths: "How many months of your budget (plus debt minimums) to keep in cash before investing beyond the basics.",
   highApr: "Debts at or above this rate get paid off before you invest beyond the employer match. Below it, investing usually wins.",
   marginalTax:
-    "Your top tax bracket (federal + state). Putting $1 more into a pre-tax 401(k) only costs about $1 × (1 − this rate) of take-home pay.",
+    "Your top tax bracket (federal + state). Putting $1 more into a pre-tax 401(k) only costs about $1 × (1 − this rate) of take-home pay. We estimate it from everyone's pay in the plan and your filing status (2025 federal brackets, about 4% state). Set your own if your state's rate is different or you have other income.",
   hsaEligible: "You can use an HSA only with a high-deductible health plan. Check your benefits if you're not sure.",
   projectWith:
     "\"Following this plan\" assumes every spare dollar goes through your plan's steps (emergency fund, debts, IRA, 401(k) and so on). \"What I invest now\" assumes you keep investing only what you put in each month today, and any other spare money sits in cash.",

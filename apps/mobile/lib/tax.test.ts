@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { estimateAnnualTaxes, estimatePaycheckTaxes, estimateTaxRate, federalIncomeTax } from "./tax";
+import type { Income } from "@coastfi/engine";
+import { estimateAnnualTaxes, estimateBracket, estimatePaycheckTaxes, estimateTaxRate, federalBracket, federalIncomeTax } from "./tax";
 
 describe("federalIncomeTax", () => {
   it("applies brackets progressively", () => {
@@ -79,5 +80,39 @@ describe("filing status", () => {
     const x = estimateAnnualTaxes({ gross: 91_000, pretax: 5_000 }, "mfj", [{ gross: 50_000, pretax: 0 }]);
     expect(x.socialSecurity).toBeCloseTo(91_000 * 0.062, 6);
     expect(x.medicare).toBeCloseTo(91_000 * 0.0145, 6);
+  });
+});
+
+describe("estimateBracket", () => {
+  const job: Income = {
+    id: "j", name: "Job", kind: "job", freq: "biweekly", net: 2500, matchMode: "pct", gross: 3500, contribPct: 0.05,
+    deductions: [{ id: "h", kind: "health", amount: 110 }],
+  };
+
+  it("is null with no income", () => {
+    expect(estimateBracket([], "single")).toBeNull();
+  });
+
+  it("uses gross − 401(k) − pre-tax deductions − standard deduction", () => {
+    // 3,500 × 26 = 91,000 − 4,550 (401k) − 2,860 (health) = 83,590 − 15,750 = 67,840 → 22%
+    const e = estimateBracket([job], "single")!;
+    expect(e.taxable).toBeCloseTo(67_840, 6);
+    expect(e.federal).toBe(0.22);
+    expect(e.total).toBeCloseTo(0.26, 9);
+  });
+
+  it("depends on filing status and counts every job on the return", () => {
+    expect(estimateBracket([job], "mfj")!.federal).toBe(0.12);
+    expect(estimateBracket([job, { ...job, id: "k" }], "mfj")!.federal).toBe(0.22);
+  });
+
+  it("counts take-home for incomes without gross pay", () => {
+    const rental: Income = { id: "r", name: "Rental", kind: "rental", freq: "monthly", net: 2_000, matchMode: "usd" };
+    expect(estimateBracket([rental], "single")!.taxable).toBeCloseTo(24_000 - 15_750, 6);
+  });
+
+  it("is the lowest bracket when income is under the standard deduction", () => {
+    expect(federalBracket(0)).toBe(0.1);
+    expect(federalBracket(1_000_000)).toBe(0.37);
   });
 });

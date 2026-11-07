@@ -1,6 +1,9 @@
 import type { Debt, DebtKind } from "@coastfi/engine";
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { DEBT_KINDS, debtKind, debtLabel } from "../lib/debts";
+import { money, percent } from "../lib/format";
+import { Icon } from "./Icon";
 import { HELP } from "../lib/help";
 import { newId } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
@@ -20,12 +23,35 @@ export function DebtEditor({ debt, onChange, onRemove }: { debt: Debt; onChange:
     const keepApr = debt.apr !== kind.typicalApr && debt.apr !== 0;
     onChange({ kind: k, ...(keepApr ? {} : { apr: debtKind(k).typicalApr }) });
   };
+  // filled-in debts start collapsed (one line each); a new, blank one opens to fill in
+  const [open, setOpen] = useState(() => !debt.name && !debt.balance && !debt.minPayment);
   return (
-    <Card style={{ gap: space.sm }}>
+    <Card style={{ gap: space.sm, paddingVertical: open ? space.lg : space.md }}>
       <View style={styles.between}>
-        <Text style={[type.heading, { color: t.text, flex: 1 }]} numberOfLines={1}>{debtLabel(debt)}</Text>
+        <Pressable
+          role="button"
+          aria-expanded={open}
+          accessibilityLabel={`${debtLabel(debt)} details`}
+          accessibilityState={{ expanded: open }}
+          onPress={() => setOpen((o) => !o)}
+          style={[styles.between, { flex: 1, minHeight: 32 }]}
+        >
+          <View style={{ transform: [{ rotate: open ? "90deg" : "0deg" }] }}>
+            <Icon name="chevron" size={18} color={t.text3} />
+          </View>
+          <View style={{ flex: 1, gap: 1 }}>
+            <Text style={[type.heading, { color: t.text }]} numberOfLines={1}>{debtLabel(debt)}</Text>
+            {!open ? (
+              <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
+                {money(debt.balance)} · {percent(debt.apr, 1).replace(/\.0%$/, "%")} · {money(debt.minPayment)}/mo
+              </Text>
+            ) : null}
+          </View>
+        </Pressable>
         <IconButton icon="trash" color={t.bad} label={`Remove ${debtLabel(debt)}`} onPress={onRemove} />
       </View>
+      {open ? (
+        <>
       <View role="radiogroup" aria-label="Type of debt" style={styles.chips}>
         {DEBT_KINDS.map((k) => {
           const on = k.value === kind.value;
@@ -61,6 +87,8 @@ export function DebtEditor({ debt, onChange, onRemove }: { debt: Debt; onChange:
         <View style={[styles.note, { backgroundColor: t.warnSoft }]}>
           <Text style={[type.caption, { color: t.text }]}>{kind.note}</Text>
         </View>
+      ) : null}
+        </>
       ) : null}
     </Card>
   );

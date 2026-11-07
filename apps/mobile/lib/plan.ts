@@ -2,6 +2,7 @@ import { run, type MonthRow, type PlanState, type RunResult } from "@coastfi/eng
 import { useMemo } from "react";
 import { money } from "./format";
 import { useStore } from "./store";
+import { estimateBracket } from "./tax";
 import type { Theme } from "./theme";
 
 /** Today, as a stable Date that changes at most once a day (the engine never reads the clock). */
@@ -10,9 +11,21 @@ function useToday(): Date {
   return useMemo(() => new Date(), [key]);
 }
 
+/**
+ * The plan as the engine should see it: unless the user typed their own tax bracket, use the
+ * estimate from their income and filing status (so it follows raises and new jobs).
+ */
+export function effectivePlan(saved: PlanState): PlanState {
+  if (saved.plan.marginalTaxManual) return saved;
+  const est = estimateBracket(saved.incomes, saved.filingStatus ?? "single");
+  if (!est || Math.abs(est.total - saved.plan.marginalTax) < 1e-9) return saved;
+  return { ...saved, plan: { ...saved.plan, marginalTax: est.total } };
+}
+
 /** Runs the engine on the saved plan. Re-runs only when the plan changes. */
 export function usePlan(): { state: PlanState; result: RunResult; start: Date } {
-  const state = useStore((s) => s.plan);
+  const saved = useStore((s) => s.plan);
+  const state = useMemo(() => effectivePlan(saved), [saved]);
   const start = useToday();
   const result = useMemo(() => run(state, start), [state, start]);
   return { state, result, start };

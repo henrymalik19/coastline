@@ -93,6 +93,8 @@ export type PlanSettings = {
   efMonths: number;
   highApr: number;
   marginalTax: number;
+  /** True = `marginalTax` was typed by the user. Missing/false = the app estimates it from income. */
+  marginalTaxManual?: boolean;
   hsaEligible: boolean;
   hsaFamily: boolean;
   projectWith: ProjectWith;

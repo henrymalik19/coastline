@@ -2,6 +2,7 @@ import type { BudgetItem } from "@coastfi/engine";
 import { useEffect, useState } from "react";
 import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../lib/confirm";
+import { debtLabel } from "../lib/debts";
 import { money } from "../lib/format";
 import { HELP } from "../lib/help";
 import { useLayout } from "../lib/layout";
@@ -9,7 +10,7 @@ import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, IconButton, InfoTip, NumberInput, TextField, Toggle } from "./form";
-import { AddChip, MasterDetail } from "./MasterDetail";
+import { AddChip, MasterDetail, useTwoPane } from "./MasterDetail";
 import { Card, Pill } from "./ui";
 
 const UNGROUPED = "Other";
@@ -35,7 +36,10 @@ export function BudgetEditor() {
   const t = useTheme();
   const { state, result } = usePlan();
   const update = useStore((s) => s.update);
-  const compact = useLayout().contentWidth < 560;
+  // compact rows when the items pane itself is narrow (phones, or two panes on a mid-size window)
+  const { contentWidth } = useLayout();
+  const paneWidth = useTwoPane() ? contentWidth - 270 - space.md : contentWidth;
+  const compact = paneWidth < 560;
   const cols = budgetCols(compact);
   const groups = grouped(state.budget);
   const [selected, setSelected] = useState<string | undefined>(groups[0]?.name);
@@ -77,6 +81,7 @@ export function BudgetEditor() {
   // what's left each month once the budget and debt minimums are paid (engine numbers, normal month)
   const d = result.d;
   const leftover = d.leanMonthly - d.budgetTotal - d.debtMins;
+  const debtsWithPayments = state.debts.filter((x) => x.minPayment > 0);
   const figure = (label: string, value: string, sign?: "−" | "=") => (
     <View style={styles.figure}>
       {sign ? <Text style={[type.heading, { color: t.text3, marginRight: space.sm }]}>{sign}</Text> : null}
@@ -106,6 +111,14 @@ export function BudgetEditor() {
           : "Your plan puts the leftover to work: emergency fund, employer match, debt, then investing (see the Plan tab)."}
         {d.extraChecksPerYear > 1 ? ` Extra-paycheck months add about ${money(d.extraChecksPerYear)} a year on top.` : ""}
       </Text>
+      {debtsWithPayments.length ? (
+        <View style={[styles.debtNote, { backgroundColor: t.accentSoft }]}>
+          <Text style={[type.caption, { color: t.text }]}>
+            <Text style={{ fontWeight: "700" }}>Debt payments are already counted</Text> ({money(d.debtMins)}/mo from{" "}
+            {debtsWithPayments.map(debtLabel).join(", ")}). Don't add them here too.
+          </Text>
+        </View>
+      ) : null}
       <View style={[styles.totals, { borderTopColor: t.border }]}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
           <Text style={[type.caption, { color: t.text3 }]}>Still paid after you retire</Text>
@@ -143,9 +156,11 @@ export function BudgetEditor() {
             <View style={[styles.cols, { paddingHorizontal: space.lg, paddingBottom: space.sm }]}>
               <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Item</Text>
               <Text style={[type.overline, { color: t.text3, width: cols.amount, textAlign: "right" }]}>Monthly</Text>
-              <View style={{ width: cols.retire, alignItems: "center" }}>
-                <Text style={[compact ? type.caption : type.overline, { color: t.text3, textAlign: "center", fontWeight: "600" }]}>After you retire?</Text>
-              </View>
+              {compact ? null : (
+                <View style={{ width: cols.retire, alignItems: "center" }}>
+                  <Text style={[type.overline, { color: t.text3, textAlign: "center", fontWeight: "600" }]}>After you retire?</Text>
+                </View>
+              )}
               <View style={{ width: cols.actions }} />
             </View>
           </View>
@@ -216,7 +231,7 @@ function GroupName({ name, onRename, onRemove }: { name: string; onRename: (to: 
 
 /** Column widths: roomy on wide screens, tight on phones so item names stay visible. */
 export const budgetCols = (compact: boolean) =>
-  compact ? { amount: 72, retire: 76, actions: 40 } : { amount: 124, retire: 120, actions: 84 };
+  compact ? { amount: 84, retire: 0, actions: 40 } : { amount: 124, retire: 120, actions: 84 };
 
 /** One budget item: read-only text by default; ✎ turns it into inputs, ✓ finishes. */
 function BudgetRow({
@@ -268,13 +283,23 @@ function BudgetRow({
         </>
       ) : (
         <>
-          <Text numberOfLines={1} style={[type.body, { flex: 1, minWidth: 0, color: item.name ? t.text : t.text3 }]}>{name}</Text>
-          <Text style={[type.body, { width: w.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(item.amount)}</Text>
-          <View style={{ width: w.retire, alignItems: "center" }}>
-            <View style={{ alignSelf: "center" }}>
-              <Pill tone={item.inRetirement ? "good" : "neutral"}>{item.inRetirement ? "Still pay" : "Stops"}</Pill>
+          {compact ? (
+            // phones: the retirement status goes under the name so the name gets the room
+            <View style={{ flex: 1, minWidth: 0, paddingVertical: 4 }}>
+              <Text numberOfLines={2} style={[type.body, { color: item.name ? t.text : t.text3 }]}>{name}</Text>
+              <Text style={[type.caption, { color: item.inRetirement ? t.good : t.text3 }]}>{item.inRetirement ? "Still pay after I retire" : "Stops when I retire"}</Text>
             </View>
-          </View>
+          ) : (
+            <Text numberOfLines={1} style={[type.body, { flex: 1, minWidth: 0, color: item.name ? t.text : t.text3 }]}>{name}</Text>
+          )}
+          <Text style={[type.body, { width: w.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(item.amount)}</Text>
+          {compact ? null : (
+            <View style={{ width: w.retire, alignItems: "center" }}>
+              <View style={{ alignSelf: "center" }}>
+                <Pill tone={item.inRetirement ? "good" : "neutral"}>{item.inRetirement ? "Still pay" : "Stops"}</Pill>
+              </View>
+            </View>
+          )}
           <View style={[styles.actions, { width: w.actions }]}>
             <IconButton icon="edit" label={`Edit ${name}`} onPress={onEdit} />
           </View>
@@ -289,6 +314,7 @@ const styles = StyleSheet.create({
   flow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.lg },
   figure: { flexDirection: "row", alignItems: "center" },
   result: { borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, marginLeft: "auto" },
+  debtNote: { borderRadius: radius.sm, padding: space.md },
   tip: { width: "100%", padding: space.md, borderRadius: radius.sm, overflow: "hidden" },
   headRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingLeft: space.lg, paddingRight: space.sm, paddingVertical: space.sm },
   cols: { flexDirection: "row", alignItems: "center", gap: space.sm },

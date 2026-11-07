@@ -1,11 +1,13 @@
 import { useRouter } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { AccountsEditor } from "../components/AccountsEditor";
 import { BudgetEditor } from "../components/BudgetEditor";
 import { AddDebtButtons, DebtEditor } from "../components/DebtEditor";
 import { EmergencyFundNote, looksLikeEmergencyFund } from "../components/EmergencyFundNote";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField } from "../components/form";
 import { Icon } from "../components/Icon";
+import { useTwoPane } from "../components/MasterDetail";
 import { ProgressBar, ProgressRing } from "../components/ProgressRing";
 import { IncomesEditor } from "../components/IncomeEditor";
 import { Card, Divider, Screen } from "../components/ui";
@@ -18,12 +20,14 @@ import { HELP } from "../lib/help";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 
-const STEPS = ["you", "income", "budget", "money", "goals", "review"] as const;
+// money (accounts + debts) comes before the budget, so debt payments are known and not typed in twice
+const STEPS = ["you", "income", "money", "budget", "goals", "review"] as const;
 type Step = (typeof STEPS)[number];
 
 export default function Onboarding() {
   const t = useTheme();
   const router = useRouter();
+  const twoPane = useTwoPane();
   const completeOnboarding = useStore((s) => s.completeOnboarding);
   const [step, setStep] = useState<Step>("you");
   const i = STEPS.indexOf(step);
@@ -52,7 +56,7 @@ export default function Onboarding() {
   const [title, subtitle] = titles[step];
 
   return (
-    <Screen title={title} subtitle={subtitle} hideSettings maxWidth={1120} fill={step === "income" || step === "budget"}>
+    <Screen title={title} subtitle={subtitle} hideSettings maxWidth={1120} fill={twoPane && (step === "income" || step === "budget")}>
       <View style={{ gap: 6 }}>
         <Text style={[type.caption, { color: t.text3 }]}>Step {i + 1} of {STEPS.length}</Text>
         <ProgressBar progress={(i + 1) / STEPS.length} />
@@ -153,16 +157,11 @@ function MoneyStep() {
   const update = useStore((s) => s.update);
   return (
     <>
-      <Block hint="Rough is fine. You'll update these at each monthly check-in.">
-        {state.accounts.map((a, i) => (
-          <View key={a.id}>
-            <FieldRow label={a.name} info={HELP[a.type]}>
-              <NumberInput kind="money" label={`${a.name} balance`} value={a.balance} onChange={(v) => update((p) => { p.accounts[i]!.balance = v; })} />
-            </FieldRow>
-            {i < state.accounts.length - 1 ? <Divider /> : null}
-          </View>
-        ))}
-      </Block>
+      <Text style={[type.heading, { color: t.text }]}>Accounts</Text>
+      <AccountsEditor />
+      <Text style={[type.caption, { color: t.text3, marginTop: -space.xs }]}>
+        Rough is fine. You'll update these at each monthly check-in. Tap an account to rename it, change its type or remove it.
+      </Text>
       <Text style={[type.heading, { color: t.text, marginTop: space.sm }]}>Debts</Text>
       {state.debts.map((dt, i) => (
         <DebtEditor

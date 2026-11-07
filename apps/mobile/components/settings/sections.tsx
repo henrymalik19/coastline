@@ -1,14 +1,15 @@
-import type { AccountType } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../../lib/confirm";
-import { money } from "../../lib/format";
+import { money, percent } from "../../lib/format";
+import { estimateBracket } from "../../lib/tax";
 import { HELP } from "../../lib/help";
 import { usePlan } from "../../lib/plan";
 import { newId, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
 import { AccountPanel } from "../AccountPanel";
+import { AccountsEditor } from "../AccountsEditor";
 import { BudgetEditor } from "../BudgetEditor";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "../form";
 import { Icon, type IconName } from "../Icon";
@@ -165,39 +166,14 @@ function BudgetSection() {
 
 /* ---------- Accounts ---------- */
 
-const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
-  { value: "pretax", label: "Pre-tax" },
-  { value: "roth", label: "Roth" },
-  { value: "taxable", label: "Brokerage" },
-  { value: "hsa", label: "HSA" },
-  { value: "cash", label: "Cash" },
-];
-
 function AccountsSection() {
   const t = useTheme();
-  const { state } = usePlan();
-  const update = useStore((s) => s.update);
   return (
     <>
-      <Text style={[type.body, { color: t.text2 }]}>Cash is your emergency fund. Everything else counts as invested.</Text>
-      {state.accounts.length === 0 ? <Empty text="No accounts yet" /> : null}
-      {state.accounts.map((a, i) => (
-        <ItemCard
-          key={a.id}
-          label="Account"
-          placeholder="e.g. Fidelity 401(k)"
-          name={a.name}
-          onName={(v) => update((p) => { p.accounts[i]!.name = v; })}
-          onDelete={() => removeItem("this account", a.name, () => update((p) => { p.accounts.splice(i, 1); }))}
-        >
-          <Segmented label="Account type" options={ACCOUNT_TYPES} value={a.type} onChange={(v) => update((p) => { p.accounts[i]!.type = v; })} />
-          <Text style={[type.caption, { color: t.text3 }]}>{HELP[a.type]}</Text>
-          <FieldRow label="Balance">
-            <NumberInput kind="money" label={`${a.name} balance`} value={a.balance} onChange={(v) => update((p) => { p.accounts[i]!.balance = v; })} />
-          </FieldRow>
-        </ItemCard>
-      ))}
-      <Button title="Add account" icon="plus" onPress={() => update((p) => { p.accounts.push({ id: newId(), name: "", type: "taxable", balance: 0 }); })} style={{ alignSelf: "flex-start" }} />
+      <Text style={[type.body, { color: t.text2 }]}>
+        Cash is your emergency fund. Everything else counts as invested. Tap an account to rename it, change its type, move it or remove it.
+      </Text>
+      <AccountsEditor />
     </>
   );
 }
@@ -303,7 +279,7 @@ function AssumptionsSection() {
               <NumberInput kind="decimal" label="Full emergency fund in months" value={state.plan.efMonths} max={24} step={1} onChange={(v) => update((p) => { p.plan.efMonths = v; })} />
             </FieldRow>,
             pct("hi", '"High-interest" debt starts at', HELP.highApr, state.plan.highApr, (v) => update((p) => { p.plan.highApr = v; })),
-            pct("mt", "Your tax bracket", HELP.marginalTax, state.plan.marginalTax, (v) => update((p) => { p.plan.marginalTax = v; }), 0.6, "Federal + state"),
+            <TaxBracketRow key="mt" />,
             <ToggleRow key="h" label="I have an HSA-eligible health plan" hint="High-deductible plan" value={state.plan.hsaEligible} onChange={(v) => update((p) => { p.plan.hsaEligible = v; })} />,
             state.plan.hsaEligible ? <ToggleRow key="hf" label="HSA family coverage" value={state.plan.hsaFamily} onChange={(v) => update((p) => { p.plan.hsaFamily = v; })} /> : null,
             <FieldRow
@@ -324,6 +300,41 @@ function AssumptionsSection() {
         </Rows>
       </Group>
     </>
+  );
+}
+
+/** Tax bracket: estimated from income and filing status unless the user types their own. */
+function TaxBracketRow() {
+  const t = useTheme();
+  const { state } = usePlan();
+  const update = useStore((s) => s.update);
+  const manual = !!state.plan.marginalTaxManual;
+  const est = estimateBracket(state.incomes, state.filingStatus ?? "single");
+  const link = { color: t.accent, fontWeight: "700" as const };
+  const hint = manual
+    ? est
+      ? <>Your own number. Our estimate is {percent(est.total)}. <Text role="link" style={link} onPress={() => update((p) => { p.plan.marginalTaxManual = false; })}>Use the estimate</Text></>
+      : <>Your own number. Add your pay under Income and we can estimate it.</>
+    : est
+      ? <>Estimated from your pay and filing status: {percent(est.federal)} federal + {percent(est.state)} state. <Text role="link" style={link} onPress={() => update((p) => { p.plan.marginalTax = est.total; p.plan.marginalTaxManual = true; })}>Set my own</Text></>
+      : <>Add your pay under Income and we'll estimate this. Until then it uses the number here.</>;
+  return (
+    <View style={{ paddingBottom: space.md }}>
+      <FieldRow label="Your tax bracket" info={HELP.marginalTax}>
+        {manual || !est ? (
+          <NumberInput
+            kind="percent"
+            label="Your tax bracket"
+            value={state.plan.marginalTax}
+            max={0.6}
+            onChange={(v) => update((p) => { p.plan.marginalTax = v; p.plan.marginalTaxManual = true; })}
+          />
+        ) : (
+          <Text style={[type.heading, { color: t.text, fontVariant: ["tabular-nums"] }]}>{percent(est.total)}</Text>
+        )}
+      </FieldRow>
+      <Text style={[type.caption, { color: t.text3, marginTop: -space.xs }]}>{hint}</Text>
+    </View>
   );
 }
 

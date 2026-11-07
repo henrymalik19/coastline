@@ -1,4 +1,5 @@
-import type { FilingStatus } from "@coastfi/engine";
+import { PERIODS, type FilingStatus, type Income } from "@coastfi/engine";
+import { paycheck } from "./paycheck";
 
 /**
  * Rough paycheck tax estimate, used only to pre-fill pay-stub fields (the user can edit them).
@@ -95,4 +96,32 @@ export function estimateTaxRate(annualGross: number, annualPretax = 0, status: F
   if (!(annualGross > 0)) return 0;
   const t = estimateAnnualTaxes({ gross: annualGross, pretax: annualPretax }, status);
   return (t.federal + t.state + t.socialSecurity + t.medicare) / annualGross;
+}
+
+/** The federal bracket (top rate) that `taxable` income falls in. */
+export function federalBracket(taxable: number, status: FilingStatus = "single"): number {
+  if (!(taxable > 0)) return TAX_TABLES[status].brackets[0]![1];
+  for (const [upTo, rate] of TAX_TABLES[status].brackets) if (taxable <= upTo) return rate;
+  return TAX_TABLES[status].brackets.at(-1)![1];
+}
+
+export type BracketEstimate = { federal: number; state: number; total: number; taxable: number };
+
+/**
+ * Estimated top tax rate (federal bracket + flat state rate) for the whole household, from
+ * every income in the plan. Jobs with gross pay count gross − 401(k) − pre-tax deductions;
+ * other incomes (or jobs entered by take-home only) count their take-home, a rough lower bound.
+ * Returns null when there's no income to go on.
+ */
+export function estimateBracket(incomes: Income[], status: FilingStatus = "single"): BracketEstimate | null {
+  let base = 0;
+  for (const inc of incomes) {
+    const P = PERIODS[inc.freq];
+    const p = paycheck(inc);
+    base += (inc.kind ?? "job") === "job" && p.gross > 0 ? Math.max(0, p.gross - p.k401 - p.pretaxDeductions) * P : Math.max(0, inc.net) * P;
+  }
+  if (!(base > 0)) return null;
+  const taxable = Math.max(0, base - TAX_TABLES[status].standard);
+  const federal = federalBracket(taxable, status);
+  return { federal, state: STATE_RATE, total: federal + STATE_RATE, taxable };
 }
