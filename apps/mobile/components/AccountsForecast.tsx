@@ -298,7 +298,6 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
   const web = Platform.OS === "web";
   const stick = (st: object) => (web ? ({ position: "sticky", ...st } as object) : null);
   const MW = compact ? 70 : 104;
-  const planCols = compact ? 1 : 3;
   const H1 = 30;
   const num = (v: string, color: string, w = COL, bold = false) => (
     <Text style={[type.caption, { width: w, paddingHorizontal: 8, textAlign: "right", color, fontWeight: bold ? "700" : "500", fontVariant: ["tabular-nums"] }]}>{v}</Text>
@@ -310,9 +309,6 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
   const head1 = (
     <View style={[styles.gr, { height: H1, backgroundColor: t.surface, zIndex: 3 }, stick({ top: 0 })]}>
       {monthCell(<Text style={[type.overline, { color: t.text3 }]}>Month</Text>, t.surface, 4)}
-      <View style={[{ width: COL * planCols, justifyContent: "center" }, groupEdge]}>
-        <Text numberOfLines={1} style={[type.overline, { color: t.text3, textAlign: "center" }]}>Your plan</Text>
-      </View>
       {cols.map((x) => {
         const on = sel === x.key;
         const planned = (schedule[x.key]?.length ?? 0) > 0;
@@ -335,11 +331,6 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
   const head2 = (
     <View style={[styles.gr, { backgroundColor: t.surface, borderBottomWidth: 1, borderBottomColor: t.border, zIndex: 3 }, stick({ top: H1 })]}>
       {monthCell(<Text style={[type.caption, { color: t.text3 }]}> </Text>, t.surface, 4)}
-      <View style={[{ flexDirection: "row" }, groupEdge]}>
-        {compact ? null : num("Left after bills", t.text3)}
-        {compact ? null : num("Planned", t.text3)}
-        {num(compact ? "Left over" : "Not planned", t.text3)}
-      </View>
       {cols.map((x) => (
         <View key={x.key} style={[{ flexDirection: "row" }, groupEdge]}>
           {num(isDebt(x.key) ? "Paid" : "In", t.text3)}
@@ -351,7 +342,6 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
   const todayRow = (
     <View style={[styles.gr, { backgroundColor: t.surface }]}>
       {monthCell(<Text style={[type.caption, { color: t.text3 }]}>Today</Text>, t.surface)}
-      <View style={[{ width: COL * planCols }, groupEdge]} />
       {cols.map((x) => (
         <View key={x.key} style={[{ flexDirection: "row" }, groupEdge]}>
           {num("", t.text3)}
@@ -376,11 +366,6 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
           1,
           i === 0,
         )}
-        <View style={[{ flexDirection: "row", alignItems: "center" }, groupEdge]}>
-          {compact ? null : num(money(r.available), t.text2)}
-          {compact ? null : num(r.plannedAsk > 0.5 ? money(r.plannedAsk) : "–", t.text2)}
-          {num(short ? (compact ? `−${money(r.plannedShort)}` : `short ${money(r.plannedShort)}`) : money(Math.max(0, r.available - r.plannedGot)), short ? t.bad : t.good, COL, short)}
-        </View>
         {cols.map((x) => (
           <View key={x.key} style={[{ flexDirection: "row", alignItems: "center" }, groupEdge]}>
             <View style={{ width: COL, paddingHorizontal: 8, alignItems: "flex-end" }}>{amountCell(x, i, COL - 16)}</View>
@@ -424,14 +409,12 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
         <Text style={[type.overline, styles.sMonth, { color: t.text3 }]}>Month</Text>
         <Text style={[type.overline, styles.sNum, { color: t.text3 }]}>{isDebt(one.key) ? "Paid" : "Added"}</Text>
         <Text style={[type.overline, styles.sNum, { color: t.text3 }]}>{isDebt(one.key) ? "Owed" : "Balance"}</Text>
-        <Text style={[type.overline, styles.sNum, { color: t.text3 }]}>Left over</Text>
       </View>
       <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1 }}>
         <View style={[styles.sRow, { backgroundColor: t.surface }]}>
           <Text style={[type.caption, styles.sMonth, { color: t.text3 }]}>Today</Text>
           {sCell("", t.text3)}
           {sCell(money(one.start), t.text2, true)}
-          {sCell("", t.text3)}
         </View>
         {Array.from({ length: span }, (_, i) => {
           const r = pl.months[i]!;
@@ -457,7 +440,6 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
                 sCell(added > 0.5 ? money(added) : "–", changed ? t.accent : added > 0.5 ? t.text : t.text3, changed)
               )}
               {sCell(money(m.balance), t.text, true)}
-              {sCell(short ? `−${money(r.plannedShort)}` : money(Math.max(0, r.available - r.plannedGot)), short ? t.bad : t.text3, short)}
             </View>
           );
         })}

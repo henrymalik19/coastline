@@ -12,7 +12,6 @@ import { usePlan } from "../lib/plan";
 import { stepInfo } from "../lib/steps";
 import { space, type, useTheme } from "../lib/theme";
 import { Icon } from "./Icon";
-import { ProgressBar } from "./ProgressRing";
 import { Card, Divider, SectionLabel } from "./ui";
 
 type Row = {
@@ -22,6 +21,8 @@ type Row = {
   value: string;
   /** 0–1, or none (brokerage, debts). */
   progress?: number;
+  /** 0–1: where the plan has it by December (drawn lighter behind `progress`). */
+  later?: number;
   /** When / how it gets there. */
   status: string;
   /** A to-do for it (e.g. what to set per paycheck). */
@@ -52,6 +53,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
     return first && /^From /.test(first) ? first : undefined;
   };
 
+  const dec = pl.months.find((m) => m.y === y0 && m.mo === 11) ?? pl.months[0];
   const rows: Row[] = [];
   // emergency fund
   if (pl.fullTarget > 0) {
@@ -62,6 +64,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       name: "Emergency fund",
       value: `${money(cash, { whole: true })} of ${money(pl.fullTarget, { whole: true })}`,
       progress: Math.min(1, cash / pl.fullTarget),
+      later: dec ? Math.min(1, dec.cash / pl.fullTarget) : undefined,
       status: `${state.plan.efMonths} months of expenses (${money(pl.fullTarget / Math.max(1, state.plan.efMonths), { whole: true })}/mo) · ${full ? "Full" : ev("fullEF") !== undefined ? `full by ${when(ev("fullEF"))}` : "not full in the plan yet"}`,
       color: t.good,
       done: full,
@@ -95,6 +98,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       name: k === "ira" ? "IRA" : BUCKET_LABELS[k],
       value: `${money(soFar, { whole: true })} of ${money(yr.limit, { whole: true })}`,
       progress: Math.min(1, soFar / yr.limit),
+      later: Math.min(1, yearIn / yr.limit),
       status:
         `In so far · plan: ` +
         (maxed
@@ -136,6 +140,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       name: g.name || "Goal",
       value: `${money(g.saved, { whole: true })} of ${money(g.target, { whole: true })}`,
       progress: Math.min(1, g.saved / g.target),
+      later: dec ? Math.min(1, (dec.goals.find((x) => x.id === g.id)?.saved ?? g.saved) / g.target) : undefined,
       status: done ? "Reached" : m !== undefined ? `Reached ${when(m)}` : "Not reached in the plan yet",
       color: t.series.goals,
       done,
@@ -158,6 +163,10 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       <View style={{ padding: space.lg, paddingBottom: space.sm, gap: 2 }}>
         <SectionLabel>Accounts filling up</SectionLabel>
         <Text style={[type.caption, { color: t.text3, marginTop: -space.xs }]}>Where each one stands and when it gets there. Tap one for its forecast.</Text>
+        <View style={styles.key}>
+          <View style={styles.keyItem}><View style={[styles.keySw, { backgroundColor: t.accent }]} /><Text style={[type.caption, { color: t.text3 }]}>In now</Text></View>
+          <View style={styles.keyItem}><View style={[styles.keySw, { backgroundColor: t.accent, opacity: 0.35 }]} /><Text style={[type.caption, { color: t.text3 }]}>By Dec {y0}, with the plan</Text></View>
+        </View>
       </View>
       {rows.map((r, i) => (
         <View key={r.key}>
@@ -174,7 +183,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
                 <Text style={[type.body, { color: t.text, fontWeight: "600", flex: 1 }]} numberOfLines={1}>{r.name}</Text>
                 <Text style={[type.label, { color: t.text, fontVariant: ["tabular-nums"] }]}>{r.value}</Text>
               </View>
-              {r.progress !== undefined ? <ProgressBar progress={r.progress} color={r.color} /> : null}
+              {r.progress !== undefined ? <TwoBar now={r.progress} later={r.later} color={r.color} /> : null}
               <Text style={[type.caption, { color: r.done ? t.good : t.text3, fontWeight: r.done ? "700" : "400" }]}>{r.status}</Text>
               {r.tip ? <Text style={[type.caption, { color: t.accent }]}>{r.tip}</Text> : null}
               {r.tip2 ? <Text style={[type.caption, { color: t.warn }]}>{r.tip2}</Text> : null}
@@ -188,7 +197,24 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
   );
 }
 
+/** Solid: what's there now. Lighter, behind it: where the plan has it by year end. */
+function TwoBar({ now, later, color }: { now: number; later?: number; color: string }) {
+  const t = useTheme();
+  const pct = (v: number) => `${Math.round(Math.max(0, Math.min(1, v)) * 1000) / 10}%` as const;
+  return (
+    <View style={[styles.track, { backgroundColor: t.track }]} role="progressbar" aria-valuenow={Math.round(now * 100)} aria-valuemin={0} aria-valuemax={100}>
+      {later !== undefined && later > now ? <View style={[styles.fill, { width: pct(later), backgroundColor: color, opacity: 0.35 }]} /> : null}
+      <View style={[styles.fill, { width: pct(now), backgroundColor: color }]} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  track: { height: 8, borderRadius: 4, overflow: "hidden", position: "relative" },
+  fill: { position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: 4 },
+  key: { flexDirection: "row", gap: space.md, marginTop: 4, flexWrap: "wrap" },
+  keyItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  keySw: { width: 10, height: 10, borderRadius: 2 },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },
   line: { flexDirection: "row", alignItems: "center", gap: space.sm },
   dot: { width: 8, height: 8, borderRadius: 4 },
