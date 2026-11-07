@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../lib/confirm";
 import { debtLabel } from "../lib/debts";
+import { paycheckFor } from "../lib/loans";
 import { money } from "../lib/format";
 import { HELP } from "../lib/help";
 import { useLayout } from "../lib/layout";
@@ -15,6 +16,8 @@ import { AddChip, MasterDetail, useFillPage, useTwoPane } from "./MasterDetail";
 import { Card, Pill } from "./ui";
 
 const UNGROUPED = "Other";
+/** Key of the read-only "Debt payments" group (not a real budget group). */
+const DEBT_KEY = "\u0000debts";
 const groupOf = (b: BudgetItem) => b.group?.trim() || UNGROUPED;
 
 /** Groups in the order they first appear; items without a group go under "Other". */
@@ -49,10 +52,14 @@ export function BudgetEditor() {
   const [selected, setSelected] = useState<string | undefined>(groups[0]?.name);
   const [retireTip, setRetireTip] = useState(false);
   const names = groups.map((g) => g.name).join("|");
+  // debt payments come from Debts: shown here as a read-only group so the budget lists everything
+  const debtRows = state.debts.filter((x) => x.balance > 0 && x.minPayment > 0);
+  const onDebts = selected === DEBT_KEY && debtRows.length > 0;
   useEffect(() => {
+    if (selected === DEBT_KEY && debtRows.length > 0) return;
     if (!selected || !groups.some((g) => g.name === selected)) setSelected(groups[0]?.name);
-  }, [names]); // eslint-disable-line react-hooks/exhaustive-deps
-  const current = groups.find((g) => g.name === selected) ?? groups[0];
+  }, [names, debtRows.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const current = onDebts ? undefined : groups.find((g) => g.name === selected) ?? groups[0];
   const retireMonthly = state.budget.filter((b) => b.inRetirement).reduce((a, b) => a + b.amount, 0);
 
   const addGroup = () => {
@@ -85,7 +92,6 @@ export function BudgetEditor() {
   // what's left each month once the budget and debt minimums are paid (engine numbers, normal month)
   const d = result.d;
   const leftover = d.leanMonthly - d.budgetTotal - d.debtMins;
-  const debtsWithPayments = state.debts.filter((x) => x.minPayment > 0);
   const figure = (label: string, value: string, sign?: "−" | "=") => (
     <View style={styles.figure}>
       {sign ? <Text style={[type.heading, { color: t.text3, marginRight: space.sm }]}>{sign}</Text> : null}
@@ -107,9 +113,6 @@ export function BudgetEditor() {
         </View>
         <Text style={[type.stat, { color: leftover < 0 ? t.bad : t.good, fontVariant: ["tabular-nums"] }]}>{money(leftover)}/mo</Text>
       </View>
-      {debtsWithPayments.length ? (
-        <Text style={[type.caption, { color: t.text2 }]}>Debt payments are already counted; don't add them here.</Text>
-      ) : null}
       <Pressable role="button" aria-expanded={showDetails} onPress={() => setShowDetails((v) => !v)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
         <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{showDetails ? "Hide details" : "Details"}</Text>
         <View style={{ transform: [{ rotate: showDetails ? "90deg" : "0deg" }] }}>
@@ -154,14 +157,6 @@ export function BudgetEditor() {
           : "Your plan puts the leftover to work: emergency fund, employer match, debt, then investing (see the Plan tab)."}
         {d.extraChecksPerYear > 1 ? ` Extra-paycheck months add about ${money(d.extraChecksPerYear)} a year on top.` : ""}
       </Text>
-      {debtsWithPayments.length ? (
-        <View style={[styles.debtNote, { backgroundColor: t.accentSoft }]}>
-          <Text style={[type.caption, { color: t.text }]}>
-            <Text style={{ fontWeight: "700" }}>Debt payments are already counted</Text> ({money(d.debtMins)}/mo from{" "}
-            {debtsWithPayments.map(debtLabel).join(", ")}). Don't add them here too.
-          </Text>
-        </View>
-      ) : null}
       <View style={[styles.totals, { borderTopColor: t.border }]}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
           <Text style={[type.caption, { color: t.text3 }]}>Still paid after you retire</Text>
@@ -178,8 +173,11 @@ export function BudgetEditor() {
       label="Budget groups"
       header={header}
       listTitle="Groups"
-      items={groups.map((g) => ({ key: g.name, title: g.name, subtitle: `${g.rows.length} item${g.rows.length === 1 ? "" : "s"}`, value: money(g.subtotal) }))}
-      selected={current?.name}
+      items={[
+        ...groups.map((g) => ({ key: g.name, title: g.name, subtitle: `${g.rows.length} item${g.rows.length === 1 ? "" : "s"}`, value: money(g.subtotal) })),
+        ...(debtRows.length ? [{ key: DEBT_KEY, title: "Debt payments", subtitle: "From your debts", value: money(d.debtMins) }] : []),
+      ]}
+      selected={onDebts ? DEBT_KEY : current?.name}
       onSelect={setSelected}
       listFooter={<Button title="Add group" icon="plus" tone="ghost" onPress={addGroup} style={{ alignSelf: "flex-start" }} />}
       chipAdd={<AddChip label="Group" onPress={addGroup} />}
@@ -190,7 +188,19 @@ export function BudgetEditor() {
         </>
       }
       detailHead={
-        current ? (
+        onDebts ? (
+          <View>
+            <View style={styles.headRow}>
+              <Text role="heading" aria-level={2} style={[type.heading, { color: t.text, flex: 1 }]}>Debt payments</Text>
+              <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(d.debtMins)}/mo</Text>
+            </View>
+            <View style={[styles.cols, { paddingHorizontal: space.lg, paddingBottom: space.sm }]}>
+              <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Debt</Text>
+              <Text style={[type.overline, { color: t.text3, width: cols.amount, textAlign: "right" }]}>Monthly</Text>
+              <View style={{ width: cols.actions }} />
+            </View>
+          </View>
+        ) : current ? (
           <View>
             <View style={styles.headRow}>
               <GroupName key={current.name} name={current.name} onRename={(to) => renameGroup(current.name, to)} onRemove={() => removeGroup(current.name, current.rows.length)} />
@@ -210,7 +220,26 @@ export function BudgetEditor() {
         ) : undefined
       }
       detail={
-        current
+        onDebts
+          ? debtRows.map((x) => {
+              const link = paycheckFor(state, x.id);
+              const from = link
+                ? `From your ${link.income.name || "job"} paycheck (${money(link.deduction.amount)} per check)`
+                : x.promoUntil
+                  ? "Minimum payment · intro rate"
+                  : "Minimum payment";
+              return (
+                <View key={x.id} style={[styles.row, { borderBottomColor: t.border }]}>
+                  <View style={{ flex: 1, minWidth: 0, paddingVertical: 4 }}>
+                    <Text numberOfLines={2} style={[type.body, { color: t.text }]}>{debtLabel(x)}</Text>
+                    <Text style={[type.caption, { color: t.text3 }]}>{from}</Text>
+                  </View>
+                  <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(x.minPayment)}</Text>
+                  <View style={[styles.actions, { width: cols.actions }]} />
+                </View>
+              );
+            })
+          : current
           ? current.rows.map(({ item, index }) => (
               <BudgetRow
                 key={item.id}
@@ -226,7 +255,11 @@ export function BudgetEditor() {
             ))
           : null
       }
-      detailFooter={current ? <Button title={`Add item to ${current.name}`} icon="plus" tone="ghost" onPress={() => addItem(current.name)} style={{ alignSelf: "flex-start" }} /> : undefined}
+      detailFooter={onDebts ? (
+        <Text style={[type.caption, { color: t.text3, padding: space.sm }]}>
+          These come from your debts, so they're counted once. Change them on the Debts page (or under Income for a paycheck 401(k) loan).
+        </Text>
+      ) : current ? <Button title={`Add item to ${current.name}`} icon="plus" tone="ghost" onPress={() => addItem(current.name)} style={{ alignSelf: "flex-start" }} /> : undefined}
     />
   );
 }
