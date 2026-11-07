@@ -1,6 +1,6 @@
 import type { BudgetItem } from "@coastfi/engine";
 import { useEffect, useState } from "react";
-import { Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../lib/confirm";
 import { debtLabel } from "../lib/debts";
 import { money } from "../lib/format";
@@ -10,6 +10,7 @@ import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, IconButton, InfoTip, NumberInput, TextField, Toggle } from "./form";
+import { Icon } from "./Icon";
 import { AddChip, MasterDetail, useTwoPane } from "./MasterDetail";
 import { Card, Pill } from "./ui";
 
@@ -38,7 +39,9 @@ export function BudgetEditor() {
   const update = useStore((s) => s.update);
   // compact rows when the items pane itself is narrow (phones, or two panes on a mid-size window)
   const { contentWidth } = useLayout();
-  const paneWidth = useTwoPane() ? contentWidth - 270 - space.md : contentWidth;
+  const twoPane = useTwoPane();
+  const [showDetails, setShowDetails] = useState(false);
+  const paneWidth = twoPane ? contentWidth - 270 - space.md : contentWidth;
   const compact = paneWidth < 560;
   const cols = budgetCols(compact);
   const groups = grouped(state.budget);
@@ -91,7 +94,45 @@ export function BudgetEditor() {
       </View>
     </View>
   );
-  const header = (
+  // phones: one compact line (what's left over, and the math in small print); details on tap
+  const phoneHeader = (
+    <Card style={{ gap: space.sm, paddingVertical: space.md }}>
+      <View style={[styles.figure, { justifyContent: "space-between", gap: space.md }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={[type.label, { color: t.text2 }]}>{leftover < 0 ? "Short each month" : "Left over to save"}</Text>
+          <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]} numberOfLines={2}>
+            {money(d.leanMonthly)} take-home − {money(d.budgetTotal)} budget{d.debtMins > 0 ? ` − ${money(d.debtMins)} debts` : ""}
+          </Text>
+        </View>
+        <Text style={[type.stat, { color: leftover < 0 ? t.bad : t.good, fontVariant: ["tabular-nums"] }]}>{money(leftover)}/mo</Text>
+      </View>
+      {debtsWithPayments.length ? (
+        <Text style={[type.caption, { color: t.text2 }]}>Debt payments are already counted; don't add them here.</Text>
+      ) : null}
+      <Pressable role="button" aria-expanded={showDetails} onPress={() => setShowDetails((v) => !v)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{showDetails ? "Hide details" : "Details"}</Text>
+        <View style={{ transform: [{ rotate: showDetails ? "90deg" : "0deg" }] }}>
+          <Icon name="chevron" size={14} color={t.accent} />
+        </View>
+      </Pressable>
+      {showDetails ? (
+        <>
+          <Text style={[type.caption, { color: t.text3 }]}>
+            {leftover < 0
+              ? "Your budget is more than you bring home in a normal month. Coasting only works once today's bills are covered."
+              : "Your plan puts the leftover to work: emergency fund, employer match, debt, then investing (see the Plan tab)."}
+            {d.extraChecksPerYear > 1 ? ` Extra-paycheck months add about ${money(d.extraChecksPerYear)} a year on top.` : ""}
+          </Text>
+          <View style={[styles.totals, { borderTopColor: t.border }]}>
+            <Text style={[type.caption, { color: t.text3 }]}>Still paid after you retire</Text>
+            <Text style={[type.label, { color: t.text2, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(retireMonthly)}/mo</Text>
+            <Text style={[type.caption, { color: t.text3, width: "100%" }]}>{HELP.inRetirement}</Text>
+          </View>
+        </>
+      ) : null}
+    </Card>
+  );
+  const header = !twoPane ? phoneHeader : (
     <Card style={{ gap: space.md }}>
       <View style={styles.flow} role="group" aria-label={`Take-home ${money(d.leanMonthly)} minus budget ${money(d.budgetTotal)} minus debt minimums ${money(d.debtMins)} leaves ${money(leftover)} a month`}>
         {figure("Take-home (normal month)", money(d.leanMonthly))}
