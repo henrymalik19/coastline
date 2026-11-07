@@ -157,8 +157,8 @@ export default function Home() {
       {todos.length && !m0.emergency ? (
         <View style={{ paddingHorizontal: space.lg, paddingBottom: space.md, marginTop: -space.xs, gap: 4 }}>
           <Text style={[type.caption, { color: t.text2, fontVariant: ["tabular-nums"] }]}>
-            {money(m0.income)} take-home this month − {money(m0.expenses)} budget, debts and set-asides ={" "}
-            <Text style={{ fontWeight: "700", color: t.text }}>{money(Math.max(0, m0.income - m0.expenses))}</Text> to put to work, filling your plan's steps in order.
+            {money(m0.income)} in − {money(m0.expenses)} costs ={" "}
+            <Text style={{ fontWeight: "700", color: t.text }}>{money(Math.max(0, m0.income - m0.expenses))}</Text> for your plan
           </Text>
           {m0.extraCheck ? (
             <Text style={[type.caption, { color: t.text3 }]}>
