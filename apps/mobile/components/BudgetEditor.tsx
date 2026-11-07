@@ -252,12 +252,16 @@ export function BudgetEditor() {
                 }}
               />
               <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(current.subtotal)}/mo</Text>
-              <IconButton
-                icon={reorder ? "check" : "sliders"}
-                color={reorder ? t.accent : undefined}
-                label={reorder ? "Done reordering" : "Reorder groups and items"}
+              <Pressable
+                role="button"
+                accessibilityLabel={reorder ? "Done reordering" : "Reorder items and groups"}
                 onPress={() => { setEditing(null); setReorder((r) => !r); }}
-              />
+                hitSlop={6}
+                style={[styles.reorderBtn, { borderColor: reorder ? t.accent : t.border, backgroundColor: reorder ? t.accentSoft : t.surface }]}
+              >
+                <Icon name={reorder ? "check" : "sliders"} size={14} color={t.accent} />
+                <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{reorder ? "Done" : "Reorder"}</Text>
+              </Pressable>
             </View>
             {reorder ? (
               <View style={[styles.reorderBar, { backgroundColor: t.accentSoft }]}>
@@ -685,6 +689,7 @@ const styles = StyleSheet.create({
   debtNote: { borderRadius: radius.sm, padding: space.md },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   chip: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6, minHeight: 32, justifyContent: "center" },
+  reorderBtn: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   schedRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: 3 },
   hint: { flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: radius.sm, paddingVertical: space.xs, paddingLeft: space.md, paddingRight: space.xs, flexWrap: "wrap" },
   reorderBar: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.lg, marginBottom: space.sm, paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.sm },
