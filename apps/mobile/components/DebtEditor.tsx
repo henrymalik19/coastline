@@ -31,7 +31,8 @@ const shortMonth = (ym: string) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slic
 const pct = (v: number) => percent(v, 1).replace(/\.0%$/, "%");
 
 export function newDebt(kind: DebtKind): Debt {
-  return { id: newId(), name: "", kind, balance: 0, apr: debtKind(kind).typicalApr, minPayment: 0 };
+  // mortgages default to the regular payment only: paying them off early is a choice, not the plan's default
+  return { id: newId(), name: "", kind, balance: 0, apr: debtKind(kind).typicalApr, minPayment: 0, ...(kind === "mortgage" ? { minimumOnly: true } : null) };
 }
 
 /** One debt: pick a type, optionally name it, then balance / rate / minimum. */
