@@ -1,5 +1,6 @@
 import { coastNumberAt } from "@coastfi/engine";
-import { StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { longMonth } from "../../components/AdjustmentsCard";
 import { IconButton } from "../../components/form";
 import { Icon } from "../../components/Icon";
@@ -17,6 +18,7 @@ export default function Plan() {
   const { twoColumn } = useLayout();
   const { state, result: o, start, actual } = usePlan();
   const update = useStore((s) => s.update);
+  const [openKey, setOpenKey] = useState<string | null>(null);
 
   // steps describe what you'll really do (no what-ifs), so they match Home's to-dos
   const real = { ...o, plan: actual };
@@ -67,6 +69,36 @@ export default function Plan() {
                 {info.progress !== undefined && !info.done ? (
                   <View style={{ maxWidth: 280, marginTop: 4 }}>
                     <ProgressBar progress={info.progress} color={t.good} />
+                  </View>
+                ) : null}
+                {info.schedule ? (
+                  <Pressable
+                    role="button"
+                    aria-expanded={openKey === info.key}
+                    onPress={() => setOpenKey(openKey === info.key ? null : info.key)}
+                    hitSlop={6}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}
+                  >
+                    <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{openKey === info.key ? "Hide each month" : "Each month"}</Text>
+                    <View style={{ transform: [{ rotate: openKey === info.key ? "90deg" : "0deg" }] }}>
+                      <Icon name="chevron" size={14} color={t.accent} />
+                    </View>
+                  </Pressable>
+                ) : null}
+                {info.schedule && openKey === info.key ? (
+                  <View style={[styles.sched, { backgroundColor: t.surface2 }]}>
+                    {info.schedule.map((r) => (
+                      <View key={r.m} style={styles.schedRow}>
+                        <Text style={[type.caption, { color: r.m === 0 ? t.text : t.text2, flex: 1, fontWeight: r.m === 0 ? "700" : "400" }]}>
+                          {r.label}
+                          {r.note ? <Text style={{ color: t.text3 }}> · {r.note}</Text> : null}
+                        </Text>
+                        <Text style={[type.caption, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(r.amount)}</Text>
+                      </View>
+                    ))}
+                    <Text style={[type.caption, { color: t.text3, marginTop: 4 }]}>
+                      From your plan: what's left each month after your budget, debt payments and set-asides, given to the steps in order.
+                    </Text>
                   </View>
                 ) : null}
               </View>
@@ -202,6 +234,8 @@ const styles = StyleSheet.create({
   step: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
   num: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   moves: { flexDirection: "row", alignItems: "center" },
+  sched: { borderRadius: 8, padding: space.sm, marginTop: 4, gap: 2 },
+  schedRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: 2 },
   tl: { flexDirection: "row", gap: space.md, paddingVertical: 10, alignItems: "flex-start" },
   cmp: { flexDirection: "row", gap: space.lg },
 });
