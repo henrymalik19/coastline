@@ -27,11 +27,16 @@ type SectionKey = "account" | "profile" | "retirementIncome" | "income" | "budge
 type SectionMeta = { key: SectionKey; title: string; subtitle: string; icon: IconName };
 
 export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
-  { title: "Account", items: [{ key: "account", title: "Account & sync", subtitle: "Sign in to use your plan on every device", icon: "user" }] },
+  {
+    title: "Account",
+    items: [
+      { key: "account", title: "Account & sync", subtitle: "Sign in to use your plan on every device", icon: "user" },
+      { key: "profile", title: "You", subtitle: "Age, retirement age and health insurance", icon: "user" },
+    ],
+  },
   {
     title: "Your money",
     items: [
-      { key: "profile", title: "You", subtitle: "Age, retirement age and health insurance", icon: "user" },
       { key: "retirementIncome", title: "Income in retirement", subtitle: "Social Security, pensions and other income after you stop working", icon: "calendar" },
       { key: "income", title: "Income", subtitle: "Jobs, business, rental and other income", icon: "wallet" },
       { key: "budget", title: "Monthly budget", subtitle: "Monthly spending by group (debt payments go under Debts)", icon: "card" },
