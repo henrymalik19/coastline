@@ -3,7 +3,8 @@
  * 401(k) / HSA / IRA, a goal) or its payoff (a debt), and when it gets there. Tap one for its month by
  * month forecast.
  */
-import { accountForecasts, BUCKET_LABELS, type AccountKey } from "@coastfi/engine";
+import { accountForecasts, accountGroup, BUCKET_LABELS, type AccountKey } from "@coastfi/engine";
+import { useStore } from "../lib/store";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { debtLabel } from "../lib/debts";
 import { money, monthLabel } from "../lib/format";
@@ -34,6 +35,7 @@ type Row = {
 export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void }) {
   const t = useTheme();
   const { state, result, actual, start } = usePlan();
+  const txns = useStore((s) => s.txns);
   const d = result.d;
   const pl = actual;
   const fc = accountForecasts(state, d, pl, d.r);
@@ -82,22 +84,29 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
     const nextMaxed = pl.maxedYears[k].includes(y0 + 1);
     const nothing = yearIn < 0.5 && a.start < 0.5;
     if (nothing && !(nextYear && nextYear.total > 0.5)) continue;
+    // what's really in so far this year: what you entered, plus transfers you've recorded into these accounts
+    const ids = new Set(state.accounts.filter((x) => accountGroup(x) === k).map((x) => x.id));
+    const moved = txns
+      .filter((x) => !x.deleted && x.date.startsWith(String(y0)) && ((x.transferAccountId && ids.has(x.transferAccountId) && x.amount < 0) || (x.categoryId && [...ids].some((id) => x.categoryId === "acct:" + id) && x.amount < 0)))
+      .reduce((sum, x) => sum + Math.abs(x.amount), 0);
+    const soFar = (k === "k401" ? c?.k401 ?? 0 : k === "hsa" ? c?.hsa ?? 0 : c?.ira ?? 0) + moved;
     rows.push({
       key: k,
       name: k === "ira" ? "IRA" : BUCKET_LABELS[k],
-      value: `${money(yearIn, { whole: true })} of ${money(yr.limit, { whole: true })}`,
-      progress: Math.min(1, yearIn / yr.limit),
+      value: `${money(soFar, { whole: true })} of ${money(yr.limit, { whole: true })}`,
+      progress: Math.min(1, soFar / yr.limit),
       status:
+        `In so far · plan: ` +
         (maxed
-          ? `Maxed in ${y0}`
+          ? `maxed by Dec ${y0}`
           : partYear
-            ? `${y0}: the plan fills the room it sees from ${monthLabel(start, 0)} on`
-            : `${money(Math.max(0, yr.limit - yearIn), { whole: true })} of room left in ${y0}`) +
+            ? `fills the room it sees from ${monthLabel(start, 0)} on`
+            : `about ${money(yearIn, { whole: true })} by Dec ${y0}`) +
         (nextYear ? ` · ${y0 + 1}: ${nextMaxed ? "maxed" : `about ${money(nextYear.employee || nextYear.total, { whole: true })}`}` : ""),
       tip2: notEntered
         ? k === "ira"
-          ? `Counts only what the plan puts in from ${monthLabel(start, 0)}. Add what's already in for ${y0} (Settings → Your money → Accounts) for your real room.`
-          : `Includes about ${money(before, { whole: true })} assumed from this year's earlier paychecks. Enter the real amount (Settings → Your money → Accounts).`
+          ? `Add what's already in for ${y0} (Settings → Your money → Accounts) so the plan knows your real room.`
+          : `Not entered yet, so the plan assumes about ${money(before, { whole: true })} from this year's earlier paychecks. Enter the real amount (Settings → Your money → Accounts).`
         : undefined,
       tip: k === "k401" || (k === "hsa" && state.plan.hsaPayroll !== false) ? tipFor(k) : undefined,
       color: t.series[k],
