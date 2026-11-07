@@ -48,7 +48,9 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
   const gridRef = useRef<unknown>(null);
   const hRef = useRef<{ scrollTo: (o: { x: number; animated: boolean }) => void } | null>(null);
   const xRef = useRef(0);
-  const { twoColumn } = useLayout();
+  const { twoColumn, contentWidth } = useLayout();
+  // phones: narrower columns, one "left over" column for the plan, details in place of the table
+  const compact = contentWidth < 600;
   const [planOpen, setPlanOpen] = useState<string | null>(null);
   const [span, setSpan] = useState(12);
   const [edit, setEdit] = useState<{ k: AccountKey; i: number } | null>(null);
@@ -186,10 +188,17 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
     const many = a.accounts.length > 1 || (a.accounts.length === 1 && a.accounts[0]!.name.trim() && a.accounts[0]!.name.trim() !== label(k));
     return (
       <View key={k}>
-        <View style={{ padding: space.lg, gap: 6 }}>
+        <View style={{ padding: compact ? space.md : space.lg, gap: 6 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
             <Text style={[type.body, { color: t.text, fontWeight: "700", flex: 1 }]}>{label(k)}</Text>
-            <IconButton icon="close" label={`Close ${label(k)}`} onPress={() => setSel(null)} />
+            {compact ? (
+              <Pressable role="button" accessibilityLabel="Back to the table" onPress={() => setSel(null)} hitSlop={8} style={styles.link}>
+                <Icon name="back" size={14} color={t.accent} />
+                <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Table</Text>
+              </Pressable>
+            ) : (
+              <IconButton icon="close" label={`Close ${label(k)}`} onPress={() => setSel(null)} />
+            )}
           </View>
           {many ? (
             <Text style={[type.caption, { color: t.text3 }]}>
@@ -198,13 +207,10 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
           ) : null}
           {schedulable(k) ? (
             <>
-              <Pressable role="button" aria-expanded={planOpen === k} onPress={() => setPlanOpen(planOpen === k ? null : k)} hitSlop={6} style={styles.link}>
-                <Text style={[type.caption, { color: schedule[k]?.length ? t.accent : t.text3, fontWeight: "700", flexShrink: 1 }]}>{planText(k)}</Text>
-                <View style={{ transform: [{ rotate: planOpen === k ? "90deg" : "0deg" }] }}>
-                  <Icon name="chevron" size={12} color={t.text3} />
-                </View>
-              </Pressable>
-              {planOpen === k ? scheduleEditor(k) : null}
+              <Text style={[type.caption, { color: schedule[k]?.length ? t.accent : t.text2, fontWeight: "700" }]}>
+                {schedule[k]?.length ? planText(k).replace("Your plan: ", "Monthly amount: ") : "Monthly amount: none set, so it gets what your steps give it"}
+              </Text>
+              {scheduleEditor(k)}
             </>
           ) : (
             <Pressable role="link" onPress={() => router.push(k === "other" ? "/money/accounts" : "/money/income")} hitSlop={6} style={styles.link}>
@@ -270,7 +276,9 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
   };
 
   /* ---------- the table: months down, accounts across ---------- */
-  const COL = 108;
+  const COL = compact ? 84 : 108;
+  /** "Nov 2026", or "Nov '26" on phones. */
+  const mLabel = (i: number) => (compact ? monthLabel(start, i).replace(/ \d\d(\d\d)$/, " '$1") : monthLabel(start, i));
   /* ---------- this month: what's set elsewhere, your plan, and what's not planned (or short) ---------- */
   const row0 = pl.months[0]!;
   const jobs = state.incomes.filter((x) => (x.kind ?? "job") === "job");
@@ -339,7 +347,8 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
   /* ---------- the table: months down, accounts across, header and month column stay put ---------- */
   const web = Platform.OS === "web";
   const stick = (st: object) => (web ? ({ position: "sticky", ...st } as object) : null);
-  const MW = 104;
+  const MW = compact ? 70 : 104;
+  const planCols = compact ? 1 : 3;
   const H1 = 30;
   const num = (v: string, color: string, w = COL, bold = false) => (
     <Text style={[type.caption, { width: w, paddingHorizontal: 8, textAlign: "right", color, fontWeight: bold ? "700" : "500", fontVariant: ["tabular-nums"] }]}>{v}</Text>
@@ -351,8 +360,8 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
   const head1 = (
     <View style={[styles.gr, { height: H1, backgroundColor: t.surface, zIndex: 3 }, stick({ top: 0 })]}>
       {monthCell(<Text style={[type.overline, { color: t.text3 }]}>Month</Text>, t.surface, 4)}
-      <View style={[{ width: COL * 3, justifyContent: "center" }, groupEdge]}>
-        <Text style={[type.overline, { color: t.text3, textAlign: "center" }]}>Your plan</Text>
+      <View style={[{ width: COL * planCols, justifyContent: "center" }, groupEdge]}>
+        <Text numberOfLines={1} style={[type.overline, { color: t.text3, textAlign: "center" }]}>Your plan</Text>
       </View>
       {shown.map((x) => {
         const on = sel === x.key;
@@ -377,9 +386,9 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
     <View style={[styles.gr, { backgroundColor: t.surface, borderBottomWidth: 1, borderBottomColor: t.border, zIndex: 3 }, stick({ top: H1 })]}>
       {monthCell(<Text style={[type.caption, { color: t.text3 }]}> </Text>, t.surface, 4)}
       <View style={[{ flexDirection: "row" }, groupEdge]}>
-        {num("Left after bills", t.text3)}
-        {num("Planned", t.text3)}
-        {num("Not planned", t.text3)}
+        {compact ? null : num("Left after bills", t.text3)}
+        {compact ? null : num("Planned", t.text3)}
+        {num(compact ? "Left over" : "Not planned", t.text3)}
       </View>
       {shown.map((x) => (
         <View key={x.key} style={[{ flexDirection: "row" }, groupEdge]}>
@@ -392,7 +401,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
   const todayRow = (
     <View style={[styles.gr, { backgroundColor: t.surface }]}>
       {monthCell(<Text style={[type.caption, { color: t.text3 }]}>Today</Text>, t.surface)}
-      <View style={[{ width: COL * 3 }, groupEdge]} />
+      <View style={[{ width: COL * planCols }, groupEdge]} />
       {shown.map((x) => (
         <View key={x.key} style={[{ flexDirection: "row" }, groupEdge]}>
           {num("", t.text3)}
@@ -409,15 +418,15 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
       <View key={i} style={[styles.gr, { backgroundColor: bg }]}>
         {monthCell(
           <Text style={[type.caption, { color: i === 0 ? t.text : t.text2, fontWeight: i === 0 ? "700" : "500" }]}>
-            {monthLabel(start, i)}
+            {mLabel(i)}
             {r.extraCheck ? <Text style={{ color: t.text3 }}> ·3</Text> : null}
           </Text>,
           bg,
         )}
-        <View style={[{ flexDirection: "row" }, groupEdge]}>
-          {num(money(r.available), t.text2)}
-          {num(r.plannedAsk > 0.5 ? money(r.plannedAsk) : "–", t.text2)}
-          {num(short ? `short ${money(r.plannedShort)}` : money(Math.max(0, r.available - r.plannedGot)), short ? t.bad : t.good, COL, short)}
+        <View style={[{ flexDirection: "row", alignItems: "center" }, groupEdge]}>
+          {compact ? null : num(money(r.available), t.text2)}
+          {compact ? null : num(r.plannedAsk > 0.5 ? money(r.plannedAsk) : "–", t.text2)}
+          {num(short ? (compact ? `−${money(r.plannedShort)}` : `short ${money(r.plannedShort)}`) : money(Math.max(0, r.available - r.plannedGot)), short ? t.bad : t.good, COL, short)}
         </View>
         {shown.map((x) => (
           <View key={x.key} style={[{ flexDirection: "row", alignItems: "center" }, groupEdge]}>
@@ -442,7 +451,8 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
     if (web) {
       const el = gridRef.current as { scrollLeft: number; scrollWidth: number; clientWidth: number; scrollTo?: (o: object) => void } | null;
       if (!el) return;
-      const target = Math.max(0, Math.min(el.scrollWidth - el.clientWidth, el.scrollLeft + dir * step));
+      const by = Math.max(COL * 2, Math.min(step, el.clientWidth - MW - 16));
+      const target = Math.max(0, Math.min(el.scrollWidth - el.clientWidth, el.scrollLeft + dir * by));
       el.scrollTo?.({ left: target, behavior: "smooth" });
       // some browsers skip smooth scrolling: make sure it lands
       setTimeout(() => { if (Math.abs(el.scrollLeft - target) > 2) el.scrollLeft = target; }, 450);
@@ -470,7 +480,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
   const panel = selected ? (
     <ScrollView
       {...({ dataSet: { ledger: "1" } } as object)}
-      style={twoColumn ? { width: 400, flexGrow: 0, flexShrink: 0, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: t.border } : { maxHeight: 360, flexGrow: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border }}
+      style={compact ? { flex: 1, minHeight: 0 } : twoColumn ? { width: 400, flexGrow: 0, flexShrink: 0, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: t.border } : { maxHeight: 360, flexGrow: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border }}
     >
       {card(selected)}
     </ScrollView>
@@ -492,10 +502,11 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
   );
   return (
     <Card padded={false} style={fill ? { flex: 1, minHeight: 0, overflow: "hidden" } : undefined}>
-      <View style={{ padding: space.md, gap: space.sm }}>
-        <View style={[styles.editRow, { justifyContent: "space-between" }]}>
-          <SectionLabel>Accounts</SectionLabel>
-          <View style={styles.editRow}>
+      <View style={{ padding: compact ? space.sm : space.md, gap: space.sm }}>
+        {compact && selected ? null : (
+        <View style={[styles.editRow, { justifyContent: "space-between" }, compact ? { flexWrap: "nowrap" } : null]}>
+          {compact ? null : <SectionLabel>Accounts</SectionLabel>}
+          <View style={[styles.editRow, compact ? { flexWrap: "nowrap", gap: 6 } : null]}>
             <View style={[styles.arrows, { borderColor: t.border }]}>
               <Pressable role="button" accessibilityLabel="Scroll the table left" onPress={() => scrollSide(-1)} hitSlop={4} style={styles.arrow}>
                 <Icon name="back" size={16} color={t.accent} />
@@ -507,27 +518,34 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
             </View>
             {[12, 24, 36, 60].map((n) => (
               <Pressable key={n} role="radio" aria-checked={span === n} onPress={() => setSpan(n)} hitSlop={6} style={[styles.chip, { borderColor: span === n ? t.accent : t.border, backgroundColor: span === n ? t.accentSoft : t.surface }]}>
-                <Text style={[type.caption, { color: span === n ? t.accent : t.text2, fontWeight: "700" }]}>{n} mo</Text>
+                <Text style={[type.caption, { color: span === n ? t.accent : t.text2, fontWeight: "700" }]}>{compact ? `${n / 12}y` : `${n} mo`}</Text>
               </Pressable>
             ))}
           </View>
         </View>
+        )}
         {summary}
         {showCheck ? (
           <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ maxHeight: 340, flexGrow: 0 }}>{check}</ScrollView>
         ) : null}
         {!selected ? (
           <Text style={[type.caption, { color: t.text3 }]}>
-            Tap an account's name for its plan and forecast · tap an amount to change that month · ● has a plan · ·3 = 3-paycheck month · red = short
+            {compact
+              ? "Tap a name to set its monthly amount · ·3 = 3 checks"
+              : "Tap an account's name to set its monthly amount and see its forecast · tap an amount to change one month · ● has a plan · ·3 = 3-paycheck month · red = short"}
           </Text>
         ) : null}
       </View>
       <View style={[{ flexDirection: twoColumn ? "row" : "column" }, fill ? { flex: 1, minHeight: 0 } : null]}>
-        {!twoColumn ? panel : null}
-        <View style={[{ paddingHorizontal: space.md, paddingBottom: space.md, gap: space.sm }, fill ? { flex: 1, minHeight: 0 } : null]}>
-          {grid}
-          {edit ? editorFor(edit.k, edit.i) : null}
-        </View>
+        {!twoColumn && !compact ? panel : null}
+        {compact && panel ? (
+          panel
+        ) : (
+          <View style={[{ paddingHorizontal: compact ? space.sm : space.md, paddingBottom: compact ? space.sm : space.md, gap: space.sm }, fill ? { flex: 1, minHeight: 0 } : null]}>
+            {grid}
+            {edit ? editorFor(edit.k, edit.i) : null}
+          </View>
+        )}
         {twoColumn ? panel : null}
       </View>
     </Card>

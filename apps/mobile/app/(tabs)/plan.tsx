@@ -16,7 +16,11 @@ import { space, type, useTheme } from "../../lib/theme";
 
 export default function Plan() {
   const t = useTheme();
-  const { twoColumn } = useLayout();
+  const { twoColumn, contentWidth } = useLayout();
+  // phones: tighter rows, and the long explanations fold away
+  const compact = contentWidth < 600;
+  const [howOpen, setHowOpen] = useState(false);
+  const [whyOpen, setWhyOpen] = useState(false);
   const { state, result: o, start, actual } = usePlan();
   const update = useStore((s) => s.update);
   // steps and accounts are two views of the same plan
@@ -91,7 +95,7 @@ export default function Plan() {
   };
   // a date label above the first step that starts in each month
   const dateLabel = (m: number) => (
-    <View key={"d" + m} style={[styles.dateLabel, { backgroundColor: t.surface2 }]}>
+    <View key={"d" + m} style={[styles.dateLabel, { backgroundColor: t.surface2 }, compact ? { paddingHorizontal: space.md } : null]}>
       <Text style={[type.overline, { color: t.accent }]}>{m === 0 ? "This month" : monthLabel(start, m)}</Text>
     </View>
   );
@@ -99,11 +103,18 @@ export default function Plan() {
 
   const steps = (
     <Card padded={false} style={twoColumn ? { flex: 3 } : undefined}>
-      <View style={{ padding: space.lg, paddingBottom: space.md, gap: 4 }}>
+      <View style={{ padding: compact ? space.md : space.lg, paddingBottom: space.md, gap: 4 }}>
         <SectionLabel>Your steps</SectionLabel>
-        <Text style={[type.body, { color: t.text2 }]}>
-          Whatever your plan doesn't assign (Accounts view) fills step 1, then step 2, and so on. To fund two steps at once, give one a share of what's left. Amounts and dates are for your numbers. Use the arrows to change the order. The dates between steps show when each one starts.
-        </Text>
+        {compact && !howOpen ? (
+          <Pressable role="button" aria-expanded={false} onPress={() => setHowOpen(true)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}>
+            <Text style={[type.caption, { color: t.text2 }]}>What's left fills these in order. <Text style={{ color: t.accent, fontWeight: "700" }}>How it works</Text></Text>
+            <Icon name="chevron" size={12} color={t.accent} />
+          </Pressable>
+        ) : (
+          <Text style={[compact ? type.caption : type.body, { color: t.text2 }]}>
+            Whatever your plan doesn't assign (Accounts view) fills step 1, then step 2, and so on. To fund two steps at once, give one a share of what's left. Amounts and dates are for your numbers. Use the arrows to change the order. The dates between steps show when each one starts.
+          </Text>
+        )}
       </View>
       <Divider />
       {infos.map((info, i) => {
@@ -120,7 +131,7 @@ export default function Plan() {
         return (
           <View key={info.key}>
             {labels}
-            <View style={styles.step}>
+            <View style={[styles.step, compact ? { paddingHorizontal: space.md, gap: space.sm } : null]}>
               <View
                 style={[
                   styles.num,
@@ -156,12 +167,12 @@ export default function Plan() {
                   />
                 ) : null}
               </View>
-              <View style={styles.moves}>
+              <View style={[styles.moves, compact ? { flexDirection: "column" } : null]}>
                 <IconButton icon="up" label={`Move ${info.label} up`} disabled={idx === 0} onPress={() => move(idx, -1)} />
                 <IconButton icon="down" label={`Move ${info.label} down`} disabled={idx === state.plan.steps.length - 1} onPress={() => move(idx, 1)} />
               </View>
             </View>
-            {i < infos.length - 1 ? <View style={{ marginLeft: 60 }}><Divider /></View> : null}
+            {i < infos.length - 1 ? <View style={{ marginLeft: compact ? 48 : 60 }}><Divider /></View> : null}
           </View>
         );
       })}
@@ -173,6 +184,15 @@ export default function Plan() {
   const coastM = o.crossing === null ? null : Math.round(o.crossing * 12);
   const coastAge = o.crossing === null ? null : Math.floor(o.d.age + o.crossing);
   const coastAt = o.crossing === null ? 0 : coastNumberAt(o.fire, o.d.r, o.d.years - o.crossing);
+  const why = !compact || whyOpen;
+  const whyToggle = compact ? (
+    <Pressable role="button" aria-expanded={whyOpen} onPress={() => setWhyOpen((v) => !v)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}>
+      <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{whyOpen ? "Less" : "What this means"}</Text>
+      <View style={{ transform: [{ rotate: whyOpen ? "-90deg" : "90deg" }] }}>
+        <Icon name="chevron" size={12} color={t.accent} />
+      </View>
+    </Pressable>
+  ) : null;
   const finish = (
     <Card style={{ gap: space.sm, borderColor: coastM === null ? t.border : t.accent }}>
       <SectionLabel>Your finish line</SectionLabel>
@@ -186,29 +206,32 @@ export default function Plan() {
       ) : coastM === null ? (
         <>
           <Text style={[type.title, { color: t.text }]}>Not reached by {o.d.retireAge} yet</Text>
-          <Text style={[type.body, { color: t.text2 }]}>
+          {why ? <Text style={[type.body, { color: t.text2 }]}>
             At this pace your savings won't grow to your retirement number ({money(o.fire, { whole: true })}) on their own by age {o.d.retireAge}. Saving more each month, a later
             retirement age, or Social Security or a pension (Money → Income in retirement) would get you there.
-          </Text>
+          </Text> : null}
+          {whyToggle}
         </>
       ) : coastM === 0 ? (
         <>
           <Text style={[type.title, { color: t.good }]}>You've reached Coast FI</Text>
-          <Text style={[type.body, { color: t.text2 }]}>
+          {why ? <Text style={[type.body, { color: t.text2 }]}>
             What you've invested ({money(o.d.invested, { whole: true })}) can grow to your retirement number ({money(o.fire, { whole: true })}) by age {o.d.retireAge} on its own.
             You only need to cover your bills. Anything you invest from here is optional and lets you retire earlier.
-          </Text>
+          </Text> : null}
+          {whyToggle}
         </>
       ) : (
         <>
-          <Text style={[type.title, { color: t.text }]}>
+          <Text style={[type.title, compact ? { fontSize: 22, lineHeight: 28 } : null, { color: t.text }]}>
             Coast FI in {monthLabel(start, coastM)}
             {coastAge !== null ? <Text style={{ color: t.text3 }}> · age {coastAge}</Text> : null}
           </Text>
-          <Text style={[type.body, { color: t.text2 }]}>
+          {why ? <Text style={[type.body, { color: t.text2 }]}>
             Once you have about {money(coastAt, { whole: true })} invested, it can grow to your retirement number ({money(o.fire, { whole: true })}) by age {o.d.retireAge} on its own.
             From then on you only need to cover your bills. Investing more is optional and lets you retire earlier.
-          </Text>
+          </Text> : null}
+          {whyToggle}
 
         </>
       )}
@@ -243,7 +266,7 @@ export default function Plan() {
   return (
     // header and the Steps / Accounts switch stay put; the content scrolls under them, and the
     // accounts table fills the rest of the screen (scrolling inside, both ways)
-    <Screen title="Plan" subtitle="Your path to Coast FI" fill maxWidth={100000}>
+    <Screen title="Plan" subtitle={compact ? undefined : "Your path to Coast FI"} fill maxWidth={100000}>
       <View style={{ maxWidth: 360 }}>
         <Segmented
           label="Plan view"
