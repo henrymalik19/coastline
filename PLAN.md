@@ -343,7 +343,10 @@ The import is read-only on the YNAB side and can be re-run: it updates rows it c
 - Move budget items, savings goals and monthly savings into categories (one-time, lossless, reversible from a backup). Budget tab with assign / activity / available, carry-over, ready to assign and overspending cover. Manual income and spending entries per category until Phase 7.
 - ✅ Engine tests: available carries over; overspending reduces next month's ready to assign; available + ready to assign equals budget-account cash. Assigning to a savings category shows as that month's saving in the plan.
 
+- *Built (first pass):* categories are derived from what the plan already has (budget items, repeating goals as bills, debts, savings accounts, one-time goals) using the plan's own keys, so no migration was needed and schedules act as targets. The budget lives in the plan document (`budgetPlan`: start month, starting cash, and per month assigned / spent / income) until transactions move everything to tables in Phase 7. The Budget tab replaced Monthly (its charts are linked from Plan → Forecast). Not yet: renaming/adding categories on the Budget tab, moving money between categories, envelope credit cards (they need transactions), and retiring Monthly savings / one-off adjustments.
+
 **Phase 7: accounts & transactions (4–6 days)**
+- Credit cards the envelope way: spending on a card moves that money from its category to the card's payment category.
 - Registers for budget accounts, quick add, splits, transfers (budget ↔ budget, and budget → tracking, which counts as saving), reconcile. Supabase tables with RLS and an offline queue.
 - ✅ Activity comes from transactions; a transfer to the IRA counts as that month's IRA saving; an RLS test for every new table; a transaction added offline syncs later.
 

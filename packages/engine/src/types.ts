@@ -264,6 +264,24 @@ export type PlanState = {
    * January through April (the April 15 deadline).
    */
   contributed?: Contributed;
+  /** The monthly (envelope) budget: what you assigned, spent and received each month. */
+  budgetPlan?: BudgetState;
+};
+
+/** One month of the envelope budget. Keys are budget item ids, `acct:<id>`, `goal:<id>`, `debt:<id>`. */
+export type BudgetMonthEntry = {
+  assigned?: Record<string, number>;
+  /** Money out per category (until transactions exist). Missing = none, or for money that moves out by itself (investments, debts), what was assigned. */
+  spent?: Record<string, number>;
+  /** Income received this month. */
+  income?: number;
+};
+export type BudgetState = {
+  /** First budgeted month, "YYYY-MM". */
+  start: string;
+  /** Cash in your budget accounts when you started (your first money to assign). */
+  startCash: number;
+  months: Record<string, BudgetMonthEntry>;
 };
 
 export type Contributed = {

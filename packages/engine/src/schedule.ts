@@ -122,3 +122,43 @@ export function mergeAccountSchedules(s: Pick<PlanState, "plan" | "accounts">): 
     scheduleMonths: Object.keys(outM).length ? outM : undefined,
   };
 }
+
+/**
+ * What you assigned to savings and debts feeds the plan for those months: an account gets exactly
+ * what you assigned, a debt gets what you assigned beyond its minimum as extra.
+ */
+export function budgetScheduleMonths(s: Pick<PlanState, "debts" | "goals" | "budgetPlan">): Record<string, Record<string, number>> | undefined {
+  const b = s.budgetPlan;
+  if (!b?.months) return undefined;
+  const out: Record<string, Record<string, number>> = {};
+  for (const [month, e] of Object.entries(b.months)) {
+    for (const [key, v] of Object.entries(e.assigned ?? {})) {
+      let amount: number | undefined;
+      if (key.startsWith(ACCOUNT_KEY)) amount = Math.max(0, num(v));
+      else if (key.startsWith("goal:")) {
+        // repeating goals set aside on their own; one-time goals get what you assigned
+        const g = (s.goals ?? []).find((y) => "goal:" + y.id === key);
+        if (!g || g.recurring) continue;
+        amount = Math.max(0, num(v));
+      }
+      else if (key.startsWith("debt:")) {
+        const x = (s.debts ?? []).find((y) => "debt:" + y.id === key);
+        if (!x || x.payroll) continue;
+        amount = Math.max(0, num(v) - Math.max(0, num(x.minPayment)));
+      }
+      if (amount === undefined) continue;
+      (out[key] ??= {})[month] = amount;
+    }
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** One-month amounts from `b` laid over `a` (b wins for the same key and month). */
+export function mergeMonths(
+  a: Record<string, Record<string, number>> | undefined,
+  b: Record<string, Record<string, number>>,
+): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = { ...(a ?? {}) };
+  for (const [k, row] of Object.entries(b)) out[k] = { ...(out[k] ?? {}), ...row };
+  return out;
+}

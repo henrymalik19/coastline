@@ -3,7 +3,7 @@ import { limitsFor } from "./limits";
 import { checksInMonth } from "./paychecks";
 import type { Adjustment, Alloc, Debt, Derived, FundKey, MonthRow, PlanEvent, PlanResult, PlanSettings, PlanState, SimulateOptions, Goal, RecurringGoal, Limits } from "./types";
 import { addMonths, monthsBetween, num, sum } from "./util";
-import { mergeAccountSchedules, PAY401, PAYHSA, payPerCheck, scheduleAmount } from "./schedule";
+import { budgetScheduleMonths, mergeAccountSchedules, mergeMonths, PAY401, PAYHSA, payPerCheck, scheduleAmount } from "./schedule";
 import { matchFor } from "./match";
 export { scheduleAmount } from "./schedule";
 
@@ -59,7 +59,12 @@ export const k401Cost = (marginalTax: number, rothShare = 0): number => 1 - marg
  */
 export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {}): PlanResult {
   // each account's own monthly amount adds into its kind (cash, IRA, HSA, brokerage)
-  const p: Partial<PlanSettings> = { ...(s.plan ?? {}), ...mergeAccountSchedules(s) };
+  // what you assigned in the monthly budget counts for those months (savings and extra debt payments)
+  const fromBudget = budgetScheduleMonths(s);
+  const sb: PlanState = fromBudget
+    ? { ...s, plan: { ...s.plan, scheduleMonths: mergeMonths(s.plan?.scheduleMonths, fromBudget) } }
+    : s;
+  const p: Partial<PlanSettings> = { ...(sb.plan ?? {}), ...mergeAccountSchedules(sb) };
   const mode = opts.mode || p.projectWith || "plan";
   const extraMonthly = (opts.extraMonthly ?? (s.whatif && s.whatif.extra)) || 0;
   const months = Math.max(opts.months || 0, d.years * 12, 36);
