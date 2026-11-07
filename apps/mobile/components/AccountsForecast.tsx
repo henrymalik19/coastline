@@ -478,18 +478,29 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
     </ScrollView>
   ) : null;
   const summary = (
-    <Pressable role="button" aria-expanded={showCheck} onPress={() => setShowCheck((v) => !v)} hitSlop={4} style={[styles.summary, { backgroundColor: row0.plannedShort > 0.5 ? t.badSoft : t.surface2 }]}>
-      <Text style={[type.caption, { color: t.text2, flex: 1 }]}>
-        <Text style={{ color: t.text, fontWeight: "700" }}>{monthLabel(start, 0)}: </Text>
-        {money(row0.available)} left after bills · {money(row0.plannedAsk)} planned ·{" "}
-        {row0.plannedShort > 0.5 ? (
-          <Text style={{ color: t.bad, fontWeight: "700" }}>short {money(row0.plannedShort)}</Text>
-        ) : (
-          <Text style={{ color: t.good, fontWeight: "700" }}>{money(notPlanned)} not planned</Text>
-        )}
-        {shortMonths.some((x) => x.i > 0) ? <Text style={{ color: t.bad }}> · short later</Text> : null}
-      </Text>
-      <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{showCheck ? "Hide" : "Details"}</Text>
+    <Pressable
+      role="button"
+      aria-expanded={showCheck}
+      accessibilityLabel={`${monthLabel(start, 0)}: ${money(row0.available)} left after bills, ${money(row0.plannedAsk)} planned, ${row0.plannedShort > 0.5 ? `short ${money(row0.plannedShort)}` : `${money(notPlanned)} not planned`}. ${showCheck ? "Hide" : "Show"} details`}
+      onPress={() => setShowCheck((v) => !v)}
+      hitSlop={4}
+      style={[styles.summary, { backgroundColor: row0.plannedShort > 0.5 ? t.badSoft : t.surface2 }]}
+    >
+      {[
+        { k: "Left after bills", v: money(row0.available, { whole: compact }), c: t.text },
+        { k: "Planned", v: money(row0.plannedAsk, { whole: compact }), c: t.text },
+        row0.plannedShort > 0.5
+          ? { k: "Short", v: money(row0.plannedShort, { whole: compact }), c: t.bad }
+          : { k: "Not planned", v: money(notPlanned, { whole: compact }), c: t.good },
+      ].map((x) => (
+        <View key={x.k} style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{x.k}</Text>
+          <Text style={[type.label, { color: x.c, fontWeight: "700", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>{x.v}</Text>
+        </View>
+      ))}
+      <View style={{ transform: [{ rotate: showCheck ? "-90deg" : "90deg" }] }}>
+        <Icon name="chevron" size={14} color={t.accent} />
+      </View>
     </Pressable>
   );
   return (
@@ -569,18 +580,26 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
           <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ maxHeight: 340, flexGrow: 0 }}>{check}</ScrollView>
         ) : null}
         {!selected ? (
-          <Text style={[type.caption, { color: t.text3 }]}>
-            {one
-              ? "·3 = a 3-paycheck month · red = your plan is short that month · "
-              : compact
-                ? "Tap a name for details · ·3 = 3 paychecks · red = short"
-                : "Pick an account above, or tap a name for its details · ● has a monthly amount · ·3 = 3-paycheck month · red = short"}
+          <View style={styles.key}>
+            <View style={styles.keyItem}>
+              <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>·3</Text>
+              <Text style={[type.caption, { color: t.text3 }]}>3 paychecks</Text>
+            </View>
+            <View style={styles.keyItem}>
+              <View style={[styles.keySwatch, { backgroundColor: t.badSoft, borderColor: t.bad }]} />
+              <Text style={[type.caption, { color: t.text3 }]}>Short</Text>
+            </View>
+            {shortMonths.some((x) => x.i > 0) ? <Text style={[type.caption, { color: t.bad, fontWeight: "700" }]}>Short later</Text> : null}
+            <View style={{ flex: 1 }} />
             {one ? (
-              <Text role="link" onPress={() => setSel(one.key)} style={{ color: t.accent, fontWeight: "700" }}>
-                About {label(one.key).replace(" (what you owe)", "").replace(" (emergency fund)", "")} ›
-              </Text>
-            ) : null}
-          </Text>
+              <Pressable role="link" onPress={() => setSel(one.key)} hitSlop={6} style={styles.keyItem}>
+                <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Details</Text>
+                <Icon name="chevron" size={12} color={t.accent} />
+              </Pressable>
+            ) : (
+              <Text style={[type.caption, { color: t.text3 }]}>Tap a name for details</Text>
+            )}
+          </View>
         ) : null}
       </View>
       <View style={[{ flexDirection: twoColumn ? "row" : "column" }, fill ? { flex: 1, minHeight: 0 } : null]}>
@@ -617,6 +636,9 @@ const styles = StyleSheet.create({
   arrows: { flexDirection: "row", borderWidth: 1, borderRadius: 999, overflow: "hidden" },
   arrow: { paddingHorizontal: 12, paddingVertical: 5, alignItems: "center", justifyContent: "center" },
   summary: { flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: 8 },
+  key: { flexDirection: "row", alignItems: "center", gap: space.md, flexWrap: "wrap" },
+  keyItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  keySwatch: { width: 10, height: 10, borderRadius: 2, borderWidth: 1 },
   gr: { flexDirection: "row", alignItems: "stretch", minHeight: 32 },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   check: { borderRadius: radius.md, padding: space.md, gap: 3 },

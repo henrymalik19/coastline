@@ -34,7 +34,7 @@ function splits(m: MonthRow, t: Theme, mt: number, rothShare = 0, hsaPayroll = f
   return segs;
 }
 
-function MonthCard({ m, title, start, state }: { m: MonthRow; title: string; start: Date; state: PlanState }) {
+function MonthCard({ m, title, start, state, wide }: { m: MonthRow; title: string; start: Date; state: PlanState; /** side by side: share the row */ wide?: boolean }) {
   const t = useTheme();
   const rothShare = usePlan().result.d.rothShare;
   const segs = splits(m, t, state.plan.marginalTax, rothShare, state.plan.hsaPayroll);
@@ -49,7 +49,7 @@ function MonthCard({ m, title, start, state }: { m: MonthRow; title: string; sta
     })
     .join(" · ");
   return (
-    <Card style={{ flex: 1, gap: space.md }}>
+    <Card style={wide ? { flex: 1, gap: space.md } : { gap: space.md }}>
       <View style={styles.between}>
         <View>
           <SectionLabel>{title}</SectionLabel>
@@ -128,8 +128,8 @@ export function MonthlyCharts() {
   return (
     <View style={{ gap: space.lg }}>
       <View style={{ flexDirection: twoColumn ? "row" : "column", gap: space.lg, alignItems: "stretch" }}>
-        {months[0] ? <MonthCard m={months[0]} title="This month" start={start} state={state} /> : null}
-        {months[1] ? <MonthCard m={months[1]} title="Next month" start={start} state={state} /> : null}
+        {months[0] ? <MonthCard m={months[0]} title="This month" start={start} state={state} wide={twoColumn} /> : null}
+        {months[1] ? <MonthCard m={months[1]} title="Next month" start={start} state={state} wide={twoColumn} /> : null}
       </View>
 
       <AdjustmentsCard start={start} />
