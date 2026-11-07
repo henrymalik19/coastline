@@ -91,7 +91,7 @@ export default function Onboarding() {
           <Button title="Continue" tone="primary" onPress={next} />
         )}
       </View>
-      <Text style={[type.caption, { color: t.text3, textAlign: "center" }]}>You can change any of this later in Settings.</Text>
+      <Text style={[type.caption, { color: t.text3, textAlign: "center" }]}>You can change any of this later in the Money tab.</Text>
     </Screen>
   );
 }

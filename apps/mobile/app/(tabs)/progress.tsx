@@ -254,7 +254,7 @@ export default function Progress() {
                 Your last {budgetHint.n} check-ins averaged <Text style={{ fontWeight: "700" }}>{money(budgetHint.avg)}</Text> of spending vs. your{" "}
                 <Text style={{ fontWeight: "700" }}>{money(d.monthlyExpenses)}</Text> budget. A realistic budget makes the whole plan more accurate.
               </Text>
-              <Button title="Update budget" onPress={() => router.push("/settings/budget")} />
+              <Button title="Update budget" onPress={() => router.push("/money/budget")} />
             </View>
           ) : null}
           <View style={[styles.tr, { borderBottomColor: t.border }]}>

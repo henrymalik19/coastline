@@ -9,6 +9,7 @@ import { useTheme } from "../../lib/theme";
 const TABS: { name: string; title: string; icon: IconName }[] = [
   { name: "home", title: "Home", icon: "home" },
   { name: "plan", title: "Plan", icon: "plan" },
+  { name: "money", title: "Money", icon: "wallet" },
   { name: "monthly", title: "Monthly", icon: "calendar" },
   { name: "progress", title: "Progress", icon: "trend" },
 ];
