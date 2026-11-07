@@ -126,7 +126,7 @@ export function BudgetEditor() {
     <Card style={{ gap: space.sm, paddingVertical: space.md }}>
       <View style={[styles.figure, { justifyContent: "space-between", gap: space.md }]}>
         <View style={{ flex: 1 }}>
-          <Text style={[type.label, { color: t.text2 }]}>{leftover < 0 ? "Short each month" : "Left over to save"}</Text>
+          <Text style={[type.label, { color: t.text2 }]}>{leftover < 0 ? "Short in a normal month" : "Left over in a normal month"}</Text>
           <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]} numberOfLines={2}>
             {money(d.leanMonthly)} take-home − {money(d.budgetTotal)} budget{d.debtMins > 0 ? ` − ${money(d.debtMins)} debts` : ""}
             {setAsideNow > 0 ? ` − ${money(setAsideNow)} set aside` : ""}
@@ -145,7 +145,7 @@ export function BudgetEditor() {
           <Text style={[type.caption, { color: t.text3 }]}>
             {leftover < 0
               ? "Your budget is more than you bring home in a normal month. Coasting only works once today's bills are covered."
-              : "Your plan puts the leftover to work: emergency fund, employer match, debt, then investing (see the Plan tab)."}
+              : "A normal month at today's numbers (two paychecks if you're paid every two weeks). Actual months can differ: 3-paycheck months, and more once debts are paid off. Home shows this month exactly."}
             {d.extraChecksPerYear > 1 ? ` Extra-paycheck months add about ${money(d.extraChecksPerYear)} a year on top.` : ""}
           </Text>
           <View style={[styles.totals, { borderTopColor: t.border }]}>
@@ -168,7 +168,7 @@ export function BudgetEditor() {
         <View style={[styles.figure, styles.result, { backgroundColor: leftover < 0 ? t.badSoft : t.goodSoft }]}>
           <Text style={[type.heading, { color: t.text3, marginRight: space.sm }]}>=</Text>
           <View>
-            <Text style={[type.caption, { color: t.text2 }]}>{leftover < 0 ? "Short each month" : "Left over to save"}</Text>
+            <Text style={[type.caption, { color: t.text2 }]}>{leftover < 0 ? "Short in a normal month" : "Left over in a normal month"}</Text>
             <Text style={[type.stat, { color: leftover < 0 ? t.bad : t.good, fontVariant: ["tabular-nums"] }]}>{money(leftover)}/mo</Text>
           </View>
         </View>
@@ -176,7 +176,7 @@ export function BudgetEditor() {
       <Text style={[type.caption, { color: t.text3 }]}>
         {leftover < 0
           ? "Your budget is more than you bring home in a normal month. Coasting only works once today's bills are covered."
-          : "Your plan puts the leftover to work: emergency fund, employer match, debt, then investing (see the Plan tab)."}
+          : "A normal month at today's numbers (two paychecks if you're paid every two weeks). Actual months can differ: 3-paycheck months, and more once debts are paid off. Home shows this month exactly."}
         {d.extraChecksPerYear > 1 ? ` Extra-paycheck months add about ${money(d.extraChecksPerYear)} a year on top.` : ""}
       </Text>
       <View style={[styles.totals, { borderTopColor: t.border }]}>

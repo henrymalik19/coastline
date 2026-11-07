@@ -15,10 +15,12 @@ import { space, type, useTheme } from "../../lib/theme";
 export default function Plan() {
   const t = useTheme();
   const { twoColumn } = useLayout();
-  const { state, result: o, start } = usePlan();
+  const { state, result: o, start, actual } = usePlan();
   const update = useStore((s) => s.update);
 
-  const infos = state.plan.steps.map((k) => stepInfo(k, state, o, start)).filter((x): x is StepInfo => !!x);
+  // steps describe what you'll really do (no what-ifs), so they match Home's to-dos
+  const real = { ...o, plan: actual };
+  const infos = state.plan.steps.map((k) => stepInfo(k, state, real, start)).filter((x): x is StepInfo => !!x);
   const activeKey = infos.find((i) => !i.done && !i.skip)?.key;
   const move = (i: number, dir: -1 | 1) =>
     update((p) => {

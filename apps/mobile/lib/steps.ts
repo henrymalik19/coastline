@@ -27,6 +27,13 @@ export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date)
     const xs = pl.months.slice(from, to ?? from + 12).map(pick).filter((v) => v > 0.5);
     return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
   };
+  /** "$7,716.22 this month · about $10,250/mo on average" when this month differs from the average, else one amount. */
+  const pace = (pick: (m: MonthRow) => number, avg: number, from = 0, what = "") => {
+    const now = from === 0 ? pick(pl.months[0]!) : 0;
+    if (now > 0.5 && Math.abs(now - avg) > 1) return `${money(now)}${what} this month · about ${money(avg, { whole: true })}/mo on average`;
+    if (now > 0.5) return `${money(now)}/mo${what}`;
+    return `about ${money(avg, { whole: true })}/mo${what}`;
+  };
   // Coast FI month: after it, more investing is optional (it retires you earlier, it isn't needed)
   const coastM = o.crossing === null ? null : Math.round(o.crossing * 12);
   const untilCoast = (ff: number) =>
@@ -51,7 +58,7 @@ export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date)
         ? `Done. ${money(d.bal.cash)} in cash`
         : (() => {
             const avg = typical((m) => m.alloc.ef, 0, e ? e.m + 1 : undefined);
-            return `${money(d.bal.cash)} of ${money(tgt)}${avg > 0 ? ` · about ${money(avg, { whole: true })}/mo` : ""} · ${e ? `done ${when(e.m)}` : "not reached in the plan"}`;
+            return `${money(d.bal.cash)} of ${money(tgt)}${avg > 0 ? ` · ${pace((m) => m.alloc.ef, avg)}` : ""} · ${e ? `done ${when(e.m)}` : "not reached in the plan"}`;
           })(),
     };
   }
@@ -94,7 +101,7 @@ export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date)
               const after = hi ? 0 : Math.max(0, ...highEnds.map((m) => m + 1));
               const from = Math.max(after, pl.months.findIndex((m, i) => i >= after && m.alloc.debt > 0.5));
               const avg = typical((m) => m.alloc.debt, from, last !== null ? last + 1 : undefined);
-              return `${list.map((x) => `${debtLabel(x)} ${money(x.balance)}`).join(", ")}${avg > 0 ? ` · about ${money(avg, { whole: true })}/mo extra${from > 0 ? ` from ${when(from)}` : ""}` : " · minimum payments only (no extra reaches this step)"} · ${last !== null ? "paid off " + when(last) : "not paid off within the plan"}`;
+              return `${list.map((x) => `${debtLabel(x)} ${money(x.balance)}`).join(", ")}${avg > 0 ? ` · ${pace((m) => m.alloc.debt, avg, from, " extra")}${from > 0 ? ` from ${when(from)}` : ""}` : " · minimum payments only (no extra reaches this step)"} · ${last !== null ? "paid off " + when(last) : "not paid off within the plan"}`;
             })(),
     };
   }
@@ -150,7 +157,7 @@ export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date)
         ? "Done"
         : (() => {
             const avg = typical((m) => m.alloc.goals, 0, e ? e.m + 1 : undefined);
-            return `${money(g.saved)} saved${avg > 0 ? ` · about ${money(avg, { whole: true })}/mo` : ""} · ${e ? `reached ${when(e.m)}` : "not reached within the plan"}`;
+            return `${money(g.saved)} saved${avg > 0 ? ` · ${pace((m) => m.alloc.goals, avg)}` : ""} · ${e ? `reached ${when(e.m)}` : "not reached within the plan"}`;
           })(),
     };
   }

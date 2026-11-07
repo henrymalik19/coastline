@@ -58,7 +58,7 @@ export default function MoneyOverview() {
       {setAsideNow > 0 ? <Line label="Set aside" value={`− ${money(setAsideNow)}`} href="/money/goals" hint="Recurring goals, this month" /> : null}
       <Divider />
       <View style={[styles.line, { paddingVertical: space.sm }]}>
-        <Text style={[type.heading, { color: t.text, flex: 1 }]}>{leftover < 0 ? "Short each month" : "Left over to save"}</Text>
+        <Text style={[type.heading, { color: t.text, flex: 1 }]}>{leftover < 0 ? "Short in a normal month" : "Left over in a normal month"}</Text>
         <Text style={[type.stat, { color: leftover < 0 ? t.bad : t.good, fontVariant: ["tabular-nums"] }]}>{money(leftover)}</Text>
       </View>
     </Section>
