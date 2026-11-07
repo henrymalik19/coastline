@@ -1,3 +1,4 @@
+import { coastNumberAt } from "@coastfi/engine";
 import { StyleSheet, Text, View } from "react-native";
 import { longMonth } from "../../components/AdjustmentsCard";
 import { IconButton } from "../../components/form";
@@ -30,9 +31,9 @@ export default function Plan() {
   const steps = (
     <Card padded={false} style={twoColumn ? { flex: 3 } : undefined}>
       <View style={{ padding: space.lg, paddingBottom: space.md, gap: 4 }}>
-        <SectionLabel>Where the next dollar goes</SectionLabel>
+        <SectionLabel>Your steps</SectionLabel>
         <Text style={[type.body, { color: t.text2 }]}>
-          Each month, money left after your budget and debt minimums fills step 1, then spills into step 2, and so on. Use the arrows to change the order.
+          Each month, what's left after your budget and debt payments fills step 1, then step 2, and so on. Amounts and dates are for your numbers. Use the arrows to change the order.
         </Text>
       </View>
       <Divider />
@@ -96,6 +97,58 @@ export default function Plan() {
     </Card>
   );
 
+  // the finish line: when growth alone can carry you, so saving more becomes optional
+  const coastM = o.crossing === null ? null : Math.round(o.crossing * 12);
+  const coastAge = o.crossing === null ? null : Math.floor(o.d.age + o.crossing);
+  const coastAt = o.crossing === null ? 0 : coastNumberAt(o.fire, o.d.r, o.d.years - o.crossing);
+  const finish = (
+    <Card style={{ gap: space.sm, borderColor: coastM === null ? t.border : t.accent }}>
+      <SectionLabel>Your finish line</SectionLabel>
+      {o.fire <= 0 ? (
+        <>
+          <Text style={[type.title, { color: t.text }]}>Add your budget to see it</Text>
+          <Text style={[type.body, { color: t.text2 }]}>
+            Your finish line depends on what you'll spend in retirement. Fill in your monthly budget (Money → Monthly budget) and mark what you'll still pay after you retire.
+          </Text>
+        </>
+      ) : coastM === null ? (
+        <>
+          <Text style={[type.title, { color: t.text }]}>Not reached by {o.d.retireAge} yet</Text>
+          <Text style={[type.body, { color: t.text2 }]}>
+            At this pace your savings won't grow to your retirement number ({money(o.fire, { compact: true })}) on their own by age {o.d.retireAge}. Saving more each month, a later
+            retirement age, or Social Security or a pension (Money → Income in retirement) would get you there.
+          </Text>
+        </>
+      ) : coastM === 0 ? (
+        <>
+          <Text style={[type.title, { color: t.good }]}>You've reached Coast FI</Text>
+          <Text style={[type.body, { color: t.text2 }]}>
+            What you've invested ({money(o.d.invested, { compact: true })}) can grow to your retirement number ({money(o.fire, { compact: true })}) by age {o.d.retireAge} on its own.
+            You only need to cover your bills. Anything you invest from here is optional and lets you retire earlier.
+          </Text>
+        </>
+      ) : (
+        <>
+          <Text style={[type.title, { color: t.text }]}>
+            Coast FI in {monthLabel(start, coastM)}
+            {coastAge !== null ? <Text style={{ color: t.text3 }}> · age {coastAge}</Text> : null}
+          </Text>
+          <Text style={[type.body, { color: t.text2 }]}>
+            Once you have about {money(coastAt, { compact: true })} invested, it can grow to your retirement number ({money(o.fire, { compact: true })}) by age {o.d.retireAge} on its own.
+            From then on you only need to cover your bills. Investing more is optional and lets you retire earlier.
+          </Text>
+          {o.coastSoonerMonths && o.coastSoonerMonths > 0 ? (
+            <Text style={[type.caption, { color: t.text3 }]}>Putting $100/mo more toward the plan gets you there {o.coastSoonerMonths} month{o.coastSoonerMonths === 1 ? "" : "s"} sooner.</Text>
+          ) : null}
+        </>
+      )}
+      {o.fire > 0 ? <View style={{ gap: 4, marginTop: space.xs }}>
+        <ProgressBar progress={o.progress} color={coastM === 0 ? t.good : t.accent} />
+        <Text style={[type.caption, { color: t.text3 }]}>{Math.round(Math.min(1, o.progress) * 100)}% of the way to Coast FI today</Text>
+      </View> : null}
+    </Card>
+  );
+
   const better = o.projectedFinal >= o.altFinal;
   const compare = (
     <Card style={{ gap: space.sm }}>
@@ -118,26 +171,27 @@ export default function Plan() {
   );
 
   return (
-    <Screen title="Plan" subtitle="Where the next dollar goes">
+    <Screen title="Plan" subtitle="Your path to Coast FI">
       {state.emergency?.active ? (
         <Card style={{ backgroundColor: t.warnSoft, borderColor: t.warn }}>
           <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Paused for emergency mode through {longMonth(state.emergency.until)}</Text>
           <Text style={[type.caption, { color: t.text2 }]}>Until then everything left over stays in cash. These steps pick up again the month after; the dates below already account for the pause.</Text>
         </Card>
       ) : null}
+      {finish}
       {twoColumn ? (
         <View style={{ flexDirection: "row", gap: space.lg, alignItems: "flex-start" }}>
           {steps}
           <View style={{ flex: 2, gap: space.lg }}>
-            {compare}
             {timeline}
+            {compare}
           </View>
         </View>
       ) : (
         <>
           {steps}
-          {compare}
           {timeline}
+          {compare}
         </>
       )}
     </Screen>
