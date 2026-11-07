@@ -1,8 +1,9 @@
 import type { AccountType } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useState, type ComponentType, type ReactNode } from "react";
-import { Platform, Share, StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../../lib/confirm";
+import { money } from "../../lib/format";
 import { HELP } from "../../lib/help";
 import { usePlan } from "../../lib/plan";
 import { newId, useStore } from "../../lib/store";
@@ -10,7 +11,7 @@ import { radius, space, type, useTheme } from "../../lib/theme";
 import { AccountPanel } from "../AccountPanel";
 import { BudgetEditor } from "../BudgetEditor";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "../form";
-import type { IconName } from "../Icon";
+import { Icon, type IconName } from "../Icon";
 import { IncomesEditor } from "../IncomeEditor";
 import { EmergencyFundNote, looksLikeEmergencyFund } from "../EmergencyFundNote";
 import { AddDebtButtons, DebtEditor } from "../DebtEditor";
@@ -335,6 +336,14 @@ function LimitsSection() {
     { k: "hsaFamily", label: "HSA, family" },
     { k: "hsaCatch", label: "HSA catch-up (55+)", catchUp: true },
   ];
+  // open the current year (or the closest one) at first; the rest start collapsed
+  const [open, setOpen] = useState<Set<number>>(() => {
+    const now = new Date().getFullYear();
+    const years = state.limits.map((l) => l.year);
+    const pick = years.includes(now) ? now : years.filter((y) => y <= now).sort((a, b) => b - a)[0] ?? Math.min(...years);
+    return new Set(state.limits.flatMap((l, i) => (l.year === pick ? [i] : [])));
+  });
+  const toggle = (i: number) => setOpen((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n; });
   return (
     <>
       <Text style={[type.body, { color: t.text2 }]}>
@@ -342,14 +351,41 @@ function LimitsSection() {
       </Text>
       {[...state.limits].sort((a, b) => a.year - b.year).map((row) => {
         const i = state.limits.indexOf(row);
+        const isOpen = open.has(i);
         return (
-          <Card key={`${row.year}-${i}`} style={{ gap: space.xs }}>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <Card key={`${row.year}-${i}`} style={{ gap: space.xs, paddingVertical: isOpen ? space.lg : space.md }}>
+            <Pressable
+              role="button"
+              aria-expanded={isOpen}
+              accessibilityLabel={`${row.year} limits`}
+              accessibilityState={{ expanded: isOpen }}
+              onPress={() => toggle(i)}
+              style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}
+            >
+              <View style={{ transform: [{ rotate: isOpen ? "90deg" : "0deg" }] }}>
+                <Icon name="chevron" size={18} color={t.text3} />
+              </View>
+              <Text style={[type.heading, { color: t.text, fontVariant: ["tabular-nums"] }]}>{row.year}</Text>
+              {!isOpen ? (
+                <Text numberOfLines={1} style={[type.caption, { color: t.text3, flex: 1, fontVariant: ["tabular-nums"] }]}>
+                  401(k) {money(row.k401)} · IRA {money(row.ira)} · HSA {money(row.hsaSelf)}
+                </Text>
+              ) : <View style={{ flex: 1 }} />}
+            </Pressable>
+            {isOpen ? (
+              <>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: space.xs }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                <Text style={[type.heading, { color: t.text }]}>Year</Text>
+                <Text style={[type.label, { color: t.text2 }]}>Year</Text>
                 <NumberInput kind="int" width={100} label="Year" value={row.year} min={2000} max={2100} onChange={(v) => update((p) => { p.limits[i]!.year = v; })} />
               </View>
-              <IconButton icon="trash" color={t.bad} label={`Remove ${row.year}`} disabled={state.limits.length <= 1} onPress={() => update((p) => { p.limits.splice(i, 1); })} />
+              <IconButton
+                icon="trash"
+                color={t.bad}
+                label={`Remove ${row.year}`}
+                disabled={state.limits.length <= 1}
+                onPress={() => { setOpen(new Set()); update((p) => { p.limits.splice(i, 1); }); }}
+              />
             </View>
             <Rows>
               {fields.map((f) => (
@@ -358,6 +394,8 @@ function LimitsSection() {
                 </FieldRow>
               ))}
             </Rows>
+              </>
+            ) : null}
           </Card>
         );
       })}
@@ -365,12 +403,13 @@ function LimitsSection() {
         title="Add year"
         icon="plus"
         style={{ alignSelf: "flex-start" }}
-        onPress={() =>
+        onPress={() => {
+          setOpen((s) => new Set(s).add(state.limits.length));
           update((p) => {
             const last = [...p.limits].sort((a, b) => a.year - b.year).at(-1)!;
             p.limits.push({ ...last, year: last.year + 1 });
-          })
-        }
+          });
+        }}
       />
     </>
   );
