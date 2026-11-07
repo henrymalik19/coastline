@@ -1,12 +1,14 @@
 import { PERIODS, type Income, type PayDeduction, type PlanState } from "@coastfi/engine";
 import { debtKind } from "./debts";
 import { newId } from "./id";
+import { paycheck } from "./paycheck";
 
 /**
  * 401(k) loan repayments entered on a paycheck are linked to a "401(k) loan" debt:
  * the deduction holds the per-check amount, the debt holds the balance and rate, and the
- * debt's monthly payment is kept equal to per-check × checks per year ÷ 12. Take-home
- * doesn't subtract the repayment, so it's counted once (as the debt payment).
+ * debt's monthly payment is kept equal to per-check × checks per year ÷ 12. The repayment
+ * comes out of take-home (like the pay stub), and the debt is marked `payroll` so the plan
+ * pays it down without also taking it from the budget.
  */
 export const isLoanDeduction = (d: PayDeduction) => d.kind === "k401_loan";
 
@@ -26,7 +28,10 @@ export function paycheckFor(state: PlanState, debtId: string): { income: Income;
  * - each linked debt's monthly payment follows the paycheck amount.
  */
 export function syncPaycheckLoans(p: PlanState): void {
+  const linked = new Set<string>();
   for (const inc of p.incomes) {
+    // take-home (auto mode) always reflects the current deductions, loan repayments included
+    if ((inc.kind ?? "job") === "job" && inc.netMode === "auto") inc.net = paycheck(inc).net;
     if (!inc.deductions?.some(isLoanDeduction)) continue;
     inc.deductions = inc.deductions.filter((d) => {
       if (!isLoanDeduction(d)) return true;
@@ -37,8 +42,13 @@ export function syncPaycheckLoans(p: PlanState): void {
       const debt = p.debts.find((x) => x.id === d.debtId);
       if (!debt) return false; // the debt was removed: drop the repayment too
       debt.kind = "k401_loan";
+      debt.payroll = true;
       debt.minPayment = Math.round(monthlyFromPaycheck(d.amount, inc) * 100) / 100;
+      linked.add(debt.id);
       return true;
     });
+    if (inc.netMode === "auto") inc.net = paycheck(inc).net;
   }
+  // a debt no longer repaid from a paycheck goes back to a normal (budget-paid) debt
+  for (const d of p.debts) if (d.payroll && !linked.has(d.id)) delete d.payroll;
 }

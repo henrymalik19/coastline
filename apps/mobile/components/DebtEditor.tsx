@@ -178,7 +178,7 @@ function PaycheckLoanPayment({ debt }: { debt: Debt }) {
         if (d) d.amount = v;
       });
     return (
-      <FieldRow label="Repayment per paycheck" hint={`From your ${income.name || "job"} paycheck, ${P} a year · about ${money(debt.minPayment)}/mo`}>
+      <FieldRow label="Repayment per paycheck" hint={`Comes out of your ${income.name || "job"} paycheck, ${P} a year (about ${money(debt.minPayment)}/mo), before take-home`}>
         <NumberInput kind="money" label={`${debtLabel(debt)} repayment per paycheck`} value={deduction.amount} onChange={setPerCheck} />
       </FieldRow>
     );

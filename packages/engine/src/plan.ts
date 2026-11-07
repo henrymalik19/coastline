@@ -180,15 +180,23 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
 
     // debts: interest, then minimums (paid from the budget)
     let minPay = 0;
+    // a payroll-repaid debt (paycheck 401(k) loan) is already out of take-home; once it is
+    // paid off the deduction stops, and that money comes back as take-home
+    let payrollFreed = 0;
     for (const dt of debts) {
-      if (dt.balance <= 0) continue;
+      if (dt.balance <= 0) {
+        if (dt.payroll) payrollFreed += dt.minPayment;
+        continue;
+      }
       dt.balance *= 1 + rateIn(dt, monthStr) / 12;
       // borrowed shortfall behaves like a card: minimum is 2% of the balance (at least $25)
       const minimum = dt.id === SHORTFALL_ID ? Math.max(25, dt.balance * 0.02) : dt.minPayment;
       const pay = Math.min(minimum, dt.balance);
       dt.balance -= pay;
-      minPay += pay;
+      if (dt.payroll) payrollFreed += minimum - pay;
+      else minPay += pay;
     }
+    income += payrollFreed;
     const expenses = (inEmergency && em!.essentialsOnly ? essentialBudget : d.budgetTotal) + minPay + adjExpense;
     let avail = income - expenses + extraMonthly;
     const alloc: Alloc = {

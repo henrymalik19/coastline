@@ -2,6 +2,7 @@ import { k401Cost, run, type MonthRow, type PlanState, type RunResult } from "@c
 import { useMemo } from "react";
 import { money } from "./format";
 import { useStore } from "./store";
+import { syncPaycheckLoans } from "./loans";
 import { estimateBracket } from "./tax";
 import type { Theme } from "./theme";
 
@@ -19,6 +20,13 @@ function useToday(): Date {
  *   filing status (so it follows raises and new jobs).
  */
 export function effectivePlan(saved: PlanState): PlanState {
+  // plans saved before paycheck 401(k) loans came out of take-home: bring them up to date
+  const stale = saved.incomes.some((i) => i.deductions?.some((d) => d.kind === "k401_loan" && !saved.debts.find((x) => x.id === d.debtId)?.payroll));
+  if (stale) {
+    const fixed = structuredClone(saved);
+    syncPaycheckLoans(fixed);
+    saved = fixed;
+  }
   let plan = saved.plan;
   if (plan.projectWith !== "plan") plan = { ...plan, projectWith: "plan" };
   if (!plan.marginalTaxManual) {

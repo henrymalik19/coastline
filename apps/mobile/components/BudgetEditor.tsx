@@ -2,6 +2,7 @@ import type { BudgetItem } from "@coastfi/engine";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../lib/confirm";
+import { groupOf, moveGroup, moveItem, UNGROUPED } from "../lib/budgetOrder";
 import { debtLabel } from "../lib/debts";
 import { paycheckFor } from "../lib/loans";
 import { money } from "../lib/format";
@@ -15,10 +16,8 @@ import { Icon } from "./Icon";
 import { AddChip, MasterDetail, useFillPage, useTwoPane } from "./MasterDetail";
 import { Card, Pill } from "./ui";
 
-const UNGROUPED = "Other";
 /** Key of the read-only "Debt payments" group (not a real budget group). */
 const DEBT_KEY = "\u0000debts";
-const groupOf = (b: BudgetItem) => b.group?.trim() || UNGROUPED;
 
 /** Groups in the order they first appear; items without a group go under "Other". */
 function grouped(items: BudgetItem[]) {
@@ -45,6 +44,7 @@ export function BudgetEditor() {
   const twoPane = useTwoPane();
   const fillPage = useFillPage();
   const [showDetails, setShowDetails] = useState(false);
+  const [reorder, setReorder] = useState(false);
   const paneWidth = twoPane ? contentWidth - 270 - space.md : contentWidth;
   const compact = paneWidth < 560;
   const cols = budgetCols(compact);
@@ -53,7 +53,9 @@ export function BudgetEditor() {
   const [retireTip, setRetireTip] = useState(false);
   const names = groups.map((g) => g.name).join("|");
   // debt payments come from Debts: shown here as a read-only group so the budget lists everything
-  const debtRows = state.debts.filter((x) => x.balance > 0 && x.minPayment > 0);
+  // (a 401(k) loan repaid from a paycheck is already out of take-home, so it isn't a budget cost)
+  const debtRows = state.debts.filter((x) => x.balance > 0 && x.minPayment > 0 && !x.payroll);
+  const payrollLoans = state.debts.filter((x) => x.balance > 0 && x.payroll);
   const onDebts = selected === DEBT_KEY && debtRows.length > 0;
   useEffect(() => {
     if (selected === DEBT_KEY && debtRows.length > 0) return;
@@ -205,7 +207,20 @@ export function BudgetEditor() {
             <View style={styles.headRow}>
               <GroupName key={current.name} name={current.name} onRename={(to) => renameGroup(current.name, to)} onRemove={() => removeGroup(current.name, current.rows.length)} />
               <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(current.subtotal)}/mo</Text>
+              <IconButton
+                icon={reorder ? "check" : "sliders"}
+                color={reorder ? t.accent : undefined}
+                label={reorder ? "Done reordering" : "Reorder groups and items"}
+                onPress={() => { setEditing(null); setReorder((r) => !r); }}
+              />
             </View>
+            {reorder ? (
+              <View style={[styles.reorderBar, { backgroundColor: t.accentSoft }]}>
+                <Text style={[type.caption, { color: t.text, flex: 1 }]}>Move this group</Text>
+                <Button title="Earlier" icon="up" disabled={groups[0]?.name === current.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, current.name, -1); })} style={styles.moveBtn} />
+                <Button title="Later" icon="down" disabled={groups.at(-1)?.name === current.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, current.name, 1); })} style={styles.moveBtn} />
+              </View>
+            ) : null}
             <View style={[styles.cols, { paddingHorizontal: space.lg, paddingBottom: space.sm }]}>
               <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Item</Text>
               <Text style={[type.overline, { color: t.text3, width: cols.amount, textAlign: "right" }]}>Monthly</Text>
@@ -214,7 +229,7 @@ export function BudgetEditor() {
                   <Text style={[type.overline, { color: t.text3, textAlign: "center", fontWeight: "600" }]}>After you retire?</Text>
                 </View>
               )}
-              <View style={{ width: cols.actions }} />
+              <View style={{ width: reorder ? 84 : cols.actions }} />
             </View>
           </View>
         ) : undefined
@@ -240,11 +255,12 @@ export function BudgetEditor() {
               );
             })
           : current
-          ? current.rows.map(({ item, index }) => (
+          ? current.rows.map(({ item, index }, i) => (
               <BudgetRow
                 key={item.id}
                 item={item}
                 group={current.name}
+                reorder={reorder ? { up: i > 0, down: i < current.rows.length - 1, move: (by) => update((p) => { p.budget = moveItem(p.budget, index, by); }) } : undefined}
                 editing={editing === item.id}
                 compact={compact}
                 onEdit={() => setEditing(item.id)}
@@ -257,7 +273,8 @@ export function BudgetEditor() {
       }
       detailFooter={onDebts ? (
         <Text style={[type.caption, { color: t.text3, padding: space.sm }]}>
-          These come from your debts, so they're counted once. Change them on the Debts page (or under Income for a paycheck 401(k) loan).
+          These come from your debts, so they're counted once. Change them on the Debts page.
+          {payrollLoans.length ? " 401(k) loan repayments aren't listed: they come out of your paycheck, before take-home." : ""}
         </Text>
       ) : current ? <Button title={`Add item to ${current.name}`} icon="plus" tone="ghost" onPress={() => addItem(current.name)} style={{ alignSelf: "flex-start" }} /> : undefined}
     />
@@ -311,14 +328,16 @@ export const budgetCols = (compact: boolean) =>
 
 /** One budget item: read-only text by default; ✎ turns it into inputs, ✓ finishes. */
 function BudgetRow({
-  item, group, editing, compact, onEdit, onDone, onChange, onRemove,
+  item, group, editing, compact, onEdit, onDone, onChange, onRemove, reorder,
 }: {
   item: BudgetItem; group: string; editing: boolean; compact: boolean;
+  /** Reorder mode: up/down arrows instead of the edit button. */
+  reorder?: { up: boolean; down: boolean; move: (by: -1 | 1) => void };
   onEdit: () => void; onDone: () => void; onChange: (patch: Partial<BudgetItem>) => void; onRemove: () => void;
 }) {
   const t = useTheme();
   const name = item.name || "Untitled item";
-  const w = budgetCols(compact);
+  const w = { ...budgetCols(compact), ...(reorder ? { actions: 84 } : null) };
   const nameField = (
     <View style={{ flex: 1, minWidth: 0 }}>
       <TextField label={`Item in ${group}`} placeholder="Item name" value={item.name} onChange={(v) => onChange({ name: v })} />
@@ -377,7 +396,14 @@ function BudgetRow({
             </View>
           )}
           <View style={[styles.actions, { width: w.actions }]}>
-            <IconButton icon="edit" label={`Edit ${name}`} onPress={onEdit} />
+            {reorder ? (
+              <>
+                <IconButton icon="up" label={`Move ${name} up`} disabled={!reorder.up} onPress={() => reorder.move(-1)} />
+                <IconButton icon="down" label={`Move ${name} down`} disabled={!reorder.down} onPress={() => reorder.move(1)} />
+              </>
+            ) : (
+              <IconButton icon="edit" label={`Edit ${name}`} onPress={onEdit} />
+            )}
           </View>
         </>
       )}
@@ -391,6 +417,8 @@ const styles = StyleSheet.create({
   figure: { flexDirection: "row", alignItems: "center" },
   result: { borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, marginLeft: "auto" },
   debtNote: { borderRadius: radius.sm, padding: space.md },
+  reorderBar: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.lg, marginBottom: space.sm, paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.sm },
+  moveBtn: { minHeight: 34, paddingHorizontal: space.md },
   tip: { width: "100%", padding: space.md, borderRadius: radius.sm, overflow: "hidden" },
   headRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingLeft: space.lg, paddingRight: space.sm, paddingVertical: space.sm },
   cols: { flexDirection: "row", alignItems: "center", gap: space.sm },

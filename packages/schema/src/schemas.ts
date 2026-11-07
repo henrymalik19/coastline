@@ -65,6 +65,7 @@ export const DebtSchema = z.object({
   promoApr: rate.min(0).optional(),
   promoUntil: z.string().regex(MONTH_RE, "Use YYYY-MM").optional(),
   minimumOnly: z.boolean().optional(),
+  payroll: z.boolean().optional(),
 });
 export const RetirementIncomeSchema = z.object({
   id,

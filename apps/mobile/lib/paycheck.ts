@@ -17,14 +17,14 @@ export function paycheck(inc: Income) {
   const k401Pretax = k401 * (1 - Math.min(1, Math.max(0, inc.rothShare ?? 0)));
   const t = inc.taxes ?? { federal: 0, state: 0, socialSecurity: 0, medicare: 0 };
   const taxes = t.federal + t.state + t.socialSecurity + t.medicare;
-  // a 401(k) loan repayment is paid as a debt (its own monthly payment), so take-home leaves it in
+  // a 401(k) loan repayment comes out of the paycheck like any deduction, so take-home matches the pay stub
   const loanRepayment = (inc.deductions ?? []).filter((x) => x.kind === "k401_loan").reduce((a, x) => a + Math.max(0, x.amount), 0);
   const deductions = (inc.deductions ?? []).filter((x) => x.kind !== "k401_loan").reduce((a, x) => a + Math.max(0, x.amount), 0);
   /** Deductions that usually come out before tax (they lower the tax estimate). */
   const pretaxDeductions = (inc.deductions ?? [])
     .filter((x) => DEDUCTION_KINDS.find((k) => k.value === x.kind)?.pretax)
     .reduce((a, x) => a + Math.max(0, x.amount), 0);
-  const net = Math.max(0, Math.round((gross - k401 - taxes - deductions) * 100) / 100);
+  const net = Math.max(0, Math.round((gross - k401 - taxes - deductions - loanRepayment) * 100) / 100);
   return { gross, k401, k401Pretax, taxes, deductions, pretaxDeductions, loanRepayment, net };
 }
 

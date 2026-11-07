@@ -37,11 +37,20 @@ describe("paycheck 401(k) loans", () => {
     expect(p.incomes[0]!.deductions!.map((d) => d.kind)).toEqual(["health"]);
   });
 
-  it("take-home leaves the repayment in (it's counted once, as the debt payment)", () => {
+  it("take-home matches the pay stub: the repayment comes out like any deduction", () => {
     const withLoan = paycheck(job([{ id: "l", kind: "k401_loan", amount: 120 }]));
     const without = paycheck(job([]));
-    expect(withLoan.net).toBe(without.net);
+    expect(withLoan.net).toBeCloseTo(without.net - 120, 6);
     expect(withLoan.loanRepayment).toBe(120);
+  });
+
+  it("the linked debt is marked as repaid by payroll, and loses that mark when unlinked", () => {
+    const p = plan(job([{ id: "l", kind: "k401_loan", amount: 120 }]));
+    syncPaycheckLoans(p);
+    expect(p.debts[0]!.payroll).toBe(true);
+    p.incomes[0]!.deductions = [];
+    syncPaycheckLoans(p);
+    expect(p.debts[0]!.payroll).toBeUndefined();
   });
 });
 

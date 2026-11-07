@@ -85,6 +85,11 @@ export type Debt = {
   promoUntil?: string;
   /** Pay only the minimum, never extra (e.g. federal student loans on income-driven repayment or PSLF). */
   minimumOnly?: boolean;
+  /**
+   * Repaid by a paycheck deduction (a 401(k) loan): the payment is already out of take-home,
+   * so it lowers the balance without coming out of the budget.
+   */
+  payroll?: boolean;
 };
 
 /** Money that starts coming in after you stop working (today's dollars, per month). */

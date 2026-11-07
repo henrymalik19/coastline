@@ -458,3 +458,20 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     expect(k401Cost(0.25, 0.5)).toBeCloseTo(0.875, 12);
   });
 });
+
+describe("payroll-repaid debts (paycheck 401(k) loans)", () => {
+  it("pay down without coming out of the budget, and the money comes back once paid off", () => {
+    const s = blank({
+      incomes: [{ id: "i", name: "Job", freq: "monthly", net: 3000, matchMode: "usd" }],
+      debts: [{ id: "k", name: "401(k) loan", kind: "k401_loan", balance: 1000, apr: 0, minPayment: 300, payroll: true }],
+    });
+    const d = derive(s, START);
+    expect(d.debtMins).toBe(0);
+    const plan = simulatePlan(s, d);
+    expect(plan.months[0]!.minPay).toBe(0);
+    expect(plan.months[0]!.income).toBe(3000);
+    expect(plan.months[3]!.income).toBeCloseTo(3000 + 200, 9); // last payment is 100 of the 300
+    expect(plan.months[4]!.income).toBeCloseTo(3300, 9);
+    expect(plan.events.find((e) => e.key === "debt:k")!.m).toBe(3);
+  });
+});

@@ -18,7 +18,8 @@ export function derive(s: PlanState, startDate: Date): Derived {
 
   const budget = s.budget ?? [];
   const budgetTotal = sum(budget.map((b) => b.amount));
-  const debtMins = sum((s.debts ?? []).filter((d) => num(d.balance) > 0).map((d) => d.minPayment));
+  // payroll-repaid debts (paycheck 401(k) loans) are already out of take-home, so they aren't budget costs
+  const debtMins = sum((s.debts ?? []).filter((d) => num(d.balance) > 0 && !d.payroll).map((d) => d.minPayment));
   const monthlyExpenses = budgetTotal + debtMins;
   // essentials: items not explicitly marked non-essential, plus debt minimums
   const essentialExpenses = sum(budget.filter((b) => b.essential !== false).map((b) => b.amount)) + debtMins;

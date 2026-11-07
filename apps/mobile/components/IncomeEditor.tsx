@@ -330,7 +330,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
             {auto ? (
               <Text style={[type.caption, { color: t.text3 }]}>
                 {money(pay.gross)} − {money(pay.k401)} 401(k) − {money(pay.taxes)} taxes − {money(pay.deductions)} other
-                {pay.loanRepayment > 0 ? ` (the ${money(pay.loanRepayment)} 401(k) loan repayment is counted under Debts)` : ""}
+                {pay.loanRepayment > 0 ? ` − ${money(pay.loanRepayment)} 401(k) loan` : ""}
               </Text>
             ) : (
               <Text style={[type.caption, { color: t.text3 }]}>Typed from your pay stub</Text>
@@ -406,7 +406,7 @@ function LoanFields({ inc, change }: { inc: Income; change: (p: Partial<Income>)
             </>
           ) : null}
           <Text style={[type.caption, { color: t.text3 }]}>
-            This also shows under Debts, so don't add it there or in your budget. The interest goes back into your own 401(k), so the plan doesn't rush to pay it off.
+            It comes out of your take-home like on your pay stub, and shows under Debts so the plan tracks the balance. Don't add it to your budget. The interest goes back into your own 401(k), so the plan doesn't rush to pay it off.
           </Text>
         </View>
       ) : null}
