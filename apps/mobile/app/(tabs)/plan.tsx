@@ -1,6 +1,6 @@
 import { coastNumberAt, isHighInterest, paysExtra } from "@coastfi/engine";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { longMonth } from "../../components/AdjustmentsCard";
 import { AccountsForecast } from "../../components/AccountsForecast";
 import { IconButton, NumberInput, Segmented } from "../../components/form";
@@ -21,6 +21,8 @@ export default function Plan() {
   const update = useStore((s) => s.update);
   // steps and accounts are two views of the same plan
   const [tab, setTab] = useState<"steps" | "accounts">("steps");
+  const [acctView, setAcctView] = useState<"cards" | "table">("cards");
+  const tableView = tab === "accounts" && acctView === "table";
 
   // steps describe what you'll really do (no what-ifs), so they match Home's to-dos
   const real = { ...o, plan: actual };
@@ -101,7 +103,7 @@ export default function Plan() {
       <View style={{ padding: space.lg, paddingBottom: space.md, gap: 4 }}>
         <SectionLabel>Your steps</SectionLabel>
         <Text style={[type.body, { color: t.text2 }]}>
-          Each month, what's left after your budget and debt payments fills step 1, then step 2, and so on. To do several at once, give a step a set amount a month (it goes first, every month) or a share of what's left. Amounts and dates are for your numbers. Use the arrows to change the order. The dates between steps show when each one starts.
+          Whatever your plan doesn't assign (Accounts view) fills step 1, then step 2, and so on. To fund two steps at once, give one a share of what's left. Amounts and dates are for your numbers. Use the arrows to change the order. The dates between steps show when each one starts.
         </Text>
       </View>
       <Divider />
@@ -150,7 +152,7 @@ export default function Plan() {
                     share={shares[info.key] ?? 1}
                     amount={amt}
                     changed={changed}
-                    allowAmount={canAmount}
+                    allowAmount={canAmount && amt !== undefined}
                     onChange={(v) => setSplit(info.key, v)}
                   />
                 ) : null}
@@ -240,14 +242,9 @@ export default function Plan() {
   );
 
   return (
-    <Screen title="Plan" subtitle="Your path to Coast FI">
-      {state.emergency?.active ? (
-        <Card style={{ backgroundColor: t.warnSoft, borderColor: t.warn }}>
-          <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Paused for emergency mode through {longMonth(state.emergency.until)}</Text>
-          <Text style={[type.caption, { color: t.text2 }]}>Until then everything left over stays in cash. These steps pick up again the month after; the dates below already account for the pause.</Text>
-        </Card>
-      ) : null}
-      {finish}
+    // header and the Steps / Accounts switch stay put; the content scrolls under them, and the
+    // accounts table fills the rest of the screen (scrolling inside, both ways)
+    <Screen title="Plan" subtitle="Your path to Coast FI" fill maxWidth={tableView ? 100000 : undefined}>
       <View style={{ maxWidth: 360 }}>
         <Segmented
           label="Plan view"
@@ -256,18 +253,35 @@ export default function Plan() {
           onChange={setTab}
         />
       </View>
-      {tab === "accounts" ? (
-        <AccountsForecast state={state} o={real} start={start} />
-      ) : twoColumn ? (
-        <View style={{ flexDirection: "row", gap: space.lg, alignItems: "flex-start" }}>
-          {steps}
-          <View style={{ flex: 2, gap: space.lg }}>{compare}</View>
-        </View>
+      {tableView ? (
+        <AccountsForecast state={state} o={real} start={start} view={acctView} onView={setAcctView} fill />
       ) : (
-        <>
-          {steps}
-          {compare}
-        </>
+        <ScrollView style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
+          {state.emergency?.active ? (
+            <Card style={{ backgroundColor: t.warnSoft, borderColor: t.warn }}>
+              <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Paused for emergency mode through {longMonth(state.emergency.until)}</Text>
+              <Text style={[type.caption, { color: t.text2 }]}>Until then everything left over stays in cash. These steps pick up again the month after; the dates below already account for the pause.</Text>
+            </Card>
+          ) : null}
+          {tab === "accounts" ? (
+            <AccountsForecast state={state} o={real} start={start} view={acctView} onView={setAcctView} />
+          ) : (
+            <>
+              {finish}
+              {twoColumn ? (
+                <View style={{ flexDirection: "row", gap: space.lg, alignItems: "flex-start" }}>
+                  {steps}
+                  <View style={{ flex: 2, gap: space.lg }}>{compare}</View>
+                </View>
+              ) : (
+                <>
+                  {steps}
+                  {compare}
+                </>
+              )}
+            </>
+          )}
+        </ScrollView>
       )}
     </Screen>
   );

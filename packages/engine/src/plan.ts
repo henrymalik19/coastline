@@ -316,6 +316,11 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     }
     const expenses = (inEmergency && em!.essentialsOnly ? essentialBudget : d.budgetTotal) + minPay + adjExpense + setAside;
     let avail = income - expenses + extraMonthly;
+    // what's left after bills this month, and how much of it your schedule asked for / got
+    const available = avail;
+    let plannedAsk = 0;
+    let plannedGot = 0;
+    let plannedShort = 0;
     const alloc: Alloc = {
       k401: 0, k401TakeHome: 0, k401Step: 0, matchGain: 0,
       ira: 0, taxable: 0, ef: 0, debt: 0, hsa: 0, goals: 0, leftover: 0,
@@ -462,7 +467,12 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       if (payrollSteps) for (const k of ["k401", "hsa"] as const) if (started[k] && order.includes(k)) doStep(k);
       // your schedule goes first (after paycheck deductions): each account gets what you set, if it's there
       for (const [k, v] of onSchedule) {
-        if (avail <= 1e-9) break;
+        const before = avail;
+        plannedAsk += v;
+        if (avail <= 1e-9) {
+          plannedShort += v;
+          continue;
+        }
         if (k === "cash") {
           const put = Math.min(avail, v);
           cash += put;
@@ -482,6 +492,10 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
           doStep(k);
           avail += held;
         }
+        const got = before - avail;
+        plannedGot += got;
+        // short when the money ran out (not when a limit or a paid-off balance stopped it)
+        if (got < v - 0.005 && avail <= 1e-9) plannedShort += v - got;
       }
       const scheduledStep = (step: string) =>
         step === "starterEF" || step === "fullEF" ? onSchedule.has("cash") : (step === "hsa" && hsaPayroll) ? false : onSchedule.has(step);
@@ -542,6 +556,10 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       debts: debts.map((x) => ({ id: x.id, balance: x.balance })),
       pre: payPre - payRoth + payMatch + alloc.k401 * (1 - d.rothShare) + alloc.matchGain + loanBack,
       loanBack,
+      available,
+      plannedAsk,
+      plannedGot,
+      plannedShort,
       post: payRoth + alloc.k401 * d.rothShare + payHsaEmployer + payHsa + alloc.hsa + alloc.ira + alloc.taxable,
     });
   }

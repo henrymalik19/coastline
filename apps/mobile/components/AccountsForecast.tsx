@@ -6,7 +6,7 @@
 import { accountForecasts, BUCKET_LABELS, scheduleAmount, type AccountForecast, type AccountKey, type PlanState, type RunResult, type ScheduleEntry } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { debtLabel } from "../lib/debts";
 import { money, monthLabel } from "../lib/format";
 import { useStore } from "../lib/store";
@@ -16,7 +16,26 @@ import { Icon } from "./Icon";
 import { ProgressBar } from "./ProgressRing";
 import { Card, Divider, SectionLabel } from "./ui";
 
-type Props = { state: PlanState; o: RunResult; start: Date };
+type Props = {
+  state: PlanState; o: RunResult; start: Date;
+  /** Cards or the table (the Plan tab keeps this so the table can fill the screen). */
+  view: "cards" | "table"; onView: (v: "cards" | "table") => void;
+  /** Fill the height it's given (the table scrolls inside). */
+  fill?: boolean;
+};
+
+// thin, quiet scrollbars for the table (web)
+if (Platform.OS === "web" && typeof document !== "undefined" && !document.getElementById("ledger-css")) {
+  const el = document.createElement("style");
+  el.id = "ledger-css";
+  el.textContent =
+    "[data-ledger]{scrollbar-width:thin;scrollbar-color:rgba(127,127,127,.45) transparent}" +
+    "[data-ledger]::-webkit-scrollbar{width:10px;height:10px}" +
+    "[data-ledger]::-webkit-scrollbar-track{background:transparent}" +
+    "[data-ledger]::-webkit-scrollbar-thumb{background:rgba(127,127,127,.4);border-radius:8px;border:2px solid transparent;background-clip:padding-box}" +
+    "[data-ledger]::-webkit-scrollbar-corner{background:transparent}";
+  document.head.appendChild(el);
+}
 
 const ym = (start: Date, m: number) => {
   const dt = new Date(start.getFullYear(), start.getMonth() + m, 1);
@@ -25,11 +44,10 @@ const ym = (start: Date, m: number) => {
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const monthName = (key: string) => `${MON[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
 
-export function AccountsForecast({ state, o, start }: Props) {
+export function AccountsForecast({ state, o, start, view, onView, fill }: Props) {
   const t = useTheme();
   const update = useStore((s) => s.update);
   const router = useRouter();
-  const [view, setView] = useState<"cards" | "table">("cards");
   const [open, setOpen] = useState<string | null>(null);
   const [planOpen, setPlanOpen] = useState<string | null>(null);
   const [span, setSpan] = useState(12);
@@ -92,12 +110,6 @@ export function AccountsForecast({ state, o, start }: Props) {
   // show accounts that have money or get some in the next two years
   const shown = all.filter((a) => a.start > 0.5 || a.months.slice(0, 24).some((m) => m.total > 0.5) || (schedule[a.key]?.length ?? 0) > 0);
   const isDebt = (k: AccountKey) => k.startsWith("debt:");
-  const m0 = all.reduce(
-    (s, a) => (isDebt(a.key) ? s : { pay: s.pay + a.months[0]!.paycheck, plan: s.plan + a.months[0]!.plan, emp: s.emp + a.months[0]!.employer }),
-    { pay: 0, plan: 0, emp: 0 },
-  );
-  const debtExtra = all.filter((a) => isDebt(a.key)).reduce((s, a) => s + a.months[0]!.plan, 0);
-  const pieces = [m0.pay > 0.5 ? `${money(m0.pay)} from your paychecks` : "", m0.plan > 0.5 ? `${money(m0.plan)} from what's left` : "", m0.emp > 0.5 ? `${money(m0.emp)} from employers` : ""].filter(Boolean);
 
   const parts = (m: { paycheck: number; plan: number; employer: number; loan: number }, k: AccountKey) =>
     [
@@ -314,68 +326,216 @@ export function AccountsForecast({ state, o, start }: Props) {
 
   /* ---------- the table: months down, accounts across ---------- */
   const COL = 108;
-  const table = (
-    <View style={{ padding: space.md, gap: space.sm }}>
-      <ScrollView horizontal>
-        <View>
-          <View style={[styles.tr, { borderBottomColor: t.border }]}>
-            <Text style={[type.overline, styles.monthCol, { color: t.text3 }]}>Month</Text>
-            {shown.map((a) => (
-              <Text key={a.key} numberOfLines={2} style={[type.overline, { color: t.text3, width: COL * 2, textAlign: "center" }]}>{label(a.key).replace(" (what you owe)", "")}</Text>
-            ))}
-          </View>
-          <View style={[styles.tr, { borderBottomColor: t.border }]}>
-            <Text style={[type.caption, styles.monthCol, { color: t.text3 }]}>Today</Text>
-            {shown.map((a) => (
-              <View key={a.key} style={{ flexDirection: "row", width: COL * 2 }}>
-                <Text style={[type.caption, { color: t.text3, width: COL, textAlign: "right" }]}>{" "}</Text>
-                <Text style={[type.caption, { color: t.text2, width: COL, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(a.start)}</Text>
-              </View>
-            ))}
-          </View>
-          {Array.from({ length: span }, (_, i) => (
-            <View key={i} style={[styles.tr, { borderBottomColor: t.border }]}>
-              <Text style={[type.caption, styles.monthCol, { color: i === 0 ? t.text : t.text2, fontWeight: i === 0 ? "700" : "400" }]}>
-                {monthLabel(start, i)}
-                {pl.months[i]!.extraCheck ? " ·3" : ""}
-              </Text>
-              {shown.map((a) => (
-                <View key={a.key} style={{ flexDirection: "row", width: COL * 2 }}>
-                  {amountCell(a, i, COL)}
-                  <Text style={[type.caption, { color: t.text2, width: COL, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(a.months[i]!.balance)}</Text>
-                </View>
-              ))}
-            </View>
-          ))}
-        </View>
-      </ScrollView>
-      {edit ? editorFor(edit.k, edit.i) : null}
-      <View style={styles.editRow}>
-        {[12, 24, 36].map((n) => (
-          <Pressable key={n} role="button" onPress={() => setSpan(n)} hitSlop={6}>
-            <Text style={[type.caption, { color: span === n ? t.text : t.accent, fontWeight: "700" }]}>{n} months</Text>
+  /* ---------- this month: what's set elsewhere, your plan, and what's not planned (or short) ---------- */
+  const row0 = pl.months[0]!;
+  const jobs = state.incomes.filter((x) => (x.kind ?? "job") === "job");
+  const perCheck = (pick: (x: (typeof jobs)[number]) => number) => jobs.filter((x) => pick(x) > 0).map((x) => `${x.name || "your job"} ${money(pick(x))}/check`).join(", ");
+  const loanDebts = state.debts.filter((x) => x.payroll && x.balance > 0);
+  const escrowNow = state.debts.reduce((a, x) => a + (x.payroll ? 0 : Math.min(Math.max(0, x.escrow ?? 0), x.minPayment)), 0);
+  const fromPay: { label: string; amount: number; where: string; href: string }[] = [
+    { label: "401(k) from your paychecks", amount: row0.payPre, where: perCheck((x) => x.pretax ?? 0), href: "/money/income" },
+    { label: "HSA from your paychecks", amount: row0.payHsa ?? 0, where: perCheck((x) => x.hsaPre ?? 0), href: "/money/income" },
+    ...loanDebts.map((x) => ({ label: `${debtLabel(x)} from your paycheck`, amount: x.minPayment, where: "goes back into your 401(k)", href: "/money/debts" })),
+  ].filter((x) => x.amount > 0.5);
+  const mine = all
+    .filter((a) => scheduleAmount(state.plan, a.key, thisMonth) !== undefined)
+    .map((a) => ({ k: a.key, ask: scheduleAmount(state.plan, a.key, thisMonth)!, got: a.months[0]!.plan + (a.key === "cash" ? 0 : 0) }));
+  const toSteps = all
+    .filter((a) => scheduleAmount(state.plan, a.key, thisMonth) === undefined && a.months[0]!.plan > 0.5)
+    .map((a) => ({ k: a.key, v: a.months[0]!.plan }));
+  const notPlanned = Math.max(0, row0.available - row0.plannedGot);
+  const shortMonths = pl.months.slice(0, 24).map((m, i) => ({ i, v: m.plannedShort })).filter((x) => x.v > 0.5);
+  const line = (labelText: string, value: string, opts?: { strong?: boolean; color?: string; href?: string; hint?: string }) => (
+    <View style={styles.checkLine}>
+      <View style={{ flex: 1 }}>
+        {opts?.href ? (
+          <Pressable role="link" onPress={() => router.push(opts.href as never)} hitSlop={4}>
+            <Text style={[type.caption, { color: t.text2, fontWeight: opts.strong ? "700" : "400" }]}>{labelText} <Text style={{ color: t.accent }}>›</Text></Text>
           </Pressable>
+        ) : (
+          <Text style={[type.caption, { color: opts?.strong ? t.text : t.text2, fontWeight: opts?.strong ? "700" : "400" }]}>{labelText}</Text>
+        )}
+        {opts?.hint ? <Text style={[type.caption, { color: t.text3 }]}>{opts.hint}</Text> : null}
+      </View>
+      <Text style={[opts?.strong ? type.label : type.caption, { color: opts?.color ?? t.text, fontWeight: opts?.strong ? "700" : "500", fontVariant: ["tabular-nums"] }]}>{value}</Text>
+    </View>
+  );
+  const check = (
+    <View style={[styles.check, { backgroundColor: t.surface2 }]}>
+      <Text style={[type.overline, { color: t.text3 }]}>This month ({monthLabel(start, 0)})</Text>
+      {fromPay.length ? (
+        <>
+          <Text style={[type.caption, { color: t.text3, marginTop: 2 }]}>Comes out of your paychecks first (set on your job, not from what's left)</Text>
+          {fromPay.map((x) => line(x.label, money(x.amount), { href: x.href, hint: x.where || undefined }))}
+          <View style={[styles.rule, { backgroundColor: t.border }]} />
+        </>
+      ) : null}
+      {line("Take-home", money(row0.income))}
+      {line("Budget", `− ${money(Math.max(0, row0.expenses - row0.minPay - row0.setAside))}`, { href: "/money/budget" })}
+      {row0.minPay > 0.5 ? line("Debt payments", `− ${money(row0.minPay)}`, { href: "/money/debts", hint: escrowNow > 0.5 ? `includes ${money(escrowNow)} escrow` : undefined }) : null}
+      {row0.setAside > 0.5 ? line("Set aside for recurring goals", `− ${money(row0.setAside)}`, { href: "/money/goals" }) : null}
+      {line("Left after bills", money(row0.available), { strong: true, color: row0.available < 0 ? t.bad : t.text })}
+      <View style={[styles.rule, { backgroundColor: t.border }]} />
+      <Text style={[type.caption, { color: t.text3 }]}>Your plan</Text>
+      {mine.length ? mine.map((x) => line(label(x.k).replace(" (what you owe)", isDebt(x.k) ? " (extra)" : ""), `− ${money(x.ask)}`)) : (
+        <Text style={[type.caption, { color: t.text3 }]}>Nothing planned yet. Open an account below and set a monthly amount.</Text>
+      )}
+      {row0.plannedShort > 0.5
+        ? line("Short this month", money(-row0.plannedShort), { strong: true, color: t.bad, hint: "Your plan asks for more than is left after bills. Lower an amount, or move one to a later month." })
+        : line("Not planned yet", money(notPlanned), { strong: true, color: t.good, hint: notPlanned > 0.5 ? (toSteps.length ? `Goes to your steps: ${toSteps.map((x) => `${label(x.k).replace(" (what you owe)", " (extra)")} ${money(x.v)}`).join(", ")}` : "Stays in cash") : undefined })}
+      {shortMonths.length && !(shortMonths.length === 1 && shortMonths[0]!.i === 0) ? (
+        <Text style={[type.caption, { color: t.bad }]}>
+          Short later: {shortMonths.filter((x) => x.i > 0).slice(0, 4).map((x) => `${monthLabel(start, x.i)} by ${money(x.v)}`).join(", ")}{shortMonths.length > 5 ? "…" : ""}. See the table.
+        </Text>
+      ) : null}
+    </View>
+  );
+
+  /* ---------- the table: months down, accounts across, header and month column stay put ---------- */
+  const web = Platform.OS === "web";
+  const stick = (st: object) => (web ? ({ position: "sticky", ...st } as object) : null);
+  const MW = 104;
+  const H1 = 30;
+  const num = (v: string, color: string, w = COL, bold = false) => (
+    <Text style={[type.caption, { width: w, paddingHorizontal: 8, textAlign: "right", color, fontWeight: bold ? "700" : "500", fontVariant: ["tabular-nums"] }]}>{v}</Text>
+  );
+  const groupEdge = { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: t.border };
+  const monthCell = (content: React.ReactNode, bg: string, z = 1) => (
+    <View style={[{ width: MW, paddingHorizontal: 8, justifyContent: "center", backgroundColor: bg, zIndex: z }, stick({ left: 0 })]}>{content}</View>
+  );
+  const head1 = (
+    <View style={[styles.gr, { height: H1, backgroundColor: t.surface, zIndex: 3 }, stick({ top: 0 })]}>
+      {monthCell(<Text style={[type.overline, { color: t.text3 }]}>Month</Text>, t.surface, 4)}
+      <View style={[{ width: COL * 3, justifyContent: "center" }, groupEdge]}>
+        <Text style={[type.overline, { color: t.text3, textAlign: "center" }]}>Your plan</Text>
+      </View>
+      {shown.map((x) => (
+        <View key={x.key} style={[{ width: COL * 2, justifyContent: "center", paddingHorizontal: 6 }, groupEdge]}>
+          <Text numberOfLines={1} style={[type.overline, { color: t.text2, textAlign: "center" }]}>{label(x.key).replace(" (what you owe)", "")}</Text>
+        </View>
+      ))}
+    </View>
+  );
+  const head2 = (
+    <View style={[styles.gr, { backgroundColor: t.surface, borderBottomWidth: 1, borderBottomColor: t.border, zIndex: 3 }, stick({ top: H1 })]}>
+      {monthCell(<Text style={[type.caption, { color: t.text3 }]}> </Text>, t.surface, 4)}
+      <View style={[{ flexDirection: "row" }, groupEdge]}>
+        {num("Left after bills", t.text3)}
+        {num("Planned", t.text3)}
+        {num("Not planned", t.text3)}
+      </View>
+      {shown.map((x) => (
+        <View key={x.key} style={[{ flexDirection: "row" }, groupEdge]}>
+          {num(isDebt(x.key) ? "Paid" : "In", t.text3)}
+          {num(isDebt(x.key) ? "Owed" : "Balance", t.text3)}
+        </View>
+      ))}
+    </View>
+  );
+  const todayRow = (
+    <View style={[styles.gr, { backgroundColor: t.surface }]}>
+      {monthCell(<Text style={[type.caption, { color: t.text3 }]}>Today</Text>, t.surface)}
+      <View style={[{ width: COL * 3 }, groupEdge]} />
+      {shown.map((x) => (
+        <View key={x.key} style={[{ flexDirection: "row" }, groupEdge]}>
+          {num("", t.text3)}
+          {num(money(x.start), t.text2)}
+        </View>
+      ))}
+    </View>
+  );
+  const bodyRows = Array.from({ length: span }, (_, i) => {
+    const r = pl.months[i]!;
+    const short = r.plannedShort > 0.5;
+    const bg = short ? t.badSoft : i % 2 ? t.surface2 : t.surface;
+    return (
+      <View key={i} style={[styles.gr, { backgroundColor: bg }]}>
+        {monthCell(
+          <Text style={[type.caption, { color: i === 0 ? t.text : t.text2, fontWeight: i === 0 ? "700" : "500" }]}>
+            {monthLabel(start, i)}
+            {r.extraCheck ? <Text style={{ color: t.text3 }}> ·3</Text> : null}
+          </Text>,
+          bg,
+        )}
+        <View style={[{ flexDirection: "row" }, groupEdge]}>
+          {num(money(r.available), t.text2)}
+          {num(r.plannedAsk > 0.5 ? money(r.plannedAsk) : "–", t.text2)}
+          {num(short ? `short ${money(r.plannedShort)}` : money(Math.max(0, r.available - r.plannedGot)), short ? t.bad : t.good, COL, short)}
+        </View>
+        {shown.map((x) => (
+          <View key={x.key} style={[{ flexDirection: "row", alignItems: "center" }, groupEdge]}>
+            <View style={{ width: COL, paddingHorizontal: 8, alignItems: "flex-end" }}>{amountCell(x, i, COL - 16)}</View>
+            {num(money(x.months[i]!.balance), t.text2)}
+          </View>
         ))}
       </View>
-      <Text style={[type.caption, { color: t.text3 }]}>
-        Each account: what goes in that month, then the balance (for debts: what you pay, then what's still owed). Tap an amount to change it. "·3" is a 3-paycheck month.
-      </Text>
+    );
+  });
+  const gridInner = (
+    <>
+      {head1}
+      {head2}
+      {todayRow}
+      {bodyRows}
+    </>
+  );
+  const grid = web ? (
+    <View
+      {...({ dataSet: { ledger: "1" } } as object)}
+      style={[{ overflow: "auto" as never, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border }, fill ? { flex: 1, minHeight: 0 } : { maxHeight: 620 }]}
+    >
+      <View style={{ alignSelf: "flex-start" }}>{gridInner}</View>
+    </View>
+  ) : (
+    <ScrollView style={fill ? { flex: 1 } : { maxHeight: 620 }}>
+      <ScrollView horizontal>
+        <View>{gridInner}</View>
+      </ScrollView>
+    </ScrollView>
+  );
+  const table = (
+    <View style={[{ padding: space.md, gap: space.sm }, fill ? { flex: 1, minHeight: 0 } : null]}>
+      <View style={[styles.editRow, { justifyContent: "space-between" }]}>
+        <View style={styles.editRow}>
+          {[12, 24, 36, 60].map((n) => (
+            <Pressable key={n} role="radio" aria-checked={span === n} onPress={() => setSpan(n)} hitSlop={6} style={[styles.chip, { borderColor: span === n ? t.accent : t.border, backgroundColor: span === n ? t.accentSoft : t.surface }]}>
+              <Text style={[type.caption, { color: span === n ? t.accent : t.text2, fontWeight: "700" }]}>{n} months</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={[type.caption, { color: t.text3, flexShrink: 1 }]}>Tap an amount to change it · ·3 = 3-paycheck month · red = your plan is short</Text>
+      </View>
+      {grid}
+      {edit ? editorFor(edit.k, edit.i) : null}
     </View>
   );
 
   return (
-    <Card padded={false}>
-      <View style={{ padding: space.lg, paddingBottom: space.md, gap: space.sm }}>
-        <SectionLabel>Accounts</SectionLabel>
-        <Text style={[type.body, { color: t.text2 }]}>
-          Going in this month: <Text style={{ color: t.text, fontWeight: "700" }}>{money(m0.pay + m0.plan + m0.emp)}</Text>
-          {pieces.length ? ` (${pieces.join(" · ")})` : ""}
-          {debtExtra > 0.5 ? `, plus ${money(debtExtra)} extra on debt` : ""}. Give an account its own monthly plan, or change any month.
-        </Text>
-        <Segmented label="Show accounts as" options={[{ value: "cards", label: "Cards" }, { value: "table", label: "Table" }]} value={view} onChange={(v) => { setView(v); setEdit(null); }} />
-      </View>
-      <Divider />
-      {view === "table" ? table : shown.map(card)}
+    <Card padded={false} style={fill ? { flex: 1, minHeight: 0 } : undefined}>
+      {view === "table" ? (
+        <>
+          <View style={{ paddingHorizontal: space.lg, paddingTop: space.md, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, flexWrap: "wrap" }}>
+            <SectionLabel>Accounts</SectionLabel>
+            <View style={{ width: 220 }}>
+              <Segmented label="Show accounts as" options={[{ value: "cards", label: "Cards" }, { value: "table", label: "Table" }]} value={view} onChange={(v) => { onView(v); setEdit(null); }} />
+            </View>
+          </View>
+          {table}
+        </>
+      ) : (
+        <>
+          <View style={{ padding: space.lg, paddingBottom: space.md, gap: space.sm }}>
+            <SectionLabel>Accounts</SectionLabel>
+            <Text style={[type.body, { color: t.text2 }]}>
+              Paychecks, bills and debts come from where you set them. Your plan is the rest: give an account a monthly amount, and anything not planned goes to your steps.
+            </Text>
+            {check}
+            <Segmented label="Show accounts as" options={[{ value: "cards", label: "Cards" }, { value: "table", label: "Table" }]} value={view} onChange={(v) => { onView(v); setEdit(null); }} />
+          </View>
+          <Divider />
+          {shown.map(card)}
+        </>
+      )}
     </Card>
   );
 }
@@ -416,4 +576,9 @@ const styles = StyleSheet.create({
   editor: { borderWidth: 1, borderRadius: radius.md, padding: space.sm, gap: space.sm },
   tr: { flexDirection: "row", alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: 5 },
   monthCol: { width: 92 },
+  gr: { flexDirection: "row", alignItems: "stretch", minHeight: 32 },
+  chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  check: { borderRadius: radius.md, padding: space.md, gap: 3 },
+  checkLine: { flexDirection: "row", alignItems: "flex-start", gap: space.sm, paddingVertical: 1 },
+  rule: { height: StyleSheet.hairlineWidth, marginVertical: 4 },
 });

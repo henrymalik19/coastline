@@ -498,6 +498,14 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     expect(dec!.alloc.taxable).toBeCloseTo(6000 - 500, 6);
   });
 
+  it("a schedule bigger than what's left is short by the difference", () => {
+    const s = blank({ incomes: [{ ...job, net: 3000 }], budget: [{ id: "b", name: "Rent", amount: 2000, inRetirement: false }], plan: { ...blank().plan, schedule: { cash: [{ from: "2026-11", amount: 1500 }] } } });
+    const m0 = simulatePlan(s, derive(s, START)).months[0]!;
+    expect(m0.available).toBeCloseTo(1000, 9);
+    expect(m0.plannedGot).toBeCloseTo(1000, 9);
+    expect(m0.plannedShort).toBeCloseTo(500, 9);
+  });
+
   it("401(k) loan repayments go back into your 401(k)", () => {
     const s = blank({
       incomes: [{ ...job, net: 8000 }],
@@ -553,6 +561,10 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     // the rest goes through the steps: here the IRA
     expect(at(2026, 10).alloc.ira).toBeGreaterThan(0);
     expect(at(2027, 9).debts.find((x) => x.id === "loan")!.balance).toBeLessThan(25305.25 - 11 * 528.45);
+    expect(at(2026, 10).plannedAsk).toBeCloseTo(1500 + 0, 6);
+    expect(at(2026, 10).plannedGot).toBeCloseTo(1500, 6);
+    expect(at(2026, 10).plannedShort).toBe(0);
+    expect(at(2026, 10).available).toBeCloseTo(12000 - derive(s, START).budgetTotal, 6);
   });
 
   it("a monthly plan goes first, even for a later step, and takes no more", () => {
