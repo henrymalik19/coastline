@@ -3,7 +3,7 @@
  * Paychecks set the 401(k) (and a paycheck HSA); everything else is set here, from what's left after
  * your budget and debt payments. The Plan tab's Forecast only shows the forecast.
  */
-import { accountForecasts, setAsideFor, type AccountKey } from "@coastfi/engine";
+import { accountForecasts, accountPlanKey, ACCOUNT_KEY, setAsideFor } from "@coastfi/engine";
 import { monthKey } from "../lib/store";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -13,7 +13,7 @@ import { money, monthLabel } from "../lib/format";
 import { usePlan } from "../lib/plan";
 import { space, type, useTheme } from "../lib/theme";
 import { Icon } from "./Icon";
-import { ScheduleEditor, scheduleSummary, useSchedule } from "./ScheduleEditor";
+import { plannedNow, ScheduleEditor, scheduleSummary, useSchedule } from "./ScheduleEditor";
 import { Card, Divider } from "./ui";
 
 export function SavingsEditor() {
@@ -25,13 +25,26 @@ export function SavingsEditor() {
   const payrollHsa = state.plan.hsaPayroll !== false;
   const jobs = state.incomes.filter((x) => (x.kind ?? "job") === "job");
 
-  const keys: { k: AccountKey; label: string; unit: string; note?: string }[] = [
-    { k: "cash", label: "Emergency fund (cash)", unit: "/mo", note: "Cash can go past your emergency fund goal if you plan it." },
-    { k: "ira", label: "IRA", unit: "/mo" },
-    ...(payrollHsa ? [] : [{ k: "hsa" as AccountKey, label: "HSA", unit: "/mo" }]),
-    { k: "taxable", label: "Brokerage", unit: "/mo" },
-    ...state.goals.filter((g) => !g.recurring).map((g) => ({ k: ("goal:" + g.id) as AccountKey, label: g.name || "Goal", unit: "/mo" })),
-    ...state.debts.filter((x) => x.balance > 0).map((x) => ({ k: ("debt:" + x.id) as AccountKey, label: `Extra on ${debtLabel(x)}`, unit: "extra/mo" })),
+  const now = monthKey(start);
+  // one row per account you add to; a kind with no account yet (or an amount set for the whole kind) gets its own
+  const KINDS: { k: "cash" | "ira" | "hsa" | "taxable"; label: string }[] = [
+    { k: "cash", label: "Emergency fund (cash)" },
+    { k: "ira", label: "IRA" },
+    ...(payrollHsa ? [] : [{ k: "hsa" as const, label: "HSA" }]),
+    { k: "taxable", label: "Brokerage" },
+  ];
+  const own = state.accounts.map((a) => ({ a, k: accountPlanKey(state, a) })).filter((x) => x.k);
+  const kindSet = (k: string) => (state.plan.schedule?.[k]?.length ?? 0) > 0 || Object.keys(state.plan.scheduleMonths?.[k] ?? {}).length > 0;
+  const keys: { k: string; label: string; unit: string; note?: string; now?: number }[] = [
+    ...KINDS.flatMap((g) => {
+      const accts = own.filter((x) => x.k === g.k);
+      const note = g.k === "cash" ? "Cash can go past your emergency fund goal if you plan it." : undefined;
+      const rows = accts.map(({ a }) => ({ k: ACCOUNT_KEY + a.id, label: a.name.trim() || g.label, unit: "/mo", note, now: plannedNow(state, ACCOUNT_KEY + a.id, now) }));
+      if (!accts.length || kindSet(g.k)) rows.push({ k: g.k, label: accts.length ? `${g.label} (all accounts)` : `${g.label} (no account yet)`, unit: "/mo", note, now: plannedNow(state, g.k, now) });
+      return rows;
+    }),
+    ...state.goals.filter((g) => !g.recurring).map((g) => ({ k: "goal:" + g.id, label: g.name || "Goal", unit: "/mo" })),
+    ...state.debts.filter((x) => x.balance > 0).map((x) => ({ k: "debt:" + x.id, label: `Extra on ${debtLabel(x)}`, unit: "extra/mo" })),
   ];
 
   const fromPay = [
@@ -49,7 +62,7 @@ export function SavingsEditor() {
       </Text>
 
       <Card style={{ gap: 4 }}>
-        <Text style={[type.overline, { color: t.text3 }]}>{monthLabel(start, 0)}</Text>
+        <Text style={[type.overline, { color: t.accent }]}>This month · {monthLabel(start, 0)}</Text>
         <Line label="Left after bills" value={money(row0.available)} />
         {row0.setAside > 0.5 ? <Text style={[type.caption, { color: t.text3 }]}>after {money(row0.setAside)} set aside for repeating goals (below)</Text> : null}
         <Line label="Your monthly savings" value={row0.plannedAsk > 0.5 ? `− ${money(row0.plannedAsk)}` : "none set yet"} />
@@ -79,7 +92,7 @@ export function SavingsEditor() {
           const f = forecasts.find((a) => a.key === x.k);
           return (
             <View key={x.k}>
-              <AccountRow k={x.k} label={x.label} unit={x.unit} note={x.note} thisMonth={f ? (x.k.startsWith("debt:") ? f.months[0]!.plan : f.months[0]!.total) : 0} />
+              <AccountRow k={x.k} label={x.label} unit={x.unit} note={x.note} thisMonth={"now" in x ? x.now : f ? (x.k.startsWith("debt:") ? f.months[0]!.plan : f.months[0]!.total) : 0} />
               {i < keys.length - 1 ? <Divider /> : null}
             </View>
           );
@@ -108,7 +121,7 @@ export function SavingsEditor() {
   );
 }
 
-function AccountRow({ k, label, unit, note, thisMonth }: { k: string; label: string; unit: string; note?: string; thisMonth: number }) {
+function AccountRow({ k, label, unit, note, thisMonth }: { k: string; label: string; unit: string; note?: string; thisMonth?: number }) {
   const t = useTheme();
   const { list, oneOffs } = useSchedule(k);
   const set = list.length > 0 || Object.keys(oneOffs).length > 0;
@@ -124,7 +137,7 @@ function AccountRow({ k, label, unit, note, thisMonth }: { k: string; label: str
           </Text>
         </View>
         <View style={{ alignItems: "flex-end" }}>
-          <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(thisMonth)}</Text>
+          <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{thisMonth === undefined ? "–" : money(thisMonth)}</Text>
           <Text style={[type.caption, { color: t.text3 }]}>this month</Text>
         </View>
         <View style={{ transform: [{ rotate: open ? "90deg" : "0deg" }] }}>

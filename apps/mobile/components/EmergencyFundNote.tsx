@@ -107,7 +107,17 @@ export function EmergencyFundGoal() {
         </Pressable>
       </View>
       <Divider />
-      <MonthlyAmount k="cash" label="Emergency fund" note="Cash can go past your goal if you plan it." />
+      {cashAccounts.length ? (
+        cashAccounts.map((a) => (
+          <View key={a.id} style={{ gap: 2 }}>
+            {cashAccounts.length > 1 ? <Text style={[type.caption, { color: t.text2, fontWeight: "600" }]}>{a.name.trim() || "Cash"}</Text> : null}
+            <MonthlyAmount k={"acct:" + a.id} label={a.name.trim() || "Cash"} note="Cash can go past your goal if you plan it." />
+          </View>
+        ))
+      ) : null}
+      {!cashAccounts.length || (state.plan.schedule?.cash?.length ?? 0) > 0 || Object.keys(state.plan.scheduleMonths?.cash ?? {}).length > 0 ? (
+        <MonthlyAmount k="cash" label={cashAccounts.length ? "Emergency fund (all cash)" : "Emergency fund"} note="Cash can go past your goal if you plan it." />
+      ) : null}
     </Card>
   );
 }

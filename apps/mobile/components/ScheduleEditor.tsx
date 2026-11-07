@@ -3,7 +3,7 @@
  * Each amount runs from its month until the next change. Used on the Plan tab's account cards and on
  * the emergency fund goal (same setting, two places to see it).
  */
-import { accountGroup, type Account, type PlanState, type ScheduleEntry } from "@coastfi/engine";
+import { accountGroup, accountPlanKey, ACCOUNT_KEY, type Account, type PlanState, type ScheduleEntry } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, Text, View, StyleSheet } from "react-native";
@@ -57,17 +57,20 @@ export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared }: { k:
   const { list, set, oneOffs, setMonth } = useSchedule(k);
   const singles = Object.keys(oneOffs).sort();
   const last = list[list.length - 1];
+  // the amount in effect this month
+  const current = [...list].filter((e) => e.from <= monthKey(start)).pop();
   const nextFrom = last
     ? monthKey(new Date(Number(last.from.slice(0, 4)), Number(last.from.slice(5, 7)), 1))
     : monthKey(start);
   return (
     <View style={[styles.box, { backgroundColor: t.surface2 }]}>
       {list.map((e, n) => (
-        <View key={e.from + n} style={styles.row}>
+        <View key={e.from + n} style={[styles.row, e === current ? { borderLeftWidth: 3, borderLeftColor: t.accent, paddingLeft: 6 } : null]}>
           <Text style={[type.caption, { color: t.text2, width: 36 }]}>From</Text>
           <MonthField label={`${label}: change starts`} value={e.from} width={150} onChange={(v) => set(list.map((x, j) => (j === n ? { ...x, from: v } : x)))} />
           <NumberInput kind="money" label={`${label} from ${monthName(e.from)}`} value={e.amount} width={130} step={100} onChange={(v) => set(list.map((x, j) => (j === n ? { ...x, amount: v } : x)))} />
           <Text style={[type.caption, { color: t.text3 }]}>{unit}</Text>
+          {e === current ? <Text style={[type.overline, { color: t.accent }]}>Now</Text> : null}
           <IconButton icon="trash" label={`Remove the change from ${monthName(e.from)}`} onPress={() => set(list.filter((_, j) => j !== n))} />
         </View>
       ))}
@@ -107,15 +110,16 @@ export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared }: { k:
 }
 
 /**
- * Where an account's monthly contribution is set: a plan key (cash, ira, hsa, taxable), "payroll" for
- * the 401(k) and a paycheck HSA (set per check on the job), or null (property, accounts the plan skips).
+ * Where an account's monthly contribution is set: its own key ("acct:<id>", added up by kind in the
+ * plan), "payroll" for the 401(k) and a paycheck HSA (set per check on the job), or null (property,
+ * accounts the plan skips).
  */
-export function contributionKey(s: PlanState, a: Pick<Account, "name" | "type" | "counts">): string | "payroll" | null {
+export function contributionKey(s: PlanState, a: Pick<Account, "id" | "name" | "type" | "counts">): string | "payroll" | null {
   const g = accountGroup(a);
   if (!g || g === "other") return null;
   if (g === "k401") return "payroll";
   if (g === "hsa" && s.plan.hsaPayroll !== false) return "payroll";
-  return g;
+  return accountPlanKey(s, a) ? ACCOUNT_KEY + a.id : null;
 }
 
 /** This month's planned amount for a key, or undefined when it follows the plan steps. */

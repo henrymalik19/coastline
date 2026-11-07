@@ -9,6 +9,7 @@ import {
   rateIn,
   setAsideFor,
   limitsFor,
+  mergeAccountSchedules,
   matchFor,
   project,
   resolveIncome,
@@ -565,6 +566,52 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     expect(at(2026, 10).plannedGot).toBeCloseTo(1500, 6);
     expect(at(2026, 10).plannedShort).toBe(0);
     expect(at(2026, 10).available).toBeCloseTo(12000 - derive(s, START).budgetTotal, 6);
+  });
+
+  it("each account has its own monthly amount; the plan adds them up by kind", () => {
+    const s = blank({
+      limits: DEFAULT_LIMITS,
+      incomes: [{ ...job, net: 12000 }],
+      budget: spending,
+      accounts: [
+        { id: "r1", name: "Roth IRA", type: "roth", balance: 0 },
+        { id: "r2", name: "Spouse Roth IRA", type: "roth", balance: 0 },
+        { id: "b", name: "Brokerage", type: "taxable", balance: 0 },
+        { id: "gone", name: "Old 401(k)", type: "pretax", balance: 0 },
+      ],
+      plan: {
+        ...blank().plan, efMonths: 0, steps: ["ira", "taxable"],
+        schedule: {
+          "acct:r1": [{ from: "2026-11", amount: 300 }],
+          "acct:r2": [{ from: "2026-12", amount: 200 }],
+          "acct:b": [{ from: "2026-11", amount: 1000 }],
+          "acct:gone": [{ from: "2026-11", amount: 999 }], // a 401(k) is set per paycheck: dropped
+        },
+        scheduleMonths: { "acct:r1": { "2027-01": 50 } },
+      },
+    });
+    const merged = mergeAccountSchedules(s);
+    expect(merged.schedule?.ira).toEqual([{ from: "2026-11", amount: 300 }, { from: "2026-12", amount: 500 }]);
+    expect(merged.schedule?.taxable).toEqual([{ from: "2026-11", amount: 1000 }]);
+    expect(merged.schedule?.k401).toBeUndefined();
+    expect(merged.scheduleMonths?.ira).toEqual({ "2027-01": 250 }); // $50 one month + the other IRA's $200
+    const m = simulatePlan(s, derive(s, START)).months;
+    expect(m[0]!.alloc.ira).toBeCloseTo(300, 6);
+    expect(m[1]!.alloc.ira).toBeCloseTo(500, 6);
+    expect(m[2]!.alloc.ira).toBeCloseTo(250, 6);
+    expect(m[3]!.alloc.ira).toBeCloseTo(500, 6);
+    expect(m[0]!.plannedAsk).toBeCloseTo(1300, 6);
+  });
+
+  it("a kind's own amount (from before accounts had theirs) adds to its accounts'", () => {
+    const s = blank({
+      accounts: [{ id: "c", name: "Savings", type: "cash", balance: 0 }],
+      plan: { ...blank().plan, schedule: { cash: [{ from: "2026-11", amount: 100 }], "acct:c": [{ from: "2027-01", amount: 400 }] } },
+    });
+    expect(mergeAccountSchedules(s).schedule?.cash).toEqual([{ from: "2026-11", amount: 100 }, { from: "2027-01", amount: 500 }]);
+    // with no account amounts the schedule is left as it is
+    const plain = blank({ plan: { ...blank().plan, schedule: { cash: [{ from: "2026-11", amount: 100 }] } } });
+    expect(mergeAccountSchedules(plain).schedule).toBe(plain.plan.schedule);
   });
 
   it("a monthly plan goes first, even for a later step, and takes no more", () => {

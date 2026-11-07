@@ -3,6 +3,8 @@ import { limitsFor } from "./limits";
 import { checksInMonth } from "./paychecks";
 import type { Adjustment, Alloc, Debt, Derived, FundKey, MonthRow, PlanEvent, PlanResult, PlanSettings, PlanState, SimulateOptions, Goal, RecurringGoal, Limits } from "./types";
 import { addMonths, monthsBetween, num, sum } from "./util";
+import { mergeAccountSchedules, scheduleAmount } from "./schedule";
+export { scheduleAmount } from "./schedule";
 
 /** Id of the synthetic debt created when a short month runs past your cash. */
 export const SHORTFALL_ID = "shortfall";
@@ -34,18 +36,6 @@ export function setAsideFor(g: Pick<Goal, "target" | "saved" | "recurring">, mon
 }
 
 /** Whether the plan puts extra money toward this debt (false = minimum payments only). */
-/** This month's scheduled amount for an account ("YYYY-MM"), or undefined when it isn't on a schedule that month. */
-export function scheduleAmount(p: Pick<PlanSettings, "schedule" | "scheduleMonths">, key: string, month: string): number | undefined {
-  const one = p.scheduleMonths?.[key]?.[month];
-  if (one !== undefined) return one;
-  const list = p.schedule?.[key];
-  if (!list || !list.length) return undefined;
-  // before its first entry the account follows your steps
-  let v: number | undefined;
-  for (const e of [...list].sort((x, y) => (x.from < y.from ? -1 : 1))) if (e.from <= month) v = Math.max(0, num(e.amount));
-  return v;
-}
-
 export const paysExtra = (d: Pick<Debt, "minimumOnly">): boolean => !d.minimumOnly;
 
 /** The rate a debt charges in a given month ("YYYY-MM"): its promo rate through `promoUntil`, else its APR. */
@@ -67,7 +57,8 @@ export const k401Cost = (marginalTax: number, rothShare = 0): number => 1 - marg
  * down `plan.steps`. Leftover goes to cash; a negative month draws from cash.
  */
 export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {}): PlanResult {
-  const p: Partial<PlanSettings> = s.plan ?? {};
+  // each account's own monthly amount adds into its kind (cash, IRA, HSA, brokerage)
+  const p: Partial<PlanSettings> = { ...(s.plan ?? {}), ...mergeAccountSchedules(s) };
   const mode = opts.mode || p.projectWith || "plan";
   const extraMonthly = (opts.extraMonthly ?? (s.whatif && s.whatif.extra)) || 0;
   const months = Math.max(opts.months || 0, d.years * 12, 36);

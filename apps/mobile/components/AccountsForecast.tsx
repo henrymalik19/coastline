@@ -3,7 +3,7 @@
  * year against the limit, and the balance ahead. View only: monthly amounts are set under Money →
  * Monthly savings (and paychecks under Income).
  */
-import { accountForecasts, BUCKET_LABELS, scheduleAmount, type AccountForecast, type AccountKey, type PlanState, type RunResult, type ScheduleEntry } from "@coastfi/engine";
+import { accountForecasts, mergeAccountSchedules, BUCKET_LABELS, scheduleAmount, type AccountForecast, type AccountKey, type PlanState, type RunResult, type ScheduleEntry } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -55,8 +55,10 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
   const pl = o.plan;
   const d = o.d;
   const all = accountForecasts(state, d, pl, d.r);
-  const schedule = state.plan.schedule ?? {};
-  const oneOffs = state.plan.scheduleMonths ?? {};
+  // each account's own amount, added up by kind (what the plan uses)
+  const merged = { ...state.plan, ...mergeAccountSchedules(state) };
+  const schedule = merged.schedule ?? {};
+  const oneOffs = merged.scheduleMonths ?? {};
   const coastM = o.crossing === null ? null : Math.round(o.crossing * 12);
   const retireM = Math.min(pl.months.length, d.years * 12) - 1;
   const thisMonth = ym(start, 0);
@@ -237,10 +239,10 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
     ...loanDebts.map((x) => ({ label: `${debtLabel(x)} from your paycheck`, amount: x.minPayment, where: "goes back into your 401(k)", href: "/money/debts" })),
   ].filter((x) => x.amount > 0.5);
   const mine = all
-    .filter((a) => scheduleAmount(state.plan, a.key, thisMonth) !== undefined)
-    .map((a) => ({ k: a.key, ask: scheduleAmount(state.plan, a.key, thisMonth)!, got: a.months[0]!.plan + (a.key === "cash" ? 0 : 0) }));
+    .filter((a) => scheduleAmount(merged, a.key, thisMonth) !== undefined)
+    .map((a) => ({ k: a.key, ask: scheduleAmount(merged, a.key, thisMonth)!, got: a.months[0]!.plan + (a.key === "cash" ? 0 : 0) }));
   const toSteps = all
-    .filter((a) => scheduleAmount(state.plan, a.key, thisMonth) === undefined && a.months[0]!.plan > 0.5)
+    .filter((a) => scheduleAmount(merged, a.key, thisMonth) === undefined && a.months[0]!.plan > 0.5)
     .map((a) => ({ k: a.key, v: a.months[0]!.plan }));
   const notPlanned = Math.max(0, row0.available - row0.plannedGot);
   const shortMonths = pl.months.slice(0, 24).map((m, i) => ({ i, v: m.plannedShort })).filter((x) => x.v > 0.5);
@@ -300,8 +302,8 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
     <Text style={[type.caption, { width: w, paddingHorizontal: 8, textAlign: "right", color, fontWeight: bold ? "700" : "500", fontVariant: ["tabular-nums"] }]}>{v}</Text>
   );
   const groupEdge = { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: t.border };
-  const monthCell = (content: React.ReactNode, bg: string, z = 1) => (
-    <View style={[{ width: MW, paddingHorizontal: 8, justifyContent: "center", backgroundColor: bg, zIndex: z }, stick({ left: 0 })]}>{content}</View>
+  const monthCell = (content: React.ReactNode, bg: string, z = 1, now = false) => (
+    <View style={[{ width: MW, paddingHorizontal: 8, justifyContent: "center", backgroundColor: bg, zIndex: z, borderLeftWidth: 3, borderLeftColor: now ? t.accent : "transparent" }, stick({ left: 0 })]}>{content}</View>
   );
   const head1 = (
     <View style={[styles.gr, { height: H1, backgroundColor: t.surface, zIndex: 3 }, stick({ top: 0 })]}>
@@ -359,15 +361,18 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
   const bodyRows = Array.from({ length: span }, (_, i) => {
     const r = pl.months[i]!;
     const short = r.plannedShort > 0.5;
-    const bg = short ? t.badSoft : i % 2 ? t.surface2 : t.surface;
+    const bg = short ? t.badSoft : i === 0 ? t.accentSoft : i % 2 ? t.surface2 : t.surface;
     return (
       <View key={i} style={[styles.gr, { backgroundColor: bg }]}>
         {monthCell(
           <Text style={[type.caption, { color: i === 0 ? t.text : t.text2, fontWeight: i === 0 ? "700" : "500" }]}>
             {mLabel(i)}
             {r.extraCheck ? <Text style={{ color: t.text3 }}> ·3</Text> : null}
+            {i === 0 ? <Text style={{ color: t.accent, fontWeight: "700" }}>{"\n"}NOW</Text> : null}
           </Text>,
           bg,
+          1,
+          i === 0,
         )}
         <View style={[{ flexDirection: "row", alignItems: "center" }, groupEdge]}>
           {compact ? null : num(money(r.available), t.text2)}
@@ -433,10 +438,11 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
           const changed = oneOffs[one.key]?.[ym(start, i)] !== undefined;
           const added = isDebt(one.key) ? m.paycheck + m.plan : m.total;
           return (
-            <View key={i} style={[styles.sRow, { backgroundColor: short ? t.badSoft : i % 2 ? t.surface2 : t.surface }]}>
+            <View key={i} style={[styles.sRow, { backgroundColor: short ? t.badSoft : i === 0 ? t.accentSoft : i % 2 ? t.surface2 : t.surface, borderLeftWidth: 3, borderLeftColor: i === 0 ? t.accent : "transparent", paddingLeft: 9 }]}>
               <Text style={[type.caption, styles.sMonth, { color: i === 0 ? t.text : t.text2, fontWeight: i === 0 ? "700" : "500" }]}>
                 {mLabel(i)}
                 {r.extraCheck ? <Text style={{ color: t.accent }}> ·3</Text> : null}
+                {i === 0 ? <Text style={{ color: t.accent, fontWeight: "700" }}>{"\n"}NOW</Text> : null}
               </Text>
               {sCell(added > 0.5 ? money(added) : "–", changed ? t.accent : added > 0.5 ? t.text : t.text3, changed)}
               {sCell(money(m.balance), t.text, true)}

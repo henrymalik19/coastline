@@ -393,7 +393,9 @@ export function plannedSavings(s: PlanState, month?: string): PlannedSaving[] {
       if (v === undefined) continue;
       const debt = key.startsWith("debt:") ? s.debts.find((x) => "debt:" + x.id === key) : undefined;
       const goal = key.startsWith("goal:") ? s.goals.find((x) => "goal:" + x.id === key) : undefined;
-      const label = debt ? `Extra on ${debtLabel(debt)}` : goal ? goal.name : key === "cash" ? "Emergency fund" : SAVING_LABELS[key] ?? key;
+      const acct = key.startsWith("acct:") ? s.accounts.find((x) => "acct:" + x.id === key) : undefined;
+      if (key.startsWith("acct:") && !acct) continue;
+      const label = debt ? `Extra on ${debtLabel(debt)}` : goal ? goal.name : acct ? acct.name.trim() || "Account" : key === "cash" ? "Emergency fund" : SAVING_LABELS[key] ?? key;
       out.push({ key, label, amount: v, steps: [] });
     }
   }

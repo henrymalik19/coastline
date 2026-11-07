@@ -54,7 +54,6 @@ export function AccountsEditor() {
   const update = useStore((s) => s.update);
   const [open, setOpen] = useState<string | null>(null);
   const thisMonth = monthKey(start);
-  const GROUP_NAMES: Record<string, string> = { cash: "cash", ira: "IRA", hsa: "HSA", taxable: "brokerage" };
   const [reorder, setReorder] = useState(false);
   const accounts = state.accounts;
 
@@ -94,7 +93,6 @@ export function AccountsEditor() {
             const name = a.name.trim() || "Unnamed account";
             const ck = contributionKey(state, a);
             const per = ck && ck !== "payroll" ? plannedNow(state, ck, thisMonth) : undefined;
-            const sameGroup = ck && ck !== "payroll" ? accounts.filter((x) => x.id !== a.id && contributionKey(state, x) === ck) : [];
             return (
               <View key={a.id}>
                 {i > 0 ? <Divider /> : null}
@@ -138,8 +136,7 @@ export function AccountsEditor() {
                       <MonthlyAmount
                         k={ck}
                         label={name}
-                        note={ck === "cash" ? "Cash can go past your emergency fund goal if you plan it." : undefined}
-                        shared={sameGroup.length ? `Shared with ${sameGroup.map((x) => x.name.trim() || "your other account").join(", ")}: the plan treats your ${GROUP_NAMES[ck] ?? ck} accounts as one.` : undefined}
+                        note={a.type === "cash" ? "Cash can go past your emergency fund goal if you plan it." : undefined}
                       />
                     ) : null}
                     <TextField label="Account name" placeholder="e.g. Fidelity 401(k)" value={a.name} onChange={(v) => update((p) => { p.accounts[i]!.name = v; })} />

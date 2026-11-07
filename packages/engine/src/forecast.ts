@@ -1,25 +1,12 @@
 import { limitsFor } from "./limits";
 import { rateIn } from "./plan";
 import { num } from "./util";
-import type { Account, Derived, PlanAccount, PlanResult, PlanState } from "./types";
+import { accountGroup } from "./schedule";
+import type { Derived, PlanAccount, PlanResult, PlanState } from "./types";
 
 export type AccountKey = "k401" | "hsa" | "ira" | "taxable" | "other" | "cash" | `debt:${string}` | `goal:${string}`;
 
-/**
- * Which plan account a balance belongs to: what you picked, else a guess from the name (401(k), 403(b),
- * 457, TSP → 401(k); IRA → IRA), else the type (pre-tax → 401(k), Roth → IRA). Property isn't one.
- */
-export function accountGroup(a: Pick<Account, "name" | "type" | "counts">): PlanAccount | "cash" | null {
-  if (a.type === "property") return null;
-  if (a.type === "cash") return "cash";
-  if (a.counts) return a.counts;
-  if (a.type === "hsa") return "hsa";
-  if (a.type === "taxable") return "taxable";
-  const n = a.name.toLowerCase();
-  if (/401|403|457|\btsp\b|thrift/.test(n)) return "k401";
-  if (/\bira\b/.test(n)) return "ira";
-  return a.type === "pretax" ? "k401" : "ira";
-}
+export { accountGroup } from "./schedule";
 
 /** What went into an account in one month, by where it came from. */
 export type AccountMonth = {
