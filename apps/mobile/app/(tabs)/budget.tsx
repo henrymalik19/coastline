@@ -6,6 +6,7 @@
 import { budgetCategories, budgetView, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
 import { budgetAccounts, cardMap } from "../../lib/register";
+import { duplicateOf } from "../../lib/budgetDupes";
 import { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Select } from "../../components/form";
@@ -142,6 +143,29 @@ export default function Budget() {
       a[to] = (a[to] ?? 0) + take;
       e.assigned = a;
     });
+  const removeDuplicate = async (itemId: string, lineKey: string) => {
+    const it = state.budget.find((x) => x.id === itemId);
+    if (!it) return;
+    if (!(await confirm(`Remove "${it.name}"?`, "Its monthly amount and what's assigned this month move to the account's line. It stops counting as spending (and as spending in retirement).", "Remove"))) return;
+    setOpen(lineKey);
+    update((p) => {
+      // this month's money goes with it
+      if (p.budgetPlan) {
+        const e = { ...(p.budgetPlan.months[month] ?? {}) };
+        const a = { ...(e.assigned ?? {}) };
+        if (a[itemId] !== undefined) {
+          a[lineKey] = (a[lineKey] ?? 0) + a[itemId]!;
+          delete a[itemId];
+          e.assigned = a;
+          p.budgetPlan.months = { ...p.budgetPlan.months, [month]: e };
+        }
+      }
+      // its monthly amount becomes the account's plan (unless the account already has one)
+      const has = (p.plan.schedule?.[lineKey]?.length ?? 0) > 0;
+      if (!has && it.amount > 0) p.plan.schedule = { ...(p.plan.schedule ?? {}), [lineKey]: [{ from: thisMonth, amount: it.amount }] };
+      p.budget = p.budget.filter((x) => x.id !== itemId);
+    });
+  };
   const startBudget = () =>
     update((p) => {
       p.budgetPlan = { start: thisMonth, startCash: Math.round(cashNow * 100) / 100, months: {} };
@@ -316,6 +340,22 @@ export default function Budget() {
           <Text style={[type.overline, { color: t.text3 }]}>Plan for this account</Text>
           <MonthlyAmount k={c.key} label={label(c)} note={c.moves ? undefined : "Cash can go past your emergency fund goal if you plan it."} />
           <Text style={[type.caption, { color: t.text3 }]}>Sets what "Fill from plan" assigns here each month, and what the forecast expects after this month.</Text>
+          {c.key.startsWith("acct:") && c.moves ? (
+            <View style={styles.chips}>
+              <Chip
+                title="I don't add to this account"
+                icon="close"
+                onPress={async () => {
+                  if (!(await confirm(`Hide ${c.name}?`, "Its line leaves the budget and the plan stops adding to it. It still counts in your net worth and investments. To undo, set its Counts as under Settings → Your money → Accounts.", "Hide"))) return;
+                  setOpen(null);
+                  update((p) => {
+                    const a = p.accounts.find((x) => "acct:" + x.id === c.key);
+                    if (a) a.counts = "other";
+                  });
+                }}
+              />
+            </View>
+          ) : null}
         </View>
       );
     const isBill = c.kind === "bill";
@@ -331,16 +371,31 @@ export default function Budget() {
     const l = view.lines[c.key]!;
     const isOpen = open === c.key;
     const explicitSpent = entry?.spent?.[c.key] !== undefined;
+    const dup = c.kind === "spending" ? duplicateOf(state, c.name, cats) : undefined;
     return (
       <View key={c.key} nativeID={"cat-" + c.key}>
         <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); setMoveAmt(0); setMoveTo(""); setMoveOpen(false); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, pressed ? { backgroundColor: t.surface2 } : null]}>
-          <Text style={[type.body, { color: t.text, flex: 1, minWidth: 0 }]} numberOfLines={2}>{label(c)}</Text>
+          <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Text style={[type.body, { color: t.text, flexShrink: 1 }]} numberOfLines={2}>{label(c)}</Text>
+            {dup ? <Icon name="info" size={14} color={t.warn} /> : null}
+          </View>
           {num(l.assigned, t.text2)}
           {compact ? null : num(l.spent, t.text2)}
           <View style={{ width: COLW, alignItems: "flex-end" }}>{pill(l, c)}</View>
         </Pressable>
         {isOpen ? (
           <View style={[styles.editor, { backgroundColor: t.surface2 }]}>
+            {dup ? (
+              <View style={[styles.dupBox, { backgroundColor: t.warnSoft, borderColor: t.warn }]}>
+                <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Same as your {dup.name} line?</Text>
+                <Text style={[type.caption, { color: t.text2 }]}>
+                  This item counts as spending. The {dup.name} line (in {dup.group}) is the account itself: money there counts as investing in your plan. Keep just that one.
+                </Text>
+                <View style={styles.chips}>
+                  <Chip title={`Remove, use ${dup.name}`} tone="accent" icon="check" onPress={() => void removeDuplicate(c.key, dup.key)} />
+                </View>
+              </View>
+            ) : null}
             <View style={styles.section}>
               <Text style={[type.overline, { color: t.text3 }]}>{nameOf(month)}</Text>
               <FormList>
@@ -552,6 +607,7 @@ const styles = StyleSheet.create({
   editor: { gap: space.md, marginHorizontal: space.md, marginBottom: space.md, padding: space.md, borderRadius: radius.md },
   editRow: { flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" },
   acctRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: 6 },
+  dupBox: { gap: 6, borderWidth: 1, borderRadius: radius.md, padding: space.md },
   txnRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, minHeight: 46 },
   link: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" },
 });

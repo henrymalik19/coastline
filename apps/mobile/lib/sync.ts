@@ -239,6 +239,8 @@ async function onSignedIn(session: Session) {
   setSync({ userId: session.user.id, email: session.user.email ?? undefined });
   await syncNow();
   channel?.unsubscribe();
+  // a channel with this name may still be open (e.g. after a reload in development): close it first
+  for (const c of supabase.getChannels()) if (c.topic === `realtime:plan-${session.user.id}`) void supabase.removeChannel(c);
   channel = supabase
     .channel(`plan-${session.user.id}`)
     .on("postgres_changes", { event: "*", schema: "public", table: "plans", filter: `user_id=eq.${session.user.id}` }, (payload) => {

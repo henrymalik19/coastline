@@ -18,6 +18,9 @@ import type { BudgetState, Derived, PlanResult, PlanState, Txn } from "./types";
 import { txnActivity } from "./txn";
 import { addMonths, monthsBetween, num } from "./util";
 
+/** The built-in group for accounts you add to (named so it never merges with a group of your own). */
+export const SAVINGS_GROUP = "Savings & investments";
+
 export type BudgetCategoryKind = "spending" | "bill" | "saving" | "debt";
 
 export type BudgetCategory = {
@@ -103,7 +106,7 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
       target = Math.max(0, (kindSet ?? planned(kind)) - others);
     }
     firstOfKind.add(kind);
-    out.push({ key: ACCOUNT_KEY + a.id, group: "Savings", name: a.name || "Account", kind: "saving", target, moves: kind !== "cash" });
+    out.push({ key: ACCOUNT_KEY + a.id, group: SAVINGS_GROUP, name: a.name || "Account", kind: "saving", target, moves: kind !== "cash" });
   }
   // a plan step with no account yet (an IRA you haven't opened): still a line, so you can budget for it
   const steps = s.plan?.steps ?? [];
@@ -115,7 +118,13 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
   ];
   for (const k of kinds) {
     if (!k.wanted || firstOfKind.has(k.kind)) continue;
-    out.push({ key: k.kind, group: "Savings", name: `${k.name} (no account yet)`, kind: "saving", target: scheduleAmount(s.plan, k.kind, month) ?? planned(k.kind), moves: k.kind !== "cash" });
+    // only when it's in use this month: the plan puts money there, you set an amount, or you assigned some
+    const inUse =
+      planned(k.kind) > 0.5 ||
+      scheduleAmount(s.plan, k.kind, month) !== undefined ||
+      s.budgetPlan?.months?.[month]?.assigned?.[k.kind] !== undefined;
+    if (!inUse) continue;
+    out.push({ key: k.kind, group: SAVINGS_GROUP, name: `${k.name} (no account yet)`, kind: "saving", target: scheduleAmount(s.plan, k.kind, month) ?? planned(k.kind), moves: k.kind !== "cash" });
   }
   for (const g of s.goals ?? [])
     if (!g.recurring) out.push({ key: "goal:" + g.id, group: "Savings goals", name: g.name || "Goal", kind: "saving", target: scheduleAmount(s.plan, "goal:" + g.id, month) ?? planned("goal:" + g.id), moves: false });

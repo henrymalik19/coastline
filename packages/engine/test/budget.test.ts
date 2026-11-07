@@ -103,6 +103,10 @@ describe("monthly budget", () => {
     // a plan step with no account yet still gets a line (brokerage here); one with an account doesn't
     expect(by("taxable")).toMatchObject({ kind: "saving", name: "Brokerage (no account yet)", moves: true });
     expect(by("ira")).toBeUndefined();
+    // ...but not when nothing goes there this month (a big debt comes first)
+    const busy = blank({ ...s, debts: [{ id: "v", name: "Visa", kind: "credit_card", balance: 90000, apr: 0.2, minPayment: 100 }] });
+    const db = derive(busy, START);
+    expect(budgetCategories(busy, db, simulatePlan(busy, db), START, "2026-11").find((x) => x.key === "taxable")).toBeUndefined();
     expect(budgetScheduleMonths({ debts: [], goals: [], budgetPlan: { start: "2026-11", startCash: 0, months: { "2026-11": { assigned: { taxable: 400 } } } } })).toEqual({ taxable: { "2026-11": 400 } });
   });
 });
