@@ -15,7 +15,7 @@ import { useLayout } from "../../lib/layout";
 import { usePlan } from "../../lib/plan";
 import { stepInfo, type StepInfo } from "../../lib/steps";
 import { monthKey, useStore } from "../../lib/store";
-import { space, type, useTheme } from "../../lib/theme";
+import { radius, space, type, useTheme } from "../../lib/theme";
 
 export default function Plan() {
   const t = useTheme();
@@ -313,23 +313,31 @@ export default function Plan() {
   );
 
   const better = o.projectedFinal >= o.altFinal;
+  const diff = o.projectedFinal - o.altFinal;
+  const cmpRow = (labelText: string, hint: string, value: number, strong: boolean) => (
+    <View style={styles.cmpRow}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[type.body, { color: t.text, fontWeight: strong ? "700" : "500" }]}>{labelText}</Text>
+        <Text style={[type.caption, { color: t.text3 }]}>{hint}</Text>
+      </View>
+      <Text style={[type.heading, { color: strong ? t.text : t.text2, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(value, { whole: true })}</Text>
+    </View>
+  );
   const compare = (
     <Card style={{ gap: space.sm }}>
       <SectionLabel>Why follow the plan?</SectionLabel>
-      <View style={styles.cmp}>
-        <View style={{ flex: 1 }}>
-          <Text style={[type.caption, { color: t.text3 }]}>If you follow this plan</Text>
-          <Text style={[type.stat, { color: t.text }]}>{money(o.projectedFinal, { whole: true })}</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[type.caption, { color: t.text3 }]}>If you keep investing {money(state.currentInvestMonthly)}/mo like today</Text>
-          <Text style={[type.stat, { color: t.text2 }]}>{money(o.altFinal, { whole: true })}</Text>
-        </View>
+      <Text style={[type.caption, { color: t.text3, marginTop: -space.xs }]}>Invested by age {o.d.retireAge}, at your assumed return (no market swings)</Text>
+      <View style={[styles.cmpBox, { borderColor: t.border }]}>
+        {cmpRow("Following this plan", "Your steps, in order", o.projectedFinal, true)}
+        <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: t.border }} />
+        {cmpRow("Keeping things as they are", `Investing ${money(state.currentInvestMonthly, { whole: true })}/mo like today`, o.altFinal, false)}
       </View>
-      <Text style={[type.caption, { color: t.text3 }]}>
-        What you'd have invested by age {o.d.retireAge} (at your assumed return, no market swings).{" "}
-        {better ? `Following the plan comes out ${money(o.projectedFinal - o.altFinal, { whole: true })} ahead.` : ""}
-      </Text>
+      {better && diff > 0.5 ? (
+        <View style={[styles.cmpDiff, { backgroundColor: t.goodSoft }]}>
+          <Text style={[type.body, { color: t.text, flex: 1 }]}>The plan comes out ahead by</Text>
+          <Text style={[type.heading, { color: t.good, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(diff, { whole: true })}</Text>
+        </View>
+      ) : null}
     </Card>
   );
 
@@ -433,4 +441,7 @@ const styles = StyleSheet.create({
   moveBtn: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   dateLabel: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: 6 },
   cmp: { flexDirection: "row", gap: space.lg },
+  cmpBox: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, overflow: "hidden" },
+  cmpRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.md },
+  cmpDiff: { flexDirection: "row", alignItems: "center", gap: space.md, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm },
 });
