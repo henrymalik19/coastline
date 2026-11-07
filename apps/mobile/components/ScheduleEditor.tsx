@@ -3,13 +3,16 @@
  * Each amount runs from its month until the next change. Used on the Plan tab's account cards and on
  * the emergency fund goal (same setting, two places to see it).
  */
-import type { ScheduleEntry } from "@coastfi/engine";
-import { Text, View, StyleSheet } from "react-native";
+import { accountGroup, type Account, type PlanState, type ScheduleEntry } from "@coastfi/engine";
+import { useRouter } from "expo-router";
+import { useState } from "react";
+import { Pressable, Text, View, StyleSheet } from "react-native";
 import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
 import { monthKey, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, IconButton, MonthField, NumberInput } from "./form";
+import { Icon } from "./Icon";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export const monthName = (key: string) => `${MON[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
@@ -103,7 +106,87 @@ export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared }: { k:
   );
 }
 
+/**
+ * Where an account's monthly contribution is set: a plan key (cash, ira, hsa, taxable), "payroll" for
+ * the 401(k) and a paycheck HSA (set per check on the job), or null (property, accounts the plan skips).
+ */
+export function contributionKey(s: PlanState, a: Pick<Account, "name" | "type" | "counts">): string | "payroll" | null {
+  const g = accountGroup(a);
+  if (!g || g === "other") return null;
+  if (g === "k401") return "payroll";
+  if (g === "hsa" && s.plan.hsaPayroll !== false) return "payroll";
+  return g;
+}
+
+/** This month's planned amount for a key, or undefined when it follows the plan steps. */
+export function plannedNow(s: PlanState, k: string, month: string): number | undefined {
+  const one = s.plan.scheduleMonths?.[k]?.[month];
+  if (one !== undefined) return one;
+  const list = sorted(s.plan.schedule?.[k] ?? []).filter((e) => e.from <= month);
+  return list.length ? list[list.length - 1]!.amount : undefined;
+}
+
+/**
+ * The short version: "Contributing [$500] a month". Changes over time (and single months) open the full
+ * editor. No amount = the account gets whatever your plan steps give it.
+ */
+export function MonthlyAmount({ k, label, unit = "a month", note, shared }: { k: string; label: string; unit?: string; note?: string; shared?: string }) {
+  const t = useTheme();
+  const { start } = usePlan();
+  const { list, set, oneOffs } = useSchedule(k);
+  const [more, setMore] = useState(false);
+  const now = monthKey(start);
+  const singles = Object.keys(oneOffs).length;
+  const simple = list.length === 1 && !singles;
+  const first = list[0];
+  return (
+    <View style={{ gap: 6 }}>
+      {!list.length && !singles ? (
+        <View style={[styles.row, { justifyContent: "space-between" }]}>
+          <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 160 }]}>Monthly contribution: not set, so it gets whatever your plan steps give it.</Text>
+          <Button title="Set an amount" icon="plus" onPress={() => set([{ from: now, amount: 0 }])} style={{ minHeight: 36 }} />
+        </View>
+      ) : simple && first ? (
+        <View style={styles.row}>
+          <Text style={[type.caption, { color: t.text2, fontWeight: "600" }]}>Contributing</Text>
+          <NumberInput kind="money" label={`${label} monthly contribution`} value={first.amount} width={120} step={50} onChange={(v) => set([{ ...first, amount: v }])} />
+          <Text style={[type.caption, { color: t.text3 }]}>{unit === "a month" ? "/mo" : unit}{first.from > now ? ` from ${monthName(first.from)}` : ""}</Text>
+          <IconButton icon="close" label={`Stop setting ${label} by hand`} onPress={() => set(undefined)} />
+        </View>
+      ) : (
+        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>
+          {list.length ? scheduleSummary(list).replace("Your plan: ", "Contributing ") : "One-month changes only"}
+          {singles ? ` · ${singles} one-month change${singles === 1 ? "" : "s"}` : ""}
+        </Text>
+      )}
+      {shared ? <Text style={[type.caption, { color: t.text3 }]}>{shared}</Text> : null}
+      {list.length || singles ? (
+        <Pressable role="button" aria-expanded={more} onPress={() => setMore((v) => !v)} hitSlop={6} style={styles.link}>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{more ? "Hide changes" : "Change it later or for one month"}</Text>
+          <View style={{ transform: [{ rotate: more ? "90deg" : "0deg" }] }}>
+            <Icon name="chevron" size={12} color={t.accent} />
+          </View>
+        </Pressable>
+      ) : null}
+      {more ? <ScheduleEditor k={k} label={label} unit={unit === "a month" ? "/mo" : unit} note={note} onCleared={() => setMore(false)} /> : null}
+    </View>
+  );
+}
+
+/** For accounts set per paycheck: says so, with a link to the job. */
+export function PayrollNote({ what }: { what: string }) {
+  const t = useTheme();
+  const router = useRouter();
+  return (
+    <Pressable role="link" onPress={() => router.push("/money/income")} hitSlop={6} style={styles.link}>
+      <Text style={[type.caption, { color: t.accent, fontWeight: "700", flexShrink: 1 }]}>{what} contributions are set per paycheck on your job (Income)</Text>
+      <Icon name="chevron" size={12} color={t.accent} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  link: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" },
   box: { borderRadius: radius.md, padding: space.sm, gap: 4 },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" },
 });

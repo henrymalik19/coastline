@@ -3,7 +3,8 @@
  * Paychecks set the 401(k) (and a paycheck HSA); everything else is set here, from what's left after
  * your budget and debt payments. The Plan tab's Forecast only shows the forecast.
  */
-import { accountForecasts, type AccountKey } from "@coastfi/engine";
+import { accountForecasts, setAsideFor, type AccountKey } from "@coastfi/engine";
+import { monthKey } from "../lib/store";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -29,7 +30,7 @@ export function SavingsEditor() {
     { k: "ira", label: "IRA", unit: "/mo" },
     ...(payrollHsa ? [] : [{ k: "hsa" as AccountKey, label: "HSA", unit: "/mo" }]),
     { k: "taxable", label: "Brokerage", unit: "/mo" },
-    ...state.goals.map((g) => ({ k: ("goal:" + g.id) as AccountKey, label: g.name || "Goal", unit: "/mo" })),
+    ...state.goals.filter((g) => !g.recurring).map((g) => ({ k: ("goal:" + g.id) as AccountKey, label: g.name || "Goal", unit: "/mo" })),
     ...state.debts.filter((x) => x.balance > 0).map((x) => ({ k: ("debt:" + x.id) as AccountKey, label: `Extra on ${debtLabel(x)}`, unit: "extra/mo" })),
   ];
 
@@ -38,18 +39,20 @@ export function SavingsEditor() {
     ...(payrollHsa ? jobs.filter((x) => (x.hsaPre ?? 0) > 0).map((x) => `HSA: ${x.name || "your job"} ${money(x.hsaPre!)}/check`) : []),
   ];
   const notPlanned = Math.max(0, row0.available - row0.plannedGot);
+  const repeating = state.goals.filter((g) => g.recurring).map((g) => ({ g, v: setAsideFor(g, monthKey(start)) }));
   const short = row0.plannedShort > 0.5;
 
   return (
     <>
       <Text style={[type.body, { color: t.text2 }]}>
-        These come out of what's left after your budget and debt payments. An account with no amount gets whatever your plan steps give it. These show as savings on your budget.
+        These come out of what's left after your budget and debt payments. You can also set them on each account (Money → Accounts) or goal. An account with no amount gets whatever your plan steps give it. These show as savings on your budget.
       </Text>
 
       <Card style={{ gap: 4 }}>
         <Text style={[type.overline, { color: t.text3 }]}>{monthLabel(start, 0)}</Text>
         <Line label="Left after bills" value={money(row0.available)} />
-        <Line label="Your monthly savings" value={`− ${money(row0.plannedAsk)}`} />
+        {row0.setAside > 0.5 ? <Text style={[type.caption, { color: t.text3 }]}>after {money(row0.setAside)} set aside for repeating goals (below)</Text> : null}
+        <Line label="Your monthly savings" value={row0.plannedAsk > 0.5 ? `− ${money(row0.plannedAsk)}` : "none set yet"} />
         <View style={[styles.rule, { backgroundColor: t.border }]} />
         <Line
           label={short ? "Short this month" : "Left for your plan steps"}
@@ -82,6 +85,21 @@ export function SavingsEditor() {
           );
         })}
       </Card>
+      {repeating.length ? (
+        <Card style={{ gap: 6 }}>
+          <Text style={[type.overline, { color: t.text3 }]}>Repeating goals (set aside by themselves)</Text>
+          {repeating.map(({ g, v }) => (
+            <Line key={g.id} label={g.name || "Goal"} value={v > 0.5 ? `${money(v)}/mo` : "nothing this month"} />
+          ))}
+          <Text style={[type.caption, { color: t.text3 }]}>
+            These divide what's due by the months until it's due, so the money is ready in time. Change them under Savings goals.
+          </Text>
+          <Pressable role="link" onPress={() => router.push("/money/goals")} hitSlop={6} style={styles.link}>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Savings goals</Text>
+            <Icon name="chevron" size={12} color={t.accent} />
+          </Pressable>
+        </Card>
+      ) : null}
       <Pressable role="link" onPress={() => router.push("/plan")} hitSlop={6} style={styles.link}>
         <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>See the forecast month by month (Plan → Forecast)</Text>
         <Icon name="chevron" size={12} color={t.accent} />

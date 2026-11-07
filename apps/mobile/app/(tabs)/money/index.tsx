@@ -14,7 +14,8 @@ import { netWorth } from "../../../lib/networth";
 import { dueLabel, everyLabel } from "../../../components/RecurringGoalFields";
 import { usePlan } from "../../../lib/plan";
 import { monthKey } from "../../../lib/store";
-import { SavingsPlan } from "../../../components/SavingsPlan";
+import { plannedSavings } from "../../../lib/steps";
+import { contributionKey, plannedNow } from "../../../components/ScheduleEditor";
 import { space, type, useTheme } from "../../../lib/theme";
 
 const typeLabel = (k: AccountType) => ACCOUNT_TYPES.find((x) => x.value === k)?.label ?? k;
@@ -32,6 +33,9 @@ export default function MoneyOverview() {
   const setAsideNow = state.goals.reduce((a, g) => a + setAsideFor(g, monthKey(start)), 0);
   const leftover = d.leanMonthly - d.budgetTotal - d.debtMins - setAsideNow;
   const goals = state.goals ?? [];
+  // what you set per account this month (Money → Monthly savings, or on each account)
+  const planned = plannedSavings(state, monthKey(start)).reduce((a, x) => a + x.amount, 0);
+  const savers = plannedSavings(state, monthKey(start)).filter((x) => x.amount > 0.5).length;
   const retire = (state.retirementIncome ?? []).filter((x) => x.monthly > 0);
   const debts = state.debts.filter((x) => x.balance > 0);
 
@@ -62,14 +66,26 @@ export default function MoneyOverview() {
         <Text style={[type.heading, { color: t.text, flex: 1 }]}>{leftover < 0 ? "Short in a normal month" : "Left over in a normal month"}</Text>
         <Text style={[type.stat, { color: leftover < 0 ? t.bad : t.good, fontVariant: ["tabular-nums"] }]}>{money(leftover)}</Text>
       </View>
-      <SavingsPlan leftover={leftover} />
+      <Line
+        label="Monthly savings"
+        hint={planned > 0.5 ? `To ${savers} account${savers === 1 ? "" : "s"} and goal${savers === 1 ? "" : "s"} you set` : "Set how much goes to each account"}
+        value={planned > 0.5 ? `− ${money(planned)}` : "Set ›"}
+        href="/money/savings"
+      />
+      {planned > 0.5 ? (
+        <Line label={leftover - planned < 0 ? "Short" : "Left for your plan steps"} value={money(leftover - planned)} />
+      ) : null}
     </Section>
   );
 
   const accountsCard = (
     <Section title="Accounts" edit="/money/accounts" total={money(d.invested + cash + property)}>
       {state.accounts.length ? (
-        state.accounts.map((a) => <Line key={a.id} label={a.name.trim() || "Unnamed account"} hint={typeLabel(a.type)} value={money(a.balance)} />)
+        state.accounts.map((a) => {
+          const ck = contributionKey(state, a);
+          const per = ck && ck !== "payroll" ? plannedNow(state, ck, monthKey(start)) : undefined;
+          return <Line key={a.id} label={a.name.trim() || "Unnamed account"} hint={`${typeLabel(a.type)}${per !== undefined ? ` · +${money(per)}/mo` : ck === "payroll" ? " · set per paycheck" : ""}`} value={money(a.balance)} href="/money/accounts" />;
+        })
       ) : (
         <Empty text="No accounts yet" />
       )}

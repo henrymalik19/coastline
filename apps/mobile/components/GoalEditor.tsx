@@ -1,4 +1,7 @@
-import type { Goal } from "@coastfi/engine";
+import { setAsideFor, type Goal } from "@coastfi/engine";
+import { usePlan } from "../lib/plan";
+import { monthKey } from "../lib/store";
+import { MonthlyAmount, plannedNow } from "./ScheduleEditor";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money } from "../lib/format";
@@ -19,7 +22,11 @@ export function GoalEditor({ goal, onChange, onRemove }: { goal: Goal; onChange:
   const [open, setOpen] = useState(() => !goal.name.trim() && !goal.saved);
   const name = goal.name.trim() || "New goal";
   const r = goal.recurring;
-  const summary = `${money(goal.saved)} of ${money(goal.target)}${r ? ` · ${everyLabel(r.every)}, due ${dueLabel(r.due)}` : ""}`;
+  const { state, start } = usePlan();
+  const now = monthKey(start);
+  const aside = r ? setAsideFor(goal, now) : 0;
+  const per = r ? undefined : plannedNow(state, "goal:" + goal.id, now);
+  const summary = `${money(goal.saved)} of ${money(goal.target)}${r ? ` · ${everyLabel(r.every)}, due ${dueLabel(r.due)}` : ""}${r && aside > 0.5 ? ` · ${money(aside)}/mo set aside` : per !== undefined ? ` · +${money(per)}/mo` : ""}`;
   return (
     <Card style={{ gap: space.sm, paddingVertical: open ? space.lg : space.md }}>
       <View style={styles.row}>
@@ -63,6 +70,14 @@ export function GoalEditor({ goal, onChange, onRemove }: { goal: Goal; onChange:
           </FieldRow>
           <Divider />
           <RecurringGoalFields goal={goal} onChange={onChange} />
+          <Divider />
+          {r ? (
+            <Text style={[type.caption, { color: t.text2 }]}>
+              {aside > 0.5 ? `Sets aside ${money(aside)} this month by itself, so it's ready when it's due. It shows on your budget as set aside.` : "Nothing to set aside this month."}
+            </Text>
+          ) : (
+            <MonthlyAmount k={"goal:" + goal.id} label={name} />
+          )}
         </>
       ) : null}
     </Card>

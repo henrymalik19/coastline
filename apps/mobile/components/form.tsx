@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Platform, Pressable, StyleSheet, Switch, Text, TextInput, View, type ViewStyle } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, type ViewStyle } from "react-native";
+import { useLayout } from "../lib/layout";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { formatDate, parseDate } from "../lib/dates";
 import { CalendarModal, MonthModal } from "./Calendar";
@@ -354,6 +355,62 @@ export function Segmented<T extends string>({
   );
 }
 
+/** A dropdown: shows the choice, opens a list. Saves room where a Segmented row would wrap. */
+export function Select<T extends string>({
+  options, value, onChange, label,
+}: { options: { value: T; label: string; hint?: string }[]; value: T; onChange: (v: T) => void; label: string }) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const cur = options.find((o) => o.value === value);
+  return (
+    <>
+      <Pressable
+        role="button"
+        aria-haspopup="listbox"
+        accessibilityLabel={`${label}: ${cur?.label ?? "none"}. Change`}
+        onPress={() => setOpen(true)}
+        style={[styles.select, { borderColor: t.border, backgroundColor: t.surface2 }]}
+      >
+        <Text style={[type.body, { color: t.text, flex: 1 }]} numberOfLines={1}>{cur?.label ?? "Pick one"}</Text>
+        <Icon name="down" size={16} color={t.text2} />
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel={`Close ${label}`}>
+          <Pressable onPress={() => {}} aria-label={label} style={[styles.sheet, { backgroundColor: t.surface, borderColor: t.border }]}>
+            <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.md, paddingBottom: 4 }]}>{label}</Text>
+            <ScrollView style={{ maxHeight: 440 }}>
+              {options.map((o) => {
+                const on = o.value === value;
+                return (
+                  <Pressable
+                    key={o.value}
+                    role="option"
+                    aria-selected={on}
+                    onPress={() => { onChange(o.value); setOpen(false); }}
+                    style={({ pressed }) => [styles.option, { backgroundColor: on ? t.accentSoft : pressed ? t.surface2 : "transparent" }]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[type.body, { color: on ? t.accent : t.text, fontWeight: on ? "700" : "500" }]}>{o.label}</Text>
+                      {o.hint ? <Text style={[type.caption, { color: t.text3 }]}>{o.hint}</Text> : null}
+                    </View>
+                    {on ? <Icon name="check" size={16} color={t.accent} /> : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
+/** Segmented on wide screens, a dropdown on phones. */
+export function Choice<T extends string>(props: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void; label: string }) {
+  const { contentWidth } = useLayout();
+  return contentWidth < 600 ? <Select {...props} /> : <Segmented {...props} />;
+}
+
 /* ---------- buttons ---------- */
 
 export function Button({
@@ -400,6 +457,10 @@ export function IconButton({ icon, label, onPress, disabled, color }: { icon: Ic
 }
 
 const styles = StyleSheet.create({
+  select: { flexDirection: "row", alignItems: "center", gap: space.sm, borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: space.md, minHeight: 44 },
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: space.lg },
+  sheet: { width: "100%", maxWidth: 380, borderRadius: radius.lg, borderWidth: 1, paddingVertical: space.md },
+  option: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, paddingVertical: 10 },
   input: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: space.md, minHeight: 44 },
   inputText: { flex: 1, minWidth: 0, paddingVertical: 10 },
   stepper: { alignSelf: "stretch", justifyContent: "center", borderLeftWidth: StyleSheet.hairlineWidth, paddingLeft: 4, marginLeft: 4, gap: 1 },

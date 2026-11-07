@@ -8,7 +8,7 @@ import { useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { FieldRow, NumberInput } from "./form";
 import { Icon } from "./Icon";
-import { ScheduleEditor, scheduleSummary } from "./ScheduleEditor";
+import { MonthlyAmount } from "./ScheduleEditor";
 import { Card, Divider, Pill } from "./ui";
 import { ProgressBar } from "./ProgressRing";
 
@@ -107,13 +107,7 @@ export function EmergencyFundGoal() {
         </Pressable>
       </View>
       <Divider />
-      <Pressable role="button" aria-expanded={planOpen} onPress={() => setPlanOpen((v) => !v)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}>
-        <Text style={[type.caption, { color: schedule?.length ? t.accent : t.text3, fontWeight: "700", flexShrink: 1 }]}>{scheduleSummary(schedule)}</Text>
-        <View style={{ transform: [{ rotate: planOpen ? "90deg" : "0deg" }] }}>
-          <Icon name="chevron" size={12} color={t.text3} />
-        </View>
-      </Pressable>
-      {planOpen ? <ScheduleEditor k="cash" label="Emergency fund" note="Cash can go past your goal if you plan it. Same plan as the Cash card on the Plan tab." onCleared={() => setPlanOpen(false)} /> : null}
+      <MonthlyAmount k="cash" label="Emergency fund" note="Cash can go past your goal if you plan it." />
     </Card>
   );
 }

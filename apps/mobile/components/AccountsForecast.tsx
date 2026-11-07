@@ -407,6 +407,46 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
       hRef.current?.scrollTo({ x: xRef.current, animated: true });
     }
   };
+  const one = pick !== "all" ? cols[0] : undefined;
+  const sCell = (v: string, color: string, bold = false) => (
+    <Text numberOfLines={1} style={[type.caption, styles.sNum, { color, fontWeight: bold ? "700" : "500" }]}>{v}</Text>
+  );
+  const singleTable = one ? (
+    <View style={[{ borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, overflow: "hidden", width: "100%", maxWidth: 720 }, fill ? { flex: 1, minHeight: 0 } : { maxHeight: 620 }]}>
+      <View style={[styles.sRow, { backgroundColor: t.surface, borderBottomWidth: 1, borderBottomColor: t.border }]}>
+        <Text style={[type.overline, styles.sMonth, { color: t.text3 }]}>Month</Text>
+        <Text style={[type.overline, styles.sNum, { color: t.text3 }]}>{isDebt(one.key) ? "Paid" : "Added"}</Text>
+        <Text style={[type.overline, styles.sNum, { color: t.text3 }]}>{isDebt(one.key) ? "Owed" : "Balance"}</Text>
+        <Text style={[type.overline, styles.sNum, { color: t.text3 }]}>Left over</Text>
+      </View>
+      <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1 }}>
+        <View style={[styles.sRow, { backgroundColor: t.surface }]}>
+          <Text style={[type.caption, styles.sMonth, { color: t.text3 }]}>Today</Text>
+          {sCell("", t.text3)}
+          {sCell(money(one.start), t.text2, true)}
+          {sCell("", t.text3)}
+        </View>
+        {Array.from({ length: span }, (_, i) => {
+          const r = pl.months[i]!;
+          const m = one.months[i]!;
+          const short = r.plannedShort > 0.5;
+          const changed = oneOffs[one.key]?.[ym(start, i)] !== undefined;
+          const added = isDebt(one.key) ? m.paycheck + m.plan : m.total;
+          return (
+            <View key={i} style={[styles.sRow, { backgroundColor: short ? t.badSoft : i % 2 ? t.surface2 : t.surface }]}>
+              <Text style={[type.caption, styles.sMonth, { color: i === 0 ? t.text : t.text2, fontWeight: i === 0 ? "700" : "500" }]}>
+                {mLabel(i)}
+                {r.extraCheck ? <Text style={{ color: t.accent }}> ·3</Text> : null}
+              </Text>
+              {sCell(added > 0.5 ? money(added) : "–", changed ? t.accent : added > 0.5 ? t.text : t.text3, changed)}
+              {sCell(money(m.balance), t.text, true)}
+              {sCell(short ? `−${money(r.plannedShort)}` : money(Math.max(0, r.available - r.plannedGot)), short ? t.bad : t.text3, short)}
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
+  ) : null;
   const grid = web ? (
     <View
       ref={gridRef as never}
@@ -462,7 +502,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
                 style={[styles.picker, { borderColor: t.border, backgroundColor: t.surface2 }, compact ? { flex: 1 } : null]}
               >
                 <Text numberOfLines={1} style={[type.caption, { color: t.text, fontWeight: "700", flexShrink: 1 }]}>
-                  {pick === "all" ? `All accounts (${shown.length})` : label(pick as AccountKey).replace(" (what you owe)", "")}
+                  {pick === "all" ? `All accounts (${shown.length})` : label(pick as AccountKey).replace(" (what you owe)", "").replace(" (emergency fund)", "")}
                 </Text>
                 <Icon name="down" size={14} color={t.text2} />
               </Pressable>
@@ -524,9 +564,16 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
         ) : null}
         {!selected ? (
           <Text style={[type.caption, { color: t.text3 }]}>
-            {compact
-              ? "Tap the account's name for details · ·3 = 3 paychecks · red = short"
-              : "Pick an account above, or tap a name for its details · ● has a monthly amount · ·3 = 3-paycheck month · red = short"}
+            {one
+              ? "·3 = a 3-paycheck month · red = your plan is short that month · "
+              : compact
+                ? "Tap a name for details · ·3 = 3 paychecks · red = short"
+                : "Pick an account above, or tap a name for its details · ● has a monthly amount · ·3 = 3-paycheck month · red = short"}
+            {one ? (
+              <Text role="link" onPress={() => setSel(one.key)} style={{ color: t.accent, fontWeight: "700" }}>
+                About {label(one.key).replace(" (what you owe)", "").replace(" (emergency fund)", "")} ›
+              </Text>
+            ) : null}
           </Text>
         ) : null}
       </View>
@@ -536,7 +583,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
           panel
         ) : (
           <View style={[{ paddingHorizontal: compact ? space.sm : space.md, paddingBottom: compact ? space.sm : space.md, gap: space.sm }, fill ? { flex: 1, minHeight: 0 } : null]}>
-            {grid}
+            {one ? singleTable : grid}
           </View>
         )}
         {twoColumn ? panel : null}
@@ -558,6 +605,9 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: space.lg },
   sheet: { width: "100%", maxWidth: 380, borderRadius: radius.lg, borderWidth: 1, paddingVertical: space.md },
   option: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, paddingVertical: 10 },
+  sRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, minHeight: 38, gap: 8 },
+  sMonth: { width: 78 },
+  sNum: { flex: 1, textAlign: "right", fontVariant: ["tabular-nums"] },
   arrows: { flexDirection: "row", borderWidth: 1, borderRadius: 999, overflow: "hidden" },
   arrow: { paddingHorizontal: 12, paddingVertical: 5, alignItems: "center", justifyContent: "center" },
   summary: { flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: 8 },

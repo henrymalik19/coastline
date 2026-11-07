@@ -6,9 +6,12 @@ import { HELP } from "../lib/help";
 import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
-import { Button, IconButton, NumberInput, Segmented, TextField } from "./form";
+import { Button, Choice, IconButton, NumberInput, TextField } from "./form";
 import { Icon } from "./Icon";
 import { Card, Divider } from "./ui";
+import { contributionKey, MonthlyAmount, PayrollNote, plannedNow } from "./ScheduleEditor";
+import { money } from "../lib/format";
+import { monthKey } from "../lib/store";
 
 export const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: "pretax", label: "Pre-tax" },
@@ -47,9 +50,11 @@ const QUICK_ADD: { name: string; type: AccountType }[] = [
  */
 export function AccountsEditor() {
   const t = useTheme();
-  const { state } = usePlan();
+  const { state, start } = usePlan();
   const update = useStore((s) => s.update);
   const [open, setOpen] = useState<string | null>(null);
+  const thisMonth = monthKey(start);
+  const GROUP_NAMES: Record<string, string> = { cash: "cash", ira: "IRA", hsa: "HSA", taxable: "brokerage" };
   const [reorder, setReorder] = useState(false);
   const accounts = state.accounts;
 
@@ -87,6 +92,9 @@ export function AccountsEditor() {
           {accounts.map((a, i) => {
             const isOpen = open === a.id;
             const name = a.name.trim() || "Unnamed account";
+            const ck = contributionKey(state, a);
+            const per = ck && ck !== "payroll" ? plannedNow(state, ck, thisMonth) : undefined;
+            const sameGroup = ck && ck !== "payroll" ? accounts.filter((x) => x.id !== a.id && contributionKey(state, x) === ck) : [];
             return (
               <View key={a.id}>
                 {i > 0 ? <Divider /> : null}
@@ -107,7 +115,10 @@ export function AccountsEditor() {
                     )}
                     <View style={{ flex: 1, gap: 1 }}>
                       <Text style={[type.body, { color: a.name.trim() ? t.text : t.text3 }]} numberOfLines={1}>{name}</Text>
-                      <Text style={[type.caption, { color: t.text3 }]}>{typeLabel(a.type)}</Text>
+                      <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>
+                        {typeLabel(a.type)}
+                        {per !== undefined ? <Text style={{ color: t.accent, fontWeight: "700" }}> · +{money(per)}/mo</Text> : null}
+                      </Text>
                     </View>
                   </Pressable>
                   {reorder ? (
@@ -121,12 +132,22 @@ export function AccountsEditor() {
                 </View>
                 {isOpen ? (
                   <View style={{ gap: space.sm, paddingBottom: space.md, paddingLeft: 26 }}>
+                    {ck === "payroll" ? (
+                      <PayrollNote what={accountGroup(a) === "k401" ? "401(k)" : "HSA"} />
+                    ) : ck ? (
+                      <MonthlyAmount
+                        k={ck}
+                        label={name}
+                        note={ck === "cash" ? "Cash can go past your emergency fund goal if you plan it." : undefined}
+                        shared={sameGroup.length ? `Shared with ${sameGroup.map((x) => x.name.trim() || "your other account").join(", ")}: the plan treats your ${GROUP_NAMES[ck] ?? ck} accounts as one.` : undefined}
+                      />
+                    ) : null}
                     <TextField label="Account name" placeholder="e.g. Fidelity 401(k)" value={a.name} onChange={(v) => update((p) => { p.accounts[i]!.name = v; })} />
-                    <Segmented label="Account type" options={ACCOUNT_TYPES} value={a.type} onChange={(v) => update((p) => { p.accounts[i]!.type = v; })} />
+                    <Choice label="Account type" options={ACCOUNT_TYPES} value={a.type} onChange={(v) => update((p) => { p.accounts[i]!.type = v; })} />
                     <Text style={[type.caption, { color: t.text3 }]}>{HELP[a.type]}</Text>
                     {a.type !== "cash" && a.type !== "property" ? (
                       <>
-                        <Segmented
+                        <Choice
                           label="Counts as"
                           options={COUNTS}
                           value={(accountGroup(a) ?? "other") as PlanAccount}
