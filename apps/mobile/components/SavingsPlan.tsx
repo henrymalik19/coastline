@@ -13,8 +13,8 @@ import { space, type, useTheme } from "../lib/theme";
 export function SavingsPlan({ leftover }: { leftover: number }) {
   const t = useTheme();
   const router = useRouter();
-  const { state } = usePlan();
-  const items = plannedSavings(state);
+  const { state, start } = usePlan();
+  const items = plannedSavings(state, `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`).filter((x) => x.amount > 0.5);
   if (!items.length) return null;
   const total = items.reduce((a, x) => a + x.amount, 0);
   const rest = leftover - total;

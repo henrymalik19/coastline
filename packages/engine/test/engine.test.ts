@@ -498,6 +498,37 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     expect(dec!.alloc.taxable).toBeCloseTo(6000 - 500, 6);
   });
 
+  it("a schedule per account works like a spreadsheet: amounts change on the months you set", () => {
+    const s = blank({
+      limits: DEFAULT_LIMITS,
+      incomes: [{ ...job, net: 12000 }],
+      budget: spending,
+      debts: [{ id: "loan", name: "401(k) loan", kind: "k401_loan", balance: 25305.25, apr: 0.08, minPayment: 528.45, payroll: true }],
+      plan: {
+        ...blank().plan, efMonths: 6, steps: ["fullEF", "ira", "taxable"],
+        schedule: {
+          cash: [{ from: "2026-11", amount: 1500 }, { from: "2027-04", amount: 3500 }, { from: "2027-10", amount: 0 }],
+          "debt:loan": [{ from: "2027-10", amount: 3500 }],
+          taxable: [{ from: "2026-11", amount: 0 }, { from: "2028-03", amount: 4000 }],
+        },
+        scheduleMonths: { cash: { "2026-12": 2000 } },
+      },
+    });
+    const p = simulatePlan(s, derive(s, START));
+    const at = (y: number, mo: number) => p.months.find((m) => m.y === y && m.mo === mo)!;
+    expect(at(2026, 10).alloc.ef).toBeCloseTo(1500, 6);
+    expect(at(2026, 11).alloc.ef).toBeCloseTo(2000, 6); // changed by hand
+    expect(at(2027, 3).alloc.ef).toBeCloseTo(3500, 6);
+    expect(at(2027, 9).alloc.ef).toBe(0);
+    expect(at(2027, 9).alloc.debt).toBeCloseTo(3500, 6);
+    expect(at(2026, 10).alloc.debt).toBe(0); // the loan has no extra before its first entry
+    expect(at(2027, 5).alloc.taxable).toBe(0); // $0 until Mar 2028
+    expect(at(2028, 2).alloc.taxable).toBeCloseTo(4000, 6);
+    // the rest goes through the steps: here the IRA
+    expect(at(2026, 10).alloc.ira).toBeGreaterThan(0);
+    expect(at(2027, 9).debts.find((x) => x.id === "loan")!.balance).toBeLessThan(25305.25 - 11 * 528.45);
+  });
+
   it("a monthly plan goes first, even for a later step, and takes no more", () => {
     const s = blank({
       limits: DEFAULT_LIMITS,

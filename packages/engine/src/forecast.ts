@@ -1,7 +1,9 @@
 import { limitsFor } from "./limits";
+import { rateIn } from "./plan";
+import { num } from "./util";
 import type { Account, Derived, PlanAccount, PlanResult, PlanState } from "./types";
 
-export type AccountKey = "k401" | "hsa" | "ira" | "taxable" | "other" | "cash" | "debt" | `goal:${string}`;
+export type AccountKey = "k401" | "hsa" | "ira" | "taxable" | "other" | "cash" | `debt:${string}` | `goal:${string}`;
 
 /**
  * Which plan account a balance belongs to: what you picked, else a guess from the name (401(k), 403(b),
@@ -24,7 +26,7 @@ export type AccountMonth = {
   m: number;
   y: number;
   mo: number;
-  /** From your paychecks as they are today (payroll 401(k), payroll HSA). */
+  /** From your paychecks as they are today (payroll 401(k), payroll HSA). For a debt: its minimum payment. */
   paycheck: number;
   /** What the plan adds (a raise per check, or from what's left after the budget). */
   plan: number;
@@ -97,7 +99,21 @@ export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: 
       }, (i) => rows[i]!.goals.find((x) => x.id === g.id)?.saved ?? 0),
     );
   }
-  if (d.debtTotal > 0) out.push(mk("debt", d.debtTotal, false, (i) => [0, rows[i]!.alloc.debt, 0], (i) => rows[i]!.debtTotal));
+  // each debt: what you pay it each month (minimum + extra) and what it still owes
+  for (const dt of s.debts ?? []) {
+    const start = Math.max(0, num(dt.balance));
+    if (start <= 0) continue;
+    const bal = (i: number) => (i < 0 ? start : rows[i]!.debts.find((x) => x.id === dt.id)?.balance ?? 0);
+    out.push(
+      mk(`debt:${dt.id}`, start, false, (i) => {
+        const before = bal(i - 1);
+        const month = `${rows[i]!.y}-${String(rows[i]!.mo + 1).padStart(2, "0")}`;
+        const paid = before <= 0 ? 0 : Math.max(0, before * (1 + rateIn(dt, month) / 12) - bal(i));
+        // the minimum (from your budget, or your paycheck for a payroll loan), then the extra
+        return [Math.min(paid, num(dt.minPayment)), Math.max(0, paid - num(dt.minPayment)), 0];
+      }, bal),
+    );
+  }
 
   // totals per calendar year, with the employee limit where there is one
   for (const a of out) {

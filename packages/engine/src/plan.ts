@@ -34,6 +34,18 @@ export function setAsideFor(g: Pick<Goal, "target" | "saved" | "recurring">, mon
 }
 
 /** Whether the plan puts extra money toward this debt (false = minimum payments only). */
+/** This month's scheduled amount for an account ("YYYY-MM"), or undefined when it isn't on a schedule that month. */
+export function scheduleAmount(p: Pick<PlanSettings, "schedule" | "scheduleMonths">, key: string, month: string): number | undefined {
+  const one = p.scheduleMonths?.[key]?.[month];
+  if (one !== undefined) return one;
+  const list = p.schedule?.[key];
+  if (!list || !list.length) return undefined;
+  // before its first entry the account follows your steps
+  let v: number | undefined;
+  for (const e of [...list].sort((x, y) => (x.from < y.from ? -1 : 1))) if (e.from <= month) v = Math.max(0, num(e.amount));
+  return v;
+}
+
 export const paysExtra = (d: Pick<Debt, "minimumOnly">): boolean => !d.minimumOnly;
 
 /** The rate a debt charges in a given month ("YYYY-MM"): its promo rate through `promoUntil`, else its APR. */
@@ -127,6 +139,13 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   const started = { k401: false, hsa: false };
   const amounts = p.amounts ?? {};
   const amountsBy = p.amountsBy ?? {};
+  const schedule = p.schedule ?? {};
+  const scheduleMonths = p.scheduleMonths ?? {};
+  const schedKeys = [...new Set([...Object.keys(schedule), ...Object.keys(scheduleMonths)])];
+  // debts first, then cash, goals, HSA, IRA, brokerage
+  const rank = (k: string) => (k.startsWith("debt:") ? 0 : k === "cash" ? 1 : k.startsWith("goal:") ? 2 : k === "hsa" ? 3 : k === "ira" ? 4 : 5);
+  schedKeys.sort((a, b) => rank(a) - rank(b));
+  const scheduled = (key: string, month: string) => scheduleAmount(p, key, month);
   // Payroll caps aren't prorated: real paychecks have been putting money in since January. When we
   // don't know how much, assume this year's earlier paychecks went in at today's amounts.
   let ytdBefore: PlanResult["ytdBefore"];
@@ -309,9 +328,15 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     const capIra = Math.max(0, (L.ira + (ageNow >= 50 ? L.iraCatch : 0)) * scale - ytd.ira);
     const capHsa = p.hsaEligible ? Math.max(0, capHsaFull - ytd.hsa) : 0;
 
+    // accounts on a schedule this month: they get exactly that, and the steps leave them alone
+    const onSchedule = new Map<string, number>();
+    for (const k of schedKeys) {
+      const v = scheduled(k, monthStr);
+      if (v !== undefined) onSchedule.set(k, v);
+    }
     const payDebts = (filter: (x: Debt) => boolean) => {
       // avalanche by the rate charged now (a 0% promo waits); minimum-only debts get nothing extra
-      const list = debts.filter((x) => x.balance > 0 && paysExtra(x) && filter(x)).sort((a, b) => rateIn(b, monthStr) - rateIn(a, monthStr));
+      const list = debts.filter((x) => x.balance > 0 && paysExtra(x) && !onSchedule.has("debt:" + x.id) && filter(x)).sort((a, b) => rateIn(b, monthStr) - rateIn(a, monthStr));
       for (const dt of list) {
         if (avail <= 0) break;
         const put = Math.min(avail, dt.balance);
@@ -414,12 +439,36 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       };
       // a payroll deduction, once set, keeps coming out of every paycheck: it goes first from then on
       if (payrollSteps) for (const k of ["k401", "hsa"] as const) if (started[k] && order.includes(k)) doStep(k);
+      // your schedule goes first (after paycheck deductions): each account gets what you set, if it's there
+      for (const [k, v] of onSchedule) {
+        if (avail <= 1e-9) break;
+        if (k === "cash") {
+          const put = Math.min(avail, v);
+          cash += put;
+          alloc.ef += put;
+          avail -= put;
+        } else if (k.startsWith("debt:")) {
+          const dt = debts.find((x) => "debt:" + x.id === k);
+          if (!dt) continue;
+          const put = Math.min(avail, v, Math.max(0, dt.balance));
+          dt.balance -= put;
+          alloc.debt += put;
+          avail -= put;
+        } else if (k === "ira" || k === "taxable" || (k === "hsa" && !hsaPayroll) || k.startsWith("goal:")) {
+          const held = Math.max(0, avail - v);
+          avail -= held;
+          doStep(k);
+          avail += held;
+        }
+      }
+      const scheduledStep = (step: string) =>
+        step === "starterEF" || step === "fullEF" ? onSchedule.has("cash") : (step === "hsa" && hsaPayroll) ? false : onSchedule.has(step);
       // a monthly plan (or a month you changed by hand) goes first: that step gets the amount you set,
       // if it is there, and doesn't take more from the waterfall
       const handSet = new Set<string>();
       for (const step of order) {
         const v = amountsBy[step]?.[monthStr] ?? amounts[step];
-        if (v === undefined || !(v >= 0)) continue;
+        if (v === undefined || !(v >= 0) || scheduledStep(step)) continue;
         handSet.add(step);
         const held = Math.max(0, avail - v);
         avail -= held;
@@ -428,7 +477,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       }
       for (const step of order) {
         if (avail <= 1e-9) break;
-        if (handSet.has(step)) continue;
+        if (handSet.has(step) || scheduledStep(step)) continue;
         // a step with a share gets only that part of what's left; the rest goes on to the next steps
         const share = shares[step];
         const held = share !== undefined && share >= 0 && share < 1 ? avail * (1 - share) : 0;
@@ -468,6 +517,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       cash,
       debtTotal: sum(debts.map((x) => x.balance)),
       goals: goals.map((x) => ({ id: x.id, saved: x.saved })),
+      debts: debts.map((x) => ({ id: x.id, balance: x.balance })),
       pre: payPre - payRoth + payMatch + alloc.k401 * (1 - d.rothShare) + alloc.matchGain,
       post: payRoth + alloc.k401 * d.rothShare + payHsaEmployer + payHsa + alloc.hsa + alloc.ira + alloc.taxable,
     });

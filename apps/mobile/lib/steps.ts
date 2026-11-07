@@ -2,7 +2,7 @@
  * Plan-step status for the Plan tab (port of the prototype's stepInfo/renderPlan).
  * Reads engine output only; no money math beyond display.
  */
-import { BUCKET_LABELS, isHighInterest, k401Cost, limitsFor, paysExtra, PERIODS, STEP_LABELS, type MonthRow, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
+import { BUCKET_LABELS, scheduleAmount, isHighInterest, k401Cost, limitsFor, paysExtra, PERIODS, STEP_LABELS, type MonthRow, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
 import { debtLabel } from "./debts";
 import { money, monthLabel, percent } from "./format";
 
@@ -93,7 +93,8 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
         ? `Done. ${money(d.bal.cash)} in cash`
         : (() => {
             const avg = typical((m) => m.alloc.ef, 0, e ? e.m + 1 : undefined);
-            return `${money(d.bal.cash)} of ${money(tgt)}${avg > 0 ? ` · ${pace((m) => m.alloc.ef, avg, 0, "", e?.m)}` : ""} · ${e ? `done ${when(e.m)}` : "not reached in the plan"}`;
+            const mine = scheduleText(s, "cash");
+            return `${money(d.bal.cash)} of ${money(tgt)}${mine ? ` · ${mine}` : avg > 0 ? ` · ${pace((m) => m.alloc.ef, avg, 0, "", e?.m)}` : ""} · ${e ? `done ${when(e.m)}` : "not reached in the plan"}`;
           })(),
     };
   }
@@ -156,7 +157,8 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
                   return { ...r, note: notes.join(" · ") || undefined };
                 });
               }
-              return `${list.map((x) => `${debtLabel(x)} ${money(x.balance)}`).join(", ")}${paceText} · paid off in order: ${orderText}`;
+              const mine = list.map((x) => (scheduleText(s, "debt:" + x.id) ? `${debtLabel(x)}: ${scheduleText(s, "debt:" + x.id).replace("your plan: ", "")} extra` : "")).filter(Boolean).join("; ");
+              return `${list.map((x) => `${debtLabel(x)} ${money(x.balance)}`).join(", ")}${mine ? ` · your plan: ${mine}` : paceText} · paid off in order: ${orderText}`;
             })(),
     };
   }
@@ -207,6 +209,7 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
         if (rows.some((r) => r.amount > 0.5)) ctx.schedule = rows;
       }
     }
+    if (!viaPayroll && scheduleText(s, step)) meta = scheduleText(s, step).replace(/^./, (c) => c.toUpperCase()) + (ff !== undefined ? ` · starts ${when(ff)}` : "");
     if (ff !== undefined) meta += untilCoast(ff);
     return { key: step, label: `${STEP_LABELS[step]} (${money(cap)}/yr)`, done: false, meta };
   }
@@ -220,7 +223,9 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
       meta:
         ff === undefined
           ? "Everything left over. Not reached within the plan"
-          : `Everything left over${avg > 0 ? `: ${pace((m) => m.alloc.taxable, avg, ff)}` : ` from ${when(ff)}`}${untilCoast(ff)}`,
+          : scheduleText(s, "taxable")
+            ? `${scheduleText(s, "taxable").replace(/^./, (c) => c.toUpperCase())}${untilCoast(ff)}`
+            : `Everything left over${avg > 0 ? `: ${pace((m) => m.alloc.taxable, avg, ff)}` : ` from ${when(ff)}`}${untilCoast(ff)}`,
     };
   }
   if (step.startsWith("goal:")) {
@@ -237,7 +242,8 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
         ? "Done"
         : (() => {
             const avg = typical((m) => m.alloc.goals, 0, e ? e.m + 1 : undefined);
-            return `${money(g.saved)} saved${avg > 0 ? ` · ${pace((m) => m.alloc.goals, avg, 0, "", e?.m)}` : ""} · ${e ? `reached ${when(e.m)}` : "not reached within the plan"}`;
+            const mine = scheduleText(s, step);
+            return `${money(g.saved)} saved${mine ? ` · ${mine}` : avg > 0 ? ` · ${pace((m) => m.alloc.goals, avg, 0, "", e?.m)}` : ""} · ${e ? `reached ${when(e.m)}` : "not reached within the plan"}`;
           })(),
     };
   }
@@ -366,9 +372,31 @@ export function savingKeyOf(step: string): string {
   return step === "starterEF" || step === "fullEF" ? "cash" : step === "highDebt" || step === "lowDebt" ? "debt" : step;
 }
 
-export function plannedSavings(s: PlanState): PlannedSaving[] {
+const MONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const nameOf = (key: string) => `${MONS[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
+
+/** "Your plan: $1,500/mo from Nov 2026 → $3,500/mo from Apr 2027", or "" when the account has no schedule. */
+export function scheduleText(s: PlanState, key: string): string {
+  const list = [...(s.plan.schedule?.[key] ?? [])].sort((a, b) => (a.from < b.from ? -1 : 1));
+  if (!list.length) return "";
+  return "your plan: " + list.map((e) => `${money(e.amount)}/mo from ${nameOf(e.from)}`).join(" → ");
+}
+
+export function plannedSavings(s: PlanState, month?: string): PlannedSaving[] {
   const amounts = s.plan.amounts ?? {};
   const out: PlannedSaving[] = [];
+  // your schedules (this month's amount)
+  if (month) {
+    const keys = [...new Set([...Object.keys(s.plan.schedule ?? {}), ...Object.keys(s.plan.scheduleMonths ?? {})])];
+    for (const key of keys) {
+      const v = scheduleAmount(s.plan, key, month);
+      if (v === undefined) continue;
+      const debt = key.startsWith("debt:") ? s.debts.find((x) => "debt:" + x.id === key) : undefined;
+      const goal = key.startsWith("goal:") ? s.goals.find((x) => "goal:" + x.id === key) : undefined;
+      const label = debt ? `Extra on ${debtLabel(debt)}` : goal ? goal.name : key === "cash" ? "Emergency fund" : SAVING_LABELS[key] ?? key;
+      out.push({ key, label, amount: v, steps: [] });
+    }
+  }
   for (const step of s.plan.steps) {
     const v = amounts[step];
     if (v === undefined) continue;

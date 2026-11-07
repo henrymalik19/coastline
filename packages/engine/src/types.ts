@@ -193,7 +193,18 @@ export type PlanSettings = {
    * first (if there is that much left after the budget), before the other steps.
    */
   amountsBy?: Record<string, Record<string, number>>;
+  /**
+   * Your schedule per account, like a spreadsheet: from each month on, this much a month (until the next
+   * entry). Keys: "cash", "ira", "hsa", "taxable", "goal:<id>", "debt:<id>". An account with a schedule
+   * gets exactly that from its first entry on (before it, the steps decide); what's left goes through the steps.
+   */
+  schedule?: Record<string, ScheduleEntry[]>;
+  /** Single months changed by hand, by the same keys: "YYYY-MM" → dollars. */
+  scheduleMonths?: Record<string, Record<string, number>>;
 };
+
+/** From this month ("YYYY-MM") on, this much a month. */
+export type ScheduleEntry = { from: string; amount: number };
 
 export type WhatIf = { extra: number; retDelta: number; spendDelta: number };
 
@@ -387,6 +398,8 @@ export type MonthRow = {
   cash: number;
   debtTotal: number;
   goals: { id: string; saved: number }[];
+  /** What each debt still owes at the end of the month. */
+  debts: { id: string; balance: number }[];
   /** Pre-tax dollars invested this month (payroll + match + waterfall 401(k)). */
   pre: number;
   /** Roth/taxable/HSA dollars invested this month. */
