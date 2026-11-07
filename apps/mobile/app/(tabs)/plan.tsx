@@ -10,7 +10,7 @@ import { Card, Divider, Pill, Screen, SectionLabel } from "../../components/ui";
 import { money, monthLabel } from "../../lib/format";
 import { useLayout } from "../../lib/layout";
 import { usePlan } from "../../lib/plan";
-import { milestones, stepInfo, type StepInfo } from "../../lib/steps";
+import { stepInfo, type StepInfo } from "../../lib/steps";
 import { useStore } from "../../lib/store";
 import { space, type, useTheme } from "../../lib/theme";
 
@@ -86,23 +86,12 @@ export default function Plan() {
     if (key === "hsa" || key === "ira" || key === "k401" || key === "taxable") return actual.firstFund[key] ?? null;
     return null;
   };
-  // milestones go between the steps, as date labels: what happens by the time each step starts
-  const items = milestones(real, state);
-  let shown = 0;
-  const labelsUpTo = (m: number, startsNow?: string) => {
-    const group = new Map<number, string[]>();
-    while (shown < items.length && items[shown]!.m <= m) {
-      const x = items[shown++]!;
-      group.set(x.m, [...(group.get(x.m) ?? []), x.text]);
-    }
-    if (startsNow && !group.size) group.set(m, [startsNow]);
-    return [...group.entries()].map(([gm, texts]) => (
-      <View key={"d" + gm + texts[0]} style={[styles.dateLabel, { backgroundColor: t.surface2 }]}>
-        <Text style={[type.overline, { color: t.accent, width: 84 }]}>{gm === 0 ? "This month" : monthLabel(start, gm)}</Text>
-        <Text style={[type.caption, { color: t.text2, flex: 1 }]}>{texts.join(" · ")}</Text>
-      </View>
-    ));
-  };
+  // a date label above the first step that starts in each month
+  const dateLabel = (m: number) => (
+    <View key={"d" + m} style={[styles.dateLabel, { backgroundColor: t.surface2 }]}>
+      <Text style={[type.overline, { color: t.accent }]}>{m === 0 ? "This month" : monthLabel(start, m)}</Text>
+    </View>
+  );
   let lastLabel = -1;
 
   const steps = (
@@ -110,7 +99,7 @@ export default function Plan() {
       <View style={{ padding: space.lg, paddingBottom: space.md, gap: 4 }}>
         <SectionLabel>Your steps</SectionLabel>
         <Text style={[type.body, { color: t.text2 }]}>
-          Each month, what's left after your budget and debt payments fills step 1, then step 2, and so on. To do two at once, give a step a set amount a month (or a share): the rest goes to the next steps at the same time. Amounts and dates are for your numbers. Use the arrows to change the order. The dates between steps show when each one starts and what you reach along the way.
+          Each month, what's left after your budget and debt payments fills step 1, then step 2, and so on. To do two at once, give a step a set amount a month (or a share): the rest goes to the next steps at the same time. Amounts and dates are for your numbers. Use the arrows to change the order. The dates between steps show when each one starts.
         </Text>
       </View>
       <Divider />
@@ -123,7 +112,7 @@ export default function Plan() {
         const amt = canAmount ? amounts[info.key] : undefined;
         const changed = Object.keys(amountsBy[info.key] ?? {}).length;
         const st = info.done || info.skip ? null : startOf(info.key);
-        const labels = st !== null && st > lastLabel ? labelsUpTo(st, `${info.label.replace(/ \(.*$/, "").replace(/:.*$/, "")} starts`) : null;
+        const labels = st !== null && st > lastLabel ? dateLabel(st) : null;
         if (st !== null && st > lastLabel) lastLabel = st;
         return (
           <View key={info.key}>
@@ -173,8 +162,6 @@ export default function Plan() {
           </View>
         );
       })}
-      {/* what comes after the last step starts: Coast FI and the rest */}
-      {labelsUpTo(Infinity)}
     </Card>
   );
 
