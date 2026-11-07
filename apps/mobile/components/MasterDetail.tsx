@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type ViewStyle } from "react-native";
 import { useLayout } from "../lib/layout";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Card } from "./ui";
@@ -49,9 +49,12 @@ export function MasterDetail({
   const t = useTheme();
   const twoPane = useTwoPane();
   const fill = useFillPage();
+  // when the page scrolls (phones, tablets), keep the item picker and the group header in view
+  const sticky = Platform.OS === "web" && !fill ? ({ position: "sticky", top: 0, zIndex: 2 } as unknown as ViewStyle) : null;
+  const pinHead = !twoPane && !!sticky && !!detailHead && items.length > 0;
 
   const list = twoPane ? (
-    <Card padded={false} style={styles.listPane}>
+    <Card padded={false} style={{ ...styles.listPane, ...(sticky ? { ...sticky, top: space.sm } : null) }}>
       <Text style={[type.overline, { color: t.text3, padding: space.lg, paddingBottom: space.sm }]}>{listTitle}</Text>
       <ScrollView style={fill ? { flex: 1 } : undefined} scrollEnabled={fill} showsVerticalScrollIndicator={false}>
         <View role="tablist" aria-label={label} aria-orientation="vertical" style={{ paddingHorizontal: space.sm, gap: 2, paddingBottom: space.sm }}>
@@ -106,12 +109,30 @@ export function MasterDetail({
   );
 
   const pane = (
-    <Card padded={false} style={twoPane ? { flex: 1, minWidth: 0, ...(fill ? { minHeight: 0 } : null) } : undefined}>
+    <Card
+      padded={false}
+      style={{
+        ...(twoPane ? { flex: 1, minWidth: 0, ...(fill ? { minHeight: 0 } : null) } : null),
+        // phones: the header lives in the pinned block above, so this card continues it
+        ...(pinHead ? { borderTopLeftRadius: 0, borderTopRightRadius: 0, borderTopWidth: 0, marginTop: -space.md } : null),
+      }}
+    >
       {items.length === 0 && empty ? (
         <View style={{ flex: fill ? 1 : undefined, alignItems: "center", justifyContent: "center", padding: space.xl, gap: space.md }}>{empty}</View>
       ) : (
         <>
-          {detailHead ? <View style={[styles.head, { borderBottomColor: t.border }]}>{detailHead}</View> : null}
+          {detailHead && !pinHead ? (
+            <View
+              style={[
+                styles.head,
+                { borderBottomColor: t.border },
+                // tablets: the group header sticks to the top of the page while its items scroll
+                twoPane && sticky ? { ...sticky, backgroundColor: t.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg } : null,
+              ] as ViewStyle[]}
+            >
+              {detailHead}
+            </View>
+          ) : null}
           {fill ? (
             <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {detail}
@@ -135,7 +156,17 @@ export function MasterDetail({
         </View>
       ) : (
         <>
-          {list}
+          {sticky ? (
+            // phones: chips + the group header pinned together at the top
+            <View style={[sticky, { backgroundColor: t.bg, gap: space.md, paddingTop: space.xs }] as ViewStyle[]}>
+              {list}
+              {pinHead ? (
+                <View style={[styles.head, styles.pinnedHead, { backgroundColor: t.surface, borderColor: t.border, borderBottomColor: t.border }]}>{detailHead}</View>
+              ) : null}
+            </View>
+          ) : (
+            list
+          )}
           {pane}
         </>
       )}
@@ -158,5 +189,6 @@ const styles = StyleSheet.create({
   listRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, paddingVertical: 10, borderRadius: radius.sm },
   chip: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.md, minHeight: 40 },
   head: { borderBottomWidth: StyleSheet.hairlineWidth },
+  pinnedHead: { borderWidth: StyleSheet.hairlineWidth, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
   foot: { padding: space.sm, borderTopWidth: StyleSheet.hairlineWidth },
 });
