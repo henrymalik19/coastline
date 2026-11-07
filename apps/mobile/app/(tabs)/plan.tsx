@@ -99,20 +99,20 @@ export default function Plan() {
   const better = o.projectedFinal >= o.altFinal;
   const compare = (
     <Card style={{ gap: space.sm }}>
-      <SectionLabel>This plan vs. what you do today</SectionLabel>
+      <SectionLabel>Why follow the plan?</SectionLabel>
       <View style={styles.cmp}>
         <View style={{ flex: 1 }}>
-          <Text style={[type.caption, { color: t.text3 }]}>{o.plan.mode === "plan" ? "Following this plan" : "Investing what you do today"}</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>If you follow this plan</Text>
           <Text style={[type.stat, { color: t.text }]}>{money(o.projectedFinal, { compact: true })}</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[type.caption, { color: t.text3 }]}>{o.altMode === "plan" ? "Following this plan" : "Investing what you do today"}</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>If you keep investing {money(state.currentInvestMonthly)}/mo like today</Text>
           <Text style={[type.stat, { color: t.text2 }]}>{money(o.altFinal, { compact: true })}</Text>
         </View>
       </View>
       <Text style={[type.caption, { color: t.text3 }]}>
-        Invested by age {o.d.retireAge}, at your assumed return (median, no market swings).{" "}
-        {o.plan.mode === "plan" && better ? `The plan comes out ${money(o.projectedFinal - o.altFinal, { compact: true })} ahead.` : ""}
+        What you'd have invested by age {o.d.retireAge} (at your assumed return, no market swings).{" "}
+        {better ? `Following the plan comes out ${money(o.projectedFinal - o.altFinal, { compact: true })} ahead.` : ""}
       </Text>
     </Card>
   );

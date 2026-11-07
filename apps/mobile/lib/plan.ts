@@ -12,14 +12,20 @@ function useToday(): Date {
 }
 
 /**
- * The plan as the engine should see it: unless the user typed their own tax bracket, use the
- * estimate from their income and filing status (so it follows raises and new jobs).
+ * The plan as the engine should see it:
+ * - projections always follow the plan (the "what you invest today" path is only a comparison
+ *   on the Plan page; the old setting to switch them was confusing and is gone);
+ * - unless the user typed their own tax bracket, use the estimate from their income and
+ *   filing status (so it follows raises and new jobs).
  */
 export function effectivePlan(saved: PlanState): PlanState {
-  if (saved.plan.marginalTaxManual) return saved;
-  const est = estimateBracket(saved.incomes, saved.filingStatus ?? "single");
-  if (!est || Math.abs(est.total - saved.plan.marginalTax) < 1e-9) return saved;
-  return { ...saved, plan: { ...saved.plan, marginalTax: est.total } };
+  let plan = saved.plan;
+  if (plan.projectWith !== "plan") plan = { ...plan, projectWith: "plan" };
+  if (!plan.marginalTaxManual) {
+    const est = estimateBracket(saved.incomes, saved.filingStatus ?? "single");
+    if (est && Math.abs(est.total - plan.marginalTax) >= 1e-9) plan = { ...plan, marginalTax: est.total };
+  }
+  return plan === saved.plan ? saved : { ...saved, plan };
 }
 
 /** Runs the engine on the saved plan. Re-runs only when the plan changes. */

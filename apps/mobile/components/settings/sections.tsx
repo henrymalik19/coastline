@@ -299,20 +299,6 @@ function AssumptionsSection() {
             <TaxBracketRow key="mt" />,
             <ToggleRow key="h" label="I have an HSA-eligible health plan" hint="High-deductible plan" value={state.plan.hsaEligible} onChange={(v) => update((p) => { p.plan.hsaEligible = v; })} />,
             state.plan.hsaEligible ? <ToggleRow key="hf" label="HSA family coverage" value={state.plan.hsaFamily} onChange={(v) => update((p) => { p.plan.hsaFamily = v; })} /> : null,
-            <FieldRow
-              key="pw"
-              label="Base my projections on"
-              hint="Your charts and Coast FI date assume this. The Plan page shows the other option for comparison."
-              info={HELP.projectWith}
-              stacked
-            >
-              <Segmented
-                label="Base my projections on"
-                options={[{ value: "plan", label: "Following this plan" }, { value: "current", label: "What I invest now" }]}
-                value={state.plan.projectWith}
-                onChange={(v) => update((p) => { p.plan.projectWith = v; })}
-              />
-            </FieldRow>,
           ]}
         </Rows>
       </Group>

@@ -40,6 +40,7 @@ export function AccountsEditor() {
   const { state } = usePlan();
   const update = useStore((s) => s.update);
   const [open, setOpen] = useState<string | null>(null);
+  const [reorder, setReorder] = useState(false);
   const accounts = state.accounts;
 
   const add = (q: (typeof QUICK_ADD)[number]) => {
@@ -60,6 +61,17 @@ export function AccountsEditor() {
 
   return (
     <View style={{ gap: space.md }}>
+      {accounts.length > 1 ? (
+        <View style={[styles.row, { justifyContent: "flex-end", marginBottom: -space.sm }]}>
+          <Button
+            title={reorder ? "Done" : "Reorder"}
+            icon={reorder ? "check" : "sliders"}
+            tone="ghost"
+            onPress={() => { setOpen(null); setReorder((r) => !r); }}
+            style={{ minHeight: 36 }}
+          />
+        </View>
+      ) : null}
       {accounts.length ? (
         <Card style={{ paddingVertical: space.xs }}>
           {accounts.map((a, i) => {
@@ -74,18 +86,28 @@ export function AccountsEditor() {
                     aria-expanded={isOpen}
                     accessibilityLabel={`${name} details`}
                     accessibilityState={{ expanded: isOpen }}
+                    disabled={reorder}
                     onPress={() => setOpen(isOpen ? null : a.id)}
                     style={[styles.row, { flex: 1, minHeight: 36 }]}
                   >
-                    <View style={{ transform: [{ rotate: isOpen ? "90deg" : "0deg" }] }}>
-                      <Icon name="chevron" size={18} color={t.text3} />
-                    </View>
+                    {reorder ? null : (
+                      <View style={{ transform: [{ rotate: isOpen ? "90deg" : "0deg" }] }}>
+                        <Icon name="chevron" size={18} color={t.text3} />
+                      </View>
+                    )}
                     <View style={{ flex: 1, gap: 1 }}>
                       <Text style={[type.body, { color: a.name.trim() ? t.text : t.text3 }]} numberOfLines={1}>{name}</Text>
                       <Text style={[type.caption, { color: t.text3 }]}>{typeLabel(a.type)}</Text>
                     </View>
                   </Pressable>
-                  <NumberInput kind="money" label={`${name} balance`} value={a.balance} onChange={(v) => update((p) => { p.accounts[i]!.balance = v; })} />
+                  {reorder ? (
+                    <View style={styles.row}>
+                      <IconButton icon="up" label={`Move ${name} up`} disabled={i === 0} onPress={() => move(i, -1)} />
+                      <IconButton icon="down" label={`Move ${name} down`} disabled={i === accounts.length - 1} onPress={() => move(i, 1)} />
+                    </View>
+                  ) : (
+                    <NumberInput kind="money" label={`${name} balance`} value={a.balance} onChange={(v) => update((p) => { p.accounts[i]!.balance = v; })} />
+                  )}
                 </View>
                 {isOpen ? (
                   <View style={{ gap: space.sm, paddingBottom: space.md, paddingLeft: 26 }}>
