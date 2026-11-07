@@ -11,7 +11,7 @@ import { radius, space, type, useTheme } from "../../lib/theme";
 import { AccountPanel } from "../AccountPanel";
 import { AccountsEditor } from "../AccountsEditor";
 import { RetirementIncomeEditor } from "../RetirementIncomeEditor";
-import { RecurringGoalFields } from "../RecurringGoalFields";
+import { GoalEditor } from "../GoalEditor";
 import { BudgetEditor } from "../BudgetEditor";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "../form";
 import { Icon, type IconName } from "../Icon";
@@ -240,29 +240,12 @@ function GoalsSection() {
       <EmergencyFundNote />
       {state.goals.length === 0 ? <Empty text="No goals yet" /> : null}
       {state.goals.map((g, i) => (
-        <ItemCard
+        <GoalEditor
           key={g.id}
-          label="Goal"
-          placeholder="e.g. House down payment"
-          name={g.name}
-          onName={(v) => update((p) => { p.goals[i]!.name = v; })}
-          onDelete={() => removeItem("this goal", g.name, () => update((p) => { p.goals.splice(i, 1); }))}
-        >
-          {looksLikeEmergencyFund(g.name) ? (
-            <Text style={[type.caption, { color: t.warn, fontWeight: "600" }]}>This looks like an emergency fund, which your plan already builds for you (see above). You can remove this goal.</Text>
-          ) : null}
-          <Rows>
-            {[
-              <FieldRow key="t" label="Target">
-                <NumberInput kind="money" label={`${g.name} target`} value={g.target} onChange={(v) => update((p) => { p.goals[i]!.target = v; })} />
-              </FieldRow>,
-              <FieldRow key="s" label="Saved so far">
-                <NumberInput kind="money" label={`${g.name} saved so far`} value={g.saved} onChange={(v) => update((p) => { p.goals[i]!.saved = v; })} />
-              </FieldRow>,
-            ]}
-          </Rows>
-          <RecurringGoalFields goal={g} onChange={(patch) => update((p) => { p.goals[i] = { ...p.goals[i]!, ...patch }; })} />
-        </ItemCard>
+          goal={g}
+          onChange={(patch) => update((p) => { p.goals[i] = { ...p.goals[i]!, ...patch }; })}
+          onRemove={() => removeItem("this goal", g.name, () => update((p) => { p.goals.splice(i, 1); }))}
+        />
       ))}
       <Button title="Add goal" icon="plus" onPress={() => update((p) => { p.goals.push({ id: newId(), name: "", target: 5000, saved: 0 }); })} style={{ alignSelf: "flex-start" }} />
     </>

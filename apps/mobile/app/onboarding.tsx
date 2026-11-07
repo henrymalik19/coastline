@@ -8,7 +8,7 @@ import { EmergencyFundNote, looksLikeEmergencyFund } from "../components/Emergen
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField } from "../components/form";
 import { Icon } from "../components/Icon";
 import { RetirementIncomeEditor } from "../components/RetirementIncomeEditor";
-import { RecurringGoalFields } from "../components/RecurringGoalFields";
+import { GoalEditor } from "../components/GoalEditor";
 import { useFillPage } from "../components/MasterDetail";
 import { ProgressBar, ProgressRing } from "../components/ProgressRing";
 import { IncomesEditor } from "../components/IncomeEditor";
@@ -213,22 +213,12 @@ function GoalsStep() {
       <Text style={[type.body, { color: t.text2 }]}>A house deposit, a car, a wedding… Each goal becomes a step in your plan, just before investing in a brokerage. Things that come around again (holidays, a yearly bill) can repeat. Totally optional.</Text>
       <EmergencyFundNote linkToSettings={false} />
       {state.goals.map((g, i) => (
-        <Card key={g.id} style={{ gap: space.sm }}>
-          <View style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
-            <View style={{ flex: 1 }}>
-              <TextField label="Goal name" placeholder="e.g. House down payment" value={g.name} onChange={(v) => update((p) => { p.goals[i]!.name = v; })} />
-            </View>
-            <IconButton icon="trash" color={t.bad} label={`Remove ${g.name}`} onPress={() => update((p) => { p.goals.splice(i, 1); })} />
-          </View>
-          {looksLikeEmergencyFund(g.name) ? (
-            <Text style={[type.caption, { color: t.warn, fontWeight: "600" }]}>This looks like an emergency fund, which your plan already builds for you (see above). You can remove this goal.</Text>
-          ) : null}
-          <View style={styles.debtGrid}>
-            <Labeled label="Target"><NumberInput kind="money" width="100%" label={`${g.name} target`} value={g.target} min={0} onChange={(v) => update((p) => { p.goals[i]!.target = v; })} /></Labeled>
-            <Labeled label="Saved so far"><NumberInput kind="money" width="100%" label={`${g.name} saved`} value={g.saved} min={0} onChange={(v) => update((p) => { p.goals[i]!.saved = v; })} /></Labeled>
-          </View>
-          <RecurringGoalFields goal={g} onChange={(patch) => update((p) => { p.goals[i] = { ...p.goals[i]!, ...patch }; })} />
-        </Card>
+        <GoalEditor
+          key={g.id}
+          goal={g}
+          onChange={(patch) => update((p) => { p.goals[i] = { ...p.goals[i]!, ...patch }; })}
+          onRemove={() => update((p) => { p.goals.splice(i, 1); })}
+        />
       ))}
       <Button title="Add a goal" icon="plus" onPress={() => update((p) => { p.goals.push({ id: newId(), name: "", target: 5000, saved: 0 }); })} style={{ alignSelf: "flex-start" }} />
     </>
