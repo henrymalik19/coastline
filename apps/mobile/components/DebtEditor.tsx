@@ -11,6 +11,7 @@ import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, FieldRow, IconButton, MonthField, NumberInput, TextField, ToggleRow } from "./form";
 import { Card, Divider } from "./ui";
+import { ScheduleEditor, scheduleSummary, useSchedule } from "./ScheduleEditor";
 
 /** The paycheck that repays a debt, in the shape DebtEditor's `paidFrom` wants. */
 export function paidFromFor(state: PlanState, debtId: string) {
@@ -164,6 +165,12 @@ export function DebtEditor({
           />
         </>
       ) : null}
+      {!debt.minimumOnly ? (
+        <>
+          <Divider />
+          <ExtraPayments debtId={debt.id} label={debtLabel(debt)} />
+        </>
+      ) : null}
       {kind.note && !paidFrom ? (
         <View style={[styles.note, { backgroundColor: t.warnSoft }]}>
           <Text style={[type.caption, { color: t.text }]}>{kind.note}</Text>
@@ -251,3 +258,38 @@ const styles = StyleSheet.create({
   note: { borderRadius: radius.sm, padding: space.md },
   sub: { borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.xs },
 });
+
+/**
+ * Extra payments on a debt, by month ("$0 until Oct 2027, then $3,500"). Empty: your priority order
+ * decides how much extra goes here.
+ */
+function ExtraPayments({ debtId, label }: { debtId: string; label: string }) {
+  const t = useTheme();
+  const k = "debt:" + debtId;
+  const { list, oneOffs } = useSchedule(k);
+  const [open, setOpen] = useState(false);
+  const set = list.length > 0 || Object.keys(oneOffs).length > 0;
+  return (
+    <View style={{ gap: space.sm }}>
+      <Pressable role="button" aria-expanded={open} onPress={() => setOpen((v) => !v)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[type.body, { color: t.text }]}>Extra payments</Text>
+          <Text style={[type.caption, { color: set ? t.accent : t.text3 }]}>
+            {set ? scheduleSummary(list).replace("Your plan: ", "").replace(/\/mo/g, " extra/mo") || "One-month changes" : "Not set: your priority order decides how much extra goes here"}
+          </Text>
+        </View>
+        <View style={{ transform: [{ rotate: open ? "90deg" : "0deg" }] }}>
+          <Icon name="chevron" size={14} color={t.text3} />
+        </View>
+      </Pressable>
+      {open ? (
+        <ScheduleEditor
+          k={k}
+          label={label}
+          unit="extra/mo"
+          note="On top of the regular payment. Use $0 to pay only the regular payment until a later change."
+        />
+      ) : null}
+    </View>
+  );
+}
