@@ -1,7 +1,6 @@
 import { useRouter } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { AccountPanel } from "../components/AccountPanel";
 import { BudgetEditor } from "../components/BudgetEditor";
 import { AddDebtButtons, DebtEditor } from "../components/DebtEditor";
 import { EmergencyFundNote, looksLikeEmergencyFund } from "../components/EmergencyFundNote";
@@ -28,7 +27,6 @@ export default function Onboarding() {
   const completeOnboarding = useStore((s) => s.completeOnboarding);
   const [step, setStep] = useState<Step>("you");
   const i = STEPS.indexOf(step);
-  const [signingIn, setSigningIn] = useState(false);
   const syncEmail = useSync((s) => s.email);
   // a second device: once sign-in pulls down a finished plan, go straight to it
   const onboarded = useStore((s) => s.onboarded);
@@ -66,21 +64,11 @@ export default function Onboarding() {
           Everything is in today's dollars{syncConfigured ? "." : ", and your data stays on this device."}
         </Text>
       ) : null}
-      {step === "you" && syncConfigured ? (
-        signingIn ? (
-          <View style={{ gap: space.sm }}>
-            <AccountPanel />
-            <Text style={[type.caption, { color: t.text3 }]}>
-              {syncEmail ? "Signed in. If your account has a plan, it'll load here in a moment." : "We'll load your plan from your account."}{" "}
-              <Text style={{ color: t.accent, fontWeight: "700" }} onPress={() => setSigningIn(false)}>Set up a new plan instead</Text>
-            </Text>
-          </View>
-        ) : (
-          <Text style={[type.caption, { color: t.text2 }]}>
-            Already use Coastline on another device?{" "}
-            <Text role="link" style={{ color: t.accent, fontWeight: "700" }} onPress={() => setSigningIn(true)}>Sign in to load your plan</Text>
-          </Text>
-        )
+      {step === "you" && syncConfigured && !syncEmail ? (
+        <Text style={[type.caption, { color: t.text2 }]}>
+          Already have an account?{" "}
+          <Text role="link" style={{ color: t.accent, fontWeight: "700" }} onPress={() => router.push("/sign-in")}>Sign in to load your plan</Text>
+        </Text>
       ) : null}
       {step === "you" ? <YouStep /> : null}
       {step === "income" ? <IncomeStep /> : null}
@@ -90,7 +78,7 @@ export default function Onboarding() {
       {step === "review" ? <ReviewStep /> : null}
 
       <View style={[styles.between, { marginTop: space.sm }]}>
-        {i > 0 ? <Button title="Back" icon="back" tone="ghost" onPress={back} /> : <View />}
+        <Button title="Back" icon="back" tone="ghost" onPress={i > 0 ? back : () => (router.canGoBack() ? router.back() : router.replace("/"))} />
         {step === "review" ? (
           <Button title="Go to my dashboard" tone="primary" onPress={finish} />
         ) : (
