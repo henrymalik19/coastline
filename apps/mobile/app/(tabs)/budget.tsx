@@ -8,7 +8,7 @@ import { TxnForm } from "../../components/TxnForm";
 import { budgetAccounts, cardMap } from "../../lib/register";
 import { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { Button, NumberInput, Select, TextField, ToggleRow } from "../../components/form";
+import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Select } from "../../components/form";
 import { MonthlyAmount } from "../../components/ScheduleEditor";
 import { groupOf, groupOrder, moveGroup, moveItem, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
 import { newId } from "../../lib/store";
@@ -45,6 +45,7 @@ export default function Budget() {
   const [groupOpen, setGroupOpen] = useState<string | null>(null);
   const [moveTo, setMoveTo] = useState<string>("");
   const [moveAmt, setMoveAmt] = useState(0);
+  const [moveOpen, setMoveOpen] = useState(false);
   const [groupDraft, setGroupDraft] = useState("");
   const router = useRouter();
   // opened from a link (a plan step, a to-do): show this month with that line open
@@ -242,9 +243,11 @@ export default function Budget() {
     </Card>
   );
 
-  const COLW = compact ? 64 : 104;
-  const num = (v: number, color: string, bold = false) => (
-    <Text style={[type.caption, { width: COLW, textAlign: "right", color, fontWeight: bold ? "700" : "500", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
+  const COLW = compact ? 74 : 108;
+  /** PILL_IN: the Available pill's inner padding, so header and group totals line up with its text. */
+  const PILL_IN = 8;
+  const num = (v: number, color: string, bold = false, inset = 0) => (
+    <Text style={[type.caption, { width: COLW, paddingRight: inset, textAlign: "right", color, fontWeight: bold ? "700" : "500", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
       {money(v, { whole: compact && Math.abs(v) >= 1000 })}
     </Text>
   );
@@ -268,26 +271,31 @@ export default function Budget() {
       const idx = itemIndex(it.id);
       const groups = groupOrder(state.budget);
       return (
-        <View style={[styles.catBox, { borderTopColor: t.border }]}>
+        <View style={styles.section}>
           <Text style={[type.overline, { color: t.text3 }]}>Category</Text>
-          <TextField label="Name" placeholder="e.g. Groceries" value={it.name} onChange={(v) => editItem(it.id, { name: v })} />
-          <View style={styles.editRow}>
-            <Text style={[type.caption, { color: t.text2, width: 70 }]}>Each month</Text>
-            <NumberInput kind="money" label={`${it.name || "Item"} planned each month`} value={it.amount} width={140} step={25} onChange={(v) => editItem(it.id, { amount: v })} />
-            <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 120 }]}>What your plan expects; "Fill from plan" assigns it.</Text>
-          </View>
-          <ToggleRow label="Still paid after you retire" hint="Counts toward your retirement number" value={it.inRetirement} onChange={(v) => editItem(it.id, { inRetirement: v })} />
-          <ToggleRow label="Essential" hint="Kept when emergency mode cuts to essentials" value={it.essential !== false} onChange={(v) => editItem(it.id, { essential: v })} />
-          <View style={styles.editRow}>
-            <Text style={[type.caption, { color: t.text2, width: 70 }]}>Group</Text>
-            <View style={{ flex: 1, minWidth: 160 }}>
-              <Select label="Group" value={groupOf(it)} options={groups.map((g) => ({ value: g, label: g }))} onChange={(g) => update((p) => { p.budget = moveToGroup(p.budget, itemIndex(it.id), g); })} />
+          <FormList>
+            <FormRow label="Name">
+              <InlineText label="Category name" placeholder="e.g. Groceries" value={it.name} onChange={(v) => editItem(it.id, { name: v })} />
+            </FormRow>
+            <FormRow label="Each month" hint="What your plan expects">
+              <InlineMoney label={`${it.name || "Item"} planned each month`} value={it.amount} onChange={(v) => editItem(it.id, { amount: v })} />
+            </FormRow>
+            <FormRow label="Still paid after you retire" hint="Counts toward your retirement number">
+              <InlineSwitch label="Still paid after you retire" value={it.inRetirement} onChange={(v) => editItem(it.id, { inRetirement: v })} />
+            </FormRow>
+            <FormRow label="Essential" hint="Kept in emergency mode">
+              <InlineSwitch label="Essential" value={it.essential !== false} onChange={(v) => editItem(it.id, { essential: v })} />
+            </FormRow>
+            <FormRow label="Group">
+              <Select plain label="Group" value={groupOf(it)} options={groups.map((g) => ({ value: g, label: g }))} onChange={(g) => update((p) => { p.budget = moveToGroup(p.budget, itemIndex(it.id), g); })} />
+            </FormRow>
+          </FormList>
+          <View style={[styles.chips, { justifyContent: "space-between" }]}>
+            <View style={styles.chips}>
+              <Chip title="Up" icon="up" disabled={idx <= 0 || groupOf(state.budget[idx - 1]!) !== groupOf(it)} onPress={() => update((p) => { p.budget = moveItem(p.budget, itemIndex(it.id), -1); })} />
+              <Chip title="Down" icon="down" disabled={idx >= state.budget.length - 1 || groupOf(state.budget[idx + 1]!) !== groupOf(it)} onPress={() => update((p) => { p.budget = moveItem(p.budget, itemIndex(it.id), 1); })} />
             </View>
-          </View>
-          <View style={styles.editRow}>
-            <Button title="Up" icon="up" tone="ghost" disabled={idx <= 0 || groupOf(state.budget[idx - 1]!) !== groupOf(it)} onPress={() => update((p) => { p.budget = moveItem(p.budget, itemIndex(it.id), -1); })} style={{ minHeight: 36 }} />
-            <Button title="Down" icon="down" tone="ghost" disabled={idx >= state.budget.length - 1 || groupOf(state.budget[idx + 1]!) !== groupOf(it)} onPress={() => update((p) => { p.budget = moveItem(p.budget, itemIndex(it.id), 1); })} style={{ minHeight: 36 }} />
-            <Button
+            <Chip
               title="Delete"
               icon="trash"
               tone="danger"
@@ -297,7 +305,6 @@ export default function Budget() {
                   update((p) => { p.budget = p.budget.filter((x) => x.id !== it.id); });
                 }
               }}
-              style={{ minHeight: 36 }}
             />
           </View>
         </View>
@@ -305,7 +312,7 @@ export default function Budget() {
     }
     if (c.kind === "saving")
       return (
-        <View style={[styles.catBox, { borderTopColor: t.border }]}>
+        <View style={styles.section}>
           <Text style={[type.overline, { color: t.text3 }]}>Plan for this account</Text>
           <MonthlyAmount k={c.key} label={label(c)} note={c.moves ? undefined : "Cash can go past your emergency fund goal if you plan it."} />
           <Text style={[type.caption, { color: t.text3 }]}>Sets what "Fill from plan" assigns here each month, and what the forecast expects after this month.</Text>
@@ -326,53 +333,52 @@ export default function Budget() {
     const explicitSpent = entry?.spent?.[c.key] !== undefined;
     return (
       <View key={c.key} nativeID={"cat-" + c.key}>
-        <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); setMoveAmt(0); setMoveTo(""); }} style={({ pressed }) => [styles.row, pressed ? { backgroundColor: t.surface2 } : null]}>
-          <Text style={[type.body, { color: t.text, flex: 1, minWidth: 0 }]} numberOfLines={1}>{label(c)}</Text>
+        <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); setMoveAmt(0); setMoveTo(""); setMoveOpen(false); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, pressed ? { backgroundColor: t.surface2 } : null]}>
+          <Text style={[type.body, { color: t.text, flex: 1, minWidth: 0 }]} numberOfLines={2}>{label(c)}</Text>
           {num(l.assigned, t.text2)}
-          {num(l.spent, t.text2)}
+          {compact ? null : num(l.spent, t.text2)}
           <View style={{ width: COLW, alignItems: "flex-end" }}>{pill(l, c)}</View>
         </Pressable>
         {isOpen ? (
           <View style={[styles.editor, { backgroundColor: t.surface2 }]}>
-            <View style={styles.editRow}>
-              <Text style={[type.caption, { color: t.text2, width: 70 }]}>Assigned</Text>
-              <NumberInput kind="money" label={`${label(c)} assigned in ${nameOf(month)}`} value={l.assigned} width={140} step={25} onChange={(v) => setAssigned(c.key, v)} />
-              {c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5 ? (
-                <Button title={`Plan: ${money(c.target)}`} tone="ghost" onPress={() => setAssigned(c.key, Math.round(c.target * 100) / 100)} style={{ minHeight: 36 }} />
-              ) : null}
+            <View style={styles.section}>
+              <Text style={[type.overline, { color: t.text3 }]}>{nameOf(month)}</Text>
+              <FormList>
+                <FormRow label="Assigned" hint={c.target > 0.5 ? `Plan: ${money(c.target)}` : undefined}>
+                  <InlineMoney label={`${label(c)} assigned in ${nameOf(month)}`} value={l.assigned} onChange={(v) => setAssigned(c.key, v)} />
+                </FormRow>
+                <FormRow label={c.moves ? "Paid" : "Spent"} hint={c.moves ? "Counts as paid when assigned" : explicitSpent ? "Includes an amount from before transactions" : "From transactions"}>
+                  {c.moves ? (
+                    <InlineMoney label={`${label(c)} paid in ${nameOf(month)}`} value={l.spent} onChange={(v) => setSpent(c.key, v)} />
+                  ) : (
+                    <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(l.spent)}</Text>
+                  )}
+                </FormRow>
+                <FormRow label="Available" hint={l.carried > 0.5 ? `${money(l.carried)} carried over` : (l.funded ?? 0) > 0.5 ? `+${money(l.funded ?? 0)} from card spending` : undefined}>
+                  <Text style={[type.body, { color: l.available < -0.005 ? t.bad : l.available > 0.5 ? t.good : t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(l.available)}</Text>
+                </FormRow>
+              </FormList>
+              <View style={styles.chips}>
+                {c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5 ? <Chip title={`Use plan ${money(c.target)}`} tone="accent" onPress={() => setAssigned(c.key, Math.round(c.target * 100) / 100)} /> : null}
+                {l.available < -0.005 ? <Chip title={`Cover ${money(-l.available)}`} tone="accent" icon="check" onPress={() => setAssigned(c.key, l.assigned - l.available)} /> : null}
+                <Chip title="Transaction" icon="plus" onPress={() => setAdding({ categoryId: c.key })} />
+                {l.assigned > 0.005 ? <Chip title={moveOpen ? "Cancel move" : "Move money"} onPress={() => setMoveOpen((v) => !v)} /> : null}
+                {explicitSpent ? <Chip title={c.moves ? "Same as assigned" : "Remove old amount"} onPress={() => setSpent(c.key, undefined)} /> : null}
+              </View>
             </View>
-            {c.moves ? (
-              // money that leaves by itself (a debt payment, a transfer to an investment): counts as paid when assigned
-              <View style={styles.editRow}>
-                <Text style={[type.caption, { color: t.text2, width: 70 }]}>Paid</Text>
-                <NumberInput kind="money" label={`${label(c)} paid in ${nameOf(month)}`} value={l.spent} width={140} step={25} onChange={(v) => setSpent(c.key, v)} />
-                {explicitSpent ? <Button title="Same as assigned" tone="ghost" onPress={() => setSpent(c.key, undefined)} style={{ minHeight: 36 }} /> : null}
-              </View>
-            ) : (
-              <View style={styles.editRow}>
-                <Text style={[type.caption, { color: t.text2, width: 70 }]}>Spent</Text>
-                <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(l.spent)}</Text>
-                <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 140 }]}>From this month&apos;s transactions{explicitSpent ? " (plus an amount entered before transactions)" : ""}.</Text>
-                {explicitSpent ? <Button title="Remove that amount" tone="ghost" onPress={() => setSpent(c.key, undefined)} style={{ minHeight: 36 }} /> : null}
-              </View>
-            )}
-            {l.available < -0.005 ? (
-              <Button title={`Cover ${money(-l.available)} from ready to assign`} tone="primary" onPress={() => setAssigned(c.key, l.assigned - l.available)} style={{ minHeight: 36, alignSelf: "flex-start" }} />
-            ) : null}
-            {l.assigned > 0.005 ? (
-              <View style={styles.editRow}>
-                <Text style={[type.caption, { color: t.text2, width: 70 }]}>Move</Text>
-                <NumberInput kind="money" label={`Amount to move from ${label(c)}`} value={moveAmt} width={120} step={25} onChange={setMoveAmt} />
-                <View style={{ minWidth: 150, flex: 1 }}>
-                  <Select
-                    label="Move to"
-                    value={moveTo}
-                    options={[{ value: "", label: "Pick a category" }, ...cats.filter((x) => x.key !== c.key).map((x) => ({ value: x.key, label: label(x), hint: x.group }))]}
-                    onChange={setMoveTo}
-                  />
-                </View>
+            {moveOpen && l.assigned > 0.005 ? (
+              <View style={styles.section}>
+                <FormList>
+                  <FormRow label="Amount" hint={`Up to ${money(l.assigned)}`}>
+                    <InlineMoney label={`Amount to move from ${label(c)}`} value={moveAmt || Math.max(0, Math.min(l.available, l.assigned))} onChange={setMoveAmt} />
+                  </FormRow>
+                  <FormRow label="To">
+                    <Select plain label="Move to" placeholder="Choose" value={moveTo} options={[{ value: "", label: "Choose" }, ...cats.filter((x) => x.key !== c.key).map((x) => ({ value: x.key, label: label(x), hint: x.group }))]} onChange={setMoveTo} />
+                  </FormRow>
+                </FormList>
                 <Button
                   title="Move"
+                  tone="primary"
                   disabled={!moveTo}
                   onPress={() => {
                     // nothing typed: move what's available
@@ -380,23 +386,28 @@ export default function Budget() {
                     moveMoney(c.key, moveTo, amt);
                     setMoveTo("");
                     setMoveAmt(0);
+                    setMoveOpen(false);
                   }}
-                  style={{ minHeight: 36 }}
+                  style={{ minHeight: 40 }}
                 />
               </View>
             ) : null}
             {(() => {
               const list = monthTxns.filter((x) => x.categoryId === c.key || x.splits?.some((y) => y.categoryId === c.key) || (c.kind === "debt" && x.accountId === c.key.slice(5) && !!x.transferAccountId));
+              if (!list.length) return null;
               return (
-                <View style={{ gap: 4 }}>
-                  {list.slice(0, 8).map((x) => (
-                    <Pressable key={x.id} role="button" onPress={() => setAdding({ txn: x })} style={styles.acctRow}>
-                      <Text style={[type.caption, { color: t.text2, flex: 1 }]} numberOfLines={1}>{x.date.slice(5).replace("-", "/")} · {x.payee || "Transaction"}</Text>
-                      <Text style={[type.caption, { color: x.amount > 0 ? t.good : t.text, fontVariant: ["tabular-nums"] }]}>{x.amount > 0 ? "+" : "−"}{money(Math.abs(x.amount))}</Text>
-                    </Pressable>
-                  ))}
-                  {list.length > 8 ? <Text style={[type.caption, { color: t.text3 }]}>and {list.length - 8} more</Text> : null}
-                  <Button title="Add a transaction here" icon="plus" tone="ghost" onPress={() => setAdding({ categoryId: c.key })} style={{ minHeight: 34, alignSelf: "flex-start" }} />
+                <View style={styles.section}>
+                  <Text style={[type.overline, { color: t.text3 }]}>Transactions</Text>
+                  <FormList>
+                    {list.slice(0, 8).map((x) => (
+                      <Pressable key={x.id} role="button" onPress={() => setAdding({ txn: x })} style={styles.txnRow}>
+                        <Text style={[type.body, { color: t.text, flex: 1 }]} numberOfLines={1}>{x.payee || "Transaction"}</Text>
+                        <Text style={[type.caption, { color: t.text3 }]}>{x.date.slice(5).replace("-", "/")}</Text>
+                        <Text style={[type.body, { color: x.amount > 0 ? t.good : t.text, fontVariant: ["tabular-nums"], minWidth: 72, textAlign: "right" }]}>{x.amount > 0 ? "+" : "−"}{money(Math.abs(x.amount))}</Text>
+                      </Pressable>
+                    ))}
+                  </FormList>
+                  {list.length > 8 ? <Text style={[type.caption, { color: t.text3 }]}>and {list.length - 8} more in the account registers</Text> : null}
                 </View>
               );
             })()}
@@ -442,10 +453,10 @@ export default function Budget() {
             {!accts.length ? <Text style={[type.caption, { color: t.text3 }]}>Add a cash account or credit card under Money to track transactions.</Text> : null}
             <Text style={[type.caption, { color: t.text3 }]}>Tap an account for its transactions. A credit card missing here? Set its type to Credit card under Money → Debts.</Text>
           </Card>
-          <View style={[styles.colHead, { paddingHorizontal: space.lg }]}>
-            <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Category</Text>
-            {["Assigned", "Spent", "Available"].map((h) => (
-              <Text key={h} style={[type.overline, { color: t.text3, width: COLW, textAlign: "right" }]}>{h}</Text>
+          <View style={[styles.colHead, { paddingHorizontal: compact ? space.md : space.lg }]}>
+            <Text style={[type.caption, styles.colName, { color: t.text3, flex: 1 }]}>Category</Text>
+            {(compact ? ["Assigned", "Available"] : ["Assigned", "Spent", "Available"]).map((h) => (
+              <Text key={h} numberOfLines={1} style={[type.caption, styles.colName, { color: t.text3, width: COLW, textAlign: "right", paddingRight: h === "Available" ? PILL_IN : 0 }]}>{h}</Text>
             ))}
           </View>
           {groups.map((g) => {
@@ -460,28 +471,27 @@ export default function Budget() {
                   aria-expanded={groupOpen === g.name}
                   accessibilityLabel={`${g.name} group${g.kind === "spending" ? ": rename, reorder or add a category" : ""}`}
                   onPress={() => { setGroupOpen(groupOpen === g.name ? null : g.name); setGroupDraft(g.name); }}
-                  style={[styles.groupHead, { borderBottomColor: t.border }]}
+                  style={[styles.groupHead, { borderBottomColor: t.border }, compact ? { paddingHorizontal: space.md } : null]}
                 >
                   <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Text style={[type.overline, { color: t.text2, flexShrink: 1 }]} numberOfLines={1}>{g.name}</Text>
+                    <Text style={[type.overline, { color: t.text2, flexShrink: 1 }]} numberOfLines={2}>{g.name}</Text>
                     {g.kind === "spending" ? <Icon name="edit" size={12} color={t.text3} /> : null}
                   </View>
                   {num(assigned, t.text3, true)}
-                  {num(spent, t.text3, true)}
-                  {num(avail, avail < -0.5 ? t.bad : t.text2, true)}
+                  {compact ? null : num(spent, t.text3, true)}
+                  {num(avail, avail < -0.5 ? t.bad : t.text2, true, PILL_IN)}
                 </Pressable>
                 {groupOpen === g.name && g.kind === "spending" ? (
                   <View style={[styles.editor, { backgroundColor: t.surface2, marginTop: space.md }]}>
-                    <View style={styles.editRow}>
-                      <View style={{ flex: 1, minWidth: 160 }}>
-                        <TextField label="Group name" value={groupDraft} onChange={setGroupDraft} />
-                      </View>
-                      <Button title="Rename" disabled={!groupDraft.trim() || groupDraft.trim() === g.name} onPress={() => { renameGroup(g.name, groupDraft); setGroupOpen(groupDraft.trim()); }} style={{ minHeight: 36 }} />
-                    </View>
-                    <View style={styles.editRow}>
-                      <Button title="Add a category" icon="plus" onPress={() => addItem(g.name)} style={{ minHeight: 36 }} />
-                      <Button title="Earlier" icon="up" tone="ghost" disabled={groupOrder(state.budget)[0] === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, -1); })} style={{ minHeight: 36 }} />
-                      <Button title="Later" icon="down" tone="ghost" disabled={groupOrder(state.budget).at(-1) === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, 1); })} style={{ minHeight: 36 }} />
+                    <FormList>
+                      <FormRow label="Group name">
+                        <InlineText label="Group name" value={g.name} commitOnBlur onChange={(v) => { renameGroup(g.name, v); setGroupOpen(v.trim()); }} />
+                      </FormRow>
+                    </FormList>
+                    <View style={styles.chips}>
+                      <Chip title="Add category" icon="plus" tone="accent" onPress={() => addItem(g.name)} />
+                      <Chip title="Earlier" icon="up" disabled={groupOrder(state.budget)[0] === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, -1); })} />
+                      <Chip title="Later" icon="down" disabled={groupOrder(state.budget).at(-1) === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, 1); })} />
                     </View>
                   </View>
                 ) : null}
@@ -534,11 +544,14 @@ const styles = StyleSheet.create({
   navBtn: { borderWidth: 1, borderRadius: 999, width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   groupHead: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, borderBottomWidth: StyleSheet.hairlineWidth },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },
-  pill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, alignItems: "flex-end" },
-  colHead: { flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: -space.sm },
-  editor: { gap: space.sm, marginHorizontal: space.md, marginBottom: space.md, padding: space.md, borderRadius: radius.md },
+  pill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, alignItems: "flex-end", maxWidth: "100%" },
+  colHead: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, marginBottom: -space.sm },
+  colName: { fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3, fontSize: 11 },
+  section: { gap: 6 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  editor: { gap: space.md, marginHorizontal: space.md, marginBottom: space.md, padding: space.md, borderRadius: radius.md },
   editRow: { flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" },
   acctRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: 6 },
-  catBox: { gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm, marginTop: 2 },
+  txnRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, minHeight: 46 },
   link: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" },
 });

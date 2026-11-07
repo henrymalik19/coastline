@@ -416,6 +416,120 @@ export function Choice<T extends string>(props: { options: { value: T; label: st
   return contentWidth < 600 ? <Select {...props} /> : <Segmented {...props} />;
 }
 
+/* ---------- list rows: a grouped box of "label … value" rows (forms on phones) ---------- */
+
+/** A rounded box of rows with thin dividers between them. */
+export function FormList({ children }: { children: ReactNode }) {
+  const t = useTheme();
+  const items = (Array.isArray(children) ? children.flat() : [children]).filter((c) => c !== null && c !== undefined && c !== false);
+  return (
+    <View style={[styles.formList, { borderColor: t.border, backgroundColor: t.surface }]}>
+      {items.map((c, i) => (
+        <View key={i}>
+          {i > 0 ? <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: t.border, marginLeft: space.md }} /> : null}
+          {c}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** One row: the label on the left (with an optional hint under it), the value or control on the right. */
+export function FormRow({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  const t = useTheme();
+  return (
+    <View style={styles.formRow}>
+      <View style={{ flexShrink: 1, flexGrow: 1, minWidth: 0, gap: 1 }}>
+        <Text style={[type.body, { color: t.text }]}>{label}</Text>
+        {hint ? <Text style={[type.caption, { color: t.text3 }]}>{hint}</Text> : null}
+      </View>
+      <View style={{ flexShrink: 0, maxWidth: "62%", alignItems: "flex-end" }}>{children}</View>
+    </View>
+  );
+}
+
+/** Text typed straight into a row (right-aligned). Saves as you type, or on finishing with `commitOnBlur`. */
+export function InlineText({ value, onChange, label, placeholder, commitOnBlur }: { value: string; onChange: (v: string) => void; label: string; placeholder?: string; commitOnBlur?: boolean }) {
+  const t = useTheme();
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <TextInput
+      accessibilityLabel={label}
+      value={commitOnBlur ? draft : value}
+      onChangeText={commitOnBlur ? setDraft : onChange}
+      onBlur={commitOnBlur ? () => draft.trim() && draft !== value && onChange(draft) : undefined}
+      onSubmitEditing={commitOnBlur ? () => draft.trim() && draft !== value && onChange(draft) : undefined}
+      placeholder={placeholder}
+      placeholderTextColor={t.text3}
+      style={[type.body, styles.inlineText, { color: t.text }, Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null]}
+    />
+  );
+}
+
+/** A dollar amount typed straight into a row (right-aligned, saved when you finish). */
+export function InlineMoney({ value, onChange, label }: { value: number; onChange: (v: number) => void; label: string }) {
+  const t = useTheme();
+  const show = (v: number) => (Number.isFinite(v) ? v.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "");
+  const [text, setText] = useState(show(value));
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setText(show(value));
+  }, [value, focused]);
+  const commit = () => {
+    setFocused(false);
+    const v = Number(text.replace(/[^0-9.]/g, ""));
+    if (Number.isFinite(v) && Math.abs(v - value) > 0.004) onChange(Math.round(v * 100) / 100);
+    else setText(show(value));
+  };
+  return (
+    <View style={[styles.inlineMoney, { borderColor: focused ? t.accent : t.border, backgroundColor: t.surface2 }]}>
+      <Text style={[type.body, { color: t.text3 }]}>$</Text>
+      <TextInput
+        accessibilityLabel={label}
+        value={text}
+        onChangeText={setText}
+        onFocus={() => { setFocused(true); setText(value ? String(+value.toFixed(2)) : ""); }}
+        onBlur={commit}
+        onSubmitEditing={commit}
+        keyboardType="decimal-pad"
+        placeholder="0"
+        placeholderTextColor={t.text3}
+        selectTextOnFocus
+        style={[type.body, { color: t.text, textAlign: "right", minWidth: 64, maxWidth: 120, paddingVertical: 6, fontVariant: ["tabular-nums"] }, Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null]}
+      />
+    </View>
+  );
+}
+
+/** A switch that sits on the right of a FormRow. */
+export function InlineSwitch({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
+  const t = useTheme();
+  return <Switch accessibilityLabel={label} value={value} onValueChange={onChange} trackColor={{ true: t.accent, false: t.border }} thumbColor="#fff" />;
+}
+
+/** A small rounded button for quick actions in a row of choices. */
+export function Chip({ title, onPress, icon, tone = "neutral", disabled }: { title: string; onPress: () => void; icon?: IconName; tone?: "neutral" | "accent" | "danger"; disabled?: boolean }) {
+  const t = useTheme();
+  const fg = tone === "danger" ? t.bad : tone === "accent" ? t.accent : t.text2;
+  return (
+    <Pressable
+      role="button"
+      accessibilityLabel={title}
+      disabled={disabled}
+      onPress={onPress}
+      hitSlop={4}
+      style={({ pressed }) => [
+        styles.chip,
+        { borderColor: tone === "accent" ? t.accent : t.border, backgroundColor: tone === "accent" ? t.accentSoft : pressed ? t.surface2 : t.surface, opacity: disabled ? 0.4 : 1 },
+      ]}
+    >
+      {icon ? <Icon name={icon} size={14} color={fg} /> : null}
+      <Text style={[type.caption, { color: fg, fontWeight: "700" }]}>{title}</Text>
+    </Pressable>
+  );
+}
+
 /* ---------- buttons ---------- */
 
 export function Button({
@@ -462,6 +576,11 @@ export function IconButton({ icon, label, onPress, disabled, color }: { icon: Ic
 }
 
 const styles = StyleSheet.create({
+  formList: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, overflow: "hidden" },
+  formRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: 8, minHeight: 50 },
+  inlineText: { textAlign: "right", paddingVertical: 10, minWidth: 140 },
+  inlineMoney: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: 10 },
+  chip: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7 },
   selectPlain: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44, flex: 1 },
   select: { flexDirection: "row", alignItems: "center", gap: space.sm, borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: space.md, minHeight: 44 },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: space.lg },
