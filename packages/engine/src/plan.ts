@@ -3,7 +3,7 @@ import { limitsFor } from "./limits";
 import { checksInMonth } from "./paychecks";
 import type { Adjustment, Alloc, Debt, Derived, FundKey, MonthRow, PlanEvent, PlanResult, PlanSettings, PlanState, SimulateOptions, Goal, RecurringGoal, Limits } from "./types";
 import { addMonths, monthsBetween, num, sum } from "./util";
-import { mergeAccountSchedules, scheduleAmount } from "./schedule";
+import { mergeAccountSchedules, PAY401, PAYHSA, scheduleAmount } from "./schedule";
 export { scheduleAmount } from "./schedule";
 
 /** Id of the synthetic debt created when a short month runs past your cash. */
@@ -94,12 +94,19 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   const cardApr = cardAprs.length ? Math.max(...cardAprs) : DEFAULT_CARD_APR;
   const efBase = d.monthlyExpenses;
 
+  // A job's 401(k) / HSA per paycheck can change by month ("pay401:<job id>", "payhsa:<job id>"):
+  // $0 for Nov–Dec, then back on in January. Without a change it's what the job says today.
+  const perCheck = (inc: Derived["incomes"][number], kind: "k401" | "hsa", month: string): number => {
+    const v = scheduleAmount(p, (kind === "k401" ? PAY401 : PAYHSA) + inc.id, month);
+    return v !== undefined ? v : kind === "k401" ? num(inc.pretax) : Math.max(0, num(inc.hsaPre));
+  };
+  const ymOf = (absMo: number) => `${y0 + Math.floor(absMo / 12)}-${String((absMo % 12) + 1).padStart(2, "0")}`;
   // Scheduled payroll 401(k) per month (before the annual cap), so the waterfall can
   // leave room for the paychecks still to come this year.
   const schedPre = Array.from({ length: months }, (_, m) => {
     const absMo = mo0 + m;
     const g = Math.pow(1 + cg, Math.floor(m / 12));
-    return sum(d.incomes.map((inc) => num(inc.pretax) * checksInMonth(inc, y0 + Math.floor(absMo / 12), absMo % 12) * g));
+    return sum(d.incomes.map((inc) => perCheck(inc, "k401", ymOf(absMo)) * checksInMonth(inc, y0 + Math.floor(absMo / 12), absMo % 12) * g));
   });
   const starterTarget = num(p.starterEF);
   const fullTarget = num(p.efMonths) * efBase;
@@ -138,7 +145,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   const amountsBy = p.amountsBy ?? {};
   const schedule = p.schedule ?? {};
   const scheduleMonths = p.scheduleMonths ?? {};
-  const schedKeys = [...new Set([...Object.keys(schedule), ...Object.keys(scheduleMonths)])];
+  // paycheck changes (pay401:, payhsa:) are handled with the paychecks, not from what's left
+  const schedKeys = [...new Set([...Object.keys(schedule), ...Object.keys(scheduleMonths)])].filter((k) => !k.startsWith(PAY401) && !k.startsWith(PAYHSA));
   // debts first, then cash, goals, HSA, IRA, brokerage
   const rank = (k: string) => (k.startsWith("debt:") ? 0 : k === "cash" ? 1 : k.startsWith("goal:") ? 2 : k === "hsa" ? 3 : k === "ira" ? 4 : 5);
   schedKeys.sort((a, b) => rank(a) - rank(b));
@@ -193,14 +201,21 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     let payRoth = 0;
     let extraCheck = false;
     const checks: number[] = [];
+    const ymNow = y + "-" + String(mo + 1).padStart(2, "0");
     for (const inc of d.incomes) {
       const c = checksInMonth(inc, y, mo);
       checks.push(c);
       if (c > BASE_CHECKS[inc.freq] + 1e-9 && Number.isInteger(c)) extraCheck = true;
       income += num(inc.net) * c * g;
-      payPre += num(inc.pretax) * c * g;
-      payMatch += num(inc.match) * c * g;
-      payRoth += num(inc.pretax) * c * g * Math.min(1, Math.max(0, num(inc.rothShare)));
+      const pre0 = num(inc.pretax);
+      const pre = perCheck(inc, "k401", ymNow);
+      const roth = Math.min(1, Math.max(0, num(inc.rothShare)));
+      payPre += pre * c * g;
+      // the match follows what you put in (never more than today's)
+      payMatch += (pre === pre0 ? num(inc.match) : pre0 > 0 ? num(inc.match) * Math.min(1, pre / pre0) : 0) * c * g;
+      payRoth += pre * c * g * roth;
+      // putting in less comes back as take-home (after tax if pre-tax); more comes out of it
+      if (pre !== pre0) income += (pre0 - pre) * c * g * k401Cost(mt, roth);
     }
     // a payroll 401(k) dollar that stops comes back as take-home: after tax if it was pre-tax, in full if Roth
     const backCost = k401Cost(mt, payPre > 0 ? payRoth / payPre : 0);
@@ -235,7 +250,13 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     const capHsaFull = ((p.hsaFamily ? L.hsaFamily : L.hsaSelf) + (ageNow >= 55 ? L.hsaCatch : 0)) * hScale;
     const payHsaEmployer = Math.min(d.hsaEmployerAnnual / 12, Math.max(0, capHsaFull - ytd.hsa));
     ytd.hsa += payHsaEmployer;
-    const hsaSched = sum(d.incomes.map((inc, i) => Math.max(0, num(inc.hsaPre)) * checks[i]! * g));
+    const hsaSched = sum(d.incomes.map((inc, i) => perCheck(inc, "hsa", ymNow) * checks[i]! * g));
+    // a payroll HSA changed by month: the difference comes back as (or comes out of) take-home
+    for (const [i, inc] of d.incomes.entries()) {
+      const h0 = Math.max(0, num(inc.hsaPre));
+      const h = perCheck(inc, "hsa", ymNow);
+      if (h !== h0) income += (h0 - h) * checks[i]! * g * hsaCost;
+    }
     const payHsa = Math.min(hsaSched, Math.max(0, capHsaFull - ytd.hsa));
     if (hsaSched > payHsa) income += (hsaSched - payHsa) * hsaCost;
     ytd.hsa += payHsa;

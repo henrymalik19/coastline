@@ -568,6 +568,40 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     expect(at(2026, 10).available).toBeCloseTo(12000 - derive(s, START).budgetTotal, 6);
   });
 
+  it("a job's 401(k) and HSA per paycheck can change by month; the difference is take-home", () => {
+    const base = {
+      limits: DEFAULT_LIMITS,
+      incomes: [{ ...job, net: 6000, pretax: 1000, match: 500, hsaPre: 200 }],
+      plan: { ...blank().plan, marginalTax: 0.2, hsaEligible: true },
+    };
+    const plain = simulatePlan(blank(base), derive(blank(base), START)).months;
+    const s = blank({
+      ...base,
+      plan: {
+        ...base.plan,
+        schedule: {
+          "pay401:i": [{ from: "2026-11", amount: 0 }, { from: "2027-01", amount: 1000 }],
+          "payhsa:i": [{ from: "2026-11", amount: 0 }, { from: "2027-01", amount: 300 }],
+        },
+        scheduleMonths: { "pay401:i": { "2027-02": 400 } },
+      },
+    });
+    const m = simulatePlan(s, derive(s, START)).months;
+    // Nov and Dec: nothing in, and it comes back after tax (80%)
+    expect(m[0]!.payPre).toBe(0);
+    expect(m[0]!.payMatch).toBe(0);
+    expect(m[0]!.payHsa ?? 0).toBe(0);
+    expect(m[0]!.income - plain[0]!.income).toBeCloseTo((1000 + 200) * 0.8, 6);
+    expect(m[0]!.plannedAsk).toBe(0); // paycheck changes aren't taken from what's left
+    // January: back on, HSA higher than today ($100 more per check comes out of take-home)
+    expect(m[2]!.payPre).toBeCloseTo(1000, 6);
+    expect(m[2]!.payMatch).toBeCloseTo(500, 6);
+    expect(m[2]!.income - plain[2]!.income).toBeCloseTo(-100 * 0.8, 6);
+    // one month at $400: the match scales with it
+    expect(m[3]!.payPre).toBeCloseTo(400, 6);
+    expect(m[3]!.payMatch).toBeCloseTo(200, 6);
+  });
+
   it("each account has its own monthly amount; the plan adds them up by kind", () => {
     const s = blank({
       limits: DEFAULT_LIMITS,

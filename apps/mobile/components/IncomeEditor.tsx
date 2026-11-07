@@ -1,4 +1,4 @@
-import { k401Cost, PERIODS, resolveIncome, type Income, type IncomeKind, type PayFreq, type PayTaxes } from "@coastfi/engine";
+import { k401Cost, PAY401, PAYHSA, PERIODS, resolveIncome, type Income, type IncomeKind, type PayFreq, type PayTaxes } from "@coastfi/engine";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money, percent } from "../lib/format";
@@ -11,6 +11,7 @@ import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, DateField, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "./form";
 import { AddChip, MasterDetail } from "./MasterDetail";
 import { Card, Divider } from "./ui";
+import { PaycheckChanges } from "./ScheduleEditor";
 import { confirm } from "../lib/confirm";
 import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
@@ -263,6 +264,9 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
           </>
         )}
         {(inc.matchMode === "pct" && (inc.gross ?? 0) > 0) || inc.matchMode === "usd" ? <IncomeSummary inc={inc} marginalTax={marginalTax} /> : null}
+        {(inc.pretax ?? 0) > 0 || (state.plan.schedule?.[PAY401 + inc.id]?.length ?? 0) > 0 ? (
+          <PaycheckChanges k={PAY401 + inc.id} label={`${inc.name || "This job"} 401(k)`} base={inc.pretax ?? 0} />
+        ) : null}
         <FieldRow label="Roth 401(k)" hint={rothHint(inc.rothShare ?? 0)} info={HELP.roth401k}>
           <NumberInput kind="percent" label="Share of your 401(k) that goes to Roth" value={inc.rothShare ?? 0} max={1} onChange={(v) => change({ rothShare: v || undefined })} />
         </FieldRow>
@@ -275,6 +279,9 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
         <FieldRow label="You put in per paycheck" hint="Your own HSA contribution, pre-tax. Counts toward the HSA limit">
           <NumberInput kind="money" label="Your HSA contribution per paycheck" value={inc.hsaPre ?? 0} onChange={(v) => change({ hsaPre: v || undefined })} />
         </FieldRow>
+        {(inc.hsaPre ?? 0) > 0 || (state.plan.schedule?.[PAYHSA + inc.id]?.length ?? 0) > 0 ? (
+          <PaycheckChanges k={PAYHSA + inc.id} label={`${inc.name || "This job"} HSA`} base={inc.hsaPre ?? 0} />
+        ) : null}
         <FieldRow label="Your employer puts in" hint="Per year. Free money that counts toward your HSA limit" info={HELP.hsaEmployer}>
           <NumberInput kind="money" label="Employer HSA contribution per year" value={inc.hsaEmployer ?? 0} onChange={(v) => change({ hsaEmployer: v || undefined })} />
         </FieldRow>

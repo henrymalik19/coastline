@@ -29,6 +29,10 @@ export function accountGroup(a: Pick<Account, "name" | "type" | "counts">): Plan
   return a.type === "pretax" ? "k401" : "ira";
 }
 
+/** A job's 401(k) / HSA per paycheck, changed by month ("pay401:<job id>", "payhsa:<job id>"). */
+export const PAY401 = "pay401:";
+export const PAYHSA = "payhsa:";
+
 /** Prefix of an account's own monthly amount in the schedule ("acct:<id>"). */
 export const ACCOUNT_KEY = "acct:";
 

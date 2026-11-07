@@ -51,7 +51,13 @@ export function useSchedule(k: string) {
   return { list, set, oneOffs, setMonth };
 }
 
-export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared }: { k: string; label: string; unit?: string; note?: string; onCleared?: () => void }) {
+export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared, perCheck, base }: {
+  k: string; label: string; unit?: string; note?: string; onCleared?: () => void;
+  /** A paycheck amount (401(k), HSA): per check, set on the job, not from what's left. */
+  perCheck?: boolean;
+  /** What a new change starts at (today's per-check amount). */
+  base?: number;
+}) {
   const t = useTheme();
   const { start } = usePlan();
   const { list, set, oneOffs, setMonth } = useSchedule(k);
@@ -85,7 +91,7 @@ export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared }: { k:
         </View>
       ))}
       <View style={styles.row}>
-        <Button title={list.length ? "Add a change" : "Set a monthly amount"} icon="plus" onPress={() => set([...list, { from: nextFrom, amount: last?.amount ?? 0 }])} style={{ minHeight: 36 }} />
+        <Button title={list.length ? "Add a change" : perCheck ? "Change it from a month" : "Set a monthly amount"} icon="plus" onPress={() => set([...list, { from: nextFrom, amount: last?.amount ?? base ?? 0 }])} style={{ minHeight: 36 }} />
         {list.length ? (
           <Button
             title="Change one month"
@@ -99,11 +105,13 @@ export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared }: { k:
             style={{ minHeight: 36 }}
           />
         ) : null}
-        {list.length || singles.length ? <Button title="Follow my steps instead" tone="ghost" onPress={() => { set(undefined); singles.forEach((m) => setMonth(m, undefined)); onCleared?.(); }} style={{ minHeight: 36 }} /> : null}
+        {list.length || singles.length ? <Button title={perCheck ? "Same every paycheck" : "Follow my steps instead"} tone="ghost" onPress={() => { set(undefined); singles.forEach((m) => setMonth(m, undefined)); onCleared?.(); }} style={{ minHeight: 36 }} /> : null}
       </View>
       <Text style={[type.caption, { color: t.text3 }]}>
-        Each amount runs from its month until your next change; a one-month change applies to that month only. It goes in before your other steps, if there's that much left after your budget. Use $0 to stop.
-        {note ? ` ${note}` : ""} Shows as savings on your budget.
+        {perCheck
+          ? "Each amount is per paycheck, from its month until your next change; a one-month change applies to that month only. Use $0 to pause. Putting in less comes back as take-home (after tax if pre-tax); putting in more comes out of it."
+          : "Each amount runs from its month until your next change; a one-month change applies to that month only. It goes in before your other steps, if there's that much left after your budget. Use $0 to stop."}
+        {note ? ` ${note}` : ""}{perCheck ? "" : " Shows as savings on your budget."}
       </Text>
     </View>
   );
@@ -173,6 +181,30 @@ export function MonthlyAmount({ k, label, unit = "a month", note, shared }: { k:
         </Pressable>
       ) : null}
       {more ? <ScheduleEditor k={k} label={label} unit={unit === "a month" ? "/mo" : unit} note={note} onCleared={() => setMore(false)} /> : null}
+    </View>
+  );
+}
+
+/**
+ * A job's 401(k) or HSA per paycheck, changed by month: "$0/check from Nov 2026 → $860/check from Jan 2027".
+ * Without changes it's the amount above, every paycheck.
+ */
+export function PaycheckChanges({ k, label, base }: { k: string; label: string; base: number }) {
+  const t = useTheme();
+  const { list, oneOffs } = useSchedule(k);
+  const [open, setOpen] = useState(false);
+  const singles = Object.keys(oneOffs).length;
+  const text = list.length
+    ? list.map((e) => `${money(e.amount)}/check from ${monthName(e.from)}`).join(" → ") + (singles ? ` · ${singles} one-month change${singles === 1 ? "" : "s"}` : "")
+    : singles ? `${singles} one-month change${singles === 1 ? "" : "s"}` : "Same every paycheck. Pausing or changing it later?";
+  return (
+    <View style={{ gap: 6 }}>
+      <Pressable role="button" aria-expanded={open} onPress={() => setOpen((v) => !v)} hitSlop={6} style={styles.link}>
+        <Text style={[type.caption, { color: list.length || singles ? t.accent : t.text3, fontWeight: "700", flexShrink: 1 }]}>{text}</Text>
+        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}> {open ? "Hide" : list.length || singles ? "Change" : "Change by month"}</Text>
+        <Icon name="chevron" size={12} color={t.accent} />
+      </Pressable>
+      {open ? <ScheduleEditor k={k} label={label} unit="/check" perCheck base={base} /> : null}
     </View>
   );
 }
