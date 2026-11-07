@@ -142,9 +142,8 @@ export default function Plan() {
           .filter(Boolean)
           .map((x) => x.replace(/^./, (c) => c.toUpperCase()));
         // a very short first part ("Visa $3,000") reads better with the next one
-        const lead = (parts[0] ?? "").length < 32 && parts.length > 1 ? 2 : 1;
-        const summary = parts.slice(0, lead).join(" · ");
-        const details = parts.slice(lead);
+        // closed: just the title, tags and progress; everything else when you tap it
+        const details = parts;
         const share = shares[info.key] ?? 1;
         const splitNote = canShare ? (amt !== undefined ? `gets ${money(amt, { whole: true })}/mo` : share < 1 ? `gets ${Math.round(share * 100)}% of what's left` : "") : "";
         const st = info.done || info.skip ? null : startOf(info.key);
@@ -173,10 +172,7 @@ export default function Plan() {
                   {active ? <Pill tone="accent">Now</Pill> : null}
                   {info.action ? <Pill tone="bad">To do</Pill> : null}
                 </View>
-                <Text numberOfLines={isOpen ? undefined : 2} style={[type.caption, { color: info.done || info.skip ? t.text3 : t.text2 }]}>
-                  {summary}
-                  {splitNote ? <Text style={{ color: t.accent, fontWeight: "700" }}> · {splitNote}</Text> : null}
-                </Text>
+                {splitNote ? <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{splitNote.replace(/^./, (ch) => ch.toUpperCase())}</Text> : null}
                 {info.progress !== undefined && !info.done ? (
                   <View style={{ maxWidth: 280, marginTop: 3 }}>
                     <ProgressBar progress={info.progress} color={t.good} />
