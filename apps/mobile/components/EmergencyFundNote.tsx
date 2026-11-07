@@ -1,9 +1,15 @@
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { money } from "../lib/format";
+import { money, monthLabel } from "../lib/format";
+import { HELP } from "../lib/help";
 import { usePlan } from "../lib/plan";
+import { useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
+import { FieldRow, NumberInput } from "./form";
 import { Icon } from "./Icon";
+import { ScheduleEditor, scheduleSummary } from "./ScheduleEditor";
+import { Card, Divider, Pill } from "./ui";
 import { ProgressBar } from "./ProgressRing";
 
 /** Goals pages: the emergency fund is already a plan step, so it shouldn't be added as a goal. */
@@ -32,11 +38,11 @@ export function EmergencyFundNote({ linkToSettings = true }: { linkToSettings?: 
         </View>
       ) : null}
       {linkToSettings ? (
-        <Pressable role="link" onPress={() => router.push("/settings/assumptions")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+        <Pressable role="link" onPress={() => router.push("/money/goals")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change emergency fund size →</Text>
         </Pressable>
       ) : (
-        <Text style={[type.caption, { color: t.text3 }]}>You can change its size later in Settings → Assumptions & plan rules.</Text>
+        <Text style={[type.caption, { color: t.text3 }]}>You can change its size later under Money → Savings goals.</Text>
       )}
     </View>
   );
@@ -50,3 +56,64 @@ export function looksLikeEmergencyFund(name: string) {
 const styles = StyleSheet.create({
   box: { borderRadius: radius.lg, padding: space.lg, gap: space.md },
 });
+
+/**
+ * The emergency fund as a built-in savings goal: its size (months of expenses, and the starter
+ * cushion), what's saved (your cash accounts), when it's done, and your monthly plan for it. Not a
+ * regular goal underneath: its target follows your spending and it holds your actual cash.
+ */
+export function EmergencyFundGoal() {
+  const t = useTheme();
+  const router = useRouter();
+  const { state, result, actual, start } = usePlan();
+  const update = useStore((s) => s.update);
+  const [planOpen, setPlanOpen] = useState(false);
+  const full = actual.fullTarget;
+  const cash = result.d.bal.cash;
+  const monthly = result.d.monthlyExpenses;
+  const done = actual.events.find((e) => e.key === "fullEF");
+  const cashAccounts = state.accounts.filter((a) => a.type === "cash");
+  const schedule = state.plan.schedule?.cash;
+  return (
+    <Card style={{ gap: space.sm }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+        <Icon name="shield" size={20} color={t.accent} />
+        <Text style={[type.heading, { color: t.text, flex: 1 }]}>Emergency fund</Text>
+        <Pill tone="accent">Built in</Pill>
+      </View>
+      <Text style={[type.caption, { color: t.text3 }]}>
+        Kept in your cash accounts. Your plan builds the starter cushion first, then the full fund. Its size follows your spending.
+      </Text>
+      <FieldRow label="Full fund" hint={`${state.plan.efMonths} months of expenses (${money(monthly)}/mo) = ${money(full)}. 0 for none.`} info={HELP.efMonths}>
+        <NumberInput kind="decimal" label="Full emergency fund in months" value={state.plan.efMonths} max={24} step={1} onChange={(v) => update((p) => { p.plan.efMonths = v; })} />
+      </FieldRow>
+      <Divider />
+      <FieldRow label="Starter cushion" hint="Built first, before paying down high-interest debt" info={HELP.starterEF}>
+        <NumberInput kind="money" label="Starter emergency fund" value={state.plan.starterEF} onChange={(v) => update((p) => { p.plan.starterEF = v; })} />
+      </FieldRow>
+      <Divider />
+      <View style={{ gap: 4 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+          <Text style={[type.label, { color: t.text, flex: 1 }]}>Saved</Text>
+          <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(cash)} of {money(full)}</Text>
+        </View>
+        {full > 0 ? <ProgressBar progress={cash / full} color={t.good} /> : null}
+        <Text style={[type.caption, { color: t.text3 }]}>
+          {cashAccounts.length ? cashAccounts.map((a) => `${a.name.trim() || "Cash"} ${money(a.balance)}`).join(" + ") : "No cash accounts yet"}
+          {full > 0 ? (cash >= full - 0.5 ? " · done" : done ? ` · done ${done.m === 0 ? "this month" : monthLabel(start, done.m)}` : " · not reached in the plan") : ""}
+        </Text>
+        <Pressable role="link" onPress={() => router.push("/money/accounts")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Update cash balances →</Text>
+        </Pressable>
+      </View>
+      <Divider />
+      <Pressable role="button" aria-expanded={planOpen} onPress={() => setPlanOpen((v) => !v)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}>
+        <Text style={[type.caption, { color: schedule?.length ? t.accent : t.text3, fontWeight: "700", flexShrink: 1 }]}>{scheduleSummary(schedule)}</Text>
+        <View style={{ transform: [{ rotate: planOpen ? "90deg" : "0deg" }] }}>
+          <Icon name="chevron" size={12} color={t.text3} />
+        </View>
+      </Pressable>
+      {planOpen ? <ScheduleEditor k="cash" label="Emergency fund" note="Cash can go past your goal if you plan it. Same plan as the Cash card on the Plan tab." onCleared={() => setPlanOpen(false)} /> : null}
+    </Card>
+  );
+}

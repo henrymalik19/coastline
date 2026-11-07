@@ -6,7 +6,7 @@ import { ProgressBar } from "../../components/ProgressRing";
 import { ProjectionChart } from "../../components/ProjectionChart";
 import { Slider } from "../../components/Slider";
 import { Legend } from "../../components/StackedBars";
-import { Card, Divider, Pill, Screen, SectionLabel } from "../../components/ui";
+import { Card, Pill, Screen, SectionLabel } from "../../components/ui";
 import { badgeList, streakInfo } from "../../lib/badges";
 import { debtLabel } from "../../lib/debts";
 import { money, monthLabel, percent } from "../../lib/format";
@@ -338,7 +338,7 @@ export default function Progress() {
   );
 
   return (
-    <Screen title="Progress" subtitle="Track it, and keep the streak">
+    <Screen title="Progress" subtitle="Track it, and keep the streak" fill>
       <View style={{ maxWidth: 520 }}>
         <Segmented
           label="Progress view"
@@ -352,6 +352,8 @@ export default function Progress() {
           onChange={setView}
         />
       </View>
+      {/* the title and the view switch stay put; only the content under them scrolls */}
+      <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
       {view === "overview" ? (
         <>
           <View style={{ flexDirection: statColumns === 4 ? "row" : "column", gap: space.lg }}>
@@ -375,7 +377,7 @@ export default function Progress() {
         </View>
       ) : null}
       {view === "badges" ? badgeGrid : null}
-      <Divider />
+      </ScrollView>
     </Screen>
   );
 }

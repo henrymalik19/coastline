@@ -93,6 +93,18 @@ export default function MoneyOverview() {
 
   const goalsCard = (
     <Section title="Savings goals" edit="/money/goals">
+      {result.plan.fullTarget > 0 ? (
+        <View style={{ gap: 6, paddingVertical: space.xs }}>
+          <View style={styles.line}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[type.body, { color: t.text }]} numberOfLines={1}>Emergency fund</Text>
+              <Text style={[type.caption, { color: t.text3 }]}>{state.plan.efMonths} months of expenses · your cash</Text>
+            </View>
+            <Text style={[type.label, { color: t.text2, fontVariant: ["tabular-nums"] }]}>{money(cash)} of {money(result.plan.fullTarget)}</Text>
+          </View>
+          <ProgressBar progress={cash / result.plan.fullTarget} color={t.good} />
+        </View>
+      ) : null}
       {goals.length ? (
         goals.map((g) => (
           <View key={g.id} style={{ gap: 6, paddingVertical: space.xs }}>

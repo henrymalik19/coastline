@@ -18,7 +18,7 @@ import { BudgetEditor } from "../BudgetEditor";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "../form";
 import { Icon, type IconName } from "../Icon";
 import { IncomesEditor } from "../IncomeEditor";
-import { EmergencyFundNote, looksLikeEmergencyFund } from "../EmergencyFundNote";
+import { EmergencyFundGoal, looksLikeEmergencyFund } from "../EmergencyFundNote";
 import { AddDebtButtons, DebtEditor, paidFromFor } from "../DebtEditor";
 import { debtLabel } from "../../lib/debts";
 import { Card, Divider } from "../ui";
@@ -264,7 +264,7 @@ function GoalsSection() {
       <Text style={[type.body, { color: t.text2 }]}>
         Things you're saving up for: a house deposit, a car, a wedding. Change their priority on the Plan tab. Turn on "Repeats" for things that come around again, like holidays or a yearly bill.
       </Text>
-      <EmergencyFundNote />
+      <EmergencyFundGoal />
       {state.goals.length === 0 ? <Empty text="No goals yet" /> : null}
       {state.goals.map((g, i) => (
         <GoalEditor
@@ -284,6 +284,7 @@ function GoalsSection() {
 function AssumptionsSection() {
   const { state } = usePlan();
   const update = useStore((s) => s.update);
+  const router = useRouter();
   const pct = (key: string, label: string, info: string, value: number, set: (v: number) => void, max = 1, hint?: string) => (
     <FieldRow key={key} label={label} hint={hint} info={info}>
       <NumberInput kind="percent" label={label} value={value} max={max} onChange={set} />
@@ -306,11 +307,8 @@ function AssumptionsSection() {
       <Group title="Plan rules">
         <Rows>
           {[
-            <FieldRow key="s" label="Starter emergency fund" info={HELP.starterEF}>
-              <NumberInput kind="money" label="Starter emergency fund" value={state.plan.starterEF} onChange={(v) => update((p) => { p.plan.starterEF = v; })} />
-            </FieldRow>,
-            <FieldRow key="e" label="Full emergency fund" hint="Months of expenses" info={HELP.efMonths}>
-              <NumberInput kind="decimal" label="Full emergency fund in months" value={state.plan.efMonths} max={24} step={1} onChange={(v) => update((p) => { p.plan.efMonths = v; })} />
+            <FieldRow key="e" label="Emergency fund" hint={`${state.plan.efMonths} months · starter ${money(state.plan.starterEF)}. Set under Savings goals`}>
+              <Button title="Savings goals" onPress={() => router.push("/money/goals")} />
             </FieldRow>,
             pct("hi", '"High-interest" debt starts at', HELP.highApr, state.plan.highApr, (v) => update((p) => { p.plan.highApr = v; })),
             <TaxBracketRow key="mt" />,

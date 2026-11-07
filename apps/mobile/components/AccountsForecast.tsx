@@ -11,15 +11,15 @@ import { debtLabel } from "../lib/debts";
 import { money, monthLabel } from "../lib/format";
 import { useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { Button, IconButton, MonthField, NumberInput, Segmented } from "./form";
+import { Button, IconButton, NumberInput } from "./form";
 import { Icon } from "./Icon";
+import { ScheduleEditor } from "./ScheduleEditor";
+import { useLayout } from "../lib/layout";
 import { ProgressBar } from "./ProgressRing";
 import { Card, Divider, SectionLabel } from "./ui";
 
 type Props = {
   state: PlanState; o: RunResult; start: Date;
-  /** Cards or the table (the Plan tab keeps this so the table can fill the screen). */
-  view: "cards" | "table"; onView: (v: "cards" | "table") => void;
   /** Fill the height it's given (the table scrolls inside). */
   fill?: boolean;
 };
@@ -28,12 +28,7 @@ type Props = {
 if (Platform.OS === "web" && typeof document !== "undefined" && !document.getElementById("ledger-css")) {
   const el = document.createElement("style");
   el.id = "ledger-css";
-  el.textContent =
-    "[data-ledger]{scrollbar-width:thin;scrollbar-color:rgba(127,127,127,.45) transparent}" +
-    "[data-ledger]::-webkit-scrollbar{width:10px;height:10px}" +
-    "[data-ledger]::-webkit-scrollbar-track{background:transparent}" +
-    "[data-ledger]::-webkit-scrollbar-thumb{background:rgba(127,127,127,.4);border-radius:8px;border:2px solid transparent;background-clip:padding-box}" +
-    "[data-ledger]::-webkit-scrollbar-corner{background:transparent}";
+  el.textContent = "[data-ledger]{scrollbar-width:none;-ms-overflow-style:none}[data-ledger]::-webkit-scrollbar{display:none}";
   document.head.appendChild(el);
 }
 
@@ -44,11 +39,13 @@ const ym = (start: Date, m: number) => {
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const monthName = (key: string) => `${MON[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
 
-export function AccountsForecast({ state, o, start, view, onView, fill }: Props) {
+export function AccountsForecast({ state, o, start, fill }: Props) {
   const t = useTheme();
   const update = useStore((s) => s.update);
   const router = useRouter();
-  const [open, setOpen] = useState<string | null>(null);
+  const [sel, setSel] = useState<AccountKey | null>(null);
+  const [showCheck, setShowCheck] = useState(false);
+  const { twoColumn } = useLayout();
   const [planOpen, setPlanOpen] = useState<string | null>(null);
   const [span, setSpan] = useState(12);
   const [edit, setEdit] = useState<{ k: AccountKey; i: number } | null>(null);
@@ -154,39 +151,21 @@ export function AccountsForecast({ state, o, start, view, onView, fill }: Props)
     );
   };
 
-  /* ---------- the schedule editor on a card ---------- */
-  const scheduleEditor = (k: AccountKey) => {
-    const list = sorted(schedule[k] ?? []);
-    const last = list[list.length - 1];
-    const nextFrom = last ? ym(new Date(Number(last.from.slice(0, 4)), Number(last.from.slice(5, 7)) - 1, 1), 1) : thisMonth;
-    return (
-      <View style={[styles.sched, { backgroundColor: t.surface2 }]}>
-        {list.map((e, n) => (
-          <View key={e.from + n} style={styles.editRow}>
-            <Text style={[type.caption, { color: t.text2, width: 36 }]}>From</Text>
-            <MonthField label={`${label(k)}: change starts`} value={e.from} width={150} onChange={(v) => setEntries(k, list.map((x, j) => (j === n ? { ...x, from: v } : x)))} />
-            <NumberInput kind="money" label={`${label(k)} from ${monthName(e.from)}`} value={e.amount} width={130} step={100} onChange={(v) => setEntries(k, list.map((x, j) => (j === n ? { ...x, amount: v } : x)))} />
-            <Text style={[type.caption, { color: t.text3 }]}>{isDebt(k) ? "extra/mo" : "/mo"}</Text>
-            <IconButton icon="trash" label={`Remove the change from ${monthName(e.from)}`} onPress={() => setEntries(k, list.filter((_, j) => j !== n))} />
-          </View>
-        ))}
-        <View style={styles.editRow}>
-          <Button title={list.length ? "Add a change" : "Set a monthly amount"} icon="plus" onPress={() => setEntries(k, [...list, { from: nextFrom, amount: last?.amount ?? 0 }])} style={{ minHeight: 36 }} />
-          {list.length ? <Button title="Follow my steps instead" tone="ghost" onPress={() => { setEntries(k, undefined); setPlanOpen(null); }} style={{ minHeight: 36 }} /> : null}
-        </View>
-        <Text style={[type.caption, { color: t.text3 }]}>
-          Each amount runs from its month until your next change. It goes in before your other steps, if there's that much left after your budget. Use $0 to stop.
-          {k === "cash" ? " Cash can go past your emergency fund goal if you plan it." : ""} Shows as savings on your budget.
-        </Text>
-      </View>
-    );
-  };
+  /* ---------- the schedule editor (shared with the emergency fund goal) ---------- */
+  const scheduleEditor = (k: AccountKey) => (
+    <ScheduleEditor
+      k={k}
+      label={label(k)}
+      unit={isDebt(k) ? "extra/mo" : "/mo"}
+      note={k === "cash" ? "Cash can go past your emergency fund goal if you plan it." : undefined}
+      onCleared={() => setPlanOpen(null)}
+    />
+  );
 
-  /* ---------- a card per account ---------- */
+  /* ---------- an account's details (opened from its column) ---------- */
   const card = (a: AccountForecast) => {
     const k = a.key;
     const m0a = a.months[0]!;
-    const isOpen = open === k;
     const debt = isDebt(k);
     const y0 = start.getFullYear();
     const thisYear = a.years.find((y) => y.year === y0);
@@ -201,12 +180,14 @@ export function AccountsForecast({ state, o, start, view, onView, fill }: Props)
       points.push({ label: `At ${d.retireAge}`, v: at(retireM) });
     }
     const paidOff = debt ? a.months.findIndex((m) => m.balance <= 0.5) : -1;
-    const rows = a.months.slice(0, span);
     const many = a.accounts.length > 1 || (a.accounts.length === 1 && a.accounts[0]!.name.trim() && a.accounts[0]!.name.trim() !== label(k));
     return (
       <View key={k}>
         <View style={{ padding: space.lg, gap: 6 }}>
-          <Text style={[type.body, { color: t.text, fontWeight: "700" }]}>{label(k)}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+            <Text style={[type.body, { color: t.text, fontWeight: "700", flex: 1 }]}>{label(k)}</Text>
+            <IconButton icon="close" label={`Close ${label(k)}`} onPress={() => setSel(null)} />
+          </View>
           {many ? (
             <Text style={[type.caption, { color: t.text3 }]}>
               Today is {a.accounts.map((x) => `${x.name.trim() || "Unnamed account"} ${money(x.balance)}`).join(" + ")}.{k === "cash" ? "" : " Wrong account here? Change what it counts as under Money → Accounts."}
@@ -275,51 +256,12 @@ export function AccountsForecast({ state, o, start, view, onView, fill }: Props)
               </View>
             ) : null}
           </View>
-          <Pressable role="button" aria-expanded={isOpen} onPress={() => { setOpen(isOpen ? null : k); setEdit(null); }} hitSlop={6} style={styles.link}>
-            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{isOpen ? "Hide months" : "Month by month"}</Text>
-            <View style={{ transform: [{ rotate: isOpen ? "90deg" : "0deg" }] }}>
-              <Icon name="chevron" size={14} color={t.accent} />
-            </View>
-          </Pressable>
-          {isOpen ? (
-            <View style={[styles.sched, { backgroundColor: t.surface2 }]}>
-              <View style={styles.row}>
-                <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Month</Text>
-                <Text style={[type.overline, { color: t.text3, width: 100, textAlign: "right" }]}>{debt ? "Paid" : "In"}</Text>
-                <Text style={[type.overline, { color: t.text3, width: 110, textAlign: "right" }]}>{debt ? "Still owed" : "Balance"}</Text>
-              </View>
-              {rows.map((m, i) => (
-                <View key={m.m} style={{ gap: 4 }}>
-                  <View style={styles.row}>
-                    <Text style={[type.caption, { color: i === 0 ? t.text : t.text2, flex: 1, fontWeight: i === 0 ? "700" : "400" }]}>
-                      {i === 0 ? `This month (${monthLabel(start, 0)})` : monthLabel(start, m.m)}
-                      {pl.months[i]!.extraCheck ? <Text style={{ color: t.text3 }}> · 3 paychecks</Text> : null}
-                      {oneOffs[k]?.[ym(start, i)] !== undefined ? <Text style={{ color: t.accent }}> · changed</Text> : null}
-                    </Text>
-                    {amountCell(a, i, 100)}
-                    <Text style={[type.caption, { color: t.text2, width: 110, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(m.balance)}</Text>
-                  </View>
-                  {edit && edit.k === k && edit.i === i ? editorFor(k, i) : null}
-                </View>
-              ))}
-              <View style={styles.editRow}>
-                {[12, 24, 36].map((n) => (
-                  <Pressable key={n} role="button" onPress={() => setSpan(n)} hitSlop={6}>
-                    <Text style={[type.caption, { color: span === n ? t.text : t.accent, fontWeight: "700" }]}>{n} months</Text>
-                  </Pressable>
-                ))}
-              </View>
-              <Text style={[type.caption, { color: t.text3 }]}>
-                {schedulable(k)
-                  ? "Tap an amount to change that month, or from that month on."
-                  : "Set per paycheck, so it's steady. Change it on your job (Money → Income) or with the order of your steps."}
-                {k === "cash" ? " Cash also collects anything not given to a step." : ""}
-                {a.invested ? ` Balances grow at your assumed ${(d.r * 100).toFixed(1)}% return after inflation.` : ""}
-              </Text>
-            </View>
-          ) : null}
+          <Text style={[type.caption, { color: t.text3 }]}>
+            {schedulable(k) ? "Change single months in the table: tap an amount." : "Set per paycheck, so it's steady."}
+            {k === "cash" ? " Cash also collects anything not given to a step." : ""}
+            {a.invested ? ` Balances grow at your assumed ${(d.r * 100).toFixed(1)}% return after inflation.` : ""}
+          </Text>
         </View>
-        <Divider />
       </View>
     );
   };
@@ -409,11 +351,23 @@ export function AccountsForecast({ state, o, start, view, onView, fill }: Props)
       <View style={[{ width: COL * 3, justifyContent: "center" }, groupEdge]}>
         <Text style={[type.overline, { color: t.text3, textAlign: "center" }]}>Your plan</Text>
       </View>
-      {shown.map((x) => (
-        <View key={x.key} style={[{ width: COL * 2, justifyContent: "center", paddingHorizontal: 6 }, groupEdge]}>
-          <Text numberOfLines={1} style={[type.overline, { color: t.text2, textAlign: "center" }]}>{label(x.key).replace(" (what you owe)", "")}</Text>
-        </View>
-      ))}
+      {shown.map((x) => {
+        const on = sel === x.key;
+        const planned = (schedule[x.key]?.length ?? 0) > 0;
+        return (
+          <Pressable
+            key={x.key}
+            role="button"
+            accessibilityLabel={`${label(x.key)}: plan and forecast`}
+            onPress={() => setSel(on ? null : x.key)}
+            style={[{ width: COL * 2, justifyContent: "center", paddingHorizontal: 6, backgroundColor: on ? t.accentSoft : t.surface }, groupEdge]}
+          >
+            <Text numberOfLines={1} style={[type.overline, { color: on || planned ? t.accent : t.text2, textAlign: "center", textDecorationLine: "underline", textDecorationColor: t.border }]}>
+              {label(x.key).replace(" (what you owe)", "")}{planned ? " ●" : ""}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
   const head2 = (
@@ -493,49 +447,61 @@ export function AccountsForecast({ state, o, start, view, onView, fill }: Props)
       </ScrollView>
     </ScrollView>
   );
-  const table = (
-    <View style={[{ padding: space.md, gap: space.sm }, fill ? { flex: 1, minHeight: 0 } : null]}>
-      <View style={[styles.editRow, { justifyContent: "space-between" }]}>
-        <View style={styles.editRow}>
-          {[12, 24, 36, 60].map((n) => (
-            <Pressable key={n} role="radio" aria-checked={span === n} onPress={() => setSpan(n)} hitSlop={6} style={[styles.chip, { borderColor: span === n ? t.accent : t.border, backgroundColor: span === n ? t.accentSoft : t.surface }]}>
-              <Text style={[type.caption, { color: span === n ? t.accent : t.text2, fontWeight: "700" }]}>{n} months</Text>
-            </Pressable>
-          ))}
-        </View>
-        <Text style={[type.caption, { color: t.text3, flexShrink: 1 }]}>Tap an amount to change it · ·3 = 3-paycheck month · red = your plan is short</Text>
-      </View>
-      {grid}
-      {edit ? editorFor(edit.k, edit.i) : null}
-    </View>
+  const selected = sel ? shown.find((a) => a.key === sel) ?? null : null;
+  const panel = selected ? (
+    <ScrollView
+      {...({ dataSet: { ledger: "1" } } as object)}
+      style={twoColumn ? { width: 400, flexGrow: 0, flexShrink: 0, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: t.border } : { maxHeight: 360, flexGrow: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border }}
+    >
+      {card(selected)}
+    </ScrollView>
+  ) : null;
+  const summary = (
+    <Pressable role="button" aria-expanded={showCheck} onPress={() => setShowCheck((v) => !v)} hitSlop={4} style={[styles.summary, { backgroundColor: row0.plannedShort > 0.5 ? t.badSoft : t.surface2 }]}>
+      <Text style={[type.caption, { color: t.text2, flex: 1 }]}>
+        <Text style={{ color: t.text, fontWeight: "700" }}>{monthLabel(start, 0)}: </Text>
+        {money(row0.available)} left after bills · {money(row0.plannedAsk)} planned ·{" "}
+        {row0.plannedShort > 0.5 ? (
+          <Text style={{ color: t.bad, fontWeight: "700" }}>short {money(row0.plannedShort)}</Text>
+        ) : (
+          <Text style={{ color: t.good, fontWeight: "700" }}>{money(notPlanned)} not planned</Text>
+        )}
+        {shortMonths.some((x) => x.i > 0) ? <Text style={{ color: t.bad }}> · short later</Text> : null}
+      </Text>
+      <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{showCheck ? "Hide" : "Details"}</Text>
+    </Pressable>
   );
-
   return (
-    <Card padded={false} style={fill ? { flex: 1, minHeight: 0 } : undefined}>
-      {view === "table" ? (
-        <>
-          <View style={{ paddingHorizontal: space.lg, paddingTop: space.md, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md, flexWrap: "wrap" }}>
-            <SectionLabel>Accounts</SectionLabel>
-            <View style={{ width: 220 }}>
-              <Segmented label="Show accounts as" options={[{ value: "cards", label: "Cards" }, { value: "table", label: "Table" }]} value={view} onChange={(v) => { onView(v); setEdit(null); }} />
-            </View>
+    <Card padded={false} style={fill ? { flex: 1, minHeight: 0, overflow: "hidden" } : undefined}>
+      <View style={{ padding: space.md, gap: space.sm }}>
+        <View style={[styles.editRow, { justifyContent: "space-between" }]}>
+          <SectionLabel>Accounts</SectionLabel>
+          <View style={styles.editRow}>
+            {[12, 24, 36, 60].map((n) => (
+              <Pressable key={n} role="radio" aria-checked={span === n} onPress={() => setSpan(n)} hitSlop={6} style={[styles.chip, { borderColor: span === n ? t.accent : t.border, backgroundColor: span === n ? t.accentSoft : t.surface }]}>
+                <Text style={[type.caption, { color: span === n ? t.accent : t.text2, fontWeight: "700" }]}>{n} mo</Text>
+              </Pressable>
+            ))}
           </View>
-          {table}
-        </>
-      ) : (
-        <>
-          <View style={{ padding: space.lg, paddingBottom: space.md, gap: space.sm }}>
-            <SectionLabel>Accounts</SectionLabel>
-            <Text style={[type.body, { color: t.text2 }]}>
-              Paychecks, bills and debts come from where you set them. Your plan is the rest: give an account a monthly amount, and anything not planned goes to your steps.
-            </Text>
-            {check}
-            <Segmented label="Show accounts as" options={[{ value: "cards", label: "Cards" }, { value: "table", label: "Table" }]} value={view} onChange={(v) => { onView(v); setEdit(null); }} />
-          </View>
-          <Divider />
-          {shown.map(card)}
-        </>
-      )}
+        </View>
+        {summary}
+        {showCheck ? (
+          <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ maxHeight: 340, flexGrow: 0 }}>{check}</ScrollView>
+        ) : null}
+        {!selected ? (
+          <Text style={[type.caption, { color: t.text3 }]}>
+            Tap an account's name for its plan and forecast · tap an amount to change that month · ● has a plan · ·3 = 3-paycheck month · red = short
+          </Text>
+        ) : null}
+      </View>
+      <View style={[{ flexDirection: twoColumn ? "row" : "column" }, fill ? { flex: 1, minHeight: 0 } : null]}>
+        {!twoColumn ? panel : null}
+        <View style={[{ paddingHorizontal: space.md, paddingBottom: space.md, gap: space.sm }, fill ? { flex: 1, minHeight: 0 } : null]}>
+          {grid}
+          {edit ? editorFor(edit.k, edit.i) : null}
+        </View>
+        {twoColumn ? panel : null}
+      </View>
     </Card>
   );
 }
@@ -576,6 +542,7 @@ const styles = StyleSheet.create({
   editor: { borderWidth: 1, borderRadius: radius.md, padding: space.sm, gap: space.sm },
   tr: { flexDirection: "row", alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: 5 },
   monthCol: { width: 92 },
+  summary: { flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: 8 },
   gr: { flexDirection: "row", alignItems: "stretch", minHeight: 32 },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   check: { borderRadius: radius.md, padding: space.md, gap: 3 },
