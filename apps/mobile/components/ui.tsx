@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "expo-router";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLayout } from "../lib/layout";
 import { CONTENT_MAX_WIDTH, CONTENT_MAX_WIDTH_WIDE, FORM_MAX_WIDTH, radius, space, type, useTheme } from "../lib/theme";
 import { Icon } from "./Icon";
+import { InfoText, InfoTip } from "./form";
 
 /**
  * Scrolling page with a large title and safe-area padding. On the web the content
@@ -128,14 +129,19 @@ export function Pill({ children, tone = "neutral" }: { children: ReactNode; tone
 }
 
 /** One number with a label and an optional supporting line. */
-export function Stat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: Tone }) {
+export function Stat({ label, value, hint, tone, info }: { label: string; value: string; hint?: string; tone?: Tone; /** ⓘ explanation */ info?: string }) {
   const t = useTheme();
+  const [open, setOpen] = useState(false);
   const color = tone ? toneColors(t, tone).fg : t.text;
   return (
-    <View accessible accessibilityLabel={`${label}: ${value}${hint ? `. ${hint}` : ""}`} style={{ gap: 2 }}>
-      <Text style={[type.label, { color: t.text3 }]}>{label}</Text>
+    <View accessible={!info} accessibilityLabel={info ? undefined : `${label}: ${value}${hint ? `. ${hint}` : ""}`} style={{ gap: 2 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+        <Text style={[type.label, { color: t.text3, flexShrink: 1 }]}>{label}</Text>
+        {info ? <InfoTip text={info} label={label} open={open} onToggle={setOpen} /> : null}
+      </View>
       <Text style={[type.stat, { color, fontVariant: ["tabular-nums"] }]}>{value}</Text>
       {hint ? <Text style={[type.caption, { color: t.text3 }]}>{hint}</Text> : null}
+      {info && open ? <View style={{ marginTop: space.xs }}><InfoText text={info} /></View> : null}
     </View>
   );
 }

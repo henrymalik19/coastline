@@ -1,13 +1,15 @@
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { longMonth } from "../../components/AdjustmentsCard";
-import { Button } from "../../components/form";
+import { Button, InfoText, InfoTip } from "../../components/form";
 import { Icon } from "../../components/Icon";
 import { ProgressRing } from "../../components/ProgressRing";
 import { Card, Divider, Pill, Screen, SectionLabel, Stat, type Tone } from "../../components/ui";
 import { ageLabel, money, monthLabel, percent } from "../../lib/format";
 import { useLayout } from "../../lib/layout";
 import { monthTodos, shortfallText, usePlan, type Todo } from "../../lib/plan";
+import { netWorth } from "../../lib/networth";
 import { monthKey, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
 
@@ -25,6 +27,19 @@ export default function Home() {
   const mk = monthKey(start);
   const done = useStore((s) => s.todoDone[mk]) ?? [];
   const toggleTodo = useStore((s) => s.toggleTodo);
+
+  // which plan step a to-do comes from ("Step 3: Pay off high-interest debt")
+  const stepOf = (key: string): string | undefined => {
+    const steps = state.plan.steps;
+    const match = (k: string) => {
+      if (key === "ef") return k === "starterEF" || k === "fullEF";
+      if (key === "debt") return k === "highDebt" || k === "lowDebt";
+      if (key === "goals") return k.startsWith("goal:");
+      return k === key;
+    };
+    const i = steps.findIndex(match);
+    return i < 0 ? undefined : `Plan step ${i + 1}`;
+  };
 
   const coastAge = o.crossing === null ? null : d.age + o.crossing;
   const coastAgeCons = o.crossingC === null ? null : d.age + o.crossingC;
@@ -56,13 +71,25 @@ export default function Home() {
         </Text>
       </View>
       <View style={{ marginTop: space.lg, gap: space.sm }}>
-        <Row label="Invested today" value={money(d.invested)} />
-        <Row label="Coast number today" value={money(o.coastNow, { whole: true })} />
+        <Row
+          label="Invested today"
+          value={money(d.invested)}
+          info="Your 401(k), IRA, HSA and brokerage balances added up. Cash (your emergency fund) and property aren't counted: this is the money that grows for retirement."
+        />
+        <Row
+          label="Coast number today"
+          value={money(o.coastNow, { whole: true })}
+          info={`What you'd need invested today for growth alone to reach your FIRE number (${money(o.fire, { whole: true })}) by age ${d.retireAge}, at ${percent(d.r, 1)} a year after inflation. It goes up a little every year you wait. You have ${money(d.invested)} of it (${percent(Math.min(o.progress, 9.99))}).`}
+        />
         <Row
           label="Cash cushion"
+          info="How many months of your monthly costs (budget, debt payments and set-asides) your cash would cover if your income stopped. Three to six months is a common target."
           value={Number.isFinite(d.emergencyMonths) ? `${d.emergencyMonths.toFixed(1)} months of expenses` : "No monthly expenses set"}
           tone={Number.isFinite(d.emergencyMonths) && d.emergencyMonths < 3 ? t.warn : undefined}
         />
+        <Pressable role="link" onPress={() => router.push("/progress")} hitSlop={6} style={{ alignSelf: "flex-end" }}>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>What if I save more, or returns change? Try it →</Text>
+        </Pressable>
         {!state.emergency?.active ? (
           <Pressable role="link" onPress={() => router.push("/emergency")} hitSlop={6} style={{ alignSelf: "flex-end" }}>
             <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Money emergency? Pause the plan →</Text>
@@ -73,10 +100,35 @@ export default function Home() {
   );
 
   const statCards = [
-    <Stat key="fire" label="FIRE number" value={money(o.fire, { whole: true })} hint={`${money(d.retireAnnual, { whole: true })}/yr at ${percent(d.swr, 1)}`} />,
-    <Stat key="odds" label={`Odds of FIRE by ${d.retireAge}`} value={percent(o.mc.probFire)} tone={oddsTone(o.mc.probFire)} hint="Across 2,000 market paths" />,
-    <Stat key="days" label="Freedom bought" value={`${Math.round(o.freedomDays).toLocaleString("en-US")} days`} hint="Of retirement spending, today" />,
-    <Stat key="100" label="+$100/month" value={o.coastSoonerMonths ? `${o.coastSoonerMonths} mo sooner` : "—"} hint="Effect on your coast date" />,
+    <Stat
+      key="fire"
+      label="FIRE number"
+      value={money(o.fire, { whole: true })}
+      hint={`${money(d.retireAnnual, { whole: true })}/yr at ${percent(d.swr, 1)}`}
+      info={`What you'll want invested when you retire: your yearly retirement spending (${money(d.retireAnnual, { whole: true })}${d.retireIncomeAnnual > 0 ? ", minus Social Security or pensions" : ""}) divided by a ${percent(d.swr, 1)} withdrawal rate, with a little extra for taxes on pre-tax money. Withdrawing ${percent(d.swr, 1)} a year is meant to last for life.`}
+    />,
+    <Stat
+      key="odds"
+      label={`Odds of FIRE by ${d.retireAge}`}
+      value={percent(o.mc.probFire)}
+      tone={oddsTone(o.mc.probFire)}
+      hint="Across 2,000 market paths"
+      info={`Markets don't grow in a straight line. We simulate 2,000 possible futures with ups and downs (${percent(d.vol)} volatility) and count how many reach your FIRE number by age ${d.retireAge} if you follow the plan.`}
+    />,
+    <Stat
+      key="days"
+      label="Freedom bought"
+      value={`${Math.round(o.freedomDays).toLocaleString("en-US")} days`}
+      hint="Of retirement spending, today"
+      info="What you've invested divided by one day of retirement spending: how many days of not working you've already paid for."
+    />,
+    <Stat
+      key="worth"
+      label="Net worth"
+      value={money(netWorth(d, state))}
+      hint="What you own minus what you owe"
+      info="Investments, cash, property and money saved toward goals, minus all your debts. See the breakdown on the Money tab."
+    />,
   ];
   const statRows: (typeof statCards)[] = [];
   for (let i = 0; i < statCards.length; i += statColumns) statRows.push(statCards.slice(i, i + statColumns));
@@ -101,10 +153,16 @@ export default function Home() {
         </View>
         {m0.extraCheck ? <Pill tone="good">Extra paycheck</Pill> : null}
       </View>
+      {todos.length && !m0.emergency ? (
+        <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.lg, paddingBottom: space.md, marginTop: -space.xs }]}>
+          After your budget, debt payments and set-asides, about {money(Math.max(0, m0.income - m0.expenses), { whole: true })} is left this month. It goes to your plan's
+          steps in order (see the Plan tab), which gives these amounts.
+        </Text>
+      ) : null}
       <Divider />
       {todos.map((td, i) => (
         <View key={td.key}>
-          <TodoRow todo={td} done={done.includes(td.key)} onToggle={() => toggleTodo(mk, td.key)} />
+          <TodoRow todo={{ ...td, detail: [td.detail, stepOf(td.key)].filter(Boolean).join(" · ") }} done={done.includes(td.key)} onToggle={() => toggleTodo(mk, td.key)} />
           {i < todos.length - 1 ? <View style={{ marginLeft: 56 }}><Divider /></View> : null}
         </View>
       ))}
@@ -156,12 +214,19 @@ export default function Home() {
   );
 }
 
-function Row({ label, value, tone }: { label: string; value: string; tone?: string }) {
+function Row({ label, value, tone, info }: { label: string; value: string; tone?: string; info?: string }) {
   const t = useTheme();
+  const [open, setOpen] = useState(false);
   return (
-    <View style={styles.between}>
-      <Text style={[type.label, { color: t.text2 }]}>{label}</Text>
-      <Text style={[type.label, { color: tone ?? t.text, fontVariant: ["tabular-nums"], fontWeight: tone ? "700" : undefined }]}>{value}</Text>
+    <View style={{ gap: space.xs }}>
+      <View style={styles.between}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1 }}>
+          <Text style={[type.label, { color: t.text2 }]}>{label}</Text>
+          {info ? <InfoTip text={info} label={label} open={open} onToggle={setOpen} /> : null}
+        </View>
+        <Text style={[type.label, { color: tone ?? t.text, fontVariant: ["tabular-nums"], fontWeight: tone ? "700" : undefined }]}>{value}</Text>
+      </View>
+      {info && open ? <InfoText text={info} /> : null}
     </View>
   );
 }

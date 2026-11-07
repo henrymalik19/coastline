@@ -172,7 +172,7 @@ export function InfoTip({ label, open, onToggle }: { text: string; label: string
   );
 }
 
-function InfoText({ text }: { text: string }) {
+export function InfoText({ text }: { text: string }) {
   const t = useTheme();
   return (
     <View role="note" style={[styles.tip, { backgroundColor: t.accentSoft }]}>

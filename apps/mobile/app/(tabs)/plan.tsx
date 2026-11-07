@@ -137,9 +137,7 @@ export default function Plan() {
             Once you have about {money(coastAt, { whole: true })} invested, it can grow to your retirement number ({money(o.fire, { whole: true })}) by age {o.d.retireAge} on its own.
             From then on you only need to cover your bills. Investing more is optional and lets you retire earlier.
           </Text>
-          {o.coastSoonerMonths && o.coastSoonerMonths > 0 ? (
-            <Text style={[type.caption, { color: t.text3 }]}>Putting $100/mo more toward the plan gets you there {o.coastSoonerMonths} month{o.coastSoonerMonths === 1 ? "" : "s"} sooner.</Text>
-          ) : null}
+
         </>
       )}
       {o.fire > 0 ? <View style={{ gap: 4, marginTop: space.xs }}>
