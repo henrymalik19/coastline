@@ -10,6 +10,7 @@ import { newId, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
 import { AccountPanel } from "../AccountPanel";
 import { AccountsEditor } from "../AccountsEditor";
+import { RetirementIncomeEditor } from "../RetirementIncomeEditor";
 import { BudgetEditor } from "../BudgetEditor";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "../form";
 import { Icon, type IconName } from "../Icon";
@@ -22,7 +23,7 @@ import { HealthcareSuggestion } from "../HealthcareSuggestion";
 
 /* ---------- registry ---------- */
 
-type SectionKey = "account" | "profile" | "income" | "budget" | "accounts" | "debts" | "goals" | "assumptions" | "limits" | "data";
+type SectionKey = "account" | "profile" | "retirementIncome" | "income" | "budget" | "accounts" | "debts" | "goals" | "assumptions" | "limits" | "data";
 type SectionMeta = { key: SectionKey; title: string; subtitle: string; icon: IconName };
 
 export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
@@ -31,6 +32,7 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
     title: "Your money",
     items: [
       { key: "profile", title: "You", subtitle: "Age, retirement age and health insurance", icon: "user" },
+      { key: "retirementIncome", title: "Income in retirement", subtitle: "Social Security, pensions and other income after you stop working", icon: "calendar" },
       { key: "income", title: "Income", subtitle: "Jobs, business, rental and other income", icon: "wallet" },
       { key: "budget", title: "Monthly budget", subtitle: "Monthly spending by group (debt payments go under Debts)", icon: "card" },
       { key: "accounts", title: "Accounts", subtitle: "Balances you've saved and invested", icon: "database" },
@@ -174,6 +176,20 @@ function AccountsSection() {
         Cash is your emergency fund. Everything else counts as invested. Tap an account to rename it, change its type, move it or remove it.
       </Text>
       <AccountsEditor />
+    </>
+  );
+}
+
+/* ---------- Income in retirement ---------- */
+
+function RetirementIncomeSection() {
+  const t = useTheme();
+  return (
+    <>
+      <Text style={[type.body, { color: t.text2 }]}>
+        Money that starts after you stop working lowers what your savings need to cover. Anything that starts after your retirement age is covered from your savings until it does.
+      </Text>
+      <RetirementIncomeEditor />
     </>
   );
 }
@@ -515,6 +531,7 @@ function DataSection() {
 export const SECTION_SCREENS: Record<SectionKey, ComponentType> = {
   account: () => <AccountPanel />,
   profile: Profile,
+  retirementIncome: () => <RetirementIncomeSection />,
   income: IncomeSection,
   budget: BudgetSection,
   accounts: AccountsSection,

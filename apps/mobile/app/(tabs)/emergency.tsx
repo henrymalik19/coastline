@@ -1,4 +1,4 @@
-import type { EmergencyMode } from "@coastfi/engine";
+import { k401Cost, type EmergencyMode } from "@coastfi/engine";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { longMonth } from "../../components/AdjustmentsCard";
 import { Button, Toggle, ToggleRow } from "../../components/form";
@@ -25,7 +25,7 @@ export default function Emergency() {
   // what the options are worth, from the engine's numbers
   const nonEssential = d.budgetTotal - (d.essentialExpenses - d.debtMins);
   const payroll401k = d.annualPre / 12;
-  const take401k = payroll401k * (1 - state.plan.marginalTax);
+  const take401k = payroll401k * k401Cost(state.plan.marginalTax, d.rothShare);
   const lostMatch = d.annualMatch / 12;
   const m0 = o.plan.months[0]!;
   const fmtRunway = (v: number) => (Number.isFinite(v) ? `${v.toFixed(1)} months` : "no expenses set");

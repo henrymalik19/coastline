@@ -7,6 +7,7 @@ import { AddDebtButtons, DebtEditor, paidFromFor } from "../components/DebtEdito
 import { EmergencyFundNote, looksLikeEmergencyFund } from "../components/EmergencyFundNote";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField } from "../components/form";
 import { Icon } from "../components/Icon";
+import { RetirementIncomeEditor } from "../components/RetirementIncomeEditor";
 import { useTwoPane } from "../components/MasterDetail";
 import { ProgressBar, ProgressRing } from "../components/ProgressRing";
 import { IncomesEditor } from "../components/IncomeEditor";
@@ -75,6 +76,7 @@ export default function Onboarding() {
         </Text>
       ) : null}
       {step === "you" ? <YouStep /> : null}
+      {step === "you" ? <RetirementIncomeBlock /> : null}
       {step === "income" ? <IncomeStep /> : null}
       {step === "budget" ? <BudgetStep /> : null}
       {step === "money" ? <MoneyStep /> : null}
@@ -140,6 +142,19 @@ function YouStep() {
 {!medicareAge ? <HealthcareSuggestion retireAge={state.retireAge} value={state.healthcare} onUse={(v) => update((p) => { p.healthcare = v; })} /> : null}
 </View>
     </Block>
+  );
+}
+
+function RetirementIncomeBlock() {
+  const t = useTheme();
+  return (
+    <View style={{ gap: space.sm }}>
+      <Text style={[type.heading, { color: t.text }]}>Income in retirement</Text>
+      <Text style={[type.caption, { color: t.text3, marginTop: -space.xs }]}>
+        Optional. Social Security or a pension means your savings need to cover less. Skip it if you'd rather plan without it.
+      </Text>
+      <RetirementIncomeEditor />
+    </View>
   );
 }
 

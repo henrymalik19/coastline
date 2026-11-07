@@ -21,7 +21,7 @@ export default function Home() {
   const { state, result: o, start } = usePlan();
   const d = o.d;
   const m0 = o.plan.months[0]!;
-  const todos = monthTodos(m0, t, state.plan.marginalTax);
+  const todos = monthTodos(m0, t, state.plan.marginalTax, d.rothShare);
   const mk = monthKey(start);
   const done = useStore((s) => s.todoDone[mk]) ?? [];
   const toggleTodo = useStore((s) => s.toggleTodo);

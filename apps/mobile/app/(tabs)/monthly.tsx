@@ -1,4 +1,4 @@
-import { BUCKET_LABELS, BUCKETS, type MonthRow, type PlanState } from "@coastfi/engine";
+import { BUCKET_LABELS, BUCKETS, k401Cost, type MonthRow, type PlanState } from "@coastfi/engine";
 import { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { AdjustmentsCard, KIND_TEXT } from "../../components/AdjustmentsCard";
@@ -16,13 +16,13 @@ const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct
 type Seg = { key: string; label: string; value: number; color: string };
 
 /** Where a month's take-home goes (pre-tax payroll is already out of take-home). */
-function splits(m: MonthRow, t: Theme, mt: number): Seg[] {
+function splits(m: MonthRow, t: Theme, mt: number, rothShare = 0): Seg[] {
   const a = m.alloc;
   const segs: Seg[] = [{ key: "spend", label: "Budget + debt minimums", value: m.expenses - m.adjExpense, color: t.track }];
   if (m.adjExpense > 0.5) segs.push({ key: "oneoff", label: "One-off expenses", value: m.adjExpense, color: t.warn });
   const matchTH = a.k401TakeHome - a.k401Step;
   if (matchTH > 0.5) segs.push({ key: "match", label: `401(k) raise to full match (+${money(a.matchGain)} match)`, value: matchTH, color: t.series.k401 });
-  if (a.k401Step > 0.5) segs.push({ key: "k401", label: `Extra 401(k) (${money(a.k401Step / (1 - mt))} pre-tax)`, value: a.k401Step, color: t.series.k401 });
+  if (a.k401Step > 0.5) segs.push({ key: "k401", label: `Extra 401(k) (${money(a.k401Step / k401Cost(mt, rothShare))} in)`, value: a.k401Step, color: t.series.k401 });
   if (a.ira > 0.5) segs.push({ key: "ira", label: "IRA", value: a.ira, color: t.series.ira });
   if (a.taxable > 0.5) segs.push({ key: "taxable", label: "Brokerage", value: a.taxable, color: t.series.taxable });
   if (a.ef > 0.5) segs.push({ key: "ef", label: "Emergency fund", value: a.ef, color: t.series.ef });
@@ -35,9 +35,10 @@ function splits(m: MonthRow, t: Theme, mt: number): Seg[] {
 
 function MonthCard({ m, title, start, state }: { m: MonthRow; title: string; start: Date; state: PlanState }) {
   const t = useTheme();
-  const segs = splits(m, t, state.plan.marginalTax);
+  const rothShare = usePlan().result.d.rothShare;
+  const segs = splits(m, t, state.plan.marginalTax, rothShare);
   const sum = segs.reduce((a, s) => a + s.value, 0) || 1;
-  const todos = monthTodos(m, t, state.plan.marginalTax);
+  const todos = monthTodos(m, t, state.plan.marginalTax, rothShare);
   const key = `${m.y}-${String(m.mo + 1).padStart(2, "0")}`;
   const oneOffs = (state.adjustments ?? []).filter((a) => a.month === key);
   const checks = state.incomes

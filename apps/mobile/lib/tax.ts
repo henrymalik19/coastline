@@ -118,7 +118,7 @@ export function estimateBracket(incomes: Income[], status: FilingStatus = "singl
   for (const inc of incomes) {
     const P = PERIODS[inc.freq];
     const p = paycheck(inc);
-    base += (inc.kind ?? "job") === "job" && p.gross > 0 ? Math.max(0, p.gross - p.k401 - p.pretaxDeductions) * P : Math.max(0, inc.net) * P;
+    base += (inc.kind ?? "job") === "job" && p.gross > 0 ? Math.max(0, p.gross - p.k401Pretax - p.pretaxDeductions) * P : Math.max(0, inc.net) * P;
   }
   if (!(base > 0)) return null;
   const taxable = Math.max(0, base - TAX_TABLES[status].standard);

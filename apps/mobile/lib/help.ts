@@ -53,5 +53,9 @@ export const HELP = {
   hsaEligible: "You can use an HSA only with a high-deductible health plan. Check your benefits if you're not sure.",
   projectWith:
     "\"Following this plan\" assumes every spare dollar goes through your plan's steps (emergency fund, debts, IRA, 401(k) and so on). \"What I invest now\" assumes you keep investing only what you put in each month today, and any other spare money sits in cash.",
+  roth401k:
+    "Many 401(k)s let you pick Roth for some or all of your contributions. Roth is taxed now and comes out tax-free in retirement; pre-tax lowers your taxes now. Your employer's match is always pre-tax. Check your 401(k) website or pay stub (it may say Roth 401(k)).",
+  hsaEmployer:
+    "Some employers add money to your HSA (often $500–$1,500 a year). It's free money and counts toward the yearly HSA limit, so the plan only adds what's left.",
   catchUp: "Once you're 50 (55 for the HSA), the IRS lets you put in extra each year on top of the normal limit.",
 } as const;

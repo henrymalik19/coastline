@@ -29,6 +29,20 @@ export function isHighInterest(d: Pick<Debt, "apr" | "kind">, threshold: number)
   return d.kind !== "k401_loan" && d.apr >= threshold;
 }
 
+/** Whether the plan puts extra money toward this debt (false = minimum payments only). */
+export const paysExtra = (d: Pick<Debt, "minimumOnly">): boolean => !d.minimumOnly;
+
+/** The rate a debt charges in a given month ("YYYY-MM"): its promo rate through `promoUntil`, else its APR. */
+export function rateIn(d: Pick<Debt, "apr" | "promoApr" | "promoUntil">, month: string): number {
+  return d.promoUntil && month <= d.promoUntil ? Math.max(0, num(d.promoApr)) : d.apr;
+}
+
+/**
+ * Take-home cost of $1 more 401(k): pre-tax dollars save tax (1 − marginal), Roth dollars don't (1).
+ * `rothShare` is the part of contributions that go to Roth.
+ */
+export const k401Cost = (marginalTax: number, rothShare = 0): number => 1 - marginalTax * (1 - Math.min(1, Math.max(0, rothShare)));
+
 /**
  * Month-by-month cash flow + priority waterfall, starting at `d.start`.
  *
@@ -107,6 +121,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     let income = 0;
     let payPre = 0;
     let payMatch = 0;
+    let payRoth = 0;
     let extraCheck = false;
     const checks: number[] = [];
     for (const inc of d.incomes) {
@@ -116,7 +131,10 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       income += num(inc.net) * c * g;
       payPre += num(inc.pretax) * c * g;
       payMatch += num(inc.match) * c * g;
+      payRoth += num(inc.pretax) * c * g * Math.min(1, Math.max(0, num(inc.rothShare)));
     }
+    // a payroll 401(k) dollar that stops comes back as take-home: after tax if it was pre-tax, in full if Roth
+    const backCost = k401Cost(mt, payPre > 0 ? payRoth / payPre : 0);
 
     // Payroll deferrals stop at the annual 401(k) limit (as real payroll does). The
     // deferral that no longer happens comes back as take-home, after tax, and the
@@ -127,18 +145,25 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     if (payPre > payRoom) {
       payCut = payPre - payRoom;
       payMatch *= payRoom / payPre;
+      payRoth *= payRoom / payPre;
       payPre = payRoom;
-      income += payCut * (1 - mt);
+      income += payCut * backCost;
     }
     const monthStr = y + "-" + String(mo + 1).padStart(2, "0");
     const inEmergency = !!em && monthStr <= em.until;
     if (inEmergency && em!.pause401k && payPre > 0) {
       // stopping payroll 401(k) puts it back in the paycheck (after tax); the match stops with it
-      income += payPre * (1 - mt);
+      income += payPre * backCost;
       payPre = 0;
       payMatch = 0;
+      payRoth = 0;
     }
     ytd.k401 += payPre;
+
+    // employer HSA contributions count toward the year's HSA limit
+    const capHsaFull = ((p.hsaFamily ? L.hsaFamily : L.hsaSelf) + (ageNow >= 55 ? L.hsaCatch : 0)) * scale;
+    const payHsaEmployer = Math.min(d.hsaEmployerAnnual / 12, Math.max(0, capHsaFull - ytd.hsa));
+    ytd.hsa += payHsaEmployer;
 
     // one-off adjustments for this calendar month
     let adjIncome = 0;
@@ -157,7 +182,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     let minPay = 0;
     for (const dt of debts) {
       if (dt.balance <= 0) continue;
-      dt.balance *= 1 + dt.apr / 12;
+      dt.balance *= 1 + rateIn(dt, monthStr) / 12;
       // borrowed shortfall behaves like a card: minimum is 2% of the balance (at least $25)
       const minimum = dt.id === SHORTFALL_ID ? Math.max(25, dt.balance * 0.02) : dt.minPayment;
       const pay = Math.min(minimum, dt.balance);
@@ -194,12 +219,11 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     // deferrals already scheduled for the rest of this calendar year.
     const capK401 = Math.max(0, capK401Full - ytd.k401 - futurePre);
     const capIra = Math.max(0, (L.ira + (ageNow >= 50 ? L.iraCatch : 0)) * scale - ytd.ira);
-    const capHsa = p.hsaEligible
-      ? Math.max(0, ((p.hsaFamily ? L.hsaFamily : L.hsaSelf) + (ageNow >= 55 ? L.hsaCatch : 0)) * scale - ytd.hsa)
-      : 0;
+    const capHsa = p.hsaEligible ? Math.max(0, capHsaFull - ytd.hsa) : 0;
 
     const payDebts = (filter: (x: Debt) => boolean) => {
-      const list = debts.filter((x) => x.balance > 0 && filter(x)).sort((a, b) => b.apr - a.apr); // avalanche
+      // avalanche by the rate charged now (a 0% promo waits); minimum-only debts get nothing extra
+      const list = debts.filter((x) => x.balance > 0 && paysExtra(x) && filter(x)).sort((a, b) => rateIn(b, monthStr) - rateIn(a, monthStr));
       for (const dt of list) {
         if (avail <= 0) break;
         const put = Math.min(avail, dt.balance);
@@ -230,8 +254,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
           avail -= put;
           alloc.ef += put;
         } else if (step === "match") {
-          // raise payroll 401(k) to the full-match threshold; costs (1 - marginal) take-home per pre-tax $
-          const cost = 1 - mt;
+          // raise payroll 401(k) to the full-match threshold; a pre-tax $ costs (1 - marginal) take-home, a Roth $ costs $1
+          const cost = k401Cost(mt, d.rothShare);
           d.incomes.forEach((inc, i) => {
             if (avail <= 1e-9 || inc.gapPre <= 0) return;
             const gapPre = inc.gapPre * checks[i]! * g;
@@ -260,7 +284,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
           ytd.ira += put;
           avail -= put;
         } else if (step === "k401") {
-          const cost = 1 - mt; // $1 of pre-tax 401(k) costs (1 - marginal rate) of take-home
+          const cost = k401Cost(mt, d.rothShare); // $1 of pre-tax 401(k) costs (1 - marginal rate) of take-home; Roth costs $1
           const put = Math.min(avail, Math.max(0, capK401 * cost - alloc.k401TakeHome));
           alloc.k401TakeHome += put;
           alloc.k401Step += put;
@@ -305,13 +329,13 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     }
 
     out.push({
-      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency,
+      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payRoth, payHsaEmployer, payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency,
       alloc,
       cash,
       debtTotal: sum(debts.map((x) => x.balance)),
       goals: goals.map((x) => ({ id: x.id, saved: x.saved })),
-      pre: payPre + payMatch + alloc.k401 + alloc.matchGain,
-      post: alloc.hsa + alloc.ira + alloc.taxable,
+      pre: payPre - payRoth + payMatch + alloc.k401 * (1 - d.rothShare) + alloc.matchGain,
+      post: payRoth + alloc.k401 * d.rothShare + payHsaEmployer + alloc.hsa + alloc.ira + alloc.taxable,
     });
   }
   return { months: out, events, firstFund, maxedYears, starterTarget, fullTarget, mode };

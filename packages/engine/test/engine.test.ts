@@ -5,6 +5,8 @@ import {
   DEFAULT_LIMITS,
   derive,
   isHighInterest,
+  k401Cost,
+  rateIn,
   limitsFor,
   matchFor,
   project,
@@ -372,5 +374,87 @@ describe("emergency mode", () => {
     const inactive = run(base({ active: false, until: "2027-06", essentialsOnly: true, pause401k: true }), START);
     expect(inactive.fire).toBe(off.fire);
     expect(inactive.projectedFinal).toBe(off.projectedFinal);
+  });
+});
+
+describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth 401(k)", () => {
+  const job = { id: "i", name: "Job", freq: "monthly" as const, net: 2000, matchMode: "usd" as const };
+  const spending = [{ id: "b", name: "Life", amount: 4000, inRetirement: true }];
+
+  it("Social Security lowers the FIRE number; income starting later is bridged from savings", () => {
+    const base = blank({ age: 40, retireAge: 60, budget: spending, swr: 0.04 });
+    const none = run(base, START).fire; // 48,000 / 4% = 1.2M
+    expect(none).toBeCloseTo(1_200_000, 6);
+    // $2,000/mo from 60: covers half → 600k
+    const atRetire = run({ ...base, retirementIncome: [{ id: "ss", name: "SS", kind: "socialSecurity", monthly: 2000, startAge: 60 }] }, START).fire;
+    expect(atRetire).toBeCloseTo(600_000, 6);
+    // same income from 67: 600k + 7 years × 24k bridge
+    const later = run({ ...base, retirementIncome: [{ id: "ss", name: "SS", kind: "socialSecurity", monthly: 2000, startAge: 67 }] }, START).fire;
+    expect(later).toBeCloseTo(600_000 + 7 * 24_000, 6);
+    // income larger than spending can't go below zero (only the bridge remains)
+    const big = run({ ...base, retirementIncome: [{ id: "p", name: "Pension", kind: "pension", monthly: 9000, startAge: 62 }] }, START).fire;
+    expect(big).toBeCloseTo(2 * 108_000, 6);
+  });
+
+  it("a 0% promo charges no interest until it ends; the avalanche pays the card charging interest now first", () => {
+    const s = blank({
+      incomes: [{ ...job, net: 500 }],
+      debts: [
+        { id: "promo", name: "Promo", kind: "credit_card", balance: 3000, apr: 0.25, minPayment: 0, promoApr: 0, promoUntil: "2027-06" },
+        { id: "card", name: "Card", kind: "credit_card", balance: 3000, apr: 0.2, minPayment: 0 },
+      ],
+      plan: { ...blank().plan, steps: ["highDebt"] },
+    });
+    const plan = simulatePlan(s, derive(s, START));
+    const promoPaid = plan.events.find((e) => e.key === "debt:promo")!;
+    const cardPaid = plan.events.find((e) => e.key === "debt:card")!;
+    expect(cardPaid.m).toBeLessThan(promoPaid.m);
+    // nothing paid on the promo card in month 0 and it grew no interest
+    const s2 = { ...s, debts: [s.debts[0]!], plan: { ...s.plan, steps: [] } };
+    const p2 = simulatePlan(s2, derive(s2, START));
+    expect(p2.months[0]!.debtTotal).toBeCloseTo(3000, 9);
+    expect(rateIn(s.debts[0]!, "2027-06")).toBe(0);
+    expect(rateIn(s.debts[0]!, "2027-07")).toBe(0.25);
+  });
+
+  it("minimum-only debts get no extra payments", () => {
+    const s = blank({
+      incomes: [{ ...job, net: 1000 }],
+      debts: [{ id: "sl", name: "Federal loans", kind: "student", balance: 5000, apr: 0.06, minPayment: 0, minimumOnly: true }],
+      plan: { ...blank().plan, steps: ["highDebt", "lowDebt"] },
+    });
+    const plan = simulatePlan(s, derive(s, START));
+    expect(plan.months[0]!.alloc.debt).toBe(0);
+    expect(plan.events.find((e) => e.key === "debt:sl")).toBeUndefined();
+  });
+
+  it("employer HSA money is invested and counts toward the HSA limit", () => {
+    const s = blank({
+      limits: DEFAULT_LIMITS,
+      incomes: [{ ...job, hsaEmployer: 1200 }],
+      plan: { ...blank().plan, hsaEligible: true, steps: ["hsa"] },
+    });
+    const plan = simulatePlan(s, derive(s, START));
+    const m1 = plan.months.find((m) => m.y === 2027 && m.mo === 0)!; // January, a fresh year
+    expect(m1.payHsaEmployer).toBeCloseTo(100, 9);
+    expect(m1.post).toBeGreaterThanOrEqual(100);
+    const year = plan.months.filter((m) => m.y === 2027);
+    const L = DEFAULT_LIMITS.find((l) => l.year === 2027) ?? DEFAULT_LIMITS.at(-1)!;
+    const total = year.reduce((a, m) => a + m.payHsaEmployer + m.alloc.hsa, 0);
+    expect(total).toBeLessThanOrEqual(L.hsaSelf + 1e-6);
+  });
+
+  it("Roth 401(k) contributions go to the after-tax bucket and cost a full dollar", () => {
+    const pre = blank({ limits: DEFAULT_LIMITS, incomes: [{ ...job, pretax: 500 }] });
+    const roth = blank({ limits: DEFAULT_LIMITS, incomes: [{ ...job, pretax: 500, rothShare: 1 }] });
+    const a = simulatePlan(pre, derive(pre, START)).months[0]!;
+    const b = simulatePlan(roth, derive(roth, START)).months[0]!;
+    expect(a.pre).toBeCloseTo(500, 9);
+    expect(b.pre).toBeCloseTo(0, 9);
+    expect(b.post).toBeCloseTo(500, 9);
+    expect(b.payRoth).toBeCloseTo(500, 9);
+    expect(k401Cost(0.25, 0)).toBe(0.75);
+    expect(k401Cost(0.25, 1)).toBe(1);
+    expect(k401Cost(0.25, 0.5)).toBeCloseTo(0.875, 12);
   });
 });

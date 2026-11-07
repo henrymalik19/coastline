@@ -13,6 +13,8 @@ export const DEDUCTION_KINDS: { value: PayDeductionKind; label: string; pretax: 
 export function paycheck(inc: Income) {
   const gross = Math.max(0, inc.gross ?? 0);
   const k401 = resolveIncome(inc).pretax;
+  /** The pre-tax part of the 401(k) (the Roth part is after-tax, so it doesn't lower income tax). */
+  const k401Pretax = k401 * (1 - Math.min(1, Math.max(0, inc.rothShare ?? 0)));
   const t = inc.taxes ?? { federal: 0, state: 0, socialSecurity: 0, medicare: 0 };
   const taxes = t.federal + t.state + t.socialSecurity + t.medicare;
   // a 401(k) loan repayment is paid as a debt (its own monthly payment), so take-home leaves it in
@@ -23,7 +25,7 @@ export function paycheck(inc: Income) {
     .filter((x) => DEDUCTION_KINDS.find((k) => k.value === x.kind)?.pretax)
     .reduce((a, x) => a + Math.max(0, x.amount), 0);
   const net = Math.max(0, Math.round((gross - k401 - taxes - deductions) * 100) / 100);
-  return { gross, k401, taxes, deductions, pretaxDeductions, loanRepayment, net };
+  return { gross, k401, k401Pretax, taxes, deductions, pretaxDeductions, loanRepayment, net };
 }
 
 /** Apply a change to a job; in auto mode, take-home is recalculated from the pay stub fields. */

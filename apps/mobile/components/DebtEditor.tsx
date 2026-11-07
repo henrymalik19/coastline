@@ -8,7 +8,7 @@ import { HELP } from "../lib/help";
 import { paycheckFor } from "../lib/loans";
 import { newId } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { Button, FieldRow, IconButton, NumberInput, TextField } from "./form";
+import { Button, DateField, FieldRow, IconButton, NumberInput, TextField, ToggleRow } from "./form";
 import { Card, Divider } from "./ui";
 
 /** The paycheck that repays a debt, in the shape DebtEditor's `paidFrom` wants. */
@@ -16,6 +16,18 @@ export function paidFromFor(state: PlanState, debtId: string) {
   const link = paycheckFor(state, debtId);
   return link ? { job: link.income.name || "job", perCheck: link.deduction.amount } : undefined;
 }
+
+/** Debt types that can have an intro / promo rate. */
+const PROMO_KINDS = new Set<DebtKind>(["credit_card", "personal", "car", "other"]);
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "YYYY-MM" n months from now (a UI default only; the engine never reads the clock). */
+function monthsFromNow(n: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() + n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+const shortMonth = (ym: string) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
+const pct = (v: number) => percent(v, 1).replace(/\.0%$/, "%");
 
 export function newDebt(kind: DebtKind): Debt {
   return { id: newId(), name: "", kind, balance: 0, apr: debtKind(kind).typicalApr, minPayment: 0 };
@@ -56,7 +68,8 @@ export function DebtEditor({
             <Text style={[type.heading, { color: t.text }]} numberOfLines={1}>{debtLabel(debt)}</Text>
             {!open ? (
               <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
-                {money(debt.balance)} · {percent(debt.apr, 1).replace(/\.0%$/, "%")} · {money(debt.minPayment)}/mo
+                {money(debt.balance)} · {debt.promoUntil ? `${pct(debt.promoApr ?? 0)} until ${shortMonth(debt.promoUntil)}, then ${pct(debt.apr)}` : pct(debt.apr)} ·{" "}
+                {money(debt.minPayment)}/mo{debt.minimumOnly ? " · minimum only" : ""}
               </Text>
             ) : null}
           </View>
@@ -102,6 +115,38 @@ export function DebtEditor({
           <NumberInput kind="money" label={`${debtLabel(debt)} minimum payment`} value={debt.minPayment} onChange={(v) => onChange({ minPayment: v })} />
         </FieldRow>
       )}
+      {PROMO_KINDS.has(kind.value) ? (
+        <>
+          <Divider />
+          <ToggleRow
+            label="Intro rate (like 0% APR)"
+            hint="A promo or balance-transfer rate that ends on a set date"
+            value={debt.promoUntil !== undefined}
+            onChange={(on) => onChange(on ? { promoApr: 0, promoUntil: monthsFromNow(12) } : { promoApr: undefined, promoUntil: undefined })}
+          />
+          {debt.promoUntil !== undefined ? (
+            <View style={[styles.sub, { backgroundColor: t.surface2 }]}>
+              <FieldRow label="Intro rate">
+                <NumberInput kind="percent" label={`${debtLabel(debt)} intro rate`} value={debt.promoApr ?? 0} max={1} onChange={(v) => onChange({ promoApr: v })} />
+              </FieldRow>
+              <FieldRow label="Last month at the intro rate" hint={`Then ${percent(debt.apr, 1).replace(/\.0%$/, "%")} (the rate above). The plan pays it off before then when it can.`}>
+                <DateField label={`${debtLabel(debt)} intro rate ends`} value={debt.promoUntil ? `${debt.promoUntil}-01` : undefined} onChange={(v) => onChange({ promoUntil: v ? v.slice(0, 7) : monthsFromNow(12) })} />
+              </FieldRow>
+            </View>
+          ) : null}
+        </>
+      ) : null}
+      {kind.value === "student" ? (
+        <>
+          <Divider />
+          <ToggleRow
+            label="On income-driven repayment or PSLF"
+            hint="The plan pays only the minimum and never extra, since the rest may be forgiven"
+            value={!!debt.minimumOnly}
+            onChange={(on) => onChange({ minimumOnly: on || undefined })}
+          />
+        </>
+      ) : null}
       {kind.note && !paidFrom ? (
         <View style={[styles.note, { backgroundColor: t.warnSoft }]}>
           <Text style={[type.caption, { color: t.text }]}>{kind.note}</Text>
@@ -133,4 +178,5 @@ const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   chip: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 7, minHeight: 34, justifyContent: "center" },
   note: { borderRadius: radius.sm, padding: space.md },
+  sub: { borderRadius: radius.sm, paddingHorizontal: space.md, paddingVertical: space.xs },
 });

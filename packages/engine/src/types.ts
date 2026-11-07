@@ -39,6 +39,10 @@ export type Income = {
   taxes?: PayTaxes;
   /** Other paycheck deductions, per check (auto mode). */
   deductions?: PayDeduction[];
+  /** Share of your own 401(k) contributions that go to Roth (0–1). Missing = 0 (all pre-tax). */
+  rothShare?: number;
+  /** What your employer puts in your HSA, per year. Counts toward the HSA limit. */
+  hsaEmployer?: number;
 };
 
 export type PayTaxes = { federal: number; state: number; socialSecurity: number; medicare: number };
@@ -75,6 +79,24 @@ export type Debt = {
   apr: number;
   minPayment: number;
   plaidAccountId?: string;
+  /** Intro/promo rate (e.g. 0% balance transfer) charged through `promoUntil`; `apr` applies after. */
+  promoApr?: number;
+  /** Last month of the promo rate, "YYYY-MM". */
+  promoUntil?: string;
+  /** Pay only the minimum, never extra (e.g. federal student loans on income-driven repayment or PSLF). */
+  minimumOnly?: boolean;
+};
+
+/** Money that starts coming in after you stop working (today's dollars, per month). */
+export type RetirementIncomeKind = "socialSecurity" | "pension" | "other";
+export type RetirementIncome = {
+  id: string;
+  name: string;
+  kind: RetirementIncomeKind;
+  /** Per month, in today's dollars. */
+  monthly: number;
+  /** Age it starts. */
+  startAge: number;
 };
 export type Goal = { id: string; name: string; target: number; saved: number };
 export type LimitsRow = {
@@ -146,6 +168,8 @@ export type PlanState = {
   emergency?: EmergencyMode;
   /** Tax filing status, used for paycheck tax estimates. Missing = single. */
   filingStatus?: FilingStatus;
+  /** Social Security, pensions and other income in retirement (optional; missing = none). */
+  retirementIncome?: RetirementIncome[];
 };
 
 export type FilingStatus = "single" | "mfj" | "hoh";
@@ -210,6 +234,14 @@ export type Derived = {
   runwayEssential: number;
   debtTotal: number;
   matchLeftPerYear: number;
+  /** Retirement income per year once it has all started (Social Security, pensions…). */
+  retireIncomeAnnual: number;
+  /** Savings needed to cover retirement income that starts after you retire, until it does. */
+  retireBridge: number;
+  /** Share of payroll 401(k) going to Roth, weighted across jobs (0–1). */
+  rothShare: number;
+  /** Employer HSA contributions per year, all jobs. */
+  hsaEmployerAnnual: number;
 };
 
 export type Alloc = {
@@ -240,6 +272,10 @@ export type MonthRow = {
   minPay: number;
   payPre: number;
   payMatch: number;
+  /** Part of `payPre` that went to Roth 401(k) (after-tax). */
+  payRoth: number;
+  /** Employer HSA contribution this month. */
+  payHsaEmployer: number;
   /** Scheduled payroll 401(k) not deferred because the annual limit was reached (pre-tax $). */
   payCut: number;
   /** One-off income change this month (+ bonus / − lost pay), already included in `income`. */

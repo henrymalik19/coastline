@@ -2,7 +2,7 @@
  * Plan-step status for the Plan tab (port of the prototype's stepInfo/renderPlan).
  * Reads engine output only; no money math beyond display.
  */
-import { BUCKET_LABELS, isHighInterest, limitsFor, PERIODS, STEP_LABELS, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
+import { BUCKET_LABELS, isHighInterest, k401Cost, limitsFor, paysExtra, PERIODS, STEP_LABELS, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
 import { debtLabel } from "./debts";
 import { money, monthLabel, percent } from "./format";
 
@@ -57,7 +57,7 @@ export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date)
   if (step === "highDebt" || step === "lowDebt") {
     const hi = step === "highDebt";
     const thr = s.plan.highApr;
-    const list = s.debts.filter((x) => isHighInterest(x, thr) === hi);
+    const list = s.debts.filter((x) => paysExtra(x) && isHighInterest(x, thr) === hi);
     const bal = list.reduce((a, x) => a + (+x.balance || 0), 0);
     const ends = list.map((x) => ev("debt:" + x.id)).filter(Boolean);
     const last = ends.length === list.length && ends.length ? Math.max(...ends.map((e) => e!.m)) : null;
@@ -79,7 +79,7 @@ export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date)
     if (step === "k401" && ff !== undefined) {
       const m = pl.months.find((x) => x.alloc.k401Step > 0.5 && !x.extraCheck);
       const main = s.incomes.find((i) => (i.pretax ?? 0) > 0 || (i.match ?? 0) > 0 || i.matchMode === "pct") ?? s.incomes[0];
-      if (m && main) meta += ` · then raise ${main.name}'s 401(k) by about ${money(((m.alloc.k401Step / (1 - s.plan.marginalTax)) * 12) / PERIODS[main.freq])}/check`;
+      if (m && main) meta += ` · then raise ${main.name}'s 401(k) by about ${money(((m.alloc.k401Step / k401Cost(s.plan.marginalTax, o.d.rothShare)) * 12) / PERIODS[main.freq])}/check`;
     }
     return { key: step, label: `${STEP_LABELS[step]} (${money(cap)}/yr)`, done: false, meta };
   }

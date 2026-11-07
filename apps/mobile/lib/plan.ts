@@ -1,4 +1,4 @@
-import { run, type MonthRow, type PlanState, type RunResult } from "@coastfi/engine";
+import { k401Cost, run, type MonthRow, type PlanState, type RunResult } from "@coastfi/engine";
 import { useMemo } from "react";
 import { money } from "./format";
 import { useStore } from "./store";
@@ -45,7 +45,7 @@ export function shortfallText(m: MonthRow): string {
 export type Todo = { key: string; title: string; detail?: string; amount?: number; color: string };
 
 /** A month's actions, in plan order. Formatting only; amounts come from the engine. */
-export function monthTodos(m: MonthRow, t: Theme, marginalTax: number): Todo[] {
+export function monthTodos(m: MonthRow, t: Theme, marginalTax: number, rothShare = 0): Todo[] {
   const a = m.alloc;
   const out: Todo[] = [];
   if (m.emergency) {
@@ -61,7 +61,7 @@ export function monthTodos(m: MonthRow, t: Theme, marginalTax: number): Todo[] {
   if (a.ira > 0.5) out.push({ key: "ira", title: "Contribute to your IRA", amount: a.ira, color: t.series.ira });
   if (a.goals > 0.5) out.push({ key: "goals", title: "Save toward your goals", amount: a.goals, color: t.series.goals });
   if (a.k401Step > 0.5)
-    out.push({ key: "k401", title: "Put extra into your 401(k)", detail: `${money(a.k401Step / (1 - marginalTax))} pre-tax`, amount: a.k401Step, color: t.series.k401 });
+    out.push({ key: "k401", title: "Put extra into your 401(k)", detail: `${money(a.k401Step / k401Cost(marginalTax, rothShare))} into your 401(k)`, amount: a.k401Step, color: t.series.k401 });
   if (a.taxable > 0.5) out.push({ key: "taxable", title: "Invest in your brokerage", amount: a.taxable, color: t.series.taxable });
   return out;
 }

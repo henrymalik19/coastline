@@ -1,4 +1,4 @@
-import { PERIODS, resolveIncome, type Income, type IncomeKind, type PayFreq, type PayTaxes } from "@coastfi/engine";
+import { k401Cost, PERIODS, resolveIncome, type Income, type IncomeKind, type PayFreq, type PayTaxes } from "@coastfi/engine";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money, percent } from "../lib/format";
@@ -56,7 +56,7 @@ export function IncomeSummary({ inc, marginalTax }: { inc: Income; marginalTax: 
         ) : (
           <Text style={[type.caption, { color: t.bad }]}>
             <Text style={{ fontWeight: "700" }}>The full match needs {percent(r.maxPct ?? 0, 2)}.</Text> Going up from {percent(r.contribPct ?? 0, 2)} adds {money(r.gapPre)}/check
-            (about {money(r.gapPre * (1 - marginalTax))} less take-home) for <Text style={{ fontWeight: "700" }}>+{money(r.gapMatch * P)}/yr</Text> of free money.
+            (about {money(r.gapPre * k401Cost(marginalTax, inc.rothShare))} less take-home) for <Text style={{ fontWeight: "700" }}>+{money(r.gapMatch * P)}/yr</Text> of free money.
           </Text>
         )
       ) : !good ? (
@@ -137,7 +137,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
     .filter((j) => j.id !== inc.id && (j.kind ?? "job") === "job" && (j.gross ?? 0) > 0)
     .map((j) => {
       const p = paycheck(j);
-      return { gross: p.gross * PERIODS[j.freq], pretax: (p.k401 + p.pretaxDeductions) * PERIODS[j.freq] };
+      return { gross: p.gross * PERIODS[j.freq], pretax: (p.k401Pretax + p.pretaxDeductions) * PERIODS[j.freq] };
     });
   const taxes = inc.taxes ?? { federal: 0, state: 0, socialSecurity: 0, medicare: 0 };
   const setTax = (k: keyof PayTaxes, v: number) => change({ taxes: { ...taxes, [k]: v } });
@@ -235,7 +235,23 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
           </>
         )}
         {(inc.matchMode === "pct" && (inc.gross ?? 0) > 0) || inc.matchMode === "usd" ? <IncomeSummary inc={inc} marginalTax={marginalTax} /> : null}
+        <FieldRow label="Roth 401(k)" hint={rothHint(inc.rothShare ?? 0)} info={HELP.roth401k}>
+          <NumberInput kind="percent" label="Share of your 401(k) that goes to Roth" value={inc.rothShare ?? 0} max={1} onChange={(v) => change({ rothShare: v || undefined })} />
+        </FieldRow>
         <LoanFields inc={inc} change={change} />
+      </View>
+
+      {/* employer HSA */}
+      <View style={[styles.group, { borderColor: t.border }]}>
+        <Text style={[type.heading, { color: t.text }]}>HSA from your employer</Text>
+        <FieldRow label="Your employer puts in" hint="Per year. Free money that counts toward your HSA limit" info={HELP.hsaEmployer}>
+          <NumberInput kind="money" label="Employer HSA contribution per year" value={inc.hsaEmployer ?? 0} onChange={(v) => change({ hsaEmployer: v || undefined })} />
+        </FieldRow>
+        {(inc.hsaEmployer ?? 0) > 0 && !state.plan.hsaEligible ? (
+          <Text style={[type.caption, { color: t.warn }]}>
+            Turn on "I have an HSA-eligible health plan" in Settings → Assumptions & plan rules so your plan can add to it too.
+          </Text>
+        ) : null}
       </View>
 
       {/* taxes, from a pay stub (or an estimate) */}
@@ -247,7 +263,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
               title="Fill in an estimate"
               tone="ghost"
               disabled={!((inc.gross ?? 0) > 0)}
-              onPress={() => change({ taxes: estimatePaycheckTaxes(inc.gross ?? 0, P, pay.k401 + pay.pretaxDeductions, status, otherJobs) })}
+              onPress={() => change({ taxes: estimatePaycheckTaxes(inc.gross ?? 0, P, pay.k401Pretax + pay.pretaxDeductions, status, otherJobs) })}
             />
           </View>
           <Text style={[type.caption, { color: t.text3 }]}>
@@ -397,6 +413,9 @@ function LoanFields({ inc, change }: { inc: Income; change: (p: Partial<Income>)
     </View>
   );
 }
+
+const rothHint = (share: number) =>
+  share <= 0 ? "Share that goes to Roth. 0% = all pre-tax" : share >= 1 ? "All Roth: taxed now, tax-free in retirement" : `${Math.round(share * 100)}% Roth, ${Math.round((1 - share) * 100)}% pre-tax`;
 
 function Wrap({ bare, children }: { bare?: boolean; children: ReactNode }) {
   return bare ? <View style={{ gap: space.sm, padding: space.lg }}>{children}</View> : <Card style={{ gap: space.sm }}>{children}</Card>;

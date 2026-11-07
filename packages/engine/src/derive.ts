@@ -27,6 +27,17 @@ export function derive(s: PlanState, startDate: Date): Derived {
     (sum(budget.filter((b) => b.inRetirement).map((b) => b.amount)) + num(s.healthcare)) * (1 + (w.spendDelta || 0));
   const years = Math.max(0, Math.round(s.retireAge - s.age));
 
+  // income in retirement: the yearly total once everything has started, plus the savings
+  // needed to cover whatever starts after you retire until it does (today's dollars)
+  const retIncome = (s.retirementIncome ?? []).filter((x) => num(x.monthly) > 0);
+  const retireIncomeAnnual = sum(retIncome.map((x) => num(x.monthly) * 12));
+  const retireBridge = sum(retIncome.map((x) => num(x.monthly) * 12 * Math.max(0, num(x.startAge) - s.retireAge)));
+
+  // Roth share of payroll 401(k), weighted by each job's contribution
+  const prePerYear = incomes.map((i) => num(i.pretax) * PERIODS[i.freq]);
+  const preTotal = sum(prePerYear);
+  const rothShare = preTotal > 0 ? sum(incomes.map((i, k) => prePerYear[k]! * Math.min(1, Math.max(0, num(i.rothShare))))) / preTotal : 0;
+
   return {
     start: startDate,
     age: s.age,
@@ -55,5 +66,9 @@ export function derive(s: PlanState, startDate: Date): Derived {
     runwayEssential: essentialExpenses > 0 ? bal.cash / essentialExpenses : Infinity,
     debtTotal: sum((s.debts ?? []).map((d) => d.balance)),
     matchLeftPerYear: sum(incomes.map((i) => i.gapMatch * PERIODS[i.freq])),
+    retireIncomeAnnual,
+    retireBridge,
+    rothShare,
+    hsaEmployerAnnual: sum(incomes.map((i) => Math.max(0, num(i.hsaEmployer)))),
   };
 }

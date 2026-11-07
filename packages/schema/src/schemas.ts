@@ -40,6 +40,8 @@ export const IncomeSchema = z.object({
   deductions: z
     .array(z.object({ id, kind: z.enum(["health", "dentalVision", "lifeDisability", "union", "k401_loan", "other"]), amount: nonNeg, debtId: z.string().optional() }))
     .optional(),
+  rothShare: rate.min(0).max(1).optional(),
+  hsaEmployer: nonNeg.optional(),
 });
 
 export const BudgetItemSchema = z.object({ id, name: z.string(), amount: money, inRetirement: z.boolean(), group: z.string().optional(), essential: z.boolean().optional() });
@@ -60,6 +62,16 @@ export const DebtSchema = z.object({
   apr: rate.min(0),
   minPayment: nonNeg,
   plaidAccountId: z.string().optional(),
+  promoApr: rate.min(0).optional(),
+  promoUntil: z.string().regex(MONTH_RE, "Use YYYY-MM").optional(),
+  minimumOnly: z.boolean().optional(),
+});
+export const RetirementIncomeSchema = z.object({
+  id,
+  name: z.string(),
+  kind: z.enum(["socialSecurity", "pension", "other"]),
+  monthly: nonNeg,
+  startAge: z.number().min(0).max(120),
 });
 export const GoalSchema = z.object({ id, name: z.string(), target: nonNeg, saved: nonNeg });
 export const LimitsRowSchema = z.object({
@@ -128,6 +140,7 @@ export const PlanStateSchema = z.object({
   adjustments: z.array(AdjustmentSchema).optional(),
   emergency: EmergencyModeSchema.optional(),
   filingStatus: z.enum(["single", "mfj", "hoh"]).optional(),
+  retirementIncome: z.array(RetirementIncomeSchema).optional(),
 });
 
 /** A monthly check-in (its own table in Phase 3). */

@@ -18,9 +18,19 @@ export function project(d: Derived, plan: PlanResult, r: number): Projection {
   return { series, final: total, preShareFinal: total > 0 ? pre / total : 0 };
 }
 
-/** FIRE number = retirement spending / (1 - taxRate x pre-tax share) / swr. */
-export function fireNumber(d: Pick<Derived, "retireAnnual" | "taxRate" | "swr">, preShare: number): number {
-  return d.retireAnnual / (1 - d.taxRate * preShare) / d.swr;
+/**
+ * FIRE number = (spending not covered by retirement income / swr + bridge) / (1 - taxRate x pre-tax share).
+ * Retirement income (Social Security, pensions) lowers the yearly spending the portfolio must cover;
+ * income that starts after you retire is covered from savings until it does (the bridge).
+ */
+export function fireNumber(
+  d: Pick<Derived, "retireAnnual" | "taxRate" | "swr"> & Partial<Pick<Derived, "retireIncomeAnnual" | "retireBridge">>,
+  preShare: number,
+): number {
+  const need = Math.max(0, d.retireAnnual - (d.retireIncomeAnnual ?? 0));
+  const gross = 1 - d.taxRate * preShare;
+  // same operation order as the prototype when there is no retirement income (exact parity)
+  return need / gross / d.swr + (d.retireBridge ?? 0) / gross;
 }
 
 /** Balance needed now so growth alone reaches `fire` in `yearsLeft`. */
