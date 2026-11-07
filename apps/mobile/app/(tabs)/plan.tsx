@@ -6,7 +6,7 @@ import { budgetKeyFor } from "../../lib/budgetLinks";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { longMonth } from "../../components/AdjustmentsCard";
 import { AccountsForecast } from "../../components/AccountsForecast";
-import { IconButton, NumberInput, Segmented } from "../../components/form";
+import { Chip, FormList, FormRow, InlineMoney, Segmented, Select } from "../../components/form";
 import { Icon } from "../../components/Icon";
 import { ProgressBar } from "../../components/ProgressRing";
 import { Card, Divider, Pill, Screen, SectionLabel } from "../../components/ui";
@@ -189,56 +189,64 @@ export default function Plan() {
             {isOpen ? (
               <View style={[styles.more, { marginLeft: compact ? 48 : 60, marginRight: compact ? space.md : space.lg }]}>
                 {details.length ? (
-                  <View style={{ gap: 4 }}>
+                  <FormList>
                     {details.map((d, j) => (
-                      <View key={j} style={{ flexDirection: "row", gap: 6 }}>
-                        <Text style={[type.caption, { color: t.text3 }]}>•</Text>
+                      <View key={j} style={styles.detailRow}>
                         <Text style={[type.caption, { color: t.text2, flex: 1 }]}>{d}</Text>
                       </View>
                     ))}
-                  </View>
+                  </FormList>
                 ) : null}
                 {(() => {
+                  if (info.done || info.skip) return null;
                   // this step's line on the Budget tab (paycheck steps are set on the job instead)
                   const bk = budgetKeyFor(state, info.key, thisMk);
-                  if (info.done || info.skip) return null;
-                  if (!bk) {
-                    return info.key === "k401" || info.key === "match" || info.key === "hsa" ? (
-                      <Pressable role="link" onPress={() => router.push("/money/income")} hitSlop={6} style={styles.budgetLink}>
-                        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Set per paycheck on your job</Text>
-                        <Icon name="chevron" size={12} color={t.accent} />
-                      </Pressable>
-                    ) : null;
-                  }
-                  const got = state.budgetPlan?.months?.[thisMk]?.assigned?.[bk];
+                  const got = bk ? state.budgetPlan?.months?.[thisMk]?.assigned?.[bk] : undefined;
+                  const paycheck = !bk && (info.key === "k401" || info.key === "match" || info.key === "hsa");
+                  const shareValue = amt !== undefined ? "amount" : String(shares[info.key] ?? 1);
                   return (
-                    <Pressable role="link" onPress={() => router.push(`/budget?focus=${encodeURIComponent(bk)}`)} hitSlop={6} style={styles.budgetLink}>
-                      <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>
-                        {!state.budgetPlan ? "Budget for it" : got !== undefined ? `${money(got)} assigned this month on Budget` : "Assign it on Budget"}
-                      </Text>
-                      <Icon name="chevron" size={12} color={t.accent} />
-                    </Pressable>
+                    <FormList>
+                      {bk || paycheck ? (
+                        <Pressable
+                          role="link"
+                          onPress={() => router.push(bk ? `/budget?focus=${encodeURIComponent(bk)}` : "/money/income")}
+                          style={({ pressed }) => [styles.linkRow, pressed ? { backgroundColor: t.surface2 } : null]}
+                        >
+                          <Text style={[type.body, { color: t.text, flex: 1 }]}>{paycheck ? "Set on your job" : "This month"}</Text>
+                          <Text style={[type.body, { color: t.accent, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>
+                            {paycheck ? "Per paycheck" : !state.budgetPlan ? "Budget for it" : got !== undefined ? `${money(got)} assigned` : "Assign on Budget"}
+                          </Text>
+                          <Icon name="chevron" size={14} color={t.accent} />
+                        </Pressable>
+                      ) : null}
+                      {canShare ? (
+                        <FormRow label="Share of what's left" hint="The rest goes to the next steps">
+                          <Select
+                            plain
+                            label={`${info.label}: share of what's left`}
+                            value={shareValue}
+                            options={[
+                              { value: "1", label: "All of it" },
+                              { value: "0.75", label: "75%" },
+                              { value: "0.5", label: "50%" },
+                              { value: "0.25", label: "25%" },
+                              ...(amt !== undefined ? [{ value: "amount", label: `${money(amt, { whole: true })} a month` }] : []),
+                            ]}
+                            onChange={(v) => { if (v !== "amount") setSplit(info.key, { share: Number(v) }); }}
+                          />
+                        </FormRow>
+                      ) : null}
+                      {canShare && amt !== undefined ? (
+                        <FormRow label="Each month" hint={changed ? `${changed} month${changed === 1 ? "" : "s"} changed on the Budget tab` : undefined}>
+                          <InlineMoney label={`${info.label}, amount a month`} value={amt} onChange={(v) => setSplit(info.key, { amount: v })} />
+                        </FormRow>
+                      ) : null}
+                    </FormList>
                   );
                 })()}
-                {canShare ? (
-                  <SplitPicker
-                    label={info.label}
-                    share={shares[info.key] ?? 1}
-                    amount={amt}
-                    changed={changed}
-                    allowAmount={canAmount && amt !== undefined}
-                    onChange={(v) => setSplit(info.key, v)}
-                  />
-                ) : null}
-                <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
-                  <Pressable role="button" disabled={idx === 0} onPress={() => move(idx, -1)} style={[styles.moveBtn, { borderColor: t.border, opacity: idx === 0 ? 0.4 : 1 }]}>
-                    <Icon name="up" size={14} color={t.text2} />
-                    <Text style={[type.caption, { color: t.text2, fontWeight: "600" }]}>Move up</Text>
-                  </Pressable>
-                  <Pressable role="button" disabled={idx === state.plan.steps.length - 1} onPress={() => move(idx, 1)} style={[styles.moveBtn, { borderColor: t.border, opacity: idx === state.plan.steps.length - 1 ? 0.4 : 1 }]}>
-                    <Icon name="down" size={14} color={t.text2} />
-                    <Text style={[type.caption, { color: t.text2, fontWeight: "600" }]}>Move down</Text>
-                  </Pressable>
+                <View style={styles.chipRow}>
+                  <Chip title="Move up" icon="up" disabled={idx === 0} onPress={() => move(idx, -1)} />
+                  <Chip title="Move down" icon="down" disabled={idx === state.plan.steps.length - 1} onPress={() => move(idx, 1)} />
                 </View>
               </View>
             ) : null}
@@ -385,52 +393,6 @@ export default function Plan() {
   );
 }
 
-/** "Gets all of what's left", a share of it, or a set amount a month (the rest goes to the next steps at the same time). */
-function SplitPicker({ label, share, amount, changed, allowAmount, onChange }: {
-  label: string; share: number; amount?: number; changed: number; allowAmount: boolean;
-  onChange: (v: { share: number } | { amount: number }) => void;
-}) {
-  const t = useTheme();
-  const [open, setOpen] = useState(false);
-  const opts = [1, 0.75, 0.5, 0.25];
-  const custom = amount !== undefined;
-  const text = custom
-    ? `Gets ${money(amount, { whole: true })} a month${changed ? ` (${changed} month${changed === 1 ? "" : "s"} changed)` : ""}, the rest goes to the next steps`
-    : share >= 1 ? "Gets all of what's left" : `Gets ${Math.round(share * 100)}%, the rest goes to the next steps`;
-  const chip = (key: string, on: boolean, label: string, a11y: string, onPress: () => void) => (
-    <Pressable key={key} role="radio" aria-checked={on} accessibilityLabel={a11y} onPress={onPress}
-      style={[styles.chip, { borderColor: on ? t.accent : t.border, backgroundColor: on ? t.accentSoft : t.surface }]}>
-      <Text style={[type.caption, { color: on ? t.accent : t.text2, fontWeight: on ? "700" : "500" }]}>{label}</Text>
-    </Pressable>
-  );
-  return (
-    <View style={{ gap: 6 }}>
-      <Pressable role="button" aria-expanded={open} accessibilityLabel={`${label}: ${text}. Change`} onPress={() => setOpen((o) => !o)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}>
-        <Text style={[type.caption, { color: custom || share < 1 ? t.accent : t.text3, fontWeight: custom || share < 1 ? "700" : "500" }]}>{text}</Text>
-        <View style={{ transform: [{ rotate: open ? "90deg" : "0deg" }] }}>
-          <Icon name="chevron" size={12} color={t.text3} />
-        </View>
-      </Pressable>
-      {open ? (
-        <View style={{ gap: 6 }}>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-            {opts.map((v) =>
-              chip(String(v), !custom && Math.abs(v - share) < 1e-9, v >= 1 ? "All" : `${v * 100}%`, v >= 1 ? "All of it" : `${v * 100}%`, () => { onChange({ share: v }); setOpen(false); }),
-            )}
-            {allowAmount ? chip("amt", custom, "$ a month", "A set amount a month", () => { if (!custom) onChange({ amount: 1000 }); }) : null}
-          </View>
-          {custom ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" }}>
-              <NumberInput kind="money" label={`${label}, amount a month`} value={amount} width={140} step={100} onChange={(v) => onChange({ amount: v })} />
-              <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 160 }]}>a month. Change single months on the Budget tab.</Text>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
   step: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
@@ -438,6 +400,9 @@ const styles = StyleSheet.create({
   moves: { flexDirection: "row", alignItems: "center" },
   more: { gap: space.sm, paddingBottom: space.md },
   budgetLink: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" },
+  detailRow: { paddingHorizontal: space.md, paddingVertical: 10 },
+  linkRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, minHeight: 50 },
+  chipRow: { flexDirection: "row", gap: space.sm, flexWrap: "wrap" },
   moveBtn: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   dateLabel: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: 6 },
   cmp: { flexDirection: "row", gap: space.lg },
