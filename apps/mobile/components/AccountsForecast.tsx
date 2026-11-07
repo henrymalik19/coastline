@@ -6,7 +6,7 @@
 import { accountForecasts, BUCKET_LABELS, scheduleAmount, type AccountForecast, type AccountKey, type PlanState, type RunResult, type ScheduleEntry } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { debtLabel } from "../lib/debts";
 import { money, monthLabel } from "../lib/format";
 import { useStore } from "../lib/store";
@@ -51,9 +51,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
   const { twoColumn, contentWidth } = useLayout();
   // phones: narrower columns, one "left over" column for the plan, details in place of the table
   const compact = contentWidth < 600;
-  const [planOpen, setPlanOpen] = useState<string | null>(null);
   const [span, setSpan] = useState(12);
-  const [edit, setEdit] = useState<{ k: AccountKey; i: number } | null>(null);
   const pl = o.plan;
   const d = o.d;
   const all = accountForecasts(state, d, pl, d.r);
@@ -87,6 +85,11 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
 
   // show accounts that have money or get some in the next two years
   const shown = all.filter((a) => a.start > 0.5 || a.months.slice(0, 24).some((m) => m.total > 0.5) || (schedule[a.key]?.length ?? 0) > 0);
+  // which account the table shows: one at a time (phones start there), or all side by side
+  const [pickRaw, setPick] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+  const pick = pickRaw === "all" || (pickRaw && shown.some((a) => a.key === pickRaw)) ? pickRaw : compact ? shown[0]?.key ?? "all" : "all";
+  const cols = pick === "all" ? shown : shown.filter((a) => a.key === pick);
   const isDebt = (k: AccountKey) => k.startsWith("debt:");
 
   const parts = (m: { paycheck: number; plan: number; employer: number; loan: number }, k: AccountKey) =>
@@ -306,7 +309,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
       <View style={[{ width: COL * planCols, justifyContent: "center" }, groupEdge]}>
         <Text numberOfLines={1} style={[type.overline, { color: t.text3, textAlign: "center" }]}>Your plan</Text>
       </View>
-      {shown.map((x) => {
+      {cols.map((x) => {
         const on = sel === x.key;
         const planned = (schedule[x.key]?.length ?? 0) > 0;
         return (
@@ -333,7 +336,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
         {compact ? null : num("Planned", t.text3)}
         {num(compact ? "Left over" : "Not planned", t.text3)}
       </View>
-      {shown.map((x) => (
+      {cols.map((x) => (
         <View key={x.key} style={[{ flexDirection: "row" }, groupEdge]}>
           {num(isDebt(x.key) ? "Paid" : "In", t.text3)}
           {num(isDebt(x.key) ? "Owed" : "Balance", t.text3)}
@@ -345,7 +348,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
     <View style={[styles.gr, { backgroundColor: t.surface }]}>
       {monthCell(<Text style={[type.caption, { color: t.text3 }]}>Today</Text>, t.surface)}
       <View style={[{ width: COL * planCols }, groupEdge]} />
-      {shown.map((x) => (
+      {cols.map((x) => (
         <View key={x.key} style={[{ flexDirection: "row" }, groupEdge]}>
           {num("", t.text3)}
           {num(money(x.start), t.text2)}
@@ -371,7 +374,7 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
           {compact ? null : num(r.plannedAsk > 0.5 ? money(r.plannedAsk) : "–", t.text2)}
           {num(short ? (compact ? `−${money(r.plannedShort)}` : `short ${money(r.plannedShort)}`) : money(Math.max(0, r.available - r.plannedGot)), short ? t.bad : t.good, COL, short)}
         </View>
-        {shown.map((x) => (
+        {cols.map((x) => (
           <View key={x.key} style={[{ flexDirection: "row", alignItems: "center" }, groupEdge]}>
             <View style={{ width: COL, paddingHorizontal: 8, alignItems: "flex-end" }}>{amountCell(x, i, COL - 16)}</View>
             {num(money(x.months[i]!.balance), t.text2)}
@@ -447,30 +450,74 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
     <Card padded={false} style={fill ? { flex: 1, minHeight: 0, overflow: "hidden" } : undefined}>
       <View style={{ padding: compact ? space.sm : space.md, gap: space.sm }}>
         {compact && selected ? null : (
-        <View style={[styles.editRow, { justifyContent: "space-between" }, compact ? { flexWrap: "nowrap" } : null]}>
-          {compact ? null : <SectionLabel>Forecast</SectionLabel>}
-          <Pressable role="link" accessibilityLabel="Set monthly amounts (Money, Monthly savings)" onPress={() => router.push("/money/savings")} hitSlop={6} style={[styles.chip, { borderColor: t.accent, backgroundColor: t.accentSoft, flexDirection: "row", alignItems: "center", gap: 4 }]}>
-            <Icon name="plus" size={12} color={t.accent} />
-            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{compact ? "Set" : "Set amounts"}</Text>
-          </Pressable>
-          <View style={[styles.editRow, compact ? { flexWrap: "nowrap", gap: 6 } : null]}>
-            <View style={[styles.arrows, { borderColor: t.border }]}>
-              <Pressable role="button" accessibilityLabel="Scroll the table left" onPress={() => scrollSide(-1)} hitSlop={4} style={styles.arrow}>
-                <Icon name="back" size={16} color={t.accent} />
+          <View style={[styles.editRow, { justifyContent: "space-between" }]}>
+            <View style={[styles.editRow, compact ? { flex: 1, flexWrap: "nowrap" } : null]}>
+              {compact ? null : <SectionLabel>Forecast</SectionLabel>}
+              <Pressable
+                role="button"
+                aria-haspopup="listbox"
+                accessibilityLabel={`Account: ${pick === "all" ? "All accounts" : label(pick as AccountKey)}. Change`}
+                onPress={() => setPicking(true)}
+                hitSlop={4}
+                style={[styles.picker, { borderColor: t.border, backgroundColor: t.surface2 }, compact ? { flex: 1 } : null]}
+              >
+                <Text numberOfLines={1} style={[type.caption, { color: t.text, fontWeight: "700", flexShrink: 1 }]}>
+                  {pick === "all" ? `All accounts (${shown.length})` : label(pick as AccountKey).replace(" (what you owe)", "")}
+                </Text>
+                <Icon name="down" size={14} color={t.text2} />
               </Pressable>
-              <View style={{ width: StyleSheet.hairlineWidth, alignSelf: "stretch", backgroundColor: t.border }} />
-              <Pressable role="button" accessibilityLabel="Scroll the table right" onPress={() => scrollSide(1)} hitSlop={4} style={styles.arrow}>
-                <Icon name="chevron" size={16} color={t.accent} />
+              <Pressable role="link" accessibilityLabel="Set monthly amounts (Money, Monthly savings)" onPress={() => router.push("/money/savings")} hitSlop={6} style={[styles.chip, { borderColor: t.accent, backgroundColor: t.accentSoft, flexDirection: "row", alignItems: "center", gap: 4 }]}>
+                <Icon name="plus" size={12} color={t.accent} />
+                <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{compact ? "Set" : "Set amounts"}</Text>
               </Pressable>
             </View>
-            {[12, 24, 36, 60].map((n) => (
-              <Pressable key={n} role="radio" aria-checked={span === n} onPress={() => setSpan(n)} hitSlop={6} style={[styles.chip, { borderColor: span === n ? t.accent : t.border, backgroundColor: span === n ? t.accentSoft : t.surface }]}>
-                <Text style={[type.caption, { color: span === n ? t.accent : t.text2, fontWeight: "700" }]}>{compact ? `${n / 12}y` : `${n} mo`}</Text>
-              </Pressable>
-            ))}
+            <View style={[styles.editRow, compact ? { flexWrap: "nowrap", gap: 6 } : null]}>
+              {pick === "all" ? (
+                <View style={[styles.arrows, { borderColor: t.border }]}>
+                  <Pressable role="button" accessibilityLabel="Scroll the table left" onPress={() => scrollSide(-1)} hitSlop={4} style={styles.arrow}>
+                    <Icon name="back" size={16} color={t.accent} />
+                  </Pressable>
+                  <View style={{ width: StyleSheet.hairlineWidth, alignSelf: "stretch", backgroundColor: t.border }} />
+                  <Pressable role="button" accessibilityLabel="Scroll the table right" onPress={() => scrollSide(1)} hitSlop={4} style={styles.arrow}>
+                    <Icon name="chevron" size={16} color={t.accent} />
+                  </Pressable>
+                </View>
+              ) : null}
+              {[12, 24, 36, 60].map((n) => (
+                <Pressable key={n} role="radio" aria-checked={span === n} onPress={() => setSpan(n)} hitSlop={6} style={[styles.chip, { borderColor: span === n ? t.accent : t.border, backgroundColor: span === n ? t.accentSoft : t.surface }]}>
+                  <Text style={[type.caption, { color: span === n ? t.accent : t.text2, fontWeight: "700" }]}>{compact ? `${n / 12}y` : `${n} mo`}</Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
-        </View>
         )}
+        <Modal visible={picking} transparent animationType="fade" onRequestClose={() => setPicking(false)}>
+          <Pressable style={styles.backdrop} onPress={() => setPicking(false)} accessibilityLabel="Close the account list">
+            <Pressable onPress={() => {}} aria-label="Show which account" style={[styles.sheet, { backgroundColor: t.surface, borderColor: t.border }]}>
+              <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.md, paddingBottom: 4 }]}>Show</Text>
+              <ScrollView style={{ maxHeight: 440 }}>
+                {[{ key: "all", name: "All accounts, side by side", sub: `${shown.length} accounts` }, ...shown.map((x) => ({ key: x.key as string, name: label(x.key).replace(" (what you owe)", ""), sub: `${isDebt(x.key) ? "Owed" : "Today"} ${money(x.start)}${(schedule[x.key]?.length ?? 0) > 0 ? " · has a monthly amount" : ""}` }))].map((o) => {
+                  const on = pick === o.key;
+                  return (
+                    <Pressable
+                      key={o.key}
+                      role="option"
+                      aria-selected={on}
+                      onPress={() => { setPick(o.key); setSel(null); setPicking(false); }}
+                      style={({ pressed }) => [styles.option, { backgroundColor: on ? t.accentSoft : pressed ? t.surface2 : "transparent" }]}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[type.body, { color: on ? t.accent : t.text, fontWeight: on ? "700" : "500" }]}>{o.name}</Text>
+                        <Text style={[type.caption, { color: t.text3 }]}>{o.sub}</Text>
+                      </View>
+                      {on ? <Icon name="check" size={16} color={t.accent} /> : null}
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
         {summary}
         {showCheck ? (
           <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ maxHeight: 340, flexGrow: 0 }}>{check}</ScrollView>
@@ -478,8 +525,8 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
         {!selected ? (
           <Text style={[type.caption, { color: t.text3 }]}>
             {compact
-              ? "Tap a name for details · ·3 = 3 paychecks · red = short"
-              : "Tap an account's name for its details · ● has a monthly amount · ·3 = 3-paycheck month · red = short"}
+              ? "Tap the account's name for details · ·3 = 3 paychecks · red = short"
+              : "Pick an account above, or tap a name for its details · ● has a monthly amount · ·3 = 3-paycheck month · red = short"}
           </Text>
         ) : null}
       </View>
@@ -498,33 +545,6 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
   );
 }
 
-/** One month's amount: this month only, or from this month on (until your next change). */
-function MonthEditor({ title, unit, initial, changed, onJust, onFrom, onUndo, onCancel }: {
-  title: string; unit: string; initial: number; changed: boolean;
-  onJust: (v: number) => void; onFrom: (v: number) => void; onUndo: () => void; onCancel: () => void;
-}) {
-  const t = useTheme();
-  const [draft, setDraft] = useState(initial);
-  return (
-    <View style={[styles.editor, { backgroundColor: t.surface, borderColor: t.accent }]}>
-      <Text style={[type.caption, { color: t.text, fontWeight: "700" }]}>{title}</Text>
-      <View style={styles.editRow}>
-        <NumberInput kind="money" label={title} value={draft} width={140} step={100} onChange={setDraft} />
-        <Text style={[type.caption, { color: t.text3 }]}>{unit}</Text>
-      </View>
-      <View style={styles.editRow}>
-        <Button title="Just this month" tone="primary" onPress={() => onJust(draft)} style={{ minHeight: 36 }} />
-        <Button title="From this month on" onPress={() => onFrom(draft)} style={{ minHeight: 36 }} />
-        {changed ? <Button title="Undo this month" tone="ghost" onPress={onUndo} style={{ minHeight: 36 }} /> : null}
-        <Button title="Cancel" tone="ghost" onPress={onCancel} style={{ minHeight: 36 }} />
-      </View>
-      <Text style={[type.caption, { color: t.text3 }]}>
-        It gets this first that month (if there's that much left after your budget); the rest goes to your other steps.
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   points: { flexDirection: "row", flexWrap: "wrap", gap: space.lg, marginTop: 2 },
   link: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" },
@@ -534,6 +554,10 @@ const styles = StyleSheet.create({
   editor: { borderWidth: 1, borderRadius: radius.md, padding: space.sm, gap: space.sm },
   tr: { flexDirection: "row", alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: 5 },
   monthCol: { width: 92 },
+  picker: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 6, minWidth: 0, maxWidth: 280 },
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: space.lg },
+  sheet: { width: "100%", maxWidth: 380, borderRadius: radius.lg, borderWidth: 1, paddingVertical: space.md },
+  option: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, paddingVertical: 10 },
   arrows: { flexDirection: "row", borderWidth: 1, borderRadius: 999, overflow: "hidden" },
   arrow: { paddingHorizontal: 12, paddingVertical: 5, alignItems: "center", justifyContent: "center" },
   summary: { flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: 8 },
