@@ -4,6 +4,7 @@ import { CheckinSchema, PlanStateSchema, type Checkin } from "@coastfi/schema";
 import { z } from "zod";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { syncPaycheckLoans } from "./loans";
 import { freshPlan } from "./presets";
 
 export { newId } from "./id";
@@ -51,6 +52,7 @@ export const useStore = create<AppState>()(
         const draft = structuredClone(get().plan);
         fn(draft);
         syncGoalSteps(draft);
+        syncPaycheckLoans(draft);
         set({ plan: draft, updatedAt: now() });
       },
       setPlan: (plan) => set({ plan, updatedAt: now() }),

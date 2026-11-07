@@ -1,21 +1,34 @@
-import type { Debt, DebtKind } from "@coastfi/engine";
+import type { Debt, DebtKind, PlanState } from "@coastfi/engine";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { DEBT_KINDS, debtKind, debtLabel } from "../lib/debts";
 import { money, percent } from "../lib/format";
 import { Icon } from "./Icon";
 import { HELP } from "../lib/help";
+import { paycheckFor } from "../lib/loans";
 import { newId } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, FieldRow, IconButton, NumberInput, TextField } from "./form";
 import { Card, Divider } from "./ui";
+
+/** The paycheck that repays a debt, in the shape DebtEditor's `paidFrom` wants. */
+export function paidFromFor(state: PlanState, debtId: string) {
+  const link = paycheckFor(state, debtId);
+  return link ? { job: link.income.name || "job", perCheck: link.deduction.amount } : undefined;
+}
 
 export function newDebt(kind: DebtKind): Debt {
   return { id: newId(), name: "", kind, balance: 0, apr: debtKind(kind).typicalApr, minPayment: 0 };
 }
 
 /** One debt: pick a type, optionally name it, then balance / rate / minimum. */
-export function DebtEditor({ debt, onChange, onRemove }: { debt: Debt; onChange: (patch: Partial<Debt>) => void; onRemove: () => void }) {
+export function DebtEditor({
+  debt, onChange, onRemove, paidFrom,
+}: {
+  debt: Debt; onChange: (patch: Partial<Debt>) => void; onRemove: () => void;
+  /** Set when a paycheck repays this debt (a 401(k) loan): its payment comes from there. */
+  paidFrom?: { job: string; perCheck: number };
+}) {
   const t = useTheme();
   const kind = debtKind(debt.kind);
   const setKind = (k: DebtKind) => {
@@ -80,10 +93,16 @@ export function DebtEditor({ debt, onChange, onRemove }: { debt: Debt; onChange:
         <NumberInput kind="percent" label={`${debtLabel(debt)} APR`} value={debt.apr} max={1} onChange={(v) => onChange({ apr: v })} />
       </FieldRow>
       <Divider />
-      <FieldRow label="Minimum payment" hint="Per month" info={HELP.minPayment}>
-        <NumberInput kind="money" label={`${debtLabel(debt)} minimum payment`} value={debt.minPayment} onChange={(v) => onChange({ minPayment: v })} />
-      </FieldRow>
-      {kind.note ? (
+      {paidFrom ? (
+        <FieldRow label="Payment" hint={`From your ${paidFrom.job} paycheck (${money(paidFrom.perCheck)} per check). Change it under Income.`}>
+          <Text style={[type.heading, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(debt.minPayment)}/mo</Text>
+        </FieldRow>
+      ) : (
+        <FieldRow label="Minimum payment" hint="Per month" info={HELP.minPayment}>
+          <NumberInput kind="money" label={`${debtLabel(debt)} minimum payment`} value={debt.minPayment} onChange={(v) => onChange({ minPayment: v })} />
+        </FieldRow>
+      )}
+      {kind.note && !paidFrom ? (
         <View style={[styles.note, { backgroundColor: t.warnSoft }]}>
           <Text style={[type.caption, { color: t.text }]}>{kind.note}</Text>
         </View>

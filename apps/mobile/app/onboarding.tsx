@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AccountsEditor } from "../components/AccountsEditor";
 import { BudgetEditor } from "../components/BudgetEditor";
-import { AddDebtButtons, DebtEditor } from "../components/DebtEditor";
+import { AddDebtButtons, DebtEditor, paidFromFor } from "../components/DebtEditor";
 import { EmergencyFundNote, looksLikeEmergencyFund } from "../components/EmergencyFundNote";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField } from "../components/form";
 import { Icon } from "../components/Icon";
@@ -167,6 +167,7 @@ function MoneyStep() {
         <DebtEditor
           key={dt.id}
           debt={dt}
+          paidFrom={paidFromFor(state, dt.id)}
           onChange={(patch) => update((p) => { p.debts[i] = { ...p.debts[i]!, ...patch }; })}
           onRemove={() => update((p) => { p.debts.splice(i, 1); })}
         />

@@ -43,8 +43,14 @@ export type Income = {
 
 export type PayTaxes = { federal: number; state: number; socialSecurity: number; medicare: number };
 
-export type PayDeductionKind = "health" | "dentalVision" | "lifeDisability" | "union" | "other";
-export type PayDeduction = { id: string; kind: PayDeductionKind; amount: number };
+export type PayDeductionKind = "health" | "dentalVision" | "lifeDisability" | "union" | "k401_loan" | "other";
+export type PayDeduction = {
+  id: string;
+  kind: PayDeductionKind;
+  amount: number;
+  /** For a 401(k) loan repayment: the debt it pays. The debt carries the payment; take-home ignores it. */
+  debtId?: string;
+};
 
 export type BudgetItem = {
   id: string;

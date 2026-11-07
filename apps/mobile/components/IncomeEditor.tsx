@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money, percent } from "../lib/format";
 import { HELP } from "../lib/help";
+import { isLoanDeduction, monthlyFromPaycheck } from "../lib/loans";
 import { DEDUCTION_KINDS, paycheck, withAutoNet } from "../lib/paycheck";
 import { MATCH_PRESETS } from "../lib/presets";
 import { estimatePaycheckTaxes, FILING_LABELS } from "../lib/tax";
@@ -234,6 +235,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
           </>
         )}
         {(inc.matchMode === "pct" && (inc.gross ?? 0) > 0) || inc.matchMode === "usd" ? <IncomeSummary inc={inc} marginalTax={marginalTax} /> : null}
+        <LoanFields inc={inc} change={change} />
       </View>
 
       {/* taxes, from a pay stub (or an estimate) */}
@@ -272,6 +274,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
         <View style={[styles.group, { borderColor: t.border }]}>
           <Text style={[type.heading, { color: t.text }]}>Other deductions</Text>
           {deductions.map((x, i) => {
+            if (isLoanDeduction(x)) return null; // shown in the 401(k) section
             const label = DEDUCTION_KINDS.find((k) => k.value === x.kind)?.label ?? "Other";
             return (
               <View key={x.id} style={styles.dedRow}>
@@ -287,7 +290,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
             );
           })}
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-            {DEDUCTION_KINDS.filter((k) => k.value === "other" || !deductions.some((d) => d.kind === k.value)).map((k) => (
+            {DEDUCTION_KINDS.filter((k) => k.value !== "k401_loan" && (k.value === "other" || !deductions.some((d) => d.kind === k.value))).map((k) => (
               <Pressable
                 key={k.value}
                 role="button"
@@ -311,6 +314,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
             {auto ? (
               <Text style={[type.caption, { color: t.text3 }]}>
                 {money(pay.gross)} − {money(pay.k401)} 401(k) − {money(pay.taxes)} taxes − {money(pay.deductions)} other
+                {pay.loanRepayment > 0 ? ` (the ${money(pay.loanRepayment)} 401(k) loan repayment is counted under Debts)` : ""}
               </Text>
             ) : (
               <Text style={[type.caption, { color: t.text3 }]}>Typed from your pay stub</Text>
@@ -332,6 +336,64 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
           onChange={(manual) => change(manual ? { netMode: "manual" } : { netMode: "auto" })}
         />
       </View>
+    </View>
+  );
+}
+
+/** "Repaying a 401(k) loan?" switch; when on, the per-check repayment plus the loan's balance and rate (kept on its debt). */
+function LoanFields({ inc, change }: { inc: Income; change: (p: Partial<Income>) => void }) {
+  const t = useTheme();
+  const { state } = usePlan();
+  const update = useStore((s) => s.update);
+  const deductions = inc.deductions ?? [];
+  const loan = deductions.find(isLoanDeduction);
+  const debt = loan?.debtId ? state.debts.find((d) => d.id === loan.debtId) : undefined;
+  const setDebt = (patch: { balance?: number; apr?: number }) =>
+    update((p) => {
+      const d = p.debts.find((x) => x.id === loan?.debtId);
+      if (d) Object.assign(d, patch);
+    });
+  const turnOff = async () => {
+    if (debt && debt.balance > 0 && !(await confirm("Remove the 401(k) loan?", "This also removes it from your debts.", "Remove"))) return;
+    update((p) => {
+      p.debts = p.debts.filter((d) => d.id !== loan?.debtId);
+      const i = p.incomes.findIndex((x) => x.id === inc.id);
+      if (i >= 0) p.incomes[i]!.deductions = (p.incomes[i]!.deductions ?? []).filter((d) => !isLoanDeduction(d));
+    });
+  };
+  return (
+    <View style={{ gap: space.xs }}>
+      <ToggleRow
+        label="I'm repaying a 401(k) loan"
+        hint="Repayments come out of your paycheck after tax"
+        value={!!loan}
+        onChange={(on) => (on ? change({ deductions: [...deductions, { id: newId(), kind: "k401_loan", amount: 0 }] }) : void turnOff())}
+      />
+      {loan ? (
+        <View style={[styles.loan, { backgroundColor: t.surface2 }]}>
+          <FieldRow label="Repayment per paycheck" hint={loan.amount > 0 ? `About ${money(monthlyFromPaycheck(loan.amount, inc))} a month` : "From your pay stub"}>
+            <NumberInput
+              kind="money"
+              label="401(k) loan repayment per paycheck"
+              value={loan.amount}
+              onChange={(v) => change({ deductions: deductions.map((d) => (d.id === loan.id ? { ...d, amount: v } : d)) })}
+            />
+          </FieldRow>
+          {debt ? (
+            <>
+              <FieldRow label="Loan balance" hint="What you still owe">
+                <NumberInput kind="money" label="401(k) loan balance" value={debt.balance} onChange={(v) => setDebt({ balance: v })} />
+              </FieldRow>
+              <FieldRow label="Interest rate" hint="From your loan statement">
+                <NumberInput kind="percent" label="401(k) loan interest rate" value={debt.apr} max={1} onChange={(v) => setDebt({ apr: v })} />
+              </FieldRow>
+            </>
+          ) : null}
+          <Text style={[type.caption, { color: t.text3 }]}>
+            This also shows under Debts, so don't add it there or in your budget. The interest goes back into your own 401(k), so the plan doesn't rush to pay it off.
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -358,6 +420,7 @@ export function AddIncomeButtons({ onAdd, hasAny }: { onAdd: (inc: Income) => vo
 
 const styles = StyleSheet.create({
   group: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: space.md, gap: 2, marginTop: space.xs },
+  loan: { borderRadius: radius.sm, padding: space.md, gap: space.xs },
   dedRow: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 52 },
   result: { borderRadius: radius.md, padding: space.md, gap: space.xs, marginTop: space.sm },
   summary: { borderRadius: radius.md, padding: space.md, gap: space.xs, marginTop: space.xs },

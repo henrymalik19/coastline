@@ -15,7 +15,7 @@ import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, Toggle
 import { Icon, type IconName } from "../Icon";
 import { IncomesEditor } from "../IncomeEditor";
 import { EmergencyFundNote, looksLikeEmergencyFund } from "../EmergencyFundNote";
-import { AddDebtButtons, DebtEditor } from "../DebtEditor";
+import { AddDebtButtons, DebtEditor, paidFromFor } from "../DebtEditor";
 import { debtLabel } from "../../lib/debts";
 import { Card, Divider } from "../ui";
 import { HealthcareSuggestion } from "../HealthcareSuggestion";
@@ -194,6 +194,7 @@ function DebtsSection() {
         <DebtEditor
           key={dt.id}
           debt={dt}
+          paidFrom={paidFromFor(state, dt.id)}
           onChange={(patch) => update((p) => { p.debts[i] = { ...p.debts[i]!, ...patch }; })}
           onRemove={() => removeItem("this debt", debtLabel(dt), () => update((p) => { p.debts.splice(i, 1); }))}
         />
