@@ -193,6 +193,25 @@ export const PlanStateSchema = z.object({
     .optional(),
 });
 
+/** A transaction in a budget account (its own table, synced row by row). */
+export const TxnSchema = z.object({
+  id: z.string().min(1),
+  accountId: z.string().min(1),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  amount: z.number().finite(),
+  payee: z.string().optional(),
+  memo: z.string().optional(),
+  categoryId: z.string().optional(),
+  splits: z.array(z.object({ categoryId: z.string(), amount: z.number().finite(), memo: z.string().optional() })).optional(),
+  transferAccountId: z.string().optional(),
+  transferId: z.string().optional(),
+  cleared: z.enum(["uncleared", "cleared", "reconciled"]),
+  source: z.enum(["manual", "csv", "ynab", "plaid"]),
+  importId: z.string().optional(),
+  updatedAt: z.number(),
+  deleted: z.boolean().optional(),
+});
+
 /** A monthly check-in (its own table in Phase 3). */
 export const CheckinSchema = z.object({
   /** "YYYY-MM" */
@@ -278,5 +297,6 @@ export type _SchemaMatchesEngine = [
   Assert<Equals<z.infer<typeof StepKeySchema>, Engine.StepKey>>,
   Assert<Equals<z.infer<typeof PlanSettingsSchema>, Engine.PlanSettings>>,
   Assert<Equals<z.infer<typeof PlanStateSchema>, Engine.PlanState>>,
+  Assert<Equals<z.infer<typeof TxnSchema>, Engine.Txn>>,
 ];
 
