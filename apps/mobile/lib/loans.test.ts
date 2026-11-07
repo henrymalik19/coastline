@@ -44,3 +44,13 @@ describe("paycheck 401(k) loans", () => {
     expect(withLoan.loanRepayment).toBe(120);
   });
 });
+
+describe("linking a 401(k) loan added on the Debts page", () => {
+  it("a repayment pointing at an existing debt keeps that debt and sets its monthly payment", () => {
+    const p = plan(job([{ id: "l", kind: "k401_loan", amount: 150, debtId: "d1" }]));
+    p.debts.push({ id: "d1", name: "My loan", kind: "k401_loan", balance: 8000, apr: 0.075, minPayment: 0 });
+    syncPaycheckLoans(p);
+    expect(p.debts).toHaveLength(1);
+    expect(p.debts[0]).toMatchObject({ id: "d1", name: "My loan", balance: 8000, minPayment: 325 }); // 150 × 26 ÷ 12
+  });
+});

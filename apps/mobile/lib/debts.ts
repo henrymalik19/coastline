@@ -23,7 +23,7 @@ export const DEBT_KINDS: { value: DebtKind; label: string; typicalApr: number; p
     typicalApr: 0.085,
     placeholder: "e.g. Fidelity 401(k) loan",
     note:
-      "Easiest: turn on \"I'm repaying a 401(k) loan\" in your job's 401(k) section under Income, and it fills this in from your paycheck. Entering it here instead? Use the monthly amount (per-check × checks per year ÷ 12) as the minimum payment, and don't also list it in your budget. The interest goes back into your own 401(k), so the plan never rushes to pay this off. If you leave your job, the balance may be due soon after.",
+      "Repayments come out of your paycheck after tax. The interest goes back into your own 401(k), so the plan never rushes to pay this off. If you leave your job, the balance may be due soon after.",
   },
   { value: "other", label: "Other", typicalApr: 0.1, placeholder: "e.g. Family loan" },
 ];

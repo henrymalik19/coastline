@@ -1,4 +1,4 @@
-import type { Debt, DebtKind, PlanState } from "@coastfi/engine";
+import { PERIODS, type Debt, type DebtKind, type PlanState } from "@coastfi/engine";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { DEBT_KINDS, debtKind, debtLabel } from "../lib/debts";
@@ -6,7 +6,8 @@ import { money, percent } from "../lib/format";
 import { Icon } from "./Icon";
 import { HELP } from "../lib/help";
 import { paycheckFor } from "../lib/loans";
-import { newId } from "../lib/store";
+import { usePlan } from "../lib/plan";
+import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, FieldRow, IconButton, MonthField, NumberInput, TextField, ToggleRow } from "./form";
 import { Card, Divider } from "./ui";
@@ -69,7 +70,7 @@ export function DebtEditor({
             {!open ? (
               <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
                 {money(debt.balance)} · {debt.promoUntil ? `${pct(debt.promoApr ?? 0)} until ${shortMonth(debt.promoUntil)}, then ${pct(debt.apr)}` : pct(debt.apr)} ·{" "}
-                {money(debt.minPayment)}/mo{debt.minimumOnly ? " · minimum only" : ""}
+                {paidFrom ? `${money(paidFrom.perCheck)}/paycheck` : `${money(debt.minPayment)}/mo`}{debt.minimumOnly ? " · minimum only" : ""}
               </Text>
             ) : null}
           </View>
@@ -106,10 +107,8 @@ export function DebtEditor({
         <NumberInput kind="percent" label={`${debtLabel(debt)} APR`} value={debt.apr} max={1} onChange={(v) => onChange({ apr: v })} />
       </FieldRow>
       <Divider />
-      {paidFrom ? (
-        <FieldRow label="Payment" hint={`From your ${paidFrom.job} paycheck (${money(paidFrom.perCheck)} per check). Change it under Income.`}>
-          <Text style={[type.heading, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(debt.minPayment)}/mo</Text>
-        </FieldRow>
+      {paidFrom || kind.value === "k401_loan" ? (
+        <PaycheckLoanPayment debt={debt} />
       ) : (
         <FieldRow label="Minimum payment" hint="Per month" info={HELP.minPayment}>
           <NumberInput kind="money" label={`${debtLabel(debt)} minimum payment`} value={debt.minPayment} onChange={(v) => onChange({ minPayment: v })} />
@@ -155,6 +154,60 @@ export function DebtEditor({
         </>
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * A 401(k) loan's payment, per paycheck. Linked to a job: edit the per-check amount here (or under
+ * Income); the monthly payment follows. Not linked yet: pick the job it's repaid from, or type a
+ * monthly amount if it isn't repaid from a paycheck.
+ */
+function PaycheckLoanPayment({ debt }: { debt: Debt }) {
+  const t = useTheme();
+  const { state } = usePlan();
+  const update = useStore((s) => s.update);
+  const link = paycheckFor(state, debt.id);
+  const jobs = state.incomes.filter((i) => (i.kind ?? "job") === "job");
+
+  if (link) {
+    const { income, deduction } = link;
+    const P = PERIODS[income.freq];
+    const setPerCheck = (v: number) =>
+      update((p) => {
+        const d = p.incomes.find((x) => x.id === income.id)?.deductions?.find((x) => x.id === deduction.id);
+        if (d) d.amount = v;
+      });
+    return (
+      <FieldRow label="Repayment per paycheck" hint={`From your ${income.name || "job"} paycheck, ${P} a year · about ${money(debt.minPayment)}/mo`}>
+        <NumberInput kind="money" label={`${debtLabel(debt)} repayment per paycheck`} value={deduction.amount} onChange={setPerCheck} />
+      </FieldRow>
+    );
+  }
+
+  const linkTo = (incomeId: string) =>
+    update((p) => {
+      const inc = p.incomes.find((x) => x.id === incomeId);
+      if (!inc) return;
+      // carry over a monthly amount already typed, as the matching per-check amount
+      const perCheck = Math.round(((debt.minPayment * 12) / PERIODS[inc.freq]) * 100) / 100;
+      inc.deductions = [...(inc.deductions ?? []), { id: newId(), kind: "k401_loan", amount: perCheck, debtId: debt.id }];
+    });
+  return (
+    <View style={{ gap: space.sm }}>
+      {jobs.length ? (
+        <FieldRow label="Repaid from" hint="Pick the paycheck it comes out of, then enter the amount per paycheck" stacked>
+          <View style={styles.chips}>
+            {jobs.map((j) => (
+              <Button key={j.id} title={`${j.name || "Job"} paycheck`} onPress={() => linkTo(j.id)} style={{ minHeight: 36, paddingHorizontal: space.md }} />
+            ))}
+          </View>
+        </FieldRow>
+      ) : null}
+      <FieldRow label={jobs.length ? "Or a monthly payment" : "Payment per month"} hint={jobs.length ? "If it isn't repaid from a paycheck" : "Add your job under Income to enter it per paycheck"}>
+        <NumberInput kind="money" label={`${debtLabel(debt)} payment per month`} value={debt.minPayment} onChange={(v) => update((p) => { const d = p.debts.find((x) => x.id === debt.id); if (d) d.minPayment = v; })} />
+      </FieldRow>
+      <Text style={[type.caption, { color: t.text3 }]}>Don't also add it as a budget item.</Text>
+    </View>
   );
 }
 
