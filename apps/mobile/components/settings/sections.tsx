@@ -11,6 +11,7 @@ import { radius, space, type, useTheme } from "../../lib/theme";
 import { AccountPanel } from "../AccountPanel";
 import { useAppearance } from "../../lib/appearance";
 import { AccountsEditor } from "../AccountsEditor";
+import { ContributionsCard } from "../ContributionsCard";
 import { RetirementIncomeEditor } from "../RetirementIncomeEditor";
 import { GoalEditor } from "../GoalEditor";
 import { BudgetEditor } from "../BudgetEditor";
@@ -184,6 +185,7 @@ function AccountsSection() {
         Cash is your emergency fund. Everything else counts as invested. Tap an account to rename it, change its type, move it or remove it.
       </Text>
       <AccountsEditor />
+      <ContributionsCard />
     </>
   );
 }

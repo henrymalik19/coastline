@@ -19,7 +19,7 @@ export type StepInfo = {
   schedule?: ScheduleRow[];
 };
 
-export type ScheduleRow = { m: number; label: string; amount: number; note?: string };
+export type ScheduleRow = { m: number; label: string; amount: number; note?: string; /** shown instead of the amount */ text?: string };
 
 export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date): StepInfo | null {
   const ctx: { schedule?: ScheduleRow[] } = {};
@@ -151,9 +151,26 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
             ? pace(pick, avg, ff).replace(/^./, (c) => c.toUpperCase())
             : `Starts ${when(ff)}`;
     if (step === "k401" && ff !== undefined) {
-      const m = pl.months.find((x) => x.alloc.k401Step > 0.5 && !x.extraCheck);
-      const main = s.incomes.find((i) => (i.pretax ?? 0) > 0 || (i.match ?? 0) > 0 || i.matchMode === "pct") ?? s.incomes[0];
-      if (m && main) meta += ` (raise ${main.name}'s 401(k) by about ${money(((m.alloc.k401Step / k401Cost(s.plan.marginalTax, o.d.rothShare)) * 12) / PERIODS[main.freq])}/check)`;
+      // A 401(k) is set as a % of each paycheck: for each year, the steady rate that adds up to what the plan puts in
+      const rates = payrollRates(s, o, start);
+      if (rates.length) {
+        const [first, ...rest] = rates;
+        meta = `From ${first!.from}: set ${first!.job}'s 401(k) to ${first!.what}${first!.plus}${rest.length ? ` · ${rest[0]!.year}: ${rest[0]!.what}` : ""}`;
+        ctx.schedule = rates.map((r, i) => ({ m: i, label: `${r.year} (from ${r.from})`, amount: 0, text: r.what }));
+      }
+    }
+    // IRA / HSA: exact room left when you've told us what's in, and the April 15 deadline
+    if ((step === "ira" || step === "hsa") && ff !== undefined) {
+      const room = contributionRoom(s, start, step, ff);
+      meta += room
+        ? ` · ${room}`
+        : ` · add what you've contributed this year (Money → Accounts) for exact room`;
+      const priorKey = step === "ira" ? "priorIra" : "priorHsa";
+      if (ctx.schedule) ctx.schedule = ctx.schedule.map((r) => (pl.months[r.m]?.[priorKey] ?? 0) > 0.5 ? { ...r, note: `for ${start.getFullYear() + Math.floor((start.getMonth() + r.m) / 12) - 1} (before Apr 15)` } : r);
+      else {
+        const rows = schedule((m) => m.alloc[step], ff, ff + 11).map((r) => (pl.months[r.m]?.[priorKey] ?? 0) > 0.5 ? { ...r, note: `for ${start.getFullYear() + Math.floor((start.getMonth() + r.m) / 12) - 1} (before Apr 15)` } : r);
+        if (rows.some((r) => r.amount > 0.5)) ctx.schedule = rows;
+      }
     }
     if (ff !== undefined) meta += untilCoast(ff);
     return { key: step, label: `${STEP_LABELS[step]} (${money(cap)}/yr)`, done: false, meta };
@@ -190,6 +207,57 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
     };
   }
   return null;
+}
+
+/** "2026: $2,500 of $7,500 left · until Apr 15, 2027", from what you said you've contributed (else null). */
+function contributionRoom(s: PlanState, start: Date, step: "ira" | "hsa", firstMonth: number): string | null {
+  const c = s.contributed;
+  const y = start.getFullYear();
+  if (!c || (c.year !== y && !(c.year === y - 1 && start.getMonth() <= 3))) return null;
+  const L = limitsFor(s.limits, c.year);
+  const age = s.age + (c.year - y);
+  const cap =
+    step === "ira"
+      ? L.ira + (age >= 50 ? L.iraCatch : 0)
+      : (s.plan.hsaFamily ? L.hsaFamily : L.hsaSelf) + (age >= 55 ? L.hsaCatch : 0);
+  const left = Math.max(0, cap - (step === "ira" ? c.ira : c.hsa));
+  if (left <= 0.5) return `${c.year} is maxed`;
+  // month index of the April 15 deadline for that year
+  const deadline = (c.year + 1 - y) * 12 + 3 - start.getMonth();
+  const missed = firstMonth > deadline ? " (the plan doesn't reach this step by then, so it goes unused unless you add more)" : "";
+  return `${c.year}: ${money(left)} of ${money(cap)} left · until Apr 15, ${c.year + 1}${missed}`;
+}
+
+/** For each year the 401(k) step runs: the payroll % to set (and from when) so a steady rate matches the plan. */
+function payrollRates(s: PlanState, o: RunResult, start: Date): { year: number; from: string; job: string; what: string; plus: string }[] {
+  const d = o.d;
+  const i = d.incomes.findIndex((x) => x.pretax > 0 || x.match > 0 || x.matchMode === "pct");
+  const inc = i >= 0 ? d.incomes[i]! : d.incomes[0];
+  if (!inc) return [];
+  const idx = Math.max(0, i);
+  const cost = k401Cost(s.plan.marginalTax, d.rothShare);
+  const gross = inc.matchMode === "pct" ? inc.gross ?? 0 : 0;
+  const out: { year: number; from: string; job: string; what: string; plus: string }[] = [];
+  const byYear = new Map<number, MonthRow[]>();
+  for (const m of o.plan.months) {
+    if (m.alloc.k401Step <= 0.5 && !byYear.has(m.y)) continue;
+    byYear.set(m.y, [...(byYear.get(m.y) ?? []), m]);
+  }
+  for (const [year, rows] of byYear) {
+    if (out.length >= 3) break;
+    const extra = rows.reduce((a, m) => a + m.alloc.k401Step / cost, 0);
+    const checks = rows.reduce((a, m) => a + (m.checks[idx] ?? 0), 0);
+    if (!(extra > 0.5) || !(checks > 0)) continue;
+    const perCheck = extra / checks;
+    const base = inc.pretax + (inc.fullMatch ? 0 : inc.gapPre); // after the match step, if the plan does it
+    const from = monthLabel(start, rows[0]!.m);
+    const what =
+      gross > 0
+        ? `about ${Math.round(((base + perCheck) / gross) * 100)}% of pay${rows[0]!.mo === 0 ? " all year" : ""}`
+        : `about ${money(base + perCheck, { whole: true })}/check`;
+    out.push({ year, from, job: inc.name || "your job", what, plus: gross > 0 ? ` (+${money(perCheck, { whole: true })}/check)` : "" });
+  }
+  return out;
 }
 
 export type Milestone = { m: number; text: string; minor?: boolean; big?: boolean };

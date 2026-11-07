@@ -535,3 +535,40 @@ describe("recurring goal already set aside this month", () => {
     expect(setAsideFor(g, "2026-12")).toBeCloseTo(100, 9);
   });
 });
+
+describe("contributions already made this year, and the April 15 deadline", () => {
+  const L = limitsFor(DEFAULT_LIMITS, 2026);
+  const base = (over: Partial<PlanState> = {}) =>
+    blank({ limits: DEFAULT_LIMITS, incomes: [{ id: "i", name: "Job", freq: "monthly", net: 1000, matchMode: "usd" }], plan: { ...blank().plan, steps: ["ira"] }, ...over });
+
+  it("without it, the first year is prorated by months left (unchanged)", () => {
+    const s = base({ incomes: [{ id: "i", name: "Job", freq: "monthly", net: 20000, matchMode: "usd" }] });
+    const plan = simulatePlan(s, derive(s, START)); // Nov: 2/12 of the limit
+    expect(plan.months[0]!.alloc.ira).toBeCloseTo((L.ira * 2) / 12, 6);
+  });
+
+  it("with it, the exact room left can all go in now", () => {
+    const s = base({ incomes: [{ id: "i", name: "Job", freq: "monthly", net: 20000, matchMode: "usd" }], contributed: { year: 2026, k401: 0, ira: 5000, hsa: 0 } });
+    const plan = simulatePlan(s, derive(s, START));
+    expect(plan.months[0]!.alloc.ira).toBeCloseTo(L.ira - 5000, 6);
+    expect(plan.months[1]!.alloc.ira).toBe(0);
+  });
+
+  it("unused IRA room for last year is filled January–April, before this year's", () => {
+    const s = base({ contributed: { year: 2026, k401: 0, ira: 0, hsa: 0 } });
+    const plan = simulatePlan(s, derive(s, START));
+    const jan = plan.months[2]!; // Jan 2027
+    expect(jan.alloc.ira).toBeCloseTo(1000, 6);
+    expect(jan.priorIra).toBeCloseTo(1000, 6); // still 2026's room
+    const may = plan.months[6]!; // May 2027: the deadline has passed
+    expect(may.priorIra).toBe(0);
+    expect(may.alloc.ira).toBeCloseTo(1000, 6);
+  });
+
+  it("starting in Jan–Apr with last year's amounts: that room is used first", () => {
+    const feb = new Date(2027, 1, 10);
+    const s = base({ contributed: { year: 2026, k401: 0, ira: 7000, hsa: 0 } });
+    const plan = simulatePlan(s, derive(s, feb));
+    expect(plan.months[0]!.priorIra).toBeCloseTo(L.ira - 7000, 6);
+  });
+});

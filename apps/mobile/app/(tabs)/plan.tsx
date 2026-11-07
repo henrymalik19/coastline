@@ -93,7 +93,7 @@ export default function Plan() {
                           {r.label}
                           {r.note ? <Text style={{ color: t.text3 }}> · {r.note}</Text> : null}
                         </Text>
-                        <Text style={[type.caption, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(r.amount)}</Text>
+                        <Text style={[type.caption, { color: t.text, fontVariant: ["tabular-nums"] }]}>{r.text ?? money(r.amount)}</Text>
                       </View>
                     ))}
                     <Text style={[type.caption, { color: t.text3, marginTop: 4 }]}>

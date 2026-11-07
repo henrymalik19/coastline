@@ -1,7 +1,7 @@
 import { BASE_CHECKS } from "./constants";
 import { limitsFor } from "./limits";
 import { checksInMonth } from "./paychecks";
-import type { Adjustment, Alloc, Debt, Derived, FundKey, MonthRow, PlanEvent, PlanResult, PlanSettings, PlanState, SimulateOptions, Goal, RecurringGoal } from "./types";
+import type { Adjustment, Alloc, Debt, Derived, FundKey, MonthRow, PlanEvent, PlanResult, PlanSettings, PlanState, SimulateOptions, Goal, RecurringGoal, Limits } from "./types";
 import { addMonths, monthsBetween, num, sum } from "./util";
 
 /** Id of the synthetic debt created when a short month runs past your cash. */
@@ -102,6 +102,20 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   const fullTarget = num(p.efMonths) * efBase;
   let ytd = { k401: 0, ira: 0, hsa: 0 };
   let scale = (12 - mo0) / 12; // first year: prorate caps for the months left
+  // What's already been contributed this tax year, if known: exact room instead of prorating, and
+  // IRA/HSA room for last year can still be used January–April (the April 15 deadline).
+  const known = s.contributed;
+  const iraCapFor = (lim: Limits, age: number) => lim.ira + (age >= 50 ? lim.iraCatch : 0);
+  const hsaCapFor = (lim: Limits, age: number) => (p.hsaEligible ? (p.hsaFamily ? lim.hsaFamily : lim.hsaSelf) + (age >= 55 ? lim.hsaCatch : 0) : 0);
+  let prior = { ira: 0, hsa: 0, year: 0 };
+  if (known && num(known.year) === y0) {
+    ytd = { k401: num(known.k401), ira: num(known.ira), hsa: num(known.hsa) };
+    scale = 1;
+  } else if (known && num(known.year) === y0 - 1 && mo0 <= 3) {
+    const Lp = limitsFor(s.limits, y0 - 1);
+    prior = { ira: Math.max(0, iraCapFor(Lp, d.age) - num(known.ira)), hsa: Math.max(0, hsaCapFor(Lp, d.age) - num(known.hsa)), year: y0 - 1 };
+    scale = 1;
+  }
   const order = p.steps ?? [];
   const out: MonthRow[] = [];
   const events: PlanEvent[] = [];
@@ -120,9 +134,16 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     const y = y0 + Math.floor(absMo / 12);
     const mo = absMo % 12;
     if (mo === 0 && m > 0) {
+      if (known) {
+        // unused IRA/HSA room for the year that just ended can still be filled until April 15
+        const Lp = limitsFor(s.limits, y - 1);
+        const ageEnd = d.age + (m - 1) / 12;
+        prior = { ira: Math.max(0, iraCapFor(Lp, ageEnd) - ytd.ira), hsa: Math.max(0, hsaCapFor(Lp, ageEnd) - ytd.hsa), year: y - 1 };
+      }
       ytd = { k401: 0, ira: 0, hsa: 0 };
       scale = 1;
     }
+    if (mo > 3) prior = { ira: 0, hsa: 0, year: 0 }; // after April 15, last year's room is gone
     const L = limitsFor(s.limits, y);
     const g = Math.pow(1 + cg, Math.floor(m / 12));
     const ageNow = d.age + m / 12;
@@ -231,6 +252,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     };
     let shortfall = 0;
     let borrowed = 0;
+    let priorIra = 0;
+    let priorHsa = 0;
     if (avail < 0) {
       // a short month draws on cash first; anything beyond that goes on a credit card
       shortfall = -avail;
@@ -308,14 +331,21 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         } else if (step === "highDebt") payDebts((x) => isHighInterest(x, thr));
         else if (step === "lowDebt") payDebts((x) => !isHighInterest(x, thr));
         else if (step === "hsa") {
-          const put = Math.min(avail, capHsa);
+          // last year's room first (Jan–Apr), then this year's
+          const put = Math.min(avail, prior.hsa + capHsa);
+          const toPrior = Math.min(put, prior.hsa);
+          prior.hsa -= toPrior;
+          priorHsa += toPrior;
           alloc.hsa += put;
-          ytd.hsa += put;
+          ytd.hsa += put - toPrior;
           avail -= put;
         } else if (step === "ira") {
-          const put = Math.min(avail, capIra);
+          const put = Math.min(avail, prior.ira + capIra);
+          const toPrior = Math.min(put, prior.ira);
+          prior.ira -= toPrior;
+          priorIra += toPrior;
           alloc.ira += put;
-          ytd.ira += put;
+          ytd.ira += put - toPrior;
           avail -= put;
         } else if (step === "k401") {
           const cost = k401Cost(mt, d.rothShare); // $1 of pre-tax 401(k) costs (1 - marginal rate) of take-home; Roth costs $1
@@ -363,7 +393,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     }
 
     out.push({
-      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payRoth, payHsaEmployer, setAside, setAsideBy, payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency,
+      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payRoth, payHsaEmployer, setAside, setAsideBy, priorIra, priorHsa, payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency,
       alloc,
       cash,
       debtTotal: sum(debts.map((x) => x.balance)),

@@ -192,6 +192,23 @@ export type PlanState = {
   filingStatus?: FilingStatus;
   /** Social Security, pensions and other income in retirement (optional; missing = none). */
   retirementIncome?: RetirementIncome[];
+  /**
+   * What you've already put in this tax year (from statements / pay stub). When set, the plan uses
+   * the exact room left (no guessing by months left) and lets IRA/HSA room for last year be filled
+   * January through April (the April 15 deadline).
+   */
+  contributed?: Contributed;
+};
+
+export type Contributed = {
+  /** Tax year these amounts are for. */
+  year: number;
+  /** Your own 401(k) contributions so far (pay stub year-to-date). */
+  k401: number;
+  /** IRA contributions so far (traditional + Roth share one limit). */
+  ira: number;
+  /** HSA contributions so far, yours and your employer's. */
+  hsa: number;
 };
 
 export type FilingStatus = "single" | "mfj" | "hoh";
@@ -304,6 +321,9 @@ export type MonthRow = {
   setAside: number;
   /** `setAside` per recurring goal, by goal id. */
   setAsideBy: Record<string, number>;
+  /** Part of `alloc.ira` / `alloc.hsa` that counts toward last year (Jan–Apr, before the April 15 deadline). */
+  priorIra: number;
+  priorHsa: number;
   /** Scheduled payroll 401(k) not deferred because the annual limit was reached (pre-tax $). */
   payCut: number;
   /** One-off income change this month (+ bonus / − lost pay), already included in `income`. */

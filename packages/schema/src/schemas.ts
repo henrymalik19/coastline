@@ -163,6 +163,7 @@ export const PlanStateSchema = z.object({
   emergency: EmergencyModeSchema.optional(),
   filingStatus: z.enum(["single", "mfj", "hoh"]).optional(),
   retirementIncome: z.array(RetirementIncomeSchema).optional(),
+  contributed: z.object({ year: z.number().int(), k401: nonNeg, ira: nonNeg, hsa: nonNeg }).optional(),
 });
 
 /** A monthly check-in (its own table in Phase 3). */
