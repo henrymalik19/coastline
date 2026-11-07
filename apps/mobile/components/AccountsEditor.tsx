@@ -16,6 +16,7 @@ export const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: "taxable", label: "Brokerage" },
   { value: "hsa", label: "HSA" },
   { value: "cash", label: "Cash" },
+  { value: "property", label: "Property" },
 ];
 const typeLabel = (k: AccountType) => ACCOUNT_TYPES.find((x) => x.value === k)?.label ?? k;
 
@@ -28,6 +29,8 @@ const QUICK_ADD: { name: string; type: AccountType }[] = [
   { name: "HSA", type: "hsa" },
   { name: "Brokerage", type: "taxable" },
   { name: "Savings", type: "cash" },
+  { name: "Home", type: "property" },
+  { name: "Rental property", type: "property" },
   { name: "Other", type: "taxable" },
 ];
 

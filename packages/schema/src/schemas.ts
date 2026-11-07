@@ -45,7 +45,7 @@ export const IncomeSchema = z.object({
 });
 
 export const BudgetItemSchema = z.object({ id, name: z.string(), amount: money, inRetirement: z.boolean(), group: z.string().optional(), essential: z.boolean().optional() });
-export const AccountTypeSchema = z.enum(["pretax", "roth", "taxable", "hsa", "cash"]);
+export const AccountTypeSchema = z.enum(["pretax", "roth", "taxable", "hsa", "cash", "property"]);
 export const AccountSchema = z.object({
   id,
   name: z.string(),

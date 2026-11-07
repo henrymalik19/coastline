@@ -66,7 +66,8 @@ export type BudgetItem = {
   /** Kept when emergency mode cuts spending to essentials. Missing = essential (nothing is cut by surprise). */
   essential?: boolean;
 };
-export type AccountType = "pretax" | "roth" | "taxable" | "hsa" | "cash";
+/** "property": what a home or rental is worth. Counts in net worth, not as invested money for Coast FI. */
+export type AccountType = "pretax" | "roth" | "taxable" | "hsa" | "cash" | "property";
 export type Account = { id: string; name: string; type: AccountType; balance: number; plaidAccountId?: string };
 /** What kind of debt this is. Display only; payoff math is the same for every kind. */
 export type DebtKind = "credit_card" | "car" | "student" | "mortgage" | "personal" | "medical" | "k401_loan" | "other";

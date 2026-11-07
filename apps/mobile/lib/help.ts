@@ -32,6 +32,8 @@ export const HELP = {
   taxable: "A normal investment account (brokerage). Flexible; you can use it before 59½.",
   hsa: "Health Savings Account: tax-free for medical costs; works like an extra retirement account.",
   cash: "Checking, savings, high-yield savings. This is your emergency fund.",
+  property:
+    "What a home or rental property is worth (roughly what it would sell for). It counts in your net worth, but not toward Coast FI, since you can't spend it without selling. Add its mortgage under Debts.",
   apr: "The yearly interest rate on the debt. It's on your statement, often labeled APR.",
   minPayment: "The smallest payment the lender requires each month.",
 

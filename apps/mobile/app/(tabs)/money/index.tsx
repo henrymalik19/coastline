@@ -10,6 +10,7 @@ import { debtLabel } from "../../../lib/debts";
 import { money, percent } from "../../../lib/format";
 import { useLayout } from "../../../lib/layout";
 import { paycheckFor } from "../../../lib/loans";
+import { netWorth } from "../../../lib/networth";
 import { usePlan } from "../../../lib/plan";
 import { space, type, useTheme } from "../../../lib/theme";
 
@@ -23,7 +24,8 @@ export default function MoneyOverview() {
   const { twoColumn } = useLayout();
   const d = result.d;
   const cash = d.bal.cash;
-  const netWorth = d.invested + cash - d.debtTotal;
+  const property = d.bal.property ?? 0;
+  const worth = netWorth(d, state);
   const leftover = d.leanMonthly - d.budgetTotal - d.debtMins;
   const goals = state.goals ?? [];
   const retire = (state.retirementIncome ?? []).filter((x) => x.monthly > 0);
@@ -32,12 +34,16 @@ export default function MoneyOverview() {
   const netWorthCard = (
     <Card style={{ gap: space.sm }}>
       <Text style={[type.label, { color: t.text3 }]}>Net worth</Text>
-      <Text style={[type.display, { color: netWorth < 0 ? t.bad : t.text, fontVariant: ["tabular-nums"] }]}>{money(netWorth)}</Text>
+      <Text style={[type.display, { color: worth < 0 ? t.bad : t.text, fontVariant: ["tabular-nums"] }]}>{money(worth)}</Text>
       <View style={styles.trio}>
         <Mini label="Invested" value={money(d.invested)} />
         <Mini label="Cash" value={money(cash)} />
+        {property > 0 ? <Mini label="Property" value={money(property)} /> : null}
         <Mini label="Debts" value={money(d.debtTotal)} />
       </View>
+      {property > 0 ? (
+        <Text style={[type.caption, { color: t.text3 }]}>Property counts in net worth, not toward Coast FI (you can't spend it without selling).</Text>
+      ) : null}
     </Card>
   );
 
@@ -55,7 +61,7 @@ export default function MoneyOverview() {
   );
 
   const accountsCard = (
-    <Section title="Accounts" edit="/money/accounts" total={money(d.invested + cash)}>
+    <Section title="Accounts" edit="/money/accounts" total={money(d.invested + cash + property)}>
       {state.accounts.length ? (
         state.accounts.map((a) => <Line key={a.id} label={a.name.trim() || "Unnamed account"} hint={typeLabel(a.type)} value={money(a.balance)} />)
       ) : (

@@ -6,8 +6,9 @@ import { num, sum } from "./util";
 /** Static summary of the inputs. `startDate` is injected; the engine never reads the clock. */
 export function derive(s: PlanState, startDate: Date): Derived {
   const w: Partial<WhatIf> = s.whatif ?? {};
-  const bal: Balances = { pretax: 0, roth: 0, taxable: 0, hsa: 0, cash: 0 };
+  const bal: Balances = { pretax: 0, roth: 0, taxable: 0, hsa: 0, cash: 0, property: 0 };
   for (const a of s.accounts ?? []) bal[a.type] = (bal[a.type] || 0) + num(a.balance);
+  // property (a home or rental) isn't invested money you can draw on, so Coast FI leaves it out
   const invested = bal.pretax + bal.roth + bal.taxable + bal.hsa;
 
   const incomes = (s.incomes ?? []).map(resolveIncome);

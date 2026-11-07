@@ -10,13 +10,14 @@ import { Card, Divider, Pill, Screen, SectionLabel } from "../../components/ui";
 import { badgeList, streakInfo } from "../../lib/badges";
 import { debtLabel } from "../../lib/debts";
 import { money, monthLabel, percent } from "../../lib/format";
+import { netWorth } from "../../lib/networth";
 import { useLayout } from "../../lib/layout";
 import { usePlan } from "../../lib/plan";
 import { monthKey, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const TYPE_LABEL = { pretax: "Pre-tax", roth: "Roth", taxable: "Brokerage", hsa: "HSA", cash: "Cash" } as const;
+const TYPE_LABEL = { pretax: "Pre-tax", roth: "Roth", taxable: "Brokerage", hsa: "HSA", cash: "Cash", property: "Property" } as const;
 
 export default function Progress() {
   const t = useTheme();
@@ -190,7 +191,7 @@ export default function Progress() {
       invested: d.invested,
       cash: d.bal.cash,
       debt: d.debtTotal,
-      netWorth: d.invested + d.bal.cash + state.goals.reduce((a, g) => a + (+g.saved || 0), 0) - d.debtTotal,
+      netWorth: netWorth(d, state),
       expectedNextInvested: o.projSeries.length > 1 ? o.projSeries[1]! : d.invested,
       ...(spent > 0 ? { spent, budget: d.monthlyExpenses } : {}),
     });

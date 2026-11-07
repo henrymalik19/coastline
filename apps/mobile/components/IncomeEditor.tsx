@@ -110,7 +110,35 @@ export function IncomeEditor({
           <NumberInput kind="money" label="Amount you keep" value={inc.net} onChange={(v) => change({ net: v })} />
         </FieldRow>
       )}
+      {kind === "rental" ? <RentalValue inc={inc} /> : null}
     </Wrap>
+  );
+}
+
+/** A rental's worth, kept as a Property account (same id every time) so it shows in net worth. */
+export const rentalAccountId = (incomeId: string) => `prop-${incomeId}`;
+
+function RentalValue({ inc }: { inc: Income }) {
+  const t = useTheme();
+  const { state } = usePlan();
+  const update = useStore((s) => s.update);
+  const id = rentalAccountId(inc.id);
+  const account = state.accounts.find((a) => a.id === id);
+  const setValue = (v: number) =>
+    update((p) => {
+      const a = p.accounts.find((x) => x.id === id);
+      if (a) a.balance = v;
+      else if (v > 0) p.accounts.push({ id, name: inc.name.trim() || "Rental property", type: "property", balance: v });
+    });
+  return (
+    <View style={{ gap: 2 }}>
+      <FieldRow label="What the property is worth" hint="Roughly what it would sell for. Counts in your net worth" info={HELP.property}>
+        <NumberInput kind="money" label="Rental property value" value={account?.balance ?? 0} onChange={setValue} />
+      </FieldRow>
+      <Text style={[type.caption, { color: t.text3 }]}>
+        It's listed under Accounts as a property. Add its mortgage under Debts so net worth subtracts what you owe.
+      </Text>
+    </View>
   );
 }
 
@@ -471,7 +499,13 @@ export function IncomesEditor() {
   };
   const remove = async () => {
     if (!inc) return;
-    if (await confirm("Remove this income?", `"${inc.name || "This income"}" will be removed from your plan.`, "Remove")) update((p) => { p.incomes.splice(idx, 1); });
+    const hasProperty = state.accounts.some((a) => a.id === rentalAccountId(inc.id));
+    const msg = `"${inc.name || "This income"}" will be removed from your plan${hasProperty ? ", along with its property value in Accounts" : ""}.`;
+    if (await confirm("Remove this income?", msg, "Remove"))
+      update((p) => {
+        p.incomes.splice(idx, 1);
+        p.accounts = p.accounts.filter((a) => a.id !== rentalAccountId(inc.id));
+      });
   };
 
   const header = (
