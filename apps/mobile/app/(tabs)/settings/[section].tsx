@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from "expo-router";
 import { Text } from "react-native";
-import { useTwoPane } from "../../../components/MasterDetail";
+import { useFillPage } from "../../../components/MasterDetail";
 import { Screen } from "../../../components/ui";
 import { SECTION_SCREENS, findSection } from "../../../components/settings/sections";
 import { useTheme } from "../../../lib/theme";
@@ -9,7 +9,7 @@ const FULL_PAGE = new Set(["income", "budget"]);
 
 export default function SettingsSection() {
   const t = useTheme();
-  const twoPane = useTwoPane();
+  const fillPage = useFillPage();
   const { section } = useLocalSearchParams<{ section: string }>();
   const meta = findSection(section);
   const Body = meta ? SECTION_SCREENS[meta.key] : undefined;
@@ -19,7 +19,7 @@ export default function SettingsSection() {
       title={meta?.title ?? "Not found"}
       subtitle={meta?.subtitle}
       narrow={!(meta && FULL_PAGE.has(meta.key))}
-      fill={twoPane && !!meta && FULL_PAGE.has(meta.key)}
+      fill={fillPage && !!meta && FULL_PAGE.has(meta.key)}
       back
       hideSettings
     >

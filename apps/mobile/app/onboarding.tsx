@@ -8,7 +8,7 @@ import { EmergencyFundNote, looksLikeEmergencyFund } from "../components/Emergen
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField } from "../components/form";
 import { Icon } from "../components/Icon";
 import { RetirementIncomeEditor } from "../components/RetirementIncomeEditor";
-import { useTwoPane } from "../components/MasterDetail";
+import { useFillPage } from "../components/MasterDetail";
 import { ProgressBar, ProgressRing } from "../components/ProgressRing";
 import { IncomesEditor } from "../components/IncomeEditor";
 import { Card, Divider, Screen } from "../components/ui";
@@ -28,7 +28,7 @@ type Step = (typeof STEPS)[number];
 export default function Onboarding() {
   const t = useTheme();
   const router = useRouter();
-  const twoPane = useTwoPane();
+  const fillPage = useFillPage();
   const completeOnboarding = useStore((s) => s.completeOnboarding);
   const [step, setStep] = useState<Step>("you");
   const i = STEPS.indexOf(step);
@@ -57,7 +57,7 @@ export default function Onboarding() {
   const [title, subtitle] = titles[step];
 
   return (
-    <Screen title={title} subtitle={subtitle} hideSettings maxWidth={1120} fill={twoPane && (step === "income" || step === "budget")}>
+    <Screen title={title} subtitle={subtitle} hideSettings maxWidth={1120} fill={fillPage && (step === "income" || step === "budget")}>
       <View style={{ gap: 6 }}>
         <Text style={[type.caption, { color: t.text3 }]}>Step {i + 1} of {STEPS.length}</Text>
         <ProgressBar progress={(i + 1) / STEPS.length} />

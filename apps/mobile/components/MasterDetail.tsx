@@ -1,11 +1,21 @@
 import type { ReactNode } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useLayout } from "../lib/layout";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Card } from "./ui";
 
 /** Two panes side by side only when there is room; phones stack and let the page scroll. */
 export const useTwoPane = () => useLayout().contentWidth >= 640;
+
+/**
+ * Full-height page whose panes scroll inside themselves: only on tall, wide (desktop) windows.
+ * Tablets and folding phones keep two panes but let the page scroll, so the lists aren't squeezed.
+ */
+export function useFillPage(): boolean {
+  const twoPane = useTwoPane();
+  const { height } = useWindowDimensions();
+  return twoPane && height >= 900;
+}
 
 export type MasterItem = { key: string; title: string; subtitle?: string; value?: string };
 
@@ -38,11 +48,12 @@ export function MasterDetail({
 }) {
   const t = useTheme();
   const twoPane = useTwoPane();
+  const fill = useFillPage();
 
   const list = twoPane ? (
     <Card padded={false} style={styles.listPane}>
       <Text style={[type.overline, { color: t.text3, padding: space.lg, paddingBottom: space.sm }]}>{listTitle}</Text>
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+      <ScrollView style={fill ? { flex: 1 } : undefined} scrollEnabled={fill} showsVerticalScrollIndicator={false}>
         <View role="tablist" aria-label={label} aria-orientation="vertical" style={{ paddingHorizontal: space.sm, gap: 2, paddingBottom: space.sm }}>
           {items.map((it) => {
             const on = it.key === selected;
@@ -95,13 +106,13 @@ export function MasterDetail({
   );
 
   const pane = (
-    <Card padded={false} style={twoPane ? { flex: 1, minHeight: 0, minWidth: 0 } : undefined}>
+    <Card padded={false} style={twoPane ? { flex: 1, minWidth: 0, ...(fill ? { minHeight: 0 } : null) } : undefined}>
       {items.length === 0 && empty ? (
-        <View style={{ flex: twoPane ? 1 : undefined, alignItems: "center", justifyContent: "center", padding: space.xl, gap: space.md }}>{empty}</View>
+        <View style={{ flex: fill ? 1 : undefined, alignItems: "center", justifyContent: "center", padding: space.xl, gap: space.md }}>{empty}</View>
       ) : (
         <>
           {detailHead ? <View style={[styles.head, { borderBottomColor: t.border }]}>{detailHead}</View> : null}
-          {twoPane ? (
+          {fill ? (
             <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {detail}
             </ScrollView>
@@ -115,10 +126,10 @@ export function MasterDetail({
   );
 
   return (
-    <View style={twoPane ? { flex: 1, minHeight: 440, gap: space.md } : { gap: space.md }}>
+    <View style={fill ? { flex: 1, minHeight: 440, gap: space.md } : { gap: space.md }}>
       {header}
       {twoPane ? (
-        <View style={{ flex: 1, minHeight: 0, flexDirection: "row", gap: space.md }}>
+        <View style={{ ...(fill ? { flex: 1, minHeight: 0 } : { alignItems: "flex-start" }), flexDirection: "row", gap: space.md }}>
           {pane}
           {list}
         </View>

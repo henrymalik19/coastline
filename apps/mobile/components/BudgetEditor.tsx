@@ -11,7 +11,7 @@ import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, IconButton, InfoTip, NumberInput, TextField, Toggle } from "./form";
 import { Icon } from "./Icon";
-import { AddChip, MasterDetail, useTwoPane } from "./MasterDetail";
+import { AddChip, MasterDetail, useFillPage, useTwoPane } from "./MasterDetail";
 import { Card, Pill } from "./ui";
 
 const UNGROUPED = "Other";
@@ -40,6 +40,7 @@ export function BudgetEditor() {
   // compact rows when the items pane itself is narrow (phones, or two panes on a mid-size window)
   const { contentWidth } = useLayout();
   const twoPane = useTwoPane();
+  const fillPage = useFillPage();
   const [showDetails, setShowDetails] = useState(false);
   const paneWidth = twoPane ? contentWidth - 270 - space.md : contentWidth;
   const compact = paneWidth < 560;
@@ -132,7 +133,8 @@ export function BudgetEditor() {
       ) : null}
     </Card>
   );
-  const header = !twoPane ? phoneHeader : (
+  // the roomy summary only on tall desktop windows; phones, tablets and folds get the one-liner
+  const header = !fillPage ? phoneHeader : (
     <Card style={{ gap: space.md }}>
       <View style={styles.flow} role="group" aria-label={`Take-home ${money(d.leanMonthly)} minus budget ${money(d.budgetTotal)} minus debt minimums ${money(d.debtMins)} leaves ${money(leftover)} a month`}>
         {figure("Take-home (normal month)", money(d.leanMonthly))}
