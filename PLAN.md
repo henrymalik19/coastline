@@ -359,7 +359,20 @@ The import is read-only on the YNAB side and can be re-run: it updates rows it c
 - Plaid Transactions (`/transactions/sync` with cursors) into registers, pending vs. posted, payee-based category suggestions.
 - ✅ Sandbox transactions arrive once, pending ones are replaced when they post, and nothing syncs without the user's account mapping.
 
-### 10.7 Open questions
+### 10.7 What the budget replaces (done in Phase 6, with a data migration)
+
+| Today | Becomes |
+|---|---|
+| Money → Monthly savings, and "Contributing $X/mo" on accounts and goals | A savings category per account with a target; its dated changes become the target's changes. What you assign is what the plan counts as saved |
+| Repeating savings goals (yearly bills) | Categories with a "by date, every N months" target; carry-over does the setting aside |
+| The emergency fund goal card | The emergency fund category, linked to cash |
+| One-off adjustments (Monthly tab) | Actual transactions for past months; extra assigned in a future month for known expenses |
+| Monthly tab | Budget tab (this month) + Plan → Forecast (charts, future months) |
+| Budget savings lines, "left over in a normal month" | Ready to assign |
+
+Kept: paycheck 401(k)/HSA changes by month (they come out before take-home), plan steps (they drive "Fill from plan"), the forecast, accounts, debts, goals, emergency mode, and check-ins for tracking accounts until bank sync. Nothing is removed before its replacement ships; the migration converts schedules to targets and takes a backup first.
+
+### 10.8 Open questions
 
 - Credit cards: the envelope way (a payment category funded as you spend), or simply debts with a balance?
 - One budget per user, or several (household, business)?
