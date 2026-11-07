@@ -51,6 +51,7 @@ export const HELP = {
   marginalTax:
     "Your top tax bracket (federal + state). Putting $1 more into a pre-tax 401(k) only costs about $1 × (1 − this rate) of take-home pay.",
   hsaEligible: "You can use an HSA only with a high-deductible health plan. Check your benefits if you're not sure.",
-  projectWith: "Project your future using the plan's priorities, or using only what you invest today, to see the difference.",
+  projectWith:
+    "\"Following this plan\" assumes every spare dollar goes through your plan's steps (emergency fund, debts, IRA, 401(k) and so on). \"What I invest now\" assumes you keep investing only what you put in each month today, and any other spare money sits in cash.",
   catchUp: "Once you're 50 (55 for the HSA), the IRS lets you put in extra each year on top of the normal limit.",
 } as const;
