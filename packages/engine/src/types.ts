@@ -101,6 +101,11 @@ export type Debt = {
   /** Pay only the minimum, never extra (e.g. federal student loans on income-driven repayment or PSLF). */
   minimumOnly?: boolean;
   /**
+   * Part of the monthly payment that is escrow (property tax + home insurance), not the loan. It doesn't
+   * pay the balance down, and it keeps being a cost after the loan is paid off and in retirement.
+   */
+  escrow?: number;
+  /**
    * Repaid by a paycheck deduction (a 401(k) loan): the payment is already out of take-home,
    * so it lowers the balance without coming out of the budget.
    */
@@ -400,8 +405,10 @@ export type MonthRow = {
   goals: { id: string; saved: number }[];
   /** What each debt still owes at the end of the month. */
   debts: { id: string; balance: number }[];
-  /** Pre-tax dollars invested this month (payroll + match + waterfall 401(k)). */
+  /** Pre-tax dollars invested this month (payroll + match + waterfall 401(k) + 401(k) loan repayments). */
   pre: number;
+  /** Paid on your own 401(k) loans this month: it goes back into your 401(k) (not toward the yearly limit). */
+  loanBack: number;
   /** Roth/taxable/HSA dollars invested this month. */
   post: number;
 };

@@ -32,6 +32,8 @@ export type AccountMonth = {
   plan: number;
   /** Your employer's money (match, employer HSA). */
   employer: number;
+  /** 401(k) loan repayments going back into the account. */
+  loan: number;
   total: number;
   /** Balance at the end of the month (for debts: what's still owed). */
   balance: number;
@@ -59,13 +61,13 @@ export type AccountForecast = {
 export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: number): AccountForecast[] {
   const rm = Math.pow(1 + r, 1 / 12) - 1;
   const rows = plan.months;
-  const mk = (key: AccountKey, start: number, invested: boolean, pick: (i: number) => [number, number, number], balanceAt?: (i: number) => number) => {
+  const mk = (key: AccountKey, start: number, invested: boolean, pick: (i: number) => [number, number, number, number?], balanceAt?: (i: number) => number) => {
     let bal = start;
     const months: AccountMonth[] = rows.map((m, i) => {
-      const [paycheck, planIn, employer] = pick(i);
-      const total = paycheck + planIn + employer;
+      const [paycheck, planIn, employer, loan = 0] = pick(i);
+      const total = paycheck + planIn + employer + loan;
       bal = balanceAt ? balanceAt(i) : bal * (invested ? 1 + rm : 1) + total;
-      return { m: m.m, y: m.y, mo: m.mo, paycheck, plan: planIn, employer, total, balance: bal };
+      return { m: m.m, y: m.y, mo: m.mo, paycheck, plan: planIn, employer, loan, total, balance: bal };
     });
     const accounts = (s.accounts ?? []).filter((x) => accountGroup(x) === key).map((x) => ({ id: x.id, name: x.name, balance: +x.balance || 0 }));
     return { key, start, months, years: [] as AccountYear[], invested, accounts };
@@ -74,7 +76,7 @@ export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: 
   const out: AccountForecast[] = [
     mk("k401", startOf("k401"), true, (i) => {
       const m = rows[i]!;
-      return [m.payPre, m.alloc.k401, m.payMatch + m.alloc.matchGain];
+      return [m.payPre, m.alloc.k401, m.payMatch + m.alloc.matchGain, m.loanBack ?? 0];
     }),
     mk("hsa", startOf("hsa"), true, (i) => {
       const m = rows[i]!;
@@ -110,7 +112,8 @@ export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: 
         const month = `${rows[i]!.y}-${String(rows[i]!.mo + 1).padStart(2, "0")}`;
         const paid = before <= 0 ? 0 : Math.max(0, before * (1 + rateIn(dt, month) / 12) - bal(i));
         // the minimum (from your budget, or your paycheck for a payroll loan), then the extra
-        return [Math.min(paid, num(dt.minPayment)), Math.max(0, paid - num(dt.minPayment)), 0];
+        const loanMin = Math.max(0, num(dt.minPayment) - Math.max(0, num(dt.escrow)));
+        return [Math.min(paid, loanMin), Math.max(0, paid - loanMin), 0];
       }, bal),
     );
   }
@@ -121,7 +124,7 @@ export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: 
     for (const m of a.months) {
       const yr = byYear.get(m.y) ?? { year: m.y, total: 0, employee: 0 };
       yr.total += m.total;
-      yr.employee += m.paycheck + m.plan;
+      yr.employee += a.key.startsWith("debt:") ? 0 : m.paycheck + m.plan;
       byYear.set(m.y, yr);
     }
     for (const yr of byYear.values()) {

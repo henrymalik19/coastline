@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { longMonth } from "../../components/AdjustmentsCard";
 import { AccountsForecast } from "../../components/AccountsForecast";
-import { IconButton, NumberInput } from "../../components/form";
+import { IconButton, NumberInput, Segmented } from "../../components/form";
 import { Icon } from "../../components/Icon";
 import { ProgressBar } from "../../components/ProgressRing";
 import { Card, Divider, Pill, Screen, SectionLabel } from "../../components/ui";
@@ -19,6 +19,8 @@ export default function Plan() {
   const { twoColumn } = useLayout();
   const { state, result: o, start, actual } = usePlan();
   const update = useStore((s) => s.update);
+  // steps and accounts are two views of the same plan
+  const [tab, setTab] = useState<"steps" | "accounts">("steps");
 
   // steps describe what you'll really do (no what-ifs), so they match Home's to-dos
   const real = { ...o, plan: actual };
@@ -246,18 +248,24 @@ export default function Plan() {
         </Card>
       ) : null}
       {finish}
-      {twoColumn ? null : steps}
-      {twoColumn ? (
+      <View style={{ maxWidth: 360 }}>
+        <Segmented
+          label="Plan view"
+          options={[{ value: "steps", label: "Steps" }, { value: "accounts", label: "Accounts" }]}
+          value={tab}
+          onChange={setTab}
+        />
+      </View>
+      {tab === "accounts" ? (
+        <AccountsForecast state={state} o={real} start={start} />
+      ) : twoColumn ? (
         <View style={{ flexDirection: "row", gap: space.lg, alignItems: "flex-start" }}>
           {steps}
-          <View style={{ flex: 2, gap: space.lg }}>
-            {compare}
-          </View>
+          <View style={{ flex: 2, gap: space.lg }}>{compare}</View>
         </View>
-      ) : null}
-      <AccountsForecast state={state} o={real} start={start} />
-      {twoColumn ? null : (
+      ) : (
         <>
+          {steps}
           {compare}
         </>
       )}

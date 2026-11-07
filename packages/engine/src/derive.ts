@@ -20,7 +20,10 @@ export function derive(s: PlanState, startDate: Date): Derived {
   const budget = s.budget ?? [];
   const budgetTotal = sum(budget.map((b) => b.amount));
   // payroll-repaid debts (paycheck 401(k) loans) are already out of take-home, so they aren't budget costs
-  const debtMins = sum((s.debts ?? []).filter((d) => num(d.balance) > 0 && !d.payroll).map((d) => d.minPayment));
+  // a paid-off mortgage's escrow (property tax + insurance) keeps going
+  const escrowOf = (d: { escrow?: number; minPayment: number; payroll?: boolean }) => (d.payroll ? 0 : Math.min(Math.max(0, num(d.escrow)), num(d.minPayment)));
+  const debtMins = sum((s.debts ?? []).filter((d) => !d.payroll).map((d) => (num(d.balance) > 0 ? d.minPayment : escrowOf(d))));
+  const escrowMonthly = sum((s.debts ?? []).map(escrowOf));
   // recurring goals are set aside every month, like a bill
   const recurring = (s.goals ?? []).filter((g) => g.recurring && num(g.target) > 0 && num(g.recurring.every) > 0);
   const setAsideMonthly = sum(recurring.map((g) => num(g.target) / num(g.recurring!.every)));
@@ -30,7 +33,7 @@ export function derive(s: PlanState, startDate: Date): Derived {
   const essentialExpenses = sum(budget.filter((b) => b.essential !== false).map((b) => b.amount)) + debtMins + setAsideMonthly;
 
   const retireMonthly =
-    (sum(budget.filter((b) => b.inRetirement).map((b) => b.amount)) + num(s.healthcare) + setAsideRetired) * (1 + (w.spendDelta || 0));
+    (sum(budget.filter((b) => b.inRetirement).map((b) => b.amount)) + num(s.healthcare) + setAsideRetired + escrowMonthly) * (1 + (w.spendDelta || 0));
   const years = Math.max(0, Math.round(s.retireAge - s.age));
 
   // income in retirement: the yearly total once everything has started, plus the savings

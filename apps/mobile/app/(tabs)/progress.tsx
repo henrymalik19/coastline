@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { Button, NumberInput } from "../../components/form";
+import { Button, NumberInput, Segmented } from "../../components/form";
 import { ProgressBar } from "../../components/ProgressRing";
 import { ProjectionChart } from "../../components/ProjectionChart";
 import { Slider } from "../../components/Slider";
@@ -30,6 +30,7 @@ export default function Progress() {
   const [sel, setSel] = useState<number | null>(null);
   const [table, setTable] = useState(false);
   const [msg, setMsg] = useState("");
+  const [view, setView] = useState<"overview" | "whatif" | "checkin" | "badges">("overview");
   const [spent, setSpent] = useState(0);
   const d = o.d;
   const w = state.whatif;
@@ -338,18 +339,42 @@ export default function Progress() {
 
   return (
     <Screen title="Progress" subtitle="Track it, and keep the streak">
-      <View style={{ flexDirection: statColumns === 4 ? "row" : "column", gap: space.lg }}>
-        {freedom}
-        {streakCard}
-        {level}
+      <View style={{ maxWidth: 520 }}>
+        <Segmented
+          label="Progress view"
+          options={[
+            { value: "overview", label: "Overview" },
+            { value: "whatif", label: "What if" },
+            { value: "checkin", label: "Check-in" },
+            { value: "badges", label: "Badges" },
+          ]}
+          value={view}
+          onChange={setView}
+        />
       </View>
-      {projection}
-      {whatIfs}
-      <View style={{ flexDirection: twoColumn ? "row" : "column", gap: space.lg, alignItems: "flex-start" }}>
-        <View style={{ flex: 1, alignSelf: "stretch" }}>{checkin}</View>
-        <View style={{ flex: 1.3, alignSelf: "stretch" }}>{history}</View>
-      </View>
-      {badgeGrid}
+      {view === "overview" ? (
+        <>
+          <View style={{ flexDirection: statColumns === 4 ? "row" : "column", gap: space.lg }}>
+            {freedom}
+            {streakCard}
+            {level}
+          </View>
+          {projection}
+        </>
+      ) : null}
+      {view === "whatif" ? (
+        <>
+          {whatIfs}
+          {projection}
+        </>
+      ) : null}
+      {view === "checkin" ? (
+        <View style={{ flexDirection: twoColumn ? "row" : "column", gap: space.lg, alignItems: "flex-start" }}>
+          <View style={{ flex: 1, alignSelf: "stretch" }}>{checkin}</View>
+          <View style={{ flex: 1.3, alignSelf: "stretch" }}>{history}</View>
+        </View>
+      ) : null}
+      {view === "badges" ? badgeGrid : null}
       <Divider />
     </Screen>
   );

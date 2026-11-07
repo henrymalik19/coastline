@@ -4,6 +4,7 @@
  * $3,500 a month"), and any single month can be changed. Cards or a table, same numbers.
  */
 import { accountForecasts, BUCKET_LABELS, scheduleAmount, type AccountForecast, type AccountKey, type PlanState, type RunResult, type ScheduleEntry } from "@coastfi/engine";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { debtLabel } from "../lib/debts";
@@ -27,6 +28,7 @@ const monthName = (key: string) => `${MON[Number(key.slice(5, 7)) - 1]} ${key.sl
 export function AccountsForecast({ state, o, start }: Props) {
   const t = useTheme();
   const update = useStore((s) => s.update);
+  const router = useRouter();
   const [view, setView] = useState<"cards" | "table">("cards");
   const [open, setOpen] = useState<string | null>(null);
   const [planOpen, setPlanOpen] = useState<string | null>(null);
@@ -97,8 +99,9 @@ export function AccountsForecast({ state, o, start }: Props) {
   const debtExtra = all.filter((a) => isDebt(a.key)).reduce((s, a) => s + a.months[0]!.plan, 0);
   const pieces = [m0.pay > 0.5 ? `${money(m0.pay)} from your paychecks` : "", m0.plan > 0.5 ? `${money(m0.plan)} from what's left` : "", m0.emp > 0.5 ? `${money(m0.emp)} from employers` : ""].filter(Boolean);
 
-  const parts = (m: { paycheck: number; plan: number; employer: number }, k: AccountKey) =>
+  const parts = (m: { paycheck: number; plan: number; employer: number; loan: number }, k: AccountKey) =>
     [
+      m.loan > 0.5 ? `${money(m.loan)} 401(k) loan repayment (back into your account, not toward the limit)` : "",
       m.paycheck > 0.5 ? `${money(m.paycheck)} from your paychecks` : "",
       m.plan > 0.5 ? `${m.paycheck > 0.5 ? "+" : ""}${money(m.plan)} ${k === "k401" || (k === "hsa" && payrollHsa) ? "more per check from the plan" : "from what's left"}` : "",
       m.employer > 0.5 ? `${money(m.employer)} from your employer` : "",
@@ -207,13 +210,36 @@ export function AccountsForecast({ state, o, start }: Props) {
               </Pressable>
               {planOpen === k ? scheduleEditor(k) : null}
             </>
-          ) : null}
+          ) : (
+            <Pressable role="link" onPress={() => router.push(k === "other" ? "/money/accounts" : "/money/income")} hitSlop={6} style={styles.link}>
+              <Text style={[type.caption, { color: t.accent, fontWeight: "700", flexShrink: 1 }]}>
+                {k === "other"
+                  ? "The plan doesn't add to these. Change what an account counts as (Money → Accounts)"
+                  : (() => {
+                      const per = state.incomes.filter((x) => (x.kind ?? "job") === "job").map((x) => ({ name: x.name || "your job", v: k === "k401" ? x.pretax ?? 0 : x.hsaPre ?? 0 })).filter((x) => x.v > 0);
+                      return `Your plan: set per paycheck${per.length ? ` (${per.map((x) => `${x.name} ${money(x.v)}/check`).join(", ")})` : ""}. Change it on your job (Money → Income)`;
+                    })()}
+              </Text>
+              <Icon name="chevron" size={12} color={t.accent} />
+            </Pressable>
+          )}
           <Text style={[type.caption, { color: t.text2 }]}>
             <Text style={{ color: t.text, fontWeight: "600" }}>This month: {debt ? `${money(m0a.paycheck + m0a.plan)} paid` : money(m0a.total)}</Text>
             {m0a.total > 0.5 && !debt && k !== "cash" ? ` (${parts(m0a, k)})` : ""}
             {debt && m0a.paycheck + m0a.plan > 0.5 ? ` (${money(m0a.paycheck)} minimum${state.debts.find((x) => "debt:" + x.id === k)?.payroll ? " from your paychecks" : ""}${m0a.plan > 0.5 ? ` + ${money(m0a.plan)} extra` : ""})` : ""}
             {m0a.total <= 0.5 ? (() => { const f = a.months.findIndex((m) => m.total > 0.5); return f > 0 ? ` · starts ${monthLabel(start, f)}` : ""; })() : ""}
           </Text>
+          {(() => {
+            // a paycheck account on a job with no payday date: paychecks are averaged, so no 3-paycheck months
+            if (k !== "k401" && k !== "hsa") return null;
+            const uses = state.incomes.filter((x) => (x.kind ?? "job") === "job" && (k === "k401" ? (x.pretax ?? 0) > 0 : (x.hsaPre ?? 0) > 0));
+            const missing = uses.filter((x) => (x.freq === "biweekly" || x.freq === "weekly") && !x.nextPayday);
+            return missing.length ? (
+              <Text style={[type.caption, { color: t.warn }]}>
+                Add {missing.map((x) => x.name || "your job").join(" and ")}'s next payday (Money → Income) to see its 3-paycheck months. Until then its paychecks are spread evenly over the year.
+              </Text>
+            ) : null;
+          })()}
           {thisYear?.limit ? (
             <View style={{ gap: 4, maxWidth: 360 }}>
               <Text style={[type.caption, { color: t.text2 }]}>

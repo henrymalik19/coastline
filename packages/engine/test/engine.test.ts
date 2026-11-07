@@ -498,6 +498,32 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     expect(dec!.alloc.taxable).toBeCloseTo(6000 - 500, 6);
   });
 
+  it("401(k) loan repayments go back into your 401(k)", () => {
+    const s = blank({
+      incomes: [{ ...job, net: 8000 }],
+      debts: [{ id: "l", name: "401(k) loan", kind: "k401_loan", balance: 10000, apr: 0, minPayment: 500, payroll: true }],
+      plan: { ...blank().plan, schedule: { "debt:l": [{ from: "2026-12", amount: 1000 }] } },
+    });
+    const m = simulatePlan(s, derive(s, START)).months;
+    expect(m[0]!.loanBack).toBeCloseTo(500, 9);
+    expect(m[1]!.loanBack).toBeCloseTo(1500, 9);
+    expect(m[1]!.pre).toBeCloseTo(1500, 9);
+  });
+
+  it("mortgage escrow: part of the payment, not the loan, and it keeps going after payoff and in retirement", () => {
+    const s = blank({
+      incomes: [{ ...job, net: 8000 }],
+      debts: [{ id: "h", name: "Home", kind: "mortgage", balance: 1000, apr: 0, minPayment: 900, escrow: 400, minimumOnly: true }],
+    });
+    const d = derive(s, START);
+    const m = simulatePlan(s, d).months;
+    expect(m[0]!.debts[0]!.balance).toBeCloseTo(500, 9); // only $500 of the $900 pays the loan
+    expect(m[0]!.minPay).toBeCloseTo(900, 9);
+    expect(m[5]!.debts[0]!.balance).toBe(0);
+    expect(m[5]!.minPay).toBeCloseTo(400, 9); // taxes + insurance after payoff
+    expect(d.retireMonthly).toBeCloseTo(400, 9);
+  });
+
   it("a schedule per account works like a spreadsheet: amounts change on the months you set", () => {
     const s = blank({
       limits: DEFAULT_LIMITS,

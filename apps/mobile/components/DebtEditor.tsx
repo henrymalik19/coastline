@@ -111,10 +111,21 @@ export function DebtEditor({
       {paidFrom || kind.value === "k401_loan" ? (
         <PaycheckLoanPayment debt={debt} />
       ) : (
-        <FieldRow label="Minimum payment" hint="Per month" info={HELP.minPayment}>
+        <FieldRow label={kind.value === "mortgage" ? "Monthly payment" : "Minimum payment"} hint={kind.value === "mortgage" ? "The whole payment, including escrow" : "Per month"} info={HELP.minPayment}>
           <NumberInput kind="money" label={`${debtLabel(debt)} minimum payment`} value={debt.minPayment} onChange={(v) => onChange({ minPayment: v })} />
         </FieldRow>
       )}
+      {kind.value === "mortgage" ? (
+        <>
+          <Divider />
+          <FieldRow
+            label="Of that, escrow"
+            hint={`Property tax + home insurance. Doesn't pay the loan down, and keeps going after it's paid off (and in retirement).${(debt.escrow ?? 0) > 0 ? ` Loan part: ${money(Math.max(0, debt.minPayment - (debt.escrow ?? 0)))}/mo.` : " No escrow? Put your property tax and insurance in your budget instead."}`}
+          >
+            <NumberInput kind="money" label={`${debtLabel(debt)} escrow`} value={debt.escrow ?? 0} max={debt.minPayment} onChange={(v) => onChange({ escrow: v > 0 ? v : undefined })} />
+          </FieldRow>
+        </>
+      ) : null}
       {PROMO_KINDS.has(kind.value) ? (
         <>
           <Divider />

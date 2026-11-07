@@ -134,6 +134,12 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   const jobIdx = d.incomes.map((inc, i) => ((inc.kind ?? "job") === "job" ? i : -1)).filter((i) => i >= 0);
   const checksPerYear = sum(jobIdx.map((i) => PERIODS[d.incomes[i]!.freq] ?? 0));
   const hsaPayroll = payrollSteps && !!p.hsaPayroll && checksPerYear > 0;
+  const jobsWith = (has: (inc: Derived["incomes"][number]) => boolean) => {
+    const xs = jobIdx.filter((i) => has(d.incomes[i]!));
+    return xs.length ? xs : jobIdx;
+  };
+  const k401Jobs = jobsWith((inc) => num(inc.pretax) > 0 || num(inc.match) > 0 || inc.matchMode === "pct");
+  const hsaJobs = jobsWith((inc) => num(inc.hsaPre) > 0 || num(inc.hsaEmployer) > 0);
   const hsaCost = 1 - mt; // a pre-tax payroll HSA dollar costs (1 − marginal) take-home
   const shares = p.shares ?? {};
   const started = { k401: false, hsa: false };
@@ -244,6 +250,13 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     ytd.hsa += payHsa;
     // this month's share of a year of paychecks (for steady per-check payroll steps)
     const checkFrac = checksPerYear > 0 ? sum(jobIdx.map((i) => checks[i]!)) / checksPerYear : 0;
+    // the 401(k) / HSA come out of specific jobs' paychecks: their share of a year of those checks
+    const fracOf = (idx: number[]) => {
+      const per = sum(idx.map((i) => PERIODS[d.incomes[i]!.freq] ?? 0));
+      return per > 0 ? sum(idx.map((i) => checks[i]!)) / per : checkFrac;
+    };
+    const k401Frac = fracOf(k401Jobs);
+    const hsaFrac = fracOf(hsaJobs);
 
     // one-off adjustments for this calendar month
     let adjIncome = 0;
@@ -263,18 +276,25 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     // a payroll-repaid debt (paycheck 401(k) loan) is already out of take-home; once it is
     // paid off the deduction stops, and that money comes back as take-home
     let payrollFreed = 0;
+    // repaying a 401(k) loan puts the money (interest too) back into your own 401(k)
+    let loanBack = 0;
+    const isLoan = (x: Debt) => x.kind === "k401_loan";
     for (const dt of debts) {
+      // escrow (property tax + insurance) is part of the payment but not the loan, and it never ends
+      const esc = dt.payroll ? 0 : Math.min(Math.max(0, num(dt.escrow)), dt.minPayment);
       if (dt.balance <= 0) {
         if (dt.payroll) payrollFreed += dt.minPayment;
+        else minPay += esc;
         continue;
       }
       dt.balance *= 1 + rateIn(dt, monthStr) / 12;
       // borrowed shortfall behaves like a card: minimum is 2% of the balance (at least $25)
-      const minimum = dt.id === SHORTFALL_ID ? Math.max(25, dt.balance * 0.02) : dt.minPayment;
+      const minimum = dt.id === SHORTFALL_ID ? Math.max(25, dt.balance * 0.02) : dt.minPayment - esc;
       const pay = Math.min(minimum, dt.balance);
       dt.balance -= pay;
+      if (isLoan(dt)) loanBack += pay;
       if (dt.payroll) payrollFreed += minimum - pay;
-      else minPay += pay;
+      else minPay += pay + esc;
     }
     income += payrollFreed;
     // recurring goals: set aside what's still needed ÷ months left (so a late start catches up),
@@ -343,6 +363,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         dt.balance -= put;
         avail -= put;
         alloc.debt += put;
+        if (isLoan(dt)) loanBack += put;
       }
     };
 
@@ -387,7 +408,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
           else if (step === "lowDebt") payDebts((x) => !isHighInterest(x, thr));
           else if (step === "hsa" && hsaPayroll) {
             // from paychecks: steady per check, pre-tax, this year only (yours + employer's count)
-            const level = Math.max(0, hsaCapFor(L, ageNow) * checkFrac - payHsaEmployer - payHsa - alloc.hsa);
+            const level = Math.max(0, hsaCapFor(L, ageNow) * hsaFrac - payHsaEmployer - payHsa - alloc.hsa);
             const room = Math.max(0, Math.min(capHsa - alloc.hsa, level));
             const put = Math.min(avail, room * hsaCost);
             alloc.hsa += put / hsaCost;
@@ -415,7 +436,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
             let room = Math.max(0, capK401 * cost - alloc.k401TakeHome);
             if (payrollSteps) {
               // steady per check: never past the yearly limit's share for this month's paychecks
-              const level = Math.max(0, (L.k401 + (ageNow >= 50 ? L.k401Catch : 0)) * checkFrac - payPre - alloc.k401);
+              const level = Math.max(0, (L.k401 + (ageNow >= 50 ? L.k401Catch : 0)) * k401Frac - payPre - alloc.k401);
               room = Math.min(room, level * cost);
             }
             const put = Math.min(avail, room);
@@ -453,6 +474,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
           const put = Math.min(avail, v, Math.max(0, dt.balance));
           dt.balance -= put;
           alloc.debt += put;
+          if (isLoan(dt)) loanBack += put;
           avail -= put;
         } else if (k === "ira" || k === "taxable" || (k === "hsa" && !hsaPayroll) || k.startsWith("goal:")) {
           const held = Math.max(0, avail - v);
@@ -518,7 +540,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       debtTotal: sum(debts.map((x) => x.balance)),
       goals: goals.map((x) => ({ id: x.id, saved: x.saved })),
       debts: debts.map((x) => ({ id: x.id, balance: x.balance })),
-      pre: payPre - payRoth + payMatch + alloc.k401 * (1 - d.rothShare) + alloc.matchGain,
+      pre: payPre - payRoth + payMatch + alloc.k401 * (1 - d.rothShare) + alloc.matchGain + loanBack,
+      loanBack,
       post: payRoth + alloc.k401 * d.rothShare + payHsaEmployer + payHsa + alloc.hsa + alloc.ira + alloc.taxable,
     });
   }
