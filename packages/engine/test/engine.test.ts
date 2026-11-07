@@ -524,3 +524,12 @@ describe("setAsideFor", () => {
     expect(setAsideFor({ target: 500, saved: 0 }, "2026-11")).toBe(0);
   });
 });
+
+describe("recurring goal already set aside this month", () => {
+  it("sets nothing aside through paidThrough, then resumes with what's left", () => {
+    const g = { target: 1200, saved: 100, recurring: { every: 12, due: "2027-10", paidThrough: "2026-11" } };
+    expect(setAsideFor(g, "2026-11")).toBe(0);
+    // Dec 2026 → Oct 2027 is 11 months: (1200 − 100) / 11
+    expect(setAsideFor(g, "2026-12")).toBeCloseTo(100, 9);
+  });
+});

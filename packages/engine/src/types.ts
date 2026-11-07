@@ -118,6 +118,8 @@ export type RecurringGoal = {
   due: string;
   /** Keeps happening after you retire (adds to retirement spending). Missing = yes. */
   inRetirement?: boolean;
+  /** Last month already set aside ("YYYY-MM"): the plan sets nothing aside through it. */
+  paidThrough?: string;
 };
 export type LimitsRow = {
   year: number;

@@ -20,9 +20,10 @@ export default function Home() {
   const router = useRouter();
   // `wide` = room for two cards side by side; stats go 4 or 2 per row
   const { twoColumn: wide, statColumns } = useLayout();
-  const { state, result: o, start } = usePlan();
+  const { state, result: o, start, actual, whatIfOn } = usePlan();
   const d = o.d;
-  const m0 = o.plan.months[0]!;
+  // this month's to-dos come from the real plan (no what-ifs)
+  const m0 = actual.months[0]!;
   const todos = monthTodos(m0, t, state.plan.marginalTax, d.rothShare);
   const mk = monthKey(start);
   const done = useStore((s) => s.todoDone[mk]) ?? [];
@@ -154,10 +155,20 @@ export default function Home() {
         {m0.extraCheck ? <Pill tone="good">Extra paycheck</Pill> : null}
       </View>
       {todos.length && !m0.emergency ? (
-        <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.lg, paddingBottom: space.md, marginTop: -space.xs }]}>
-          After your budget, debt payments and set-asides, about {money(Math.max(0, m0.income - m0.expenses), { whole: true })} is left this month. It goes to your plan's
-          steps in order (see the Plan tab), which gives these amounts.
-        </Text>
+        <View style={{ paddingHorizontal: space.lg, paddingBottom: space.md, marginTop: -space.xs, gap: 4 }}>
+          <Text style={[type.caption, { color: t.text2, fontVariant: ["tabular-nums"] }]}>
+            {money(m0.income)} take-home this month − {money(m0.expenses)} budget, debts and set-asides ={" "}
+            <Text style={{ fontWeight: "700", color: t.text }}>{money(Math.max(0, m0.income - m0.expenses))}</Text> to put to work, filling your plan's steps in order.
+          </Text>
+          {m0.extraCheck ? (
+            <Text style={[type.caption, { color: t.text3 }]}>
+              This month has an extra paycheck, so there's more than in a normal month (the budget page shows a normal month).
+            </Text>
+          ) : null}
+          {whatIfOn ? (
+            <Text style={[type.caption, { color: t.text3 }]}>Your what-ifs (on Progress) change the dates and odds above, not these to-dos.</Text>
+          ) : null}
+        </View>
       ) : null}
       <Divider />
       {todos.map((td, i) => (

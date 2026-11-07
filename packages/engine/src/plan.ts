@@ -28,6 +28,8 @@ export function nextDue(r: Pick<RecurringGoal, "due" | "every">, month: string):
 /** What a recurring goal sets aside in `month`: what's still needed ÷ months left until it's due (that month included). */
 export function setAsideFor(g: Pick<Goal, "target" | "saved" | "recurring">, month: string): number {
   if (!g.recurring || !(num(g.target) > 0)) return 0;
+  // already set aside for this month (you said so): nothing more until next month
+  if (g.recurring.paidThrough && month <= g.recurring.paidThrough) return 0;
   return Math.max(0, num(g.target) - num(g.saved)) / (monthsBetween(month, nextDue(g.recurring, month)) + 1);
 }
 

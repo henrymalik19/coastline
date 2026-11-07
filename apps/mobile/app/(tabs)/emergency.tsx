@@ -14,7 +14,7 @@ const LENGTHS = [1, 2, 3, 6, 12];
 /** Emergency mode: pause the plan, keep cash, optionally cut to essentials / pause 401(k). */
 export default function Emergency() {
   const t = useTheme();
-  const { state, result: o, start } = usePlan();
+  const { state, result: o, start, actual } = usePlan();
   const update = useStore((s) => s.update);
   const d = o.d;
   const untilFor = (n: number) => monthKey(new Date(start.getFullYear(), start.getMonth() + n - 1, 1));
@@ -27,7 +27,7 @@ export default function Emergency() {
   const payroll401k = d.annualPre / 12;
   const take401k = payroll401k * k401Cost(state.plan.marginalTax, d.rothShare);
   const lostMatch = d.annualMatch / 12;
-  const m0 = o.plan.months[0]!;
+  const m0 = actual.months[0]!;
   const fmtRunway = (v: number) => (Number.isFinite(v) ? `${v.toFixed(1)} months` : "no expenses set");
 
   return (

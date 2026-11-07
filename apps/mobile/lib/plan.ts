@@ -1,4 +1,4 @@
-import { k401Cost, run, type MonthRow, type PlanState, type RunResult } from "@coastfi/engine";
+import { derive, k401Cost, run, simulatePlan, type MonthRow, type PlanResult, type PlanState, type RunResult } from "@coastfi/engine";
 import { useMemo } from "react";
 import { money } from "./format";
 import { useStore } from "./store";
@@ -36,13 +36,23 @@ export function effectivePlan(saved: PlanState): PlanState {
   return plan === saved.plan ? saved : { ...saved, plan };
 }
 
-/** Runs the engine on the saved plan. Re-runs only when the plan changes. */
-export function usePlan(): { state: PlanState; result: RunResult; start: Date } {
+/**
+ * Runs the engine on the saved plan. Re-runs only when the plan changes.
+ * `result` includes any what-ifs (projections, dates, odds). `actual` is the month-by-month plan
+ * without them: what to really do this month (to-dos, Monthly) never includes hypothetical money.
+ */
+export function usePlan(): { state: PlanState; result: RunResult; start: Date; actual: PlanResult; whatIfOn: boolean } {
   const saved = useStore((s) => s.plan);
   const state = useMemo(() => effectivePlan(saved), [saved]);
   const start = useToday();
   const result = useMemo(() => run(state, start), [state, start]);
-  return { state, result, start };
+  const whatIfOn = !!(state.whatif && (state.whatif.extra || state.whatif.retDelta || state.whatif.spendDelta));
+  const actual = useMemo(() => {
+    if (!state.whatif?.extra) return result.plan;
+    const real = { ...state, whatif: { extra: 0, retDelta: 0, spendDelta: 0 } };
+    return simulatePlan(real, derive(real, start));
+  }, [state, start, result]);
+  return { state, result, start, actual, whatIfOn };
 }
 
 /** Plain-English line for a month that comes up short. */

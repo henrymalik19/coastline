@@ -88,7 +88,12 @@ export const GoalSchema = z.object({
   target: nonNeg,
   saved: nonNeg,
   recurring: z
-    .object({ every: z.number().int().min(1).max(60), due: z.string().regex(MONTH_RE, "Use YYYY-MM"), inRetirement: z.boolean().optional() })
+    .object({
+      every: z.number().int().min(1).max(60),
+      due: z.string().regex(MONTH_RE, "Use YYYY-MM"),
+      inRetirement: z.boolean().optional(),
+      paidThrough: z.string().regex(MONTH_RE, "Use YYYY-MM").optional(),
+    })
     .optional(),
 });
 export const LimitsRowSchema = z.object({

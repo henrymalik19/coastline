@@ -287,9 +287,11 @@ export function BudgetEditor() {
                   <Text numberOfLines={2} style={[type.body, { color: t.text }]}>{g.name || "Goal"}</Text>
                   <Text style={[type.caption, { color: t.text3 }]}>
                     {money(g.target)} {everyLabel(g.recurring!.every)} · next due {dueLabel(nextDue(g.recurring!, thisMonth))}
-                    {Math.abs(setAsideFor(g, thisMonth) - g.target / g.recurring!.every) > 0.005
-                      ? ` · usually ${money(g.target / g.recurring!.every)}/mo`
-                      : ""}
+                    {g.recurring!.paidThrough && g.recurring!.paidThrough >= thisMonth
+                      ? " · already set aside this month"
+                      : Math.abs(setAsideFor(g, thisMonth) - g.target / g.recurring!.every) > 0.005
+                        ? ` · usually ${money(g.target / g.recurring!.every)}/mo`
+                        : ""}
                   </Text>
                 </View>
                 <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(setAsideFor(g, thisMonth))}</Text>

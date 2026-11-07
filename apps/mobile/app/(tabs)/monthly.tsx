@@ -106,11 +106,12 @@ function MonthCard({ m, title, start, state }: { m: MonthRow; title: string; sta
 export default function Monthly() {
   const t = useTheme();
   const { twoColumn } = useLayout();
-  const { state, result: o, start } = usePlan();
+  const { state, result: o, start, actual } = usePlan();
   const [selected, setSelected] = useState<number | null>(null);
   const [showTable, setShowTable] = useState(false);
 
-  const months = o.plan.months.slice(0, 36);
+  // the real plan, month by month (what-ifs only change projections)
+  const months = actual.months.slice(0, 36);
   const data: BarDatum[] = months.map((m, i) => ({
     key: String(m.m),
     label: m.mo % 3 === 0 || i === 0 ? MON[m.mo]! : "",

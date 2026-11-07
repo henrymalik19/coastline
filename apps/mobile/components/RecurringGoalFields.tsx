@@ -1,6 +1,8 @@
 import type { Goal } from "@coastfi/engine";
 import { Text, View } from "react-native";
 import { money } from "../lib/format";
+import { usePlan } from "../lib/plan";
+import { monthKey } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
 import { FieldRow, MonthField, Segmented, ToggleRow } from "./form";
 
@@ -24,6 +26,8 @@ export const everyLabel = (n: number) => (n === 12 ? "yearly" : n === 1 ? "month
 export function RecurringGoalFields({ goal, onChange }: { goal: Goal; onChange: (patch: Partial<Goal>) => void }) {
   const t = useTheme();
   const r = goal.recurring;
+  const thisMonth = monthKey(usePlan().start);
+  const paidNow = !!r?.paidThrough && r.paidThrough >= thisMonth;
   return (
     <View style={{ gap: space.xs }}>
       <ToggleRow
@@ -41,6 +45,12 @@ export function RecurringGoalFields({ goal, onChange }: { goal: Goal; onChange: 
           <FieldRow label="Next due" hint="The month you'll spend it">
             <MonthField label={`${goal.name || "Goal"} next due`} value={r.due} onChange={(v) => onChange({ recurring: { ...r, due: v } })} />
           </FieldRow>
+          <ToggleRow
+            label={`Already set aside for ${MON[Number(thisMonth.slice(5, 7)) - 1]}`}
+            hint={paidNow ? "Nothing more this month; it picks up next month. Include it in \"saved so far\"." : "Turn on once you've put this month's amount away"}
+            value={paidNow}
+            onChange={(on) => onChange({ recurring: { ...r, paidThrough: on ? thisMonth : undefined } })}
+          />
           <ToggleRow
             label="Still pay after I retire"
             value={r.inRetirement !== false}
