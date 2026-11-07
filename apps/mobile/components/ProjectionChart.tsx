@@ -96,7 +96,7 @@ export function ProjectionChart({
             {bands.map((b, i) => (
               <Pressable
                 key={i}
-                accessibilityLabel={`Age ${age + i}: median ${money(b.p50)}`}
+                accessibilityLabel={`Age ${age + i}: median ${money(b.p50, { whole: true })}`}
                 onPress={() => onSelect(selected === i ? null : i)}
                 onHoverIn={() => onSelect(i)}
                 onHoverOut={() => onSelect(null)}

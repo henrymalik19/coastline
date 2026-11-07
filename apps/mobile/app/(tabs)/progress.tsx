@@ -124,10 +124,10 @@ export default function Progress() {
             {b && sel !== null ? (
               <View style={styles.detailGrid}>
                 <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Age {d.age + sel}</Text>
-                <Text style={[type.caption, { color: t.text2 }]}>Median <Text style={{ color: t.text, fontWeight: "700" }}>{money(b.p50, { compact: true })}</Text></Text>
-                <Text style={[type.caption, { color: t.text2 }]}>Middle 50% <Text style={{ color: t.text, fontWeight: "600" }}>{money(b.p25, { compact: true })}–{money(b.p75, { compact: true })}</Text></Text>
-                <Text style={[type.caption, { color: t.text2 }]}>80% range <Text style={{ color: t.text, fontWeight: "600" }}>{money(b.p10, { compact: true })}–{money(b.p90, { compact: true })}</Text></Text>
-                <Text style={[type.caption, { color: t.text2 }]}>Coast FI # <Text style={{ color: t.text, fontWeight: "600" }}>{money(o.coastCurve[sel]!, { compact: true })}</Text></Text>
+                <Text style={[type.caption, { color: t.text2 }]}>Median <Text style={{ color: t.text, fontWeight: "700" }}>{money(b.p50, { whole: true })}</Text></Text>
+                <Text style={[type.caption, { color: t.text2 }]}>Middle 50% <Text style={{ color: t.text, fontWeight: "600" }}>{money(b.p25, { whole: true })}–{money(b.p75, { whole: true })}</Text></Text>
+                <Text style={[type.caption, { color: t.text2 }]}>80% range <Text style={{ color: t.text, fontWeight: "600" }}>{money(b.p10, { whole: true })}–{money(b.p90, { whole: true })}</Text></Text>
+                <Text style={[type.caption, { color: t.text2 }]}>Coast FI # <Text style={{ color: t.text, fontWeight: "600" }}>{money(o.coastCurve[sel]!, { whole: true })}</Text></Text>
               </View>
             ) : (
               <Text style={[type.caption, { color: t.text3 }]}>Hover or tap the chart to see a year's range.</Text>
@@ -136,7 +136,7 @@ export default function Progress() {
         </>
       )}
       <Text style={[type.caption, { color: t.text3 }]}>
-        Assumes {percent(d.r, 2)} real return after fees, {percent(d.vol)} volatility, about {money(avgContrib, { compact: true })}/yr in contributions (
+        Assumes {percent(d.r, 2)} real return after fees, {percent(d.vol)} volatility, about {money(avgContrib, { whole: true })}/yr in contributions (
         {o.plan.mode === "plan" ? "following your plan" : "what you invest today"}). Bands are 2,000 simulated market paths, not guarantees.
       </Text>
     </Card>

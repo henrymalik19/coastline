@@ -51,7 +51,7 @@ export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date)
         ? `Done. ${money(d.bal.cash)} in cash`
         : (() => {
             const avg = typical((m) => m.alloc.ef, 0, e ? e.m + 1 : undefined);
-            return `${money(d.bal.cash)} of ${money(tgt)}${avg > 0 ? ` · about ${money(avg)}/mo` : ""} · ${e ? `done ${when(e.m)}` : "not reached in the plan"}`;
+            return `${money(d.bal.cash)} of ${money(tgt)}${avg > 0 ? ` · about ${money(avg, { whole: true })}/mo` : ""} · ${e ? `done ${when(e.m)}` : "not reached in the plan"}`;
           })(),
     };
   }
@@ -94,7 +94,7 @@ export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date)
               const after = hi ? 0 : Math.max(0, ...highEnds.map((m) => m + 1));
               const from = Math.max(after, pl.months.findIndex((m, i) => i >= after && m.alloc.debt > 0.5));
               const avg = typical((m) => m.alloc.debt, from, last !== null ? last + 1 : undefined);
-              return `${list.map((x) => `${debtLabel(x)} ${money(x.balance)}`).join(", ")}${avg > 0 ? ` · about ${money(avg)}/mo extra${from > 0 ? ` from ${when(from)}` : ""}` : " · minimum payments only (no extra reaches this step)"} · ${last !== null ? "paid off " + when(last) : "not paid off within the plan"}`;
+              return `${list.map((x) => `${debtLabel(x)} ${money(x.balance)}`).join(", ")}${avg > 0 ? ` · about ${money(avg, { whole: true })}/mo extra${from > 0 ? ` from ${when(from)}` : ""}` : " · minimum payments only (no extra reaches this step)"} · ${last !== null ? "paid off " + when(last) : "not paid off within the plan"}`;
             })(),
     };
   }
@@ -114,7 +114,7 @@ export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date)
         : mx.length
           ? // capped accounts fill fast, then wait for the next year: say so instead of a misleading monthly average
             `Starts ${when(ff)} · fills the ${money(cap)} yearly limit ${mx[0] === start.getFullYear() ? "from this year" : "from " + mx[0]}`
-          : `${avg > 0 ? `About ${money(avg)}/mo from ` : "Starts "}${when(ff)}`;
+          : `${avg > 0 ? `About ${money(avg, { whole: true })}/mo from ` : "Starts "}${when(ff)}`;
     if (step === "k401" && ff !== undefined) {
       const m = pl.months.find((x) => x.alloc.k401Step > 0.5 && !x.extraCheck);
       const main = s.incomes.find((i) => (i.pretax ?? 0) > 0 || (i.match ?? 0) > 0 || i.matchMode === "pct") ?? s.incomes[0];
@@ -133,7 +133,7 @@ export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date)
       meta:
         ff === undefined
           ? "Everything left over. Not reached within the plan"
-          : `Everything left over${avg > 0 ? `, about ${money(avg)}/mo` : ""} from ${when(ff)}${untilCoast(ff)}`,
+          : `Everything left over${avg > 0 ? `, about ${money(avg, { whole: true })}/mo` : ""} from ${when(ff)}${untilCoast(ff)}`,
     };
   }
   if (step.startsWith("goal:")) {
@@ -150,7 +150,7 @@ export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date)
         ? "Done"
         : (() => {
             const avg = typical((m) => m.alloc.goals, 0, e ? e.m + 1 : undefined);
-            return `${money(g.saved)} saved${avg > 0 ? ` · about ${money(avg)}/mo` : ""} · ${e ? `reached ${when(e.m)}` : "not reached within the plan"}`;
+            return `${money(g.saved)} saved${avg > 0 ? ` · about ${money(avg, { whole: true })}/mo` : ""} · ${e ? `reached ${when(e.m)}` : "not reached within the plan"}`;
           })(),
     };
   }

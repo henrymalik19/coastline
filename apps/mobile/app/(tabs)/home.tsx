@@ -57,7 +57,7 @@ export default function Home() {
       </View>
       <View style={{ marginTop: space.lg, gap: space.sm }}>
         <Row label="Invested today" value={money(d.invested)} />
-        <Row label="Coast number today" value={money(o.coastNow)} />
+        <Row label="Coast number today" value={money(o.coastNow, { whole: true })} />
         <Row
           label="Cash cushion"
           value={Number.isFinite(d.emergencyMonths) ? `${d.emergencyMonths.toFixed(1)} months of expenses` : "No monthly expenses set"}
@@ -73,7 +73,7 @@ export default function Home() {
   );
 
   const statCards = [
-    <Stat key="fire" label="FIRE number" value={money(o.fire, { compact: true })} hint={`${money(d.retireAnnual, { compact: true })}/yr at ${percent(d.swr, 1)}`} />,
+    <Stat key="fire" label="FIRE number" value={money(o.fire, { whole: true })} hint={`${money(d.retireAnnual, { whole: true })}/yr at ${percent(d.swr, 1)}`} />,
     <Stat key="odds" label={`Odds of FIRE by ${d.retireAge}`} value={percent(o.mc.probFire)} tone={oddsTone(o.mc.probFire)} hint="Across 2,000 market paths" />,
     <Stat key="days" label="Freedom bought" value={`${Math.round(o.freedomDays).toLocaleString("en-US")} days`} hint="Of retirement spending, today" />,
     <Stat key="100" label="+$100/month" value={o.coastSoonerMonths ? `${o.coastSoonerMonths} mo sooner` : "—"} hint="Effect on your coast date" />,

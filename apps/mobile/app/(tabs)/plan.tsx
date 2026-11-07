@@ -115,7 +115,7 @@ export default function Plan() {
         <>
           <Text style={[type.title, { color: t.text }]}>Not reached by {o.d.retireAge} yet</Text>
           <Text style={[type.body, { color: t.text2 }]}>
-            At this pace your savings won't grow to your retirement number ({money(o.fire, { compact: true })}) on their own by age {o.d.retireAge}. Saving more each month, a later
+            At this pace your savings won't grow to your retirement number ({money(o.fire, { whole: true })}) on their own by age {o.d.retireAge}. Saving more each month, a later
             retirement age, or Social Security or a pension (Money → Income in retirement) would get you there.
           </Text>
         </>
@@ -123,7 +123,7 @@ export default function Plan() {
         <>
           <Text style={[type.title, { color: t.good }]}>You've reached Coast FI</Text>
           <Text style={[type.body, { color: t.text2 }]}>
-            What you've invested ({money(o.d.invested, { compact: true })}) can grow to your retirement number ({money(o.fire, { compact: true })}) by age {o.d.retireAge} on its own.
+            What you've invested ({money(o.d.invested, { whole: true })}) can grow to your retirement number ({money(o.fire, { whole: true })}) by age {o.d.retireAge} on its own.
             You only need to cover your bills. Anything you invest from here is optional and lets you retire earlier.
           </Text>
         </>
@@ -134,7 +134,7 @@ export default function Plan() {
             {coastAge !== null ? <Text style={{ color: t.text3 }}> · age {coastAge}</Text> : null}
           </Text>
           <Text style={[type.body, { color: t.text2 }]}>
-            Once you have about {money(coastAt, { compact: true })} invested, it can grow to your retirement number ({money(o.fire, { compact: true })}) by age {o.d.retireAge} on its own.
+            Once you have about {money(coastAt, { whole: true })} invested, it can grow to your retirement number ({money(o.fire, { whole: true })}) by age {o.d.retireAge} on its own.
             From then on you only need to cover your bills. Investing more is optional and lets you retire earlier.
           </Text>
           {o.coastSoonerMonths && o.coastSoonerMonths > 0 ? (
@@ -156,16 +156,16 @@ export default function Plan() {
       <View style={styles.cmp}>
         <View style={{ flex: 1 }}>
           <Text style={[type.caption, { color: t.text3 }]}>If you follow this plan</Text>
-          <Text style={[type.stat, { color: t.text }]}>{money(o.projectedFinal, { compact: true })}</Text>
+          <Text style={[type.stat, { color: t.text }]}>{money(o.projectedFinal, { whole: true })}</Text>
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[type.caption, { color: t.text3 }]}>If you keep investing {money(state.currentInvestMonthly)}/mo like today</Text>
-          <Text style={[type.stat, { color: t.text2 }]}>{money(o.altFinal, { compact: true })}</Text>
+          <Text style={[type.stat, { color: t.text2 }]}>{money(o.altFinal, { whole: true })}</Text>
         </View>
       </View>
       <Text style={[type.caption, { color: t.text3 }]}>
         What you'd have invested by age {o.d.retireAge} (at your assumed return, no market swings).{" "}
-        {better ? `Following the plan comes out ${money(o.projectedFinal - o.altFinal, { compact: true })} ahead.` : ""}
+        {better ? `Following the plan comes out ${money(o.projectedFinal - o.altFinal, { whole: true })} ahead.` : ""}
       </Text>
     </Card>
   );

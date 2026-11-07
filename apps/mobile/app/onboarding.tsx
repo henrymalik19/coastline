@@ -262,7 +262,7 @@ function ReviewStep() {
       <View style={{ flexDirection: "row", gap: space.md }}>
         <Card style={{ flex: 1 }}>
           <Text style={[type.caption, { color: t.text3 }]}>FIRE number</Text>
-          <Text style={[type.stat, { color: t.text }]}>{money(o.fire, { compact: true })}</Text>
+          <Text style={[type.stat, { color: t.text }]}>{money(o.fire, { whole: true })}</Text>
         </Card>
         <Card style={{ flex: 1 }}>
           <Text style={[type.caption, { color: t.text3 }]}>Odds by {d.retireAge}</Text>
