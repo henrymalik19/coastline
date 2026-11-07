@@ -94,7 +94,8 @@ export function SectionPage({ base }: { base: SectionBase }) {
       subtitle={meta?.subtitle}
       narrow={!(meta && FULL_PAGE.has(meta.key))}
       fill={fillPage && !!meta && FULL_PAGE.has(meta.key)}
-      back={() => (router.canGoBack() ? router.back() : router.replace(base))}
+      // always back to its list (Money or Settings), even when opened from another tab or a link
+      back={() => router.navigate(base)}
       hideSettings
     >
       {Body ? <Body /> : <Text style={{ color: t.text2 }}>That page doesn't exist.</Text>}
