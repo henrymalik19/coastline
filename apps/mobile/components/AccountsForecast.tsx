@@ -438,7 +438,9 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
           const m = one.months[i]!;
           const short = r.plannedShort > 0.5;
           const changed = oneOffs[one.key]?.[ym(start, i)] !== undefined;
-          const added = isDebt(one.key) ? m.paycheck + m.plan : m.total;
+          // a 401(k) loan repaid goes back in: shown apart from what you and your employer put in
+          const loan = !isDebt(one.key) ? m.loan : 0;
+          const added = isDebt(one.key) ? m.paycheck + m.plan : m.total - loan;
           return (
             <View key={i} style={[styles.sRow, { backgroundColor: short ? t.badSoft : i === 0 ? t.accentSoft : i % 2 ? t.surface2 : t.surface, borderLeftWidth: 3, borderLeftColor: i === 0 ? t.accent : "transparent", paddingLeft: 9 }]}>
               <Text style={[type.caption, styles.sMonth, { color: i === 0 ? t.text : t.text2, fontWeight: i === 0 ? "700" : "500" }]}>
@@ -446,7 +448,14 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
                 {r.extraCheck ? <Text style={{ color: t.accent }}> ·3</Text> : null}
                 {i === 0 ? <Text style={{ color: t.accent, fontWeight: "700" }}>{"\n"}NOW</Text> : null}
               </Text>
-              {sCell(added > 0.5 ? money(added) : "–", changed ? t.accent : added > 0.5 ? t.text : t.text3, changed)}
+              {loan > 0.5 ? (
+                <View style={[styles.sNum, { alignItems: "flex-end" }]}>
+                  <Text numberOfLines={1} style={[type.caption, { color: changed ? t.accent : t.text, fontWeight: changed ? "700" : "500", fontVariant: ["tabular-nums"] }]}>{money(added)}</Text>
+                  <Text numberOfLines={1} style={[type.caption, { color: t.text3, fontSize: 11, fontVariant: ["tabular-nums"] }]}>+{money(loan)} loan</Text>
+                </View>
+              ) : (
+                sCell(added > 0.5 ? money(added) : "–", changed ? t.accent : added > 0.5 ? t.text : t.text3, changed)
+              )}
               {sCell(money(m.balance), t.text, true)}
               {sCell(short ? `−${money(r.plannedShort)}` : money(Math.max(0, r.available - r.plannedGot)), short ? t.bad : t.text3, short)}
             </View>

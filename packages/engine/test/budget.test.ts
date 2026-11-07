@@ -69,6 +69,11 @@ describe("monthly budget", () => {
     const m = simulatePlan(s, derive(s, START)).months;
     expect(m[0]!.alloc.ira).toBeCloseTo(700, 6);
     expect(m[0]!.alloc.debt).toBeCloseTo(1000, 6); // $1,100 assigned − the $100 minimum
+    // cash you assign (the emergency fund, even the cash you started with) isn't new saving for the plan
+    const withCash = blank({ ...s, budgetPlan: { start: "2026-11", startCash: 13000, months: { "2026-11": { assigned: { "acct:cash": 13000, "acct:ira": 700 } } } } });
+    const mc = simulatePlan(withCash, derive(withCash, START)).months[0]!;
+    expect(mc.plannedAsk).toBeCloseTo(700, 6);
+    expect(mc.plannedShort).toBe(0);
     // without the budget the plan pours everything into the Visa first
     const plain = simulatePlan(base, derive(base, START)).months;
     expect(plain[0]!.alloc.debt).toBeGreaterThan(4000);

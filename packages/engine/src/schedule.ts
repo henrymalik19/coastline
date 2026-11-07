@@ -127,16 +127,22 @@ export function mergeAccountSchedules(s: Pick<PlanState, "plan" | "accounts">): 
  * What you assigned to savings and debts feeds the plan for those months: an account gets exactly
  * what you assigned, a debt gets what you assigned beyond its minimum as extra.
  */
-export function budgetScheduleMonths(s: Pick<PlanState, "debts" | "goals" | "budgetPlan">): Record<string, Record<string, number>> | undefined {
+export function budgetScheduleMonths(s: Pick<PlanState, "debts" | "goals" | "budgetPlan"> & Partial<Pick<PlanState, "accounts">>): Record<string, Record<string, number>> | undefined {
   const b = s.budgetPlan;
   if (!b?.months) return undefined;
   const out: Record<string, Record<string, number>> = {};
   for (const [month, e] of Object.entries(b.months)) {
     for (const [key, v] of Object.entries(e.assigned ?? {})) {
       let amount: number | undefined;
-      if (key.startsWith(ACCOUNT_KEY)) amount = Math.max(0, num(v));
-      // a kind with no account yet ("ira", "taxable", "hsa", "cash")
-      else if (key === "cash" || key === "ira" || key === "hsa" || key === "taxable") amount = Math.max(0, num(v));
+      // money assigned to cash (the emergency fund) stays in your cash either way: it isn't new saving
+      // for the plan, and it may be cash you already had (assigning it shouldn't look like a shortfall)
+      if (key.startsWith(ACCOUNT_KEY)) {
+        const a = (s.accounts ?? []).find((x) => ACCOUNT_KEY + x.id === key);
+        if (a?.type === "cash") continue;
+        amount = Math.max(0, num(v));
+      }
+      // a kind with no account yet ("ira", "taxable", "hsa")
+      else if (key === "ira" || key === "hsa" || key === "taxable") amount = Math.max(0, num(v));
       else if (key.startsWith("goal:")) {
         // repeating goals set aside on their own; one-time goals get what you assigned
         const g = (s.goals ?? []).find((y) => "goal:" + y.id === key);
