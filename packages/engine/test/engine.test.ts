@@ -4,6 +4,7 @@ import {
   coastNumberAt,
   DEFAULT_LIMITS,
   derive,
+  isHighInterest,
   limitsFor,
   matchFor,
   project,
@@ -101,6 +102,25 @@ describe("PLAN.md §5.1 required tests", () => {
     const lo = plan.events.find((e) => e.key === "debt:lo")!;
     expect(hi.m).toBeLessThan(lo.m);
     expect(plan.events.find((e) => e.key === "debtFree")!.m).toBe(lo.m);
+  });
+
+  it("a 401(k) loan is never paid early as high-interest debt, whatever its rate", () => {
+    const s = blank({
+      incomes: [{ id: "i", name: "Job", freq: "monthly", net: 1000, matchMode: "usd" }],
+      debts: [
+        { id: "loan", name: "Loan", kind: "k401_loan", balance: 3000, apr: 0.09, minPayment: 0 },
+        { id: "card", name: "Card", kind: "credit_card", balance: 3000, apr: 0.2, minPayment: 0 },
+      ],
+      plan: { ...blank().plan, steps: ["highDebt"] },
+    });
+    const plan = simulatePlan(s, derive(s, START));
+    expect(plan.events.find((e) => e.key === "debt:card")).toBeDefined();
+    expect(plan.events.find((e) => e.key === "debt:loan")).toBeUndefined();
+    // the low-interest step does pay it down
+    const low = blank({ ...s, plan: { ...s.plan, steps: ["highDebt", "lowDebt"] } });
+    expect(simulatePlan(low, derive(low, START)).events.find((e) => e.key === "debt:loan")).toBeDefined();
+    expect(isHighInterest({ kind: "k401_loan", apr: 0.5 }, 0.07)).toBe(false);
+    expect(isHighInterest({ kind: "other", apr: 0.07 }, 0.07)).toBe(true);
   });
 
   it("determinism: same state + startDate gives identical output", () => {

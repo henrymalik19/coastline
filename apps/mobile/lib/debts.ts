@@ -17,6 +17,14 @@ export const DEBT_KINDS: { value: DebtKind; label: string; typicalApr: number; p
   },
   { value: "personal", label: "Personal loan", typicalApr: 0.12, placeholder: "e.g. SoFi loan" },
   { value: "medical", label: "Medical", typicalApr: 0, placeholder: "e.g. Hospital bill" },
+  {
+    value: "k401_loan",
+    label: "401(k) loan",
+    typicalApr: 0.085,
+    placeholder: "e.g. Fidelity 401(k) loan",
+    note:
+      "Repayments come out of your paycheck after tax. Enter the monthly amount as the minimum payment (per-check amount × checks per year ÷ 12), and don't also list it as a paycheck deduction or budget item. The interest goes back into your own 401(k), so the plan never rushes to pay this off early. If you leave your job, the balance may be due soon after.",
+  },
   { value: "other", label: "Other", typicalApr: 0.1, placeholder: "e.g. Family loan" },
 ];
 

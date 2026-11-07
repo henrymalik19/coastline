@@ -22,6 +22,14 @@ export const SHORTFALL_ID = "shortfall";
 export const DEFAULT_CARD_APR = 0.22;
 
 /**
+ * Whether a debt is paid off early in the "high-interest" step. A 401(k) loan never is: its
+ * interest goes back into your own 401(k), so it waits for the low-interest step.
+ */
+export function isHighInterest(d: Pick<Debt, "apr" | "kind">, threshold: number): boolean {
+  return d.kind !== "k401_loan" && d.apr >= threshold;
+}
+
+/**
  * Month-by-month cash flow + priority waterfall, starting at `d.start`.
  *
  * Each month: income by real paydays x (1 + raises)^year; debts accrue APR/12 then
@@ -239,8 +247,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
             alloc.matchGain += gapMatch * frac;
             avail -= put;
           });
-        } else if (step === "highDebt") payDebts((x) => x.apr >= thr);
-        else if (step === "lowDebt") payDebts((x) => x.apr < thr);
+        } else if (step === "highDebt") payDebts((x) => isHighInterest(x, thr));
+        else if (step === "lowDebt") payDebts((x) => !isHighInterest(x, thr));
         else if (step === "hsa") {
           const put = Math.min(avail, capHsa);
           alloc.hsa += put;

@@ -2,7 +2,7 @@
  * Plan-step status for the Plan tab (port of the prototype's stepInfo/renderPlan).
  * Reads engine output only; no money math beyond display.
  */
-import { BUCKET_LABELS, limitsFor, PERIODS, STEP_LABELS, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
+import { BUCKET_LABELS, isHighInterest, limitsFor, PERIODS, STEP_LABELS, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
 import { debtLabel } from "./debts";
 import { money, monthLabel, percent } from "./format";
 
@@ -57,7 +57,7 @@ export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date)
   if (step === "highDebt" || step === "lowDebt") {
     const hi = step === "highDebt";
     const thr = s.plan.highApr;
-    const list = s.debts.filter((x) => (hi ? x.apr >= thr : x.apr < thr));
+    const list = s.debts.filter((x) => isHighInterest(x, thr) === hi);
     const bal = list.reduce((a, x) => a + (+x.balance || 0), 0);
     const ends = list.map((x) => ev("debt:" + x.id)).filter(Boolean);
     const last = ends.length === list.length && ends.length ? Math.max(...ends.map((e) => e!.m)) : null;
