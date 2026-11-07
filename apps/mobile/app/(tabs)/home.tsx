@@ -1,4 +1,7 @@
-import { isHighInterest, paysExtra } from "@coastfi/engine";
+import { budgetView, isHighInterest, paysExtra } from "@coastfi/engine";
+import { budgetKeyFor } from "../../lib/budgetLinks";
+import { useCategories } from "../../lib/categories";
+import { cardMap } from "../../lib/register";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -27,6 +30,13 @@ export default function Home() {
   const m0 = actual.months[0]!;
   const todos = monthTodos(m0, t, state.plan.marginalTax, d.rothShare, state.plan.hsaPayroll);
   const mk = monthKey(start);
+  // once the budget is started, this month's to-dos follow what's assigned there
+  const budgeting = !!state.budgetPlan && mk >= state.budgetPlan.start;
+  const cats = useCategories(mk);
+  const txns = useStore((s) => s.txns);
+  const bview = budgeting ? budgetView(state.budgetPlan, cats, mk, { txns, cards: cardMap(state) }) : null;
+  const rta = bview?.readyToAssign ?? 0;
+  const assignedNow = state.budgetPlan?.months?.[mk]?.assigned ?? {};
   const done = useStore((s) => s.todoDone[mk]) ?? [];
   const toggleTodo = useStore((s) => s.toggleTodo);
 
@@ -169,12 +179,35 @@ export default function Home() {
         </View>
       ) : null}
       <Divider />
-      {todos.map((td, i) => (
-        <View key={td.key}>
-          <TodoRow todo={{ ...td, detail: [td.detail, stepOf(td.key)].filter(Boolean).join(" · ") }} done={done.includes(td.key)} onToggle={() => toggleTodo(mk, td.key)} />
-          {i < todos.length - 1 ? <View style={{ marginLeft: 56 }}><Divider /></View> : null}
-        </View>
-      ))}
+      {budgeting ? (
+        <Pressable role="link" onPress={() => router.push("/budget")} style={[styles.rtaRow, { backgroundColor: rta < -0.5 ? t.badSoft : rta > 0.5 ? t.goodSoft : t.surface2 }]}>
+          <Text style={[type.label, { color: t.text, flex: 1 }]}>Ready to assign</Text>
+          <Text style={[type.label, { color: rta < -0.5 ? t.bad : rta > 0.5 ? t.good : t.text2, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(rta)}</Text>
+          <Icon name="chevron" size={14} color={t.text3} />
+        </Pressable>
+      ) : null}
+      {todos.map((td, i) => {
+        // with a budget, a to-do is done when its line has the money: tap to open that line
+        const bk = budgeting ? budgetKeyFor(state, td.key, mk) : null;
+        // a debt's line holds the minimum too; the to-do is the extra
+        const minimum = bk?.startsWith("debt:") ? state.debts.find((x) => "debt:" + x.id === bk)?.minPayment ?? 0 : 0;
+        const got = bk ? Math.max(0, (assignedNow[bk] ?? 0) - minimum) : 0;
+        return (
+          <View key={td.key}>
+            {bk ? (
+              <TodoRow
+                todo={{ ...td, detail: [`${money(got)} of ${money(td.amount ?? 0)} assigned on Budget`, stepOf(td.key)].filter(Boolean).join(" · ") }}
+                done={got >= (td.amount ?? 0) - 0.5}
+                link
+                onToggle={() => router.push(`/budget?focus=${encodeURIComponent(bk)}`)}
+              />
+            ) : (
+              <TodoRow todo={{ ...td, detail: [td.detail, stepOf(td.key)].filter(Boolean).join(" · ") }} done={done.includes(td.key)} onToggle={() => toggleTodo(mk, td.key)} />
+            )}
+            {i < todos.length - 1 ? <View style={{ marginLeft: 56 }}><Divider /></View> : null}
+          </View>
+        );
+      })}
       {m0.shortfall > 0.5 ? (
         <Text style={[type.caption, { color: t.bad, padding: space.lg }]}>{shortfallText(m0)}</Text>
       ) : null}
@@ -242,13 +275,13 @@ function Row({ label, value, tone, info }: { label: string; value: string; tone?
   );
 }
 
-function TodoRow({ todo, done, onToggle }: { todo: Todo; done: boolean; onToggle: () => void }) {
+function TodoRow({ todo, done, onToggle, link }: { todo: Todo; done: boolean; onToggle: () => void; /** Opens its Budget line instead of ticking. */ link?: boolean }) {
   const t = useTheme();
   return (
     <Pressable
       onPress={onToggle}
-      role="checkbox"
-      aria-checked={done}
+      role={link ? "link" : "checkbox"}
+      aria-checked={link ? undefined : done}
       accessibilityLabel={`${todo.title}${todo.amount ? `, ${money(todo.amount)}` : ""}`}
       style={({ pressed }) => [styles.todo, { backgroundColor: pressed ? t.surface2 : "transparent" }]}
     >
@@ -267,6 +300,7 @@ function TodoRow({ todo, done, onToggle }: { todo: Todo; done: boolean; onToggle
           <Text style={[type.label, { color: done ? t.text3 : t.text, fontVariant: ["tabular-nums"], fontWeight: "600" }]}>{money(todo.amount)}</Text>
         </View>
       ) : null}
+      {link ? <Icon name="chevron" size={14} color={t.text3} /> : null}
     </Pressable>
   );
 }
@@ -281,6 +315,7 @@ const styles = StyleSheet.create({
   check: { width: 28, height: 28, borderRadius: 8, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   amount: { flexDirection: "row", alignItems: "center", gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
+  rtaRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.lg, marginBottom: space.sm, paddingHorizontal: space.md, paddingVertical: 10, borderRadius: radius.md },
   footer: { flexDirection: "row", gap: space.sm, paddingHorizontal: space.xs, alignItems: "flex-start" },
   banner: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.lg, flexWrap: "wrap" },
 });

@@ -580,9 +580,6 @@ export function AccountsForecast({ state, o, start, fill }: Props) {
                 About {label(one.key).replace(" (what you owe)", "").replace(" (emergency fund)", "")} ›
               </Text>
             ) : null}
-            <Text role="link" onPress={() => router.push("/monthly")} style={{ color: t.accent, fontWeight: "700" }}>
-              {" · "}Monthly charts ›
-            </Text>
           </Text>
         ) : null}
       </View>

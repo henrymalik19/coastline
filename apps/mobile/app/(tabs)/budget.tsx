@@ -6,13 +6,13 @@
 import { budgetCategories, budgetView, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
 import { budgetAccounts, cardMap } from "../../lib/register";
-import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, NumberInput, Select, TextField, ToggleRow } from "../../components/form";
 import { MonthlyAmount } from "../../components/ScheduleEditor";
 import { groupOf, groupOrder, moveGroup, moveItem, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
 import { newId } from "../../lib/store";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Icon } from "../../components/Icon";
 import { Card, Divider, Pill, Screen, SectionLabel } from "../../components/ui";
 import { confirm } from "../../lib/confirm";
@@ -47,6 +47,16 @@ export default function Budget() {
   const [moveAmt, setMoveAmt] = useState(0);
   const [groupDraft, setGroupDraft] = useState("");
   const router = useRouter();
+  // opened from a link (a plan step, a to-do): show this month with that line open
+  const { focus } = useLocalSearchParams<{ focus?: string }>();
+  useEffect(() => {
+    if (!focus) return;
+    setMonth(thisMonth);
+    setOpen(focus);
+    if (Platform.OS === "web" && typeof document !== "undefined")
+      setTimeout(() => document.getElementById("cat-" + focus)?.scrollIntoView({ behavior: "smooth", block: "center" }), 350);
+    router.setParams({ focus: undefined });
+  }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
   const b = state.budgetPlan;
   const cats = useMemo(() => budgetCategories(state, result.d, actual, start, month), [state, result, actual, start, month]);
   const txns = useStore((s) => s.txns);
@@ -315,7 +325,7 @@ export default function Budget() {
     const isOpen = open === c.key;
     const explicitSpent = entry?.spent?.[c.key] !== undefined;
     return (
-      <View key={c.key}>
+      <View key={c.key} nativeID={"cat-" + c.key}>
         <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); setMoveAmt(0); setMoveTo(""); }} style={({ pressed }) => [styles.row, pressed ? { backgroundColor: t.surface2 } : null]}>
           <Text style={[type.body, { color: t.text, flex: 1, minWidth: 0 }]} numberOfLines={1}>{label(c)}</Text>
           {num(l.assigned, t.text2)}

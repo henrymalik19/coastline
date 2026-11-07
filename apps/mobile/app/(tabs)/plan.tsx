@@ -1,5 +1,8 @@
 import { coastNumberAt, isHighInterest, paysExtra } from "@coastfi/engine";
 import { useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { MonthlyCharts } from "../../components/MonthlyCharts";
+import { budgetKeyFor } from "../../lib/budgetLinks";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { longMonth } from "../../components/AdjustmentsCard";
 import { AccountsForecast } from "../../components/AccountsForecast";
@@ -11,7 +14,7 @@ import { money, monthLabel } from "../../lib/format";
 import { useLayout } from "../../lib/layout";
 import { usePlan } from "../../lib/plan";
 import { stepInfo, type StepInfo } from "../../lib/steps";
-import { useStore } from "../../lib/store";
+import { monthKey, useStore } from "../../lib/store";
 import { space, type, useTheme } from "../../lib/theme";
 
 export default function Plan() {
@@ -25,9 +28,12 @@ export default function Plan() {
   const [openSteps, setOpenSteps] = useState<Set<string>>(new Set());
   const toggle = (k: string) => setOpenSteps((cur) => { const n = new Set(cur); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   const { state, result: o, start, actual } = usePlan();
+  const router = useRouter();
+  const thisMk = monthKey(start);
   const update = useStore((s) => s.update);
   // steps and accounts are two views of the same plan
-  const [tab, setTab] = useState<"steps" | "accounts">("steps");
+  const { view } = useLocalSearchParams<{ view?: string }>();
+  const [tab, setTab] = useState<"steps" | "accounts" | "charts">(view === "charts" ? "charts" : view === "forecast" ? "accounts" : "steps");
   const tableView = tab === "accounts";
 
   // steps describe what you'll really do (no what-ifs), so they match Home's to-dos
@@ -193,6 +199,28 @@ export default function Plan() {
                     ))}
                   </View>
                 ) : null}
+                {(() => {
+                  // this step's line on the Budget tab (paycheck steps are set on the job instead)
+                  const bk = budgetKeyFor(state, info.key, thisMk);
+                  if (info.done || info.skip) return null;
+                  if (!bk) {
+                    return info.key === "k401" || info.key === "match" || info.key === "hsa" ? (
+                      <Pressable role="link" onPress={() => router.push("/money/income")} hitSlop={6} style={styles.budgetLink}>
+                        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Set per paycheck on your job</Text>
+                        <Icon name="chevron" size={12} color={t.accent} />
+                      </Pressable>
+                    ) : null;
+                  }
+                  const got = state.budgetPlan?.months?.[thisMk]?.assigned?.[bk];
+                  return (
+                    <Pressable role="link" onPress={() => router.push(`/budget?focus=${encodeURIComponent(bk)}`)} hitSlop={6} style={styles.budgetLink}>
+                      <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>
+                        {!state.budgetPlan ? "Budget for it" : got !== undefined ? `${money(got)} assigned this month on Budget` : "Assign it on Budget"}
+                      </Text>
+                      <Icon name="chevron" size={12} color={t.accent} />
+                    </Pressable>
+                  );
+                })()}
                 {canShare ? (
                   <SplitPicker
                     label={info.label}
@@ -313,13 +341,17 @@ export default function Plan() {
       <View style={{ maxWidth: 360 }}>
         <Segmented
           label="Plan view"
-          options={[{ value: "steps", label: "Steps" }, { value: "accounts", label: "Forecast" }]}
+          options={[{ value: "steps", label: "Steps" }, { value: "accounts", label: "Forecast" }, { value: "charts", label: "Charts" }]}
           value={tab}
           onChange={setTab}
         />
       </View>
       {tableView ? (
         <AccountsForecast state={state} o={real} start={start} fill />
+      ) : tab === "charts" ? (
+        <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
+          <MonthlyCharts />
+        </ScrollView>
       ) : (
         <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
           {state.emergency?.active ? (
@@ -398,6 +430,7 @@ const styles = StyleSheet.create({
   num: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   moves: { flexDirection: "row", alignItems: "center" },
   more: { gap: space.sm, paddingBottom: space.md },
+  budgetLink: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" },
   moveBtn: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   dateLabel: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: 6 },
   cmp: { flexDirection: "row", gap: space.lg },
