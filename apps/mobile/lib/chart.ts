@@ -20,7 +20,7 @@ export function bucketValues(m: MonthRow): Record<Bucket, number> {
     taxable: m.alloc.taxable,
     ef: m.alloc.ef,
     debt: m.alloc.debt,
-    hsa: m.alloc.hsa,
+    hsa: m.alloc.hsa + (m.payHsa ?? 0) + m.payHsaEmployer,
     goals: m.alloc.goals,
   };
 }

@@ -21,11 +21,14 @@ export function paycheck(inc: Income) {
   const loanRepayment = (inc.deductions ?? []).filter((x) => x.kind === "k401_loan").reduce((a, x) => a + Math.max(0, x.amount), 0);
   const deductions = (inc.deductions ?? []).filter((x) => x.kind !== "k401_loan").reduce((a, x) => a + Math.max(0, x.amount), 0);
   /** Deductions that usually come out before tax (they lower the tax estimate). */
-  const pretaxDeductions = (inc.deductions ?? [])
-    .filter((x) => DEDUCTION_KINDS.find((k) => k.value === x.kind)?.pretax)
-    .reduce((a, x) => a + Math.max(0, x.amount), 0);
-  const net = Math.max(0, Math.round((gross - k401 - taxes - deductions - loanRepayment) * 100) / 100);
-  return { gross, k401, k401Pretax, taxes, deductions, pretaxDeductions, loanRepayment, net };
+  /** Your own HSA contribution from each check (pre-tax). */
+  const hsa = Math.max(0, inc.hsaPre ?? 0);
+  const pretaxDeductions =
+    (inc.deductions ?? [])
+      .filter((x) => DEDUCTION_KINDS.find((k) => k.value === x.kind)?.pretax)
+      .reduce((a, x) => a + Math.max(0, x.amount), 0) + hsa;
+  const net = Math.max(0, Math.round((gross - k401 - hsa - taxes - deductions - loanRepayment) * 100) / 100);
+  return { gross, k401, k401Pretax, hsa, taxes, deductions, pretaxDeductions, loanRepayment, net };
 }
 
 /** Apply a change to a job; in auto mode, take-home is recalculated from the pay stub fields. */

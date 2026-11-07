@@ -445,6 +445,46 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     expect(total).toBeLessThanOrEqual(L.hsaSelf + 1e-6);
   });
 
+  it("payroll steps add a steady amount per check (no December lump sum), after what you already put in", () => {
+    const rich = { ...job, net: 20000 };
+    const base = { limits: DEFAULT_LIMITS, plan: { ...blank().plan, steps: ["k401" as const] } };
+    const lump = simulatePlan(blank({ ...base, incomes: [rich] }), derive(blank({ ...base, incomes: [rich] }), START)).months[0]!;
+    const s = blank({ ...base, incomes: [rich], plan: { ...base.plan, payrollSteps: true } });
+    const m0 = simulatePlan(s, derive(s, START)).months[0]!;
+    const L = DEFAULT_LIMITS.find((l) => l.year === 2026)!;
+    expect(lump.alloc.k401).toBeGreaterThan(L.k401 / 12 + 1); // old behavior: the rest of the year at once
+    expect(m0.alloc.k401).toBeCloseTo(L.k401 / 12, 6); // one monthly check: a twelfth of the limit
+    // your own payroll 401(k) counts first
+    const withPre = blank({ ...base, incomes: [{ ...rich, pretax: 1500 }], plan: { ...base.plan, payrollSteps: true } });
+    expect(simulatePlan(withPre, derive(withPre, START)).months[0]!.alloc.k401).toBeCloseTo(L.k401 / 12 - 1500, 6);
+  });
+
+  it("your own payroll HSA counts toward the limit; a payroll HSA step tops it up per check, pre-tax", () => {
+    const s = blank({
+      limits: DEFAULT_LIMITS,
+      incomes: [{ ...job, net: 20000, hsaPre: 200 }],
+      plan: { ...blank().plan, marginalTax: 0.2, hsaEligible: true, steps: ["hsa"], payrollSteps: true, hsaPayroll: true },
+    });
+    const jan = simulatePlan(s, derive(s, START)).months.find((m) => m.y === 2027 && m.mo === 0)!;
+    const L = DEFAULT_LIMITS.find((l) => l.year === 2027)!;
+    expect(jan.payHsa).toBeCloseTo(200, 9);
+    expect(jan.alloc.hsa).toBeCloseTo(L.hsaSelf / 12 - 200, 6);
+    expect(jan.post).toBeCloseTo(L.hsaSelf / 12, 6);
+    // a pre-tax dollar costs 80¢ of take-home: the rest of the check goes on as leftover
+    expect(jan.alloc.leftover).toBeCloseTo(20000 - (L.hsaSelf / 12 - 200) * 0.8, 6);
+  });
+
+  it("a step with a share runs alongside the next one", () => {
+    const s = blank({
+      incomes: [{ ...job, net: 10000 }],
+      budget: spending,
+      plan: { ...blank().plan, efMonths: 6, steps: ["fullEF", "taxable"], shares: { fullEF: 0.7 } },
+    });
+    const m0 = simulatePlan(s, derive(s, START)).months[0]!;
+    expect(m0.alloc.ef).toBeCloseTo(6000 * 0.7, 6);
+    expect(m0.alloc.taxable).toBeCloseTo(6000 * 0.3, 6);
+  });
+
   it("Roth 401(k) contributions go to the after-tax bucket and cost a full dollar", () => {
     const pre = blank({ limits: DEFAULT_LIMITS, incomes: [{ ...job, pretax: 500 }] });
     const roth = blank({ limits: DEFAULT_LIMITS, incomes: [{ ...job, pretax: 500, rothShare: 1 }] });

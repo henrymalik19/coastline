@@ -8,7 +8,7 @@ import { Card, Divider, Pill, Screen, SectionLabel } from "../../components/ui";
 import { bucketValues, total } from "../../lib/chart";
 import { money, monthLabel } from "../../lib/format";
 import { useLayout } from "../../lib/layout";
-import { monthTodos, shortfallText, usePlan } from "../../lib/plan";
+import { hsaTakeHome, monthTodos, shortfallText, usePlan } from "../../lib/plan";
 import { radius, space, type, useTheme, type Theme } from "../../lib/theme";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -16,7 +16,7 @@ const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct
 type Seg = { key: string; label: string; value: number; color: string };
 
 /** Where a month's take-home goes (pre-tax payroll is already out of take-home). */
-function splits(m: MonthRow, t: Theme, mt: number, rothShare = 0): Seg[] {
+function splits(m: MonthRow, t: Theme, mt: number, rothShare = 0, hsaPayroll = false): Seg[] {
   const a = m.alloc;
   const segs: Seg[] = [{ key: "spend", label: "Budget + debt minimums", value: m.expenses - m.adjExpense - m.setAside, color: t.track }];
   if (m.setAside > 0.5) segs.push({ key: "setaside", label: "Set aside for recurring goals", value: m.setAside, color: t.series.goals });
@@ -28,7 +28,7 @@ function splits(m: MonthRow, t: Theme, mt: number, rothShare = 0): Seg[] {
   if (a.taxable > 0.5) segs.push({ key: "taxable", label: "Brokerage", value: a.taxable, color: t.series.taxable });
   if (a.ef > 0.5) segs.push({ key: "ef", label: "Emergency fund", value: a.ef, color: t.series.ef });
   if (a.debt > 0.5) segs.push({ key: "debt", label: "Extra debt payments", value: a.debt, color: t.series.debt });
-  if (a.hsa > 0.5) segs.push({ key: "hsa", label: "HSA", value: a.hsa, color: t.series.hsa });
+  if (a.hsa > 0.5) segs.push({ key: "hsa", label: hsaPayroll ? `Extra HSA from paychecks (${money(a.hsa)} in)` : "HSA", value: hsaTakeHome(m, mt, hsaPayroll), color: t.series.hsa });
   if (a.goals > 0.5) segs.push({ key: "goals", label: "Savings goals", value: a.goals, color: t.series.goals });
   if (a.leftover > 0.5) segs.push({ key: "left", label: "Unassigned, stays in cash", value: a.leftover, color: t.surface2 });
   return segs;
@@ -37,9 +37,9 @@ function splits(m: MonthRow, t: Theme, mt: number, rothShare = 0): Seg[] {
 function MonthCard({ m, title, start, state }: { m: MonthRow; title: string; start: Date; state: PlanState }) {
   const t = useTheme();
   const rothShare = usePlan().result.d.rothShare;
-  const segs = splits(m, t, state.plan.marginalTax, rothShare);
+  const segs = splits(m, t, state.plan.marginalTax, rothShare, state.plan.hsaPayroll);
   const sum = segs.reduce((a, s) => a + s.value, 0) || 1;
-  const todos = monthTodos(m, t, state.plan.marginalTax, rothShare);
+  const todos = monthTodos(m, t, state.plan.marginalTax, rothShare, state.plan.hsaPayroll);
   const key = `${m.y}-${String(m.mo + 1).padStart(2, "0")}`;
   const oneOffs = (state.adjustments ?? []).filter((a) => a.month === key);
   const checks = state.incomes

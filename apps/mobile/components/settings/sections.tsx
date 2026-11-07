@@ -316,6 +316,15 @@ function AssumptionsSection() {
             <TaxBracketRow key="mt" />,
             <ToggleRow key="h" label="I have an HSA-eligible health plan" hint="High-deductible plan" value={state.plan.hsaEligible} onChange={(v) => update((p) => { p.plan.hsaEligible = v; })} />,
             state.plan.hsaEligible ? <ToggleRow key="hf" label="HSA family coverage" value={state.plan.hsaFamily} onChange={(v) => update((p) => { p.plan.hsaFamily = v; })} /> : null,
+            state.plan.hsaEligible ? (
+              <ToggleRow
+                key="hp"
+                label="I add to my HSA from my paycheck"
+                hint={state.plan.hsaPayroll === false ? "You deposit it yourself (lump sums, and last year's room until April 15)" : "Pre-tax, a steady amount per check. Set what you put in now on your job (Income)"}
+                value={state.plan.hsaPayroll !== false}
+                onChange={(v) => update((p) => { p.plan.hsaPayroll = v; })}
+              />
+            ) : null,
           ]}
         </Rows>
       </Group>

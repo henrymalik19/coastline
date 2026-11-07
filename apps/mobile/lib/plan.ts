@@ -29,6 +29,9 @@ export function effectivePlan(saved: PlanState): PlanState {
   }
   let plan = saved.plan;
   if (plan.projectWith !== "plan") plan = { ...plan, projectWith: "plan" };
+  // 401(k)/HSA steps come out of paychecks: steady per check. The HSA is from paychecks unless you say otherwise.
+  const hsaPayroll = plan.hsaPayroll ?? true;
+  if (!plan.payrollSteps || plan.hsaPayroll !== hsaPayroll) plan = { ...plan, payrollSteps: true, hsaPayroll };
   if (!plan.marginalTaxManual) {
     const est = estimateBracket(saved.incomes, saved.filingStatus ?? "single");
     if (est && Math.abs(est.total - plan.marginalTax) >= 1e-9) plan = { ...plan, marginalTax: est.total };
@@ -69,7 +72,10 @@ export function shortfallText(m: MonthRow): string {
 export type Todo = { key: string; title: string; detail?: string; amount?: number; color: string };
 
 /** A month's actions, in plan order. Formatting only; amounts come from the engine. */
-export function monthTodos(m: MonthRow, t: Theme, marginalTax: number, rothShare = 0): Todo[] {
+/** Take-home an HSA contribution costs: pre-tax from a paycheck, or dollar for dollar. */
+export const hsaTakeHome = (m: MonthRow, marginalTax: number, payroll?: boolean) => (payroll ? m.alloc.hsa * (1 - Math.min(0.6, Math.max(0, marginalTax))) : m.alloc.hsa);
+
+export function monthTodos(m: MonthRow, t: Theme, marginalTax: number, rothShare = 0, hsaPayroll = false): Todo[] {
   const a = m.alloc;
   const out: Todo[] = [];
   if (m.emergency) {
@@ -81,7 +87,12 @@ export function monthTodos(m: MonthRow, t: Theme, marginalTax: number, rothShare
     out.push({ key: "match", title: "Raise your 401(k) to the full-match %", detail: `Your employer adds ${money(a.matchGain)} more this month`, amount: a.k401TakeHome - a.k401Step, color: t.series.k401 });
   if (a.debt > 0.5) out.push({ key: "debt", title: "Pay extra toward debt", detail: "Highest interest rate first", amount: a.debt, color: t.series.debt });
   if (a.ef > 0.5) out.push({ key: "ef", title: "Add to your emergency fund", detail: "Keep it in high-yield savings", amount: a.ef, color: t.series.ef });
-  if (a.hsa > 0.5) out.push({ key: "hsa", title: "Contribute to your HSA", amount: a.hsa, color: t.series.hsa });
+  if (a.hsa > 0.5)
+    out.push(
+      hsaPayroll
+        ? { key: "hsa", title: "Raise your HSA paycheck contribution", detail: `${money(a.hsa)} into your HSA this month, pre-tax`, amount: hsaTakeHome(m, marginalTax, true), color: t.series.hsa }
+        : { key: "hsa", title: "Contribute to your HSA", amount: a.hsa, color: t.series.hsa },
+    );
   if (a.ira > 0.5) out.push({ key: "ira", title: "Contribute to your IRA", amount: a.ira, color: t.series.ira });
   if (a.goals > 0.5) out.push({ key: "goals", title: "Save toward your goals", amount: a.goals, color: t.series.goals });
   if (a.k401Step > 0.5)

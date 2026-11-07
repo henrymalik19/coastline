@@ -23,7 +23,32 @@ export default function Plan() {
   // steps describe what you'll really do (no what-ifs), so they match Home's to-dos
   const real = { ...o, plan: actual };
   const infos = state.plan.steps.map((k) => stepInfo(k, state, real, start)).filter((x): x is StepInfo => !!x);
-  const activeKey = infos.find((i) => !i.done && !i.skip)?.key;
+  // steps running now: the first unfinished one, plus the next ones while a step shares what's left
+  const shares = state.plan.shares ?? {};
+  // "Now": every step that gets money this month (several at once with shares, or when one finishes mid-month)
+  const a0 = actual.months[0]?.alloc;
+  const open = infos.filter((i) => !i.done && !i.skip);
+  const firstOf = (pred: (k: string) => boolean) => open.find((i) => pred(i.key))?.key;
+  const activeKeys = new Set<string>();
+  if (a0) {
+    const add = (k: string | undefined, amount: number) => { if (k && amount > 0.5) activeKeys.add(k); };
+    add(firstOf((k) => k === "starterEF" || k === "fullEF"), a0.ef);
+    add(firstOf((k) => k === "match"), a0.matchGain);
+    add(firstOf((k) => k === "highDebt" || k === "lowDebt"), a0.debt);
+    add(firstOf((k) => k === "hsa"), a0.hsa);
+    add(firstOf((k) => k === "ira"), a0.ira);
+    add(firstOf((k) => k === "k401"), a0.k401Step);
+    add(firstOf((k) => k.startsWith("goal:")), a0.goals);
+    add(firstOf((k) => k === "taxable"), a0.taxable);
+  }
+  if (!activeKeys.size && open[0]) activeKeys.add(open[0].key);
+  const setShare = (key: string, v: number) =>
+    update((p) => {
+      const next = { ...(p.plan.shares ?? {}) };
+      if (v >= 1) delete next[key];
+      else next[key] = v;
+      p.plan.shares = Object.keys(next).length ? next : undefined;
+    });
   const move = (i: number, dir: -1 | 1) =>
     update((p) => {
       const s = p.plan.steps;
@@ -37,12 +62,13 @@ export default function Plan() {
       <View style={{ padding: space.lg, paddingBottom: space.md, gap: 4 }}>
         <SectionLabel>Your steps</SectionLabel>
         <Text style={[type.body, { color: t.text2 }]}>
-          Each month, what's left after your budget and debt payments fills step 1, then step 2, and so on. Amounts and dates are for your numbers. Use the arrows to change the order.
+          Each month, what's left after your budget and debt payments fills step 1, then step 2, and so on. To do two at once, give a step a share: the rest goes to the next steps at the same time. Amounts and dates are for your numbers. Use the arrows to change the order.
         </Text>
       </View>
       <Divider />
       {infos.map((info, i) => {
-        const active = info.key === activeKey;
+        const active = activeKeys.has(info.key);
+        const canShare = !info.done && !info.skip && info.key !== "taxable" && info.key !== "match" && i < infos.length - 1;
         const idx = state.plan.steps.indexOf(info.key);
         return (
           <View key={info.key}>
@@ -71,6 +97,7 @@ export default function Plan() {
                     <ProgressBar progress={info.progress} color={t.good} />
                   </View>
                 ) : null}
+                {canShare ? <SharePicker label={info.label} value={shares[info.key] ?? 1} onChange={(v) => setShare(info.key, v)} /> : null}
                 {info.schedule ? (
                   <Pressable
                     role="button"
@@ -230,7 +257,45 @@ export default function Plan() {
   );
 }
 
+/** "Gets all of what's left" or a share of it (the rest goes to the next steps at the same time). */
+function SharePicker({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const opts = [1, 0.75, 0.5, 0.25];
+  const text = value >= 1 ? "Gets all of what's left" : `Gets ${Math.round(value * 100)}%, the rest goes to the next steps`;
+  return (
+    <View style={{ gap: 6 }}>
+      <Pressable role="button" aria-expanded={open} accessibilityLabel={`${label}: ${text}. Change`} onPress={() => setOpen((o) => !o)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}>
+        <Text style={[type.caption, { color: value < 1 ? t.accent : t.text3, fontWeight: value < 1 ? "700" : "500" }]}>{text}</Text>
+        <View style={{ transform: [{ rotate: open ? "90deg" : "0deg" }] }}>
+          <Icon name="chevron" size={12} color={t.text3} />
+        </View>
+      </Pressable>
+      {open ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+          {opts.map((v) => {
+            const on = Math.abs(v - value) < 1e-9;
+            return (
+              <Pressable
+                key={v}
+                role="radio"
+                aria-checked={on}
+                accessibilityLabel={v >= 1 ? "All of it" : `${v * 100}%`}
+                onPress={() => { onChange(v); setOpen(false); }}
+                style={[styles.chip, { borderColor: on ? t.accent : t.border, backgroundColor: on ? t.accentSoft : t.surface }]}
+              >
+                <Text style={[type.caption, { color: on ? t.accent : t.text2, fontWeight: on ? "700" : "500" }]}>{v >= 1 ? "All" : `${v * 100}%`}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
   step: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
   num: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   moves: { flexDirection: "row", alignItems: "center" },

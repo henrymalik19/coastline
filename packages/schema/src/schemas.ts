@@ -42,6 +42,7 @@ export const IncomeSchema = z.object({
     .optional(),
   rothShare: rate.min(0).max(1).optional(),
   hsaEmployer: nonNeg.optional(),
+  hsaPre: nonNeg.optional(),
 });
 
 export const BudgetItemSchema = z.object({
@@ -122,6 +123,9 @@ export const PlanSettingsSchema = z.object({
   hsaEligible: z.boolean(),
   hsaFamily: z.boolean(),
   projectWith: z.enum(["plan", "current"]),
+  payrollSteps: z.boolean().optional(),
+  hsaPayroll: z.boolean().optional(),
+  shares: z.record(z.string(), z.number().min(0).max(1)).optional(),
 });
 
 export const AdjustmentSchema = z.object({

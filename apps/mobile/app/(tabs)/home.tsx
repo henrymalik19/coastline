@@ -1,3 +1,4 @@
+import { isHighInterest, paysExtra } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -24,7 +25,7 @@ export default function Home() {
   const d = o.d;
   // this month's to-dos come from the real plan (no what-ifs)
   const m0 = actual.months[0]!;
-  const todos = monthTodos(m0, t, state.plan.marginalTax, d.rothShare);
+  const todos = monthTodos(m0, t, state.plan.marginalTax, d.rothShare, state.plan.hsaPayroll);
   const mk = monthKey(start);
   const done = useStore((s) => s.todoDone[mk]) ?? [];
   const toggleTodo = useStore((s) => s.toggleTodo);
@@ -33,8 +34,12 @@ export default function Home() {
   const stepOf = (key: string): string | undefined => {
     const steps = state.plan.steps;
     const match = (k: string) => {
-      if (key === "ef") return k === "starterEF" || k === "fullEF";
-      if (key === "debt") return k === "highDebt" || k === "lowDebt";
+      // the step that's actually running: the starter fund until it's full, high-interest debt while there is any
+      if (key === "ef") return k === (d.bal.cash >= actual.starterTarget - 0.5 ? "fullEF" : "starterEF");
+      if (key === "debt") {
+        const high = state.debts.some((x) => x.balance > 0 && paysExtra(x) && isHighInterest(x, state.plan.highApr));
+        return k === (high ? "highDebt" : "lowDebt");
+      }
       if (key === "goals") return k.startsWith("goal:");
       return k === key;
     };

@@ -43,6 +43,8 @@ export type Income = {
   rothShare?: number;
   /** What your employer puts in your HSA, per year. Counts toward the HSA limit. */
   hsaEmployer?: number;
+  /** What you put in your HSA from each paycheck (pre-tax). Already out of take-home; counts toward the HSA limit. */
+  hsaPre?: number;
 };
 
 export type PayTaxes = { federal: number; state: number; socialSecurity: number; medicare: number };
@@ -158,6 +160,19 @@ export type PlanSettings = {
   hsaEligible: boolean;
   hsaFamily: boolean;
   projectWith: ProjectWith;
+  /**
+   * 401(k) (and payroll HSA) steps work like a paycheck: a steady amount per check, never more than
+   * the yearly limit ÷ paychecks per year, so a step starting late in the year doesn't get a lump sum.
+   * Missing = lump sums allowed (original behavior).
+   */
+  payrollSteps?: boolean;
+  /** The HSA step is paid from paychecks (pre-tax, steady per check, no prior-year deposits). Needs payrollSteps. */
+  hsaPayroll?: boolean;
+  /**
+   * Share of what's left each month that a step gets while it's running (0–1, by step key); the rest
+   * goes on to the steps after it at the same time. Missing = 1 (one step at a time).
+   */
+  shares?: Record<string, number>;
 };
 
 export type WhatIf = { extra: number; retDelta: number; spendDelta: number };
@@ -327,6 +342,8 @@ export type MonthRow = {
   payRoth: number;
   /** Employer HSA contribution this month. */
   payHsaEmployer: number;
+  /** Your own payroll HSA contribution this month (from hsaPre, stopped at the limit). */
+  payHsa: number;
   /** Set aside this month for recurring goals (included in `expenses`). */
   setAside: number;
   /** `setAside` per recurring goal, by goal id. */

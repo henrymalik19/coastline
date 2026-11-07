@@ -177,17 +177,23 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
           : avg > 0
             ? pace(pick, avg, ff).replace(/^./, (c) => c.toUpperCase())
             : `Starts ${when(ff)}`;
-    if (step === "k401" && ff !== undefined) {
-      // A 401(k) is set as a % of each paycheck: for each year, the steady rate that adds up to what the plan puts in
-      const rates = payrollRates(s, o, start);
-      if (rates.length) {
-        const [first, ...rest] = rates;
-        meta = `From ${first!.from}: set ${first!.job}'s 401(k) to ${first!.what}${first!.plus}${rest.length ? ` · ${rest[0]!.year}: ${rest[0]!.what}` : ""}`;
-        ctx.schedule = rates.map((r, i) => ({ m: i, label: `${r.year} (from ${r.from})`, amount: 0, text: r.what }));
+    const viaPayroll = step === "k401" || (step === "hsa" && !!s.plan.hsaPayroll);
+    if (viaPayroll && ff !== undefined) {
+      // set once per paycheck: the steady amount for each year, on top of what you put in now
+      const years = payrollYears(step as "k401" | "hsa", s, o, start);
+      if (years.length) {
+        const [first, ...rest] = years;
+        const what = step === "k401" ? "401(k)" : "HSA";
+        meta =
+          `From ${first!.from}: set ${first!.job}'s ${what} to ${first!.what}` +
+          (first!.base > 0.5 ? ` (you put in ${money(first!.base, { whole: true })} now, +${money(first!.perCheck, { whole: true })})` : "") +
+          ` · ${first!.year}: ${first!.summary}` +
+          (rest.length ? ` · ${rest[0]!.year}: ${rest[0]!.what}, ${rest[0]!.summary}` : "");
+        ctx.schedule = years.map((r, i) => ({ m: i, label: `${r.year} (from ${r.from})`, amount: 0, text: `${r.what} · ${r.summary}` }));
       }
     }
-    // IRA / HSA: exact room left when you've told us what's in, and the April 15 deadline
-    if ((step === "ira" || step === "hsa") && ff !== undefined) {
+    // IRA (and an HSA you pay into yourself): exact room left when you've told us what's in, and the April 15 deadline
+    if ((step === "ira" || step === "hsa") && !viaPayroll && ff !== undefined) {
       const room = contributionRoom(s, start, step, ff);
       meta += room
         ? ` · ${room}`
@@ -255,34 +261,60 @@ function contributionRoom(s: PlanState, start: Date, step: "ira" | "hsa", firstM
   return `${c.year}: ${money(left)} of ${money(cap)} left · until Apr 15, ${c.year + 1}${missed}`;
 }
 
-/** For each year the 401(k) step runs: the payroll % to set (and from when) so a steady rate matches the plan. */
-function payrollRates(s: PlanState, o: RunResult, start: Date): { year: number; from: string; job: string; what: string; plus: string }[] {
+type PayYear = { year: number; from: string; job: string; what: string; base: number; perCheck: number; summary: string };
+
+/**
+ * For each year a payroll step (401(k) or HSA) runs: the steady amount per check to set (and from when),
+ * counting what you already put in from each paycheck, and how much of that year's limit it reaches.
+ */
+function payrollYears(kind: "k401" | "hsa", s: PlanState, o: RunResult, start: Date): PayYear[] {
   const d = o.d;
-  const i = d.incomes.findIndex((x) => x.pretax > 0 || x.match > 0 || x.matchMode === "pct");
-  const inc = i >= 0 ? d.incomes[i]! : d.incomes[0];
-  if (!inc) return [];
-  const idx = Math.max(0, i);
-  const cost = k401Cost(s.plan.marginalTax, d.rothShare);
-  const gross = inc.matchMode === "pct" ? inc.gross ?? 0 : 0;
-  const out: { year: number; from: string; job: string; what: string; plus: string }[] = [];
-  const byYear = new Map<number, MonthRow[]>();
-  for (const m of o.plan.months) {
-    if (m.alloc.k401Step <= 0.5 && !byYear.has(m.y)) continue;
-    byYear.set(m.y, [...(byYear.get(m.y) ?? []), m]);
-  }
-  for (const [year, rows] of byYear) {
+  const jobs = d.incomes.map((x, i) => ({ x, i })).filter(({ x }) => (x.kind ?? "job") === "job");
+  const j =
+    (kind === "k401"
+      ? jobs.find(({ x }) => x.pretax > 0 || x.match > 0 || x.matchMode === "pct")
+      : jobs.find(({ x }) => (x.hsaPre ?? 0) > 0 || (x.hsaEmployer ?? 0) > 0)) ?? jobs[0];
+  if (!j) return [];
+  const cost = kind === "k401" ? k401Cost(s.plan.marginalTax, d.rothShare) : 1;
+  const extraIn = (m: MonthRow) => (kind === "k401" ? m.alloc.k401Step / cost : m.alloc.hsa);
+  // what you put in per check now (for the 401(k), after the full-match raise if the plan does it)
+  const base = kind === "k401" ? j.x.pretax + (j.x.fullMatch ? 0 : j.x.gapPre) : Math.max(0, j.x.hsaPre ?? 0);
+  const gross = kind === "k401" && j.x.matchMode === "pct" ? j.x.gross ?? 0 : 0;
+  const y0 = start.getFullYear();
+  const known = s.contributed && s.contributed.year === y0 ? s.contributed : undefined;
+  const out: PayYear[] = [];
+  const years = [...new Set(o.plan.months.map((m) => m.y))];
+  for (const year of years) {
     if (out.length >= 3) break;
-    const extra = rows.reduce((a, m) => a + m.alloc.k401Step / cost, 0);
-    const checks = rows.reduce((a, m) => a + (m.checks[idx] ?? 0), 0);
-    if (!(extra > 0.5) || !(checks > 0)) continue;
+    const rows = o.plan.months.filter((m) => m.y === year);
+    const firstAt = rows.findIndex((m) => extraIn(m) > 0.5);
+    if (firstAt < 0) continue;
+    const active = rows.slice(firstAt);
+    const extra = active.reduce((a, m) => a + extraIn(m), 0);
+    const checks = active.reduce((a, m) => a + (m.checks[j.i] ?? 0), 0);
+    if (!(checks > 0)) continue;
     const perCheck = extra / checks;
-    const base = inc.pretax + (inc.fullMatch ? 0 : inc.gapPre); // after the match step, if the plan does it
-    const from = monthLabel(start, rows[0]!.m);
+    const L = limitsFor(s.limits, year);
+    const age = s.age + (year - y0);
+    const cap =
+      kind === "k401"
+        ? L.k401 + (age >= 50 ? L.k401Catch : 0)
+        : (s.plan.hsaFamily ? L.hsaFamily : L.hsaSelf) + (age >= 55 ? L.hsaCatch : 0);
+    // everything that counts toward the limit this year: your paychecks, the plan's extra, (HSA) your employer's
+    let total = rows.reduce((a, m) => a + (kind === "k401" ? m.payPre + m.alloc.k401 : (m.payHsa ?? 0) + m.payHsaEmployer + m.alloc.hsa), 0);
+    const before = year === y0 && start.getMonth() > 0; // months before today aren't in the plan
+    if (before && known) total += kind === "k401" ? known.k401 : known.hsa;
+    const maxed = o.plan.maxedYears[kind].includes(year) || total >= cap - 1;
+    const summary = maxed
+      ? "maxes it"
+      : before && !known
+        ? `about ${money(total, { whole: true })} from here to December (add what's in so far under Money → Accounts)`
+        : `about ${money(total, { whole: true })} of the ${money(cap, { whole: true })} limit${firstAt > 0 ? " (starts part way through the year)" : ""}`;
     const what =
       gross > 0
-        ? `about ${Math.round(((base + perCheck) / gross) * 100)}% of pay${rows[0]!.mo === 0 ? " all year" : ""}`
+        ? `about ${Math.round(((base + perCheck) / gross) * 100)}% of pay (${money(base + perCheck, { whole: true })}/check)`
         : `about ${money(base + perCheck, { whole: true })}/check`;
-    out.push({ year, from, job: inc.name || "your job", what, plus: gross > 0 ? ` (+${money(perCheck, { whole: true })}/check)` : "" });
+    out.push({ year, from: monthLabel(start, rows[firstAt]!.m), job: j.x.name || "your job", what, base, perCheck, summary });
   }
   return out;
 }

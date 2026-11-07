@@ -1,4 +1,4 @@
-import { BASE_CHECKS } from "./constants";
+import { BASE_CHECKS, PERIODS } from "./constants";
 import { limitsFor } from "./limits";
 import { checksInMonth } from "./paychecks";
 import type { Adjustment, Alloc, Debt, Derived, FundKey, MonthRow, PlanEvent, PlanResult, PlanSettings, PlanState, SimulateOptions, Goal, RecurringGoal, Limits } from "./types";
@@ -117,6 +117,14 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     scale = 1;
   }
   const order = p.steps ?? [];
+  // Payroll steps: a steady amount per paycheck (yearly limit ÷ paychecks per year at most)
+  const payrollSteps = !!p.payrollSteps;
+  const jobIdx = d.incomes.map((inc, i) => ((inc.kind ?? "job") === "job" ? i : -1)).filter((i) => i >= 0);
+  const checksPerYear = sum(jobIdx.map((i) => PERIODS[d.incomes[i]!.freq] ?? 0));
+  const hsaPayroll = payrollSteps && !!p.hsaPayroll && checksPerYear > 0;
+  const hsaCost = 1 - mt; // a pre-tax payroll HSA dollar costs (1 − marginal) take-home
+  const shares = p.shares ?? {};
+  const started = { k401: false, hsa: false };
   const out: MonthRow[] = [];
   const events: PlanEvent[] = [];
   const seen = new Set<string>();
@@ -194,6 +202,12 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     const capHsaFull = ((p.hsaFamily ? L.hsaFamily : L.hsaSelf) + (ageNow >= 55 ? L.hsaCatch : 0)) * scale;
     const payHsaEmployer = Math.min(d.hsaEmployerAnnual / 12, Math.max(0, capHsaFull - ytd.hsa));
     ytd.hsa += payHsaEmployer;
+    const hsaSched = sum(d.incomes.map((inc, i) => Math.max(0, num(inc.hsaPre)) * checks[i]! * g));
+    const payHsa = Math.min(hsaSched, Math.max(0, capHsaFull - ytd.hsa));
+    if (hsaSched > payHsa) income += (hsaSched - payHsa) * hsaCost;
+    ytd.hsa += payHsa;
+    // this month's share of a year of paychecks (for steady per-check payroll steps)
+    const checkFrac = checksPerYear > 0 ? sum(jobIdx.map((i) => checks[i]!)) / checksPerYear : 0;
 
     // one-off adjustments for this calendar month
     let adjIncome = 0;
@@ -302,71 +316,95 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       alloc.taxable += inv;
       avail -= inv;
     } else {
-      for (const step of order) {
-        if (avail <= 1e-9) break;
-        if (step === "starterEF" || step === "fullEF") {
-          const tgt = step === "starterEF" ? starterTarget : fullTarget;
-          const put = Math.min(avail, Math.max(0, tgt - cash));
-          cash += put;
-          avail -= put;
-          alloc.ef += put;
-        } else if (step === "match") {
-          // raise payroll 401(k) to the full-match threshold; a pre-tax $ costs (1 - marginal) take-home, a Roth $ costs $1
-          const cost = k401Cost(mt, d.rothShare);
-          d.incomes.forEach((inc, i) => {
-            if (avail <= 1e-9 || inc.gapPre <= 0) return;
-            const gapPre = inc.gapPre * checks[i]! * g;
-            const gapMatch = inc.gapMatch * checks[i]! * g;
-            const room = Math.max(0, capK401 * cost - alloc.k401TakeHome);
-            const need = Math.min(gapPre * cost, room);
-            const put = Math.min(avail, need);
-            if (put <= 0) return;
-            const frac = put / (gapPre * cost);
+      const doStep = (step: string) => {
+          if (step === "starterEF" || step === "fullEF") {
+            const tgt = step === "starterEF" ? starterTarget : fullTarget;
+            const put = Math.min(avail, Math.max(0, tgt - cash));
+            cash += put;
+            avail -= put;
+            alloc.ef += put;
+          } else if (step === "match") {
+            // raise payroll 401(k) to the full-match threshold; a pre-tax $ costs (1 - marginal) take-home, a Roth $ costs $1
+            const cost = k401Cost(mt, d.rothShare);
+            d.incomes.forEach((inc, i) => {
+              if (avail <= 1e-9 || inc.gapPre <= 0) return;
+              const gapPre = inc.gapPre * checks[i]! * g;
+              const gapMatch = inc.gapMatch * checks[i]! * g;
+              const room = Math.max(0, capK401 * cost - alloc.k401TakeHome);
+              const need = Math.min(gapPre * cost, room);
+              const put = Math.min(avail, need);
+              if (put <= 0) return;
+              const frac = put / (gapPre * cost);
+              alloc.k401TakeHome += put;
+              alloc.k401 += put / cost;
+              ytd.k401 += put / cost;
+              alloc.matchGain += gapMatch * frac;
+              avail -= put;
+            });
+          } else if (step === "highDebt") payDebts((x) => isHighInterest(x, thr));
+          else if (step === "lowDebt") payDebts((x) => !isHighInterest(x, thr));
+          else if (step === "hsa" && hsaPayroll) {
+            // from paychecks: steady per check, pre-tax, this year only (yours + employer's count)
+            const level = Math.max(0, hsaCapFor(L, ageNow) * checkFrac - payHsaEmployer - payHsa - alloc.hsa);
+            const room = Math.max(0, Math.min(capHsa - alloc.hsa, level));
+            const put = Math.min(avail, room * hsaCost);
+            alloc.hsa += put / hsaCost;
+            ytd.hsa += put / hsaCost;
+            avail -= put;
+          } else if (step === "hsa") {
+            // last year's room first (Jan–Apr), then this year's
+            const put = Math.min(avail, prior.hsa + capHsa);
+            const toPrior = Math.min(put, prior.hsa);
+            prior.hsa -= toPrior;
+            priorHsa += toPrior;
+            alloc.hsa += put;
+            ytd.hsa += put - toPrior;
+            avail -= put;
+          } else if (step === "ira") {
+            const put = Math.min(avail, prior.ira + capIra);
+            const toPrior = Math.min(put, prior.ira);
+            prior.ira -= toPrior;
+            priorIra += toPrior;
+            alloc.ira += put;
+            ytd.ira += put - toPrior;
+            avail -= put;
+          } else if (step === "k401") {
+            const cost = k401Cost(mt, d.rothShare); // $1 of pre-tax 401(k) costs (1 - marginal rate) of take-home; Roth costs $1
+            let room = Math.max(0, capK401 * cost - alloc.k401TakeHome);
+            if (payrollSteps) {
+              // steady per check: never past the yearly limit's share for this month's paychecks
+              const level = Math.max(0, (L.k401 + (ageNow >= 50 ? L.k401Catch : 0)) * checkFrac - payPre - alloc.k401);
+              room = Math.min(room, level * cost);
+            }
+            const put = Math.min(avail, room);
             alloc.k401TakeHome += put;
+            alloc.k401Step += put;
             alloc.k401 += put / cost;
             ytd.k401 += put / cost;
-            alloc.matchGain += gapMatch * frac;
             avail -= put;
-          });
-        } else if (step === "highDebt") payDebts((x) => isHighInterest(x, thr));
-        else if (step === "lowDebt") payDebts((x) => !isHighInterest(x, thr));
-        else if (step === "hsa") {
-          // last year's room first (Jan–Apr), then this year's
-          const put = Math.min(avail, prior.hsa + capHsa);
-          const toPrior = Math.min(put, prior.hsa);
-          prior.hsa -= toPrior;
-          priorHsa += toPrior;
-          alloc.hsa += put;
-          ytd.hsa += put - toPrior;
-          avail -= put;
-        } else if (step === "ira") {
-          const put = Math.min(avail, prior.ira + capIra);
-          const toPrior = Math.min(put, prior.ira);
-          prior.ira -= toPrior;
-          priorIra += toPrior;
-          alloc.ira += put;
-          ytd.ira += put - toPrior;
-          avail -= put;
-        } else if (step === "k401") {
-          const cost = k401Cost(mt, d.rothShare); // $1 of pre-tax 401(k) costs (1 - marginal rate) of take-home; Roth costs $1
-          const put = Math.min(avail, Math.max(0, capK401 * cost - alloc.k401TakeHome));
-          alloc.k401TakeHome += put;
-          alloc.k401Step += put;
-          alloc.k401 += put / cost;
-          ytd.k401 += put / cost;
-          avail -= put;
-        } else if (step === "taxable") {
-          alloc.taxable += avail;
-          avail = 0;
-        } else if (step.startsWith("goal:")) {
-          const gl = goals.find((x) => "goal:" + x.id === step);
-          if (gl && !gl.recurring) {
-            const put = Math.min(avail, Math.max(0, gl.target - gl.saved));
-            gl.saved += put;
-            avail -= put;
-            alloc.goals += put;
+          } else if (step === "taxable") {
+            alloc.taxable += avail;
+            avail = 0;
+          } else if (step.startsWith("goal:")) {
+            const gl = goals.find((x) => "goal:" + x.id === step);
+            if (gl && !gl.recurring) {
+              const put = Math.min(avail, Math.max(0, gl.target - gl.saved));
+              gl.saved += put;
+              avail -= put;
+              alloc.goals += put;
+            }
           }
-        }
+      };
+      // a payroll deduction, once set, keeps coming out of every paycheck: it goes first from then on
+      if (payrollSteps) for (const k of ["k401", "hsa"] as const) if (started[k] && order.includes(k)) doStep(k);
+      for (const step of order) {
+        if (avail <= 1e-9) break;
+        // a step with a share gets only that part of what's left; the rest goes on to the next steps
+        const share = shares[step];
+        const held = share !== undefined && share >= 0 && share < 1 ? avail * (1 - share) : 0;
+        avail -= held;
+        doStep(step);
+        avail += held;
       }
     }
     alloc.leftover = avail;
@@ -383,6 +421,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     for (const gl of goals) if (!gl.recurring && gl.target > 0 && gl.saved >= gl.target - 0.5) mark("goal:" + gl.id, m, `${gl.name} goal reached`);
     for (const k of ["hsa", "ira", "taxable"] as const) if (alloc[k] > 0.5 && firstFund[k] === undefined) firstFund[k] = m;
     if (alloc.k401Step > 0.5 && firstFund.k401 === undefined) firstFund.k401 = m;
+    if (alloc.k401Step > 0.5) started.k401 = true;
+    if (hsaPayroll && alloc.hsa > 0.5) started.hsa = true;
     if (alloc.matchGain > 0.5) mark("match", m, "Full employer match captured");
     if (mo === 11 || m === months - 1) {
       if (ytd.k401 >= capK401Full - 1) maxedYears.k401.push(y);
@@ -393,13 +433,13 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     }
 
     out.push({
-      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payRoth, payHsaEmployer, setAside, setAsideBy, priorIra, priorHsa, payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency,
+      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payRoth, payHsaEmployer, payHsa, setAside, setAsideBy, priorIra, priorHsa, payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency,
       alloc,
       cash,
       debtTotal: sum(debts.map((x) => x.balance)),
       goals: goals.map((x) => ({ id: x.id, saved: x.saved })),
       pre: payPre - payRoth + payMatch + alloc.k401 * (1 - d.rothShare) + alloc.matchGain,
-      post: payRoth + alloc.k401 * d.rothShare + payHsaEmployer + alloc.hsa + alloc.ira + alloc.taxable,
+      post: payRoth + alloc.k401 * d.rothShare + payHsaEmployer + payHsa + alloc.hsa + alloc.ira + alloc.taxable,
     });
   }
   return { months: out, events, firstFund, maxedYears, starterTarget, fullTarget, mode };

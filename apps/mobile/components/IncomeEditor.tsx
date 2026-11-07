@@ -271,11 +271,14 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
 
       {/* employer HSA */}
       <View style={[styles.group, { borderColor: t.border }]}>
-        <Text style={[type.heading, { color: t.text }]}>HSA from your employer</Text>
+        <Text style={[type.heading, { color: t.text }]}>HSA</Text>
+        <FieldRow label="You put in per paycheck" hint="Your own HSA contribution, pre-tax. Counts toward the HSA limit">
+          <NumberInput kind="money" label="Your HSA contribution per paycheck" value={inc.hsaPre ?? 0} onChange={(v) => change({ hsaPre: v || undefined })} />
+        </FieldRow>
         <FieldRow label="Your employer puts in" hint="Per year. Free money that counts toward your HSA limit" info={HELP.hsaEmployer}>
           <NumberInput kind="money" label="Employer HSA contribution per year" value={inc.hsaEmployer ?? 0} onChange={(v) => change({ hsaEmployer: v || undefined })} />
         </FieldRow>
-        {(inc.hsaEmployer ?? 0) > 0 && !state.plan.hsaEligible ? (
+        {((inc.hsaEmployer ?? 0) > 0 || (inc.hsaPre ?? 0) > 0) && !state.plan.hsaEligible ? (
           <Text style={[type.caption, { color: t.warn }]}>
             Turn on "I have an HSA-eligible health plan" in Settings → Assumptions & plan rules so your plan can add to it too.
           </Text>
@@ -357,7 +360,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
             <Text style={[type.label, { color: t.text2 }]}>Take-home per paycheck</Text>
             {auto ? (
               <Text style={[type.caption, { color: t.text3 }]}>
-                {money(pay.gross)} − {money(pay.k401)} 401(k) − {money(pay.taxes)} taxes − {money(pay.deductions)} other
+                {money(pay.gross)} − {money(pay.k401)} 401(k){pay.hsa > 0 ? ` − ${money(pay.hsa)} HSA` : ""} − {money(pay.taxes)} taxes − {money(pay.deductions)} other
                 {pay.loanRepayment > 0 ? ` − ${money(pay.loanRepayment)} 401(k) loan` : ""}
               </Text>
             ) : (
