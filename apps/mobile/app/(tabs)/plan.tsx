@@ -21,6 +21,9 @@ export default function Plan() {
   const compact = contentWidth < 600;
   const [howOpen, setHowOpen] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
+  // steps folded open to show their details, split and order buttons
+  const [openSteps, setOpenSteps] = useState<Set<string>>(new Set());
+  const toggle = (k: string) => setOpenSteps((cur) => { const n = new Set(cur); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   const { state, result: o, start, actual } = usePlan();
   const update = useStore((s) => s.update);
   // steps and accounts are two views of the same plan
@@ -112,7 +115,7 @@ export default function Plan() {
           </Pressable>
         ) : (
           <Text style={[compact ? type.caption : type.body, { color: t.text2 }]}>
-            Whatever your monthly savings (Money → Monthly savings) don't use fills step 1, then step 2, and so on. To fund two steps at once, give one a share of what's left. Amounts and dates are for your numbers. Use the arrows to change the order. The dates between steps show when each one starts.
+            Whatever your monthly savings (Money → Monthly savings) don't use fills step 1, then step 2, and so on. To fund two steps at once, give one a share of what's left. Tap a step for its details, to split what's left, or to change the order. The dates between steps show when each one starts.
           </Text>
         )}
       </View>
@@ -125,35 +128,69 @@ export default function Plan() {
         const canAmount = canShare && info.key !== "k401" && !(info.key === "hsa" && state.plan.hsaPayroll !== false);
         const amt = canAmount ? amounts[info.key] : undefined;
         const changed = Object.keys(amountsBy[info.key] ?? {}).length;
+        const isOpen = openSteps.has(info.key);
+        const parts = info.meta
+          .replace(/ \(see (Plan → Forecast|the Accounts view)\)/g, "")
+          .split(" · ")
+          .map((x) => x.trim())
+          .filter(Boolean)
+          .map((x) => x.replace(/^./, (c) => c.toUpperCase()));
+        // a very short first part ("Visa $3,000") reads better with the next one
+        const lead = (parts[0] ?? "").length < 32 && parts.length > 1 ? 2 : 1;
+        const summary = parts.slice(0, lead).join(" · ");
+        const details = parts.slice(lead);
+        const share = shares[info.key] ?? 1;
+        const splitNote = canShare ? (amt !== undefined ? `gets ${money(amt, { whole: true })}/mo` : share < 1 ? `gets ${Math.round(share * 100)}% of what's left` : "") : "";
         const st = info.done || info.skip ? null : startOf(info.key);
         const labels = st !== null && st > lastLabel ? dateLabel(st) : null;
         if (st !== null && st > lastLabel) lastLabel = st;
         return (
           <View key={info.key}>
             {labels}
-            <View style={[styles.step, compact ? { paddingHorizontal: space.md, gap: space.sm } : null]}>
-              <View
-                style={[
-                  styles.num,
-                  { backgroundColor: info.done ? t.good : active ? t.accent : t.surface2 },
-                ]}
-              >
+            <Pressable
+              role="button"
+              aria-expanded={isOpen}
+              accessibilityLabel={`${info.label}: ${isOpen ? "hide" : "show"} details`}
+              onPress={() => toggle(info.key)}
+              style={({ pressed }) => [styles.step, compact ? { paddingHorizontal: space.md, gap: space.sm } : null, pressed ? { backgroundColor: t.surface2 } : null]}
+            >
+              <View style={[styles.num, { backgroundColor: info.done ? t.good : active ? t.accent : t.surface2 }]}>
                 {info.done ? (
                   <Icon name="check" size={14} color="#fff" />
                 ) : (
                   <Text style={[type.caption, { fontWeight: "700", color: active ? "#fff" : t.text2 }]}>{i + 1}</Text>
                 )}
               </View>
-              <View style={{ flex: 1, gap: 4 }}>
+              <View style={{ flex: 1, gap: 3 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.sm }}>
-                  <Text style={[type.body, { fontWeight: "600", color: info.done || info.skip ? t.text3 : t.text }]}>{info.label}</Text>
+                  <Text style={[type.body, { fontWeight: "600", color: info.done || info.skip ? t.text3 : t.text, flexShrink: 1 }]}>{info.label}</Text>
                   {active ? <Pill tone="accent">Now</Pill> : null}
-                  {info.action ? <Pill tone="bad">Action needed</Pill> : null}
+                  {info.action ? <Pill tone="bad">To do</Pill> : null}
                 </View>
-                <Text style={[type.caption, { color: t.text2 }]}>{info.meta}</Text>
+                <Text numberOfLines={isOpen ? undefined : 2} style={[type.caption, { color: info.done || info.skip ? t.text3 : t.text2 }]}>
+                  {summary}
+                  {splitNote ? <Text style={{ color: t.accent, fontWeight: "700" }}> · {splitNote}</Text> : null}
+                </Text>
                 {info.progress !== undefined && !info.done ? (
-                  <View style={{ maxWidth: 280, marginTop: 4 }}>
+                  <View style={{ maxWidth: 280, marginTop: 3 }}>
                     <ProgressBar progress={info.progress} color={t.good} />
+                  </View>
+                ) : null}
+              </View>
+              <View style={{ transform: [{ rotate: isOpen ? "-90deg" : "90deg" }], opacity: 0.7 }}>
+                <Icon name="chevron" size={14} color={t.text3} />
+              </View>
+            </Pressable>
+            {isOpen ? (
+              <View style={[styles.more, { marginLeft: compact ? 48 : 60, marginRight: compact ? space.md : space.lg }]}>
+                {details.length ? (
+                  <View style={{ gap: 4 }}>
+                    {details.map((d, j) => (
+                      <View key={j} style={{ flexDirection: "row", gap: 6 }}>
+                        <Text style={[type.caption, { color: t.text3 }]}>•</Text>
+                        <Text style={[type.caption, { color: t.text2, flex: 1 }]}>{d}</Text>
+                      </View>
+                    ))}
                   </View>
                 ) : null}
                 {canShare ? (
@@ -166,12 +203,18 @@ export default function Plan() {
                     onChange={(v) => setSplit(info.key, v)}
                   />
                 ) : null}
+                <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
+                  <Pressable role="button" disabled={idx === 0} onPress={() => move(idx, -1)} style={[styles.moveBtn, { borderColor: t.border, opacity: idx === 0 ? 0.4 : 1 }]}>
+                    <Icon name="up" size={14} color={t.text2} />
+                    <Text style={[type.caption, { color: t.text2, fontWeight: "600" }]}>Move up</Text>
+                  </Pressable>
+                  <Pressable role="button" disabled={idx === state.plan.steps.length - 1} onPress={() => move(idx, 1)} style={[styles.moveBtn, { borderColor: t.border, opacity: idx === state.plan.steps.length - 1 ? 0.4 : 1 }]}>
+                    <Icon name="down" size={14} color={t.text2} />
+                    <Text style={[type.caption, { color: t.text2, fontWeight: "600" }]}>Move down</Text>
+                  </Pressable>
+                </View>
               </View>
-              <View style={[styles.moves, compact ? { flexDirection: "column" } : null]}>
-                <IconButton icon="up" label={`Move ${info.label} up`} disabled={idx === 0} onPress={() => move(idx, -1)} />
-                <IconButton icon="down" label={`Move ${info.label} down`} disabled={idx === state.plan.steps.length - 1} onPress={() => move(idx, 1)} />
-              </View>
-            </View>
+            ) : null}
             {i < infos.length - 1 ? <View style={{ marginLeft: compact ? 48 : 60 }}><Divider /></View> : null}
           </View>
         );
@@ -354,6 +397,8 @@ const styles = StyleSheet.create({
   step: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
   num: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   moves: { flexDirection: "row", alignItems: "center" },
+  more: { gap: space.sm, paddingBottom: space.md },
+  moveBtn: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   dateLabel: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: 6 },
   cmp: { flexDirection: "row", gap: space.lg },
 });
