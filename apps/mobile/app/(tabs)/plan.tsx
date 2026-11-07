@@ -1,7 +1,8 @@
-import { coastNumberAt } from "@coastfi/engine";
+import { coastNumberAt, isHighInterest, paysExtra } from "@coastfi/engine";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { longMonth } from "../../components/AdjustmentsCard";
+import { AccountsForecast } from "../../components/AccountsForecast";
 import { IconButton, NumberInput } from "../../components/form";
 import { Icon } from "../../components/Icon";
 import { ProgressBar } from "../../components/ProgressRing";
@@ -18,7 +19,6 @@ export default function Plan() {
   const { twoColumn } = useLayout();
   const { state, result: o, start, actual } = usePlan();
   const update = useStore((s) => s.update);
-  const [openKey, setOpenKey] = useState<string | null>(null);
 
   // steps describe what you'll really do (no what-ifs), so they match Home's to-dos
   const real = { ...o, plan: actual };
@@ -44,7 +44,6 @@ export default function Plan() {
   if (!activeKeys.size && open[0]) activeKeys.add(open[0].key);
   const amounts = state.plan.amounts ?? {};
   const amountsBy = state.plan.amountsBy ?? {};
-  const [editMonth, setEditMonth] = useState<string | null>(null);
   /** A share (0–1) or a set amount per month; picking one clears the other. */
   const setSplit = (key: string, v: { share: number } | { amount: number }) =>
     update((p) => {
@@ -54,29 +53,11 @@ export default function Plan() {
       delete sh[key];
       delete am[key];
       if ("amount" in v) am[key] = Math.max(0, v.amount);
-      else {
-        delete by[key];
-        if (v.share < 1) sh[key] = v.share;
-      }
+      else if (v.share < 1) sh[key] = v.share;
       p.plan.shares = Object.keys(sh).length ? sh : undefined;
       p.plan.amounts = Object.keys(am).length ? am : undefined;
       p.plan.amountsBy = Object.keys(by).length ? by : undefined;
     });
-  /** One month's change to a step's set amount (undefined = back to the usual amount). */
-  const setMonthAmount = (key: string, month: string, v: number | undefined) =>
-    update((p) => {
-      const by = { ...(p.plan.amountsBy ?? {}) };
-      const row = { ...(by[key] ?? {}) };
-      if (v === undefined) delete row[month];
-      else row[month] = Math.max(0, v);
-      if (Object.keys(row).length) by[key] = row;
-      else delete by[key];
-      p.plan.amountsBy = Object.keys(by).length ? by : undefined;
-    });
-  const ym = (m: number) => {
-    const dt = new Date(start.getFullYear(), start.getMonth() + m, 1);
-    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
-  };
   const move = (i: number, dir: -1 | 1) =>
     update((p) => {
       const s = p.plan.steps;
@@ -85,12 +66,51 @@ export default function Plan() {
       [s[i], s[j]] = [s[j]!, s[i]!];
     });
 
+  // when each step starts getting money (month index), for the date labels between steps
+  const months = actual.months;
+  const firstMonth = (pred: (m: (typeof months)[number], i: number) => boolean) => {
+    const i = months.findIndex(pred);
+    return i < 0 ? null : i;
+  };
+  const highEnd = Math.max(
+    -1,
+    ...state.debts.filter((x) => paysExtra(x) && isHighInterest(x, state.plan.highApr) && x.balance > 0).map((x) => actual.events.find((e) => e.key === "debt:" + x.id)?.m ?? 1e9),
+  );
+  const startOf = (key: string): number | null => {
+    if (key === "starterEF") return 0;
+    if (key === "fullEF") return firstMonth((m, i) => m.alloc.ef > 0.5 && (i === 0 ? o.d.bal.cash : months[i - 1]!.cash) >= actual.starterTarget - 0.5);
+    if (key === "match") return actual.events.find((e) => e.key === "match")?.m ?? null;
+    if (key === "highDebt") return firstMonth((m) => m.alloc.debt > 0.5);
+    if (key === "lowDebt") return firstMonth((m, i) => i > highEnd && m.alloc.debt > 0.5);
+    if (key.startsWith("goal:")) return firstMonth((m) => m.alloc.goals > 0.5);
+    if (key === "hsa" || key === "ira" || key === "k401" || key === "taxable") return actual.firstFund[key] ?? null;
+    return null;
+  };
+  // milestones go between the steps, as date labels: what happens by the time each step starts
+  const items = milestones(real, state);
+  let shown = 0;
+  const labelsUpTo = (m: number, startsNow?: string) => {
+    const group = new Map<number, string[]>();
+    while (shown < items.length && items[shown]!.m <= m) {
+      const x = items[shown++]!;
+      group.set(x.m, [...(group.get(x.m) ?? []), x.text]);
+    }
+    if (startsNow && !group.size) group.set(m, [startsNow]);
+    return [...group.entries()].map(([gm, texts]) => (
+      <View key={"d" + gm + texts[0]} style={[styles.dateLabel, { backgroundColor: t.surface2 }]}>
+        <Text style={[type.overline, { color: t.accent, width: 84 }]}>{gm === 0 ? "This month" : monthLabel(start, gm)}</Text>
+        <Text style={[type.caption, { color: t.text2, flex: 1 }]}>{texts.join(" · ")}</Text>
+      </View>
+    ));
+  };
+  let lastLabel = -1;
+
   const steps = (
     <Card padded={false} style={twoColumn ? { flex: 3 } : undefined}>
       <View style={{ padding: space.lg, paddingBottom: space.md, gap: 4 }}>
         <SectionLabel>Your steps</SectionLabel>
         <Text style={[type.body, { color: t.text2 }]}>
-          Each month, what's left after your budget and debt payments fills step 1, then step 2, and so on. To do two at once, give a step a set amount a month (or a share): the rest goes to the next steps at the same time. Amounts and dates are for your numbers. Use the arrows to change the order.
+          Each month, what's left after your budget and debt payments fills step 1, then step 2, and so on. To do two at once, give a step a set amount a month (or a share): the rest goes to the next steps at the same time. Amounts and dates are for your numbers. Use the arrows to change the order. The dates between steps show when each one starts and what you reach along the way.
         </Text>
       </View>
       <Divider />
@@ -101,9 +121,13 @@ export default function Plan() {
         // a set amount a month fits steps you pay yourself; paycheck steps are set per check instead
         const canAmount = canShare && info.key !== "k401" && !(info.key === "hsa" && state.plan.hsaPayroll !== false);
         const amt = canAmount ? amounts[info.key] : undefined;
-        const changed = amt !== undefined ? Object.keys(amountsBy[info.key] ?? {}).length : 0;
+        const changed = Object.keys(amountsBy[info.key] ?? {}).length;
+        const st = info.done || info.skip ? null : startOf(info.key);
+        const labels = st !== null && st > lastLabel ? labelsUpTo(st, `${info.label.replace(/ \(.*$/, "").replace(/:.*$/, "")} starts`) : null;
+        if (st !== null && st > lastLabel) lastLabel = st;
         return (
           <View key={info.key}>
+            {labels}
             <View style={styles.step}>
               <View
                 style={[
@@ -139,73 +163,6 @@ export default function Plan() {
                     onChange={(v) => setSplit(info.key, v)}
                   />
                 ) : null}
-                {info.schedule ? (
-                  <Pressable
-                    role="button"
-                    aria-expanded={openKey === info.key}
-                    onPress={() => setOpenKey(openKey === info.key ? null : info.key)}
-                    hitSlop={6}
-                    style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}
-                  >
-                    <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{openKey === info.key ? "Hide each month" : "Each month"}</Text>
-                    <View style={{ transform: [{ rotate: openKey === info.key ? "90deg" : "0deg" }] }}>
-                      <Icon name="chevron" size={14} color={t.accent} />
-                    </View>
-                  </Pressable>
-                ) : null}
-                {info.schedule && openKey === info.key ? (
-                  <View style={[styles.sched, { backgroundColor: t.surface2 }]}>
-                    {info.schedule.map((r, ri) => {
-                      const month = ym(r.m);
-                      const own = amt !== undefined ? amountsBy[info.key]?.[month] : undefined;
-                      const editing = amt !== undefined && editMonth === info.key + "@" + month;
-                      const set = own ?? amt;
-                      return (
-                        <View key={r.m} style={{ gap: 4 }}>
-                          <View style={styles.schedRow}>
-                            <Text style={[type.caption, { color: r.m === 0 ? t.text : t.text2, flex: 1, fontWeight: r.m === 0 ? "700" : "400" }]}>
-                              {r.label}
-                              {own !== undefined ? <Text style={{ color: t.accent }}> · changed</Text> : null}
-                              {set !== undefined && r.amount < set - 0.5 && !r.text ? <Text style={{ color: t.text3 }}> · {ri === info.schedule!.length - 1 && info.progress !== undefined ? "the last bit to finish it" : "only this much was left"}</Text> : null}
-                              {r.note ? <Text style={{ color: t.text3 }}> · {r.note}</Text> : null}
-                            </Text>
-                            {amt !== undefined && !r.text ? (
-                              <Pressable
-                                role="button"
-                                accessibilityLabel={`Change ${r.label} for ${info.label}`}
-                                onPress={() => setEditMonth(editing ? null : info.key + "@" + month)}
-                                hitSlop={6}
-                              >
-                                <Text style={[type.caption, { color: t.accent, fontWeight: "700", fontVariant: ["tabular-nums"], textDecorationLine: "underline" }]}>{money(r.amount)}</Text>
-                              </Pressable>
-                            ) : (
-                              <Text style={[type.caption, { color: t.text, fontVariant: ["tabular-nums"] }]}>{r.text ?? money(r.amount)}</Text>
-                            )}
-                          </View>
-                          {editing ? (
-                            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap", paddingBottom: 4 }}>
-                              <Text style={[type.caption, { color: t.text2 }]}>This month only:</Text>
-                              <NumberInput kind="money" label={`${info.label}, ${r.label}`} value={set ?? 0} width={130} step={100} onChange={(v) => setMonthAmount(info.key, month, v)} />
-                              {own !== undefined ? (
-                                <Pressable role="button" onPress={() => { setMonthAmount(info.key, month, undefined); setEditMonth(null); }} hitSlop={6}>
-                                  <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Back to {money(amt!)}</Text>
-                                </Pressable>
-                              ) : null}
-                              <Pressable role="button" onPress={() => setEditMonth(null)} hitSlop={6}>
-                                <Text style={[type.caption, { color: t.text3, fontWeight: "700" }]}>Done</Text>
-                              </Pressable>
-                            </View>
-                          ) : null}
-                        </View>
-                      );
-                    })}
-                    <Text style={[type.caption, { color: t.text3, marginTop: 4 }]}>
-                      {amt !== undefined
-                        ? `Tap an amount to change it for that month. If less than ${money(amt)} is left after the earlier steps, it gets what's left.`
-                        : "From your plan: what's left each month after your budget, debt payments and set-asides, given to the steps in order."}
-                    </Text>
-                  </View>
-                ) : null}
               </View>
               <View style={styles.moves}>
                 <IconButton icon="up" label={`Move ${info.label} up`} disabled={idx === 0} onPress={() => move(idx, -1)} />
@@ -216,25 +173,11 @@ export default function Plan() {
           </View>
         );
       })}
+      {/* what comes after the last step starts: Coast FI and the rest */}
+      {labelsUpTo(Infinity)}
     </Card>
   );
 
-  const items = milestones(o, state);
-  const timeline = (
-    <Card>
-      <SectionLabel>Milestone timeline</SectionLabel>
-      {items.length === 0 ? <Text style={[type.body, { color: t.text3 }]}>No milestones in range.</Text> : null}
-      {items.map((x, i) => (
-        <View key={`${x.m}-${i}`} style={[styles.tl, i < items.length - 1 ? { borderBottomColor: t.border, borderBottomWidth: StyleSheet.hairlineWidth } : null]}>
-          <Text style={[type.caption, { color: t.text3, width: 76, fontVariant: ["tabular-nums"] }]}>{x.m === 0 ? "This month" : monthLabel(start, x.m)}</Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
-            {x.big ? <Icon name="target" size={16} color={t.accent} /> : null}
-            <Text style={[type.body, { flex: 1, color: x.minor ? t.text2 : t.text, fontWeight: x.big ? "700" : "400" }]}>{x.text}</Text>
-          </View>
-        </View>
-      ))}
-    </Card>
-  );
 
   // the finish line: when growth alone can carry you, so saving more becomes optional
   const coastM = o.crossing === null ? null : Math.round(o.crossing * 12);
@@ -316,18 +259,18 @@ export default function Plan() {
         </Card>
       ) : null}
       {finish}
+      {twoColumn ? null : steps}
       {twoColumn ? (
         <View style={{ flexDirection: "row", gap: space.lg, alignItems: "flex-start" }}>
           {steps}
           <View style={{ flex: 2, gap: space.lg }}>
-            {timeline}
             {compare}
           </View>
         </View>
-      ) : (
+      ) : null}
+      <AccountsForecast state={state} o={real} start={start} />
+      {twoColumn ? null : (
         <>
-          {steps}
-          {timeline}
           {compare}
         </>
       )}
@@ -372,7 +315,7 @@ function SplitPicker({ label, share, amount, changed, allowAmount, onChange }: {
           {custom ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" }}>
               <NumberInput kind="money" label={`${label}, amount a month`} value={amount} width={140} step={100} onChange={(v) => onChange({ amount: v })} />
-              <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 160 }]}>a month. Change single months under Each month.</Text>
+              <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 160 }]}>a month. Change single months under Accounts.</Text>
             </View>
           ) : null}
         </View>
@@ -386,8 +329,6 @@ const styles = StyleSheet.create({
   step: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
   num: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   moves: { flexDirection: "row", alignItems: "center" },
-  sched: { borderRadius: 8, padding: space.sm, marginTop: 4, gap: 2 },
-  schedRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: 2 },
-  tl: { flexDirection: "row", gap: space.md, paddingVertical: 10, alignItems: "flex-start" },
+  dateLabel: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: 6 },
   cmp: { flexDirection: "row", gap: space.lg },
 });

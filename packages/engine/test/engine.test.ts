@@ -498,6 +498,19 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     expect(dec!.alloc.taxable).toBeCloseTo(6000 - 500, 6);
   });
 
+  it("a month changed by hand goes first, even for a later step", () => {
+    const s = blank({
+      limits: DEFAULT_LIMITS,
+      incomes: [{ ...job, net: 10000 }],
+      budget: spending,
+      plan: { ...blank().plan, efMonths: 6, steps: ["fullEF", "ira", "taxable"], amountsBy: { ira: { "2026-11": 1000 } } },
+    });
+    const [nov, dec] = simulatePlan(s, derive(s, START)).months;
+    expect(nov!.alloc.ira).toBeCloseTo(1000, 6);
+    expect(nov!.alloc.ef).toBeCloseTo(5000, 6);
+    expect(dec!.alloc.ira).toBe(0);
+  });
+
   it("payroll steps don't shrink this year's 401(k) limit: earlier paychecks count instead", () => {
     // starts in November: Jan–Oct paychecks are assumed to have gone in at today's amount
     const s = blank({ limits: DEFAULT_LIMITS, incomes: [{ ...job, net: 8000, pretax: 2000 }], plan: { ...blank().plan, payrollSteps: true } });

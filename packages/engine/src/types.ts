@@ -178,7 +178,10 @@ export type PlanSettings = {
    * on to the next steps. Takes the place of a share. Missing = no set amount.
    */
   amounts?: Record<string, number>;
-  /** Changes to a step's set amount for single months: by step key, then "YYYY-MM" → dollars. */
+  /**
+   * Months changed by hand: by step key, then "YYYY-MM" → dollars. That month the step gets this amount
+   * first (if there is that much left after the budget), before the other steps.
+   */
   amountsBy?: Record<string, Record<string, number>>;
 };
 
