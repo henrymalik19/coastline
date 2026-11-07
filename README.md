@@ -70,8 +70,7 @@ path to `index.html` so links like `/settings/account` work. The two public Supa
 set as Vercel environment variables (Production and Preview). Data lives in Supabase; Vercel
 only serves the files.
 
-- Deploy by hand: `npx vercel deploy --prod`
-- Auto-deploy on push needs the Vercel GitHub app to have access to this repo, then
-  `npx vercel git connect`.
+- Pushes to `main` deploy to production automatically; other branches and PRs get preview URLs.
+- Deploy by hand if needed: `npx vercel deploy --prod`
 - Supabase → Authentication → URL Configuration → Site URL is set to the Vercel address;
   update it if you add a custom domain.
