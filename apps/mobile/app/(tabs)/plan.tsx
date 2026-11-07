@@ -142,7 +142,10 @@ export default function Plan() {
           .filter(Boolean)
           .map((x) => x.replace(/^./, (c) => c.toUpperCase()));
         // a very short first part ("Visa $3,000") reads better with the next one
-        // closed: just the title, tags and progress; everything else when you tap it
+        // closed: just the title (without its "(…)"), tags and progress; everything else when you tap it
+        // only a trailing " (…)" ("401(k)" keeps its own parentheses)
+        const paren = info.label.match(/^(.*\S)\s+\(([^()]*)\)\s*$/);
+        const shortLabel = paren ? paren[1]! : info.label;
         const details = parts;
         const share = shares[info.key] ?? 1;
         const splitNote = canShare ? (amt !== undefined ? `gets ${money(amt, { whole: true })}/mo` : share < 1 ? `gets ${Math.round(share * 100)}% of what's left` : "") : "";
@@ -167,8 +170,8 @@ export default function Plan() {
                 )}
               </View>
               <View style={{ flex: 1, gap: 3 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.sm }}>
-                  <Text style={[type.body, { fontWeight: "600", color: info.done || info.skip ? t.text3 : t.text, flexShrink: 1 }]}>{info.label}</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                  <Text numberOfLines={isOpen ? undefined : 1} style={[type.body, { fontWeight: "600", color: info.done || info.skip ? t.text3 : t.text, flexShrink: 1 }]}>{isOpen ? info.label : shortLabel}</Text>
                   {active ? <Pill tone="accent">Now</Pill> : null}
                   {info.action ? <Pill tone="bad">To do</Pill> : null}
                 </View>
