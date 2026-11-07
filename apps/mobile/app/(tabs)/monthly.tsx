@@ -18,7 +18,8 @@ type Seg = { key: string; label: string; value: number; color: string };
 /** Where a month's take-home goes (pre-tax payroll is already out of take-home). */
 function splits(m: MonthRow, t: Theme, mt: number, rothShare = 0): Seg[] {
   const a = m.alloc;
-  const segs: Seg[] = [{ key: "spend", label: "Budget + debt minimums", value: m.expenses - m.adjExpense, color: t.track }];
+  const segs: Seg[] = [{ key: "spend", label: "Budget + debt minimums", value: m.expenses - m.adjExpense - m.setAside, color: t.track }];
+  if (m.setAside > 0.5) segs.push({ key: "setaside", label: "Set aside for recurring goals", value: m.setAside, color: t.series.goals });
   if (m.adjExpense > 0.5) segs.push({ key: "oneoff", label: "One-off expenses", value: m.adjExpense, color: t.warn });
   const matchTH = a.k401TakeHome - a.k401Step;
   if (matchTH > 0.5) segs.push({ key: "match", label: `401(k) raise to full match (+${money(a.matchGain)} match)`, value: matchTH, color: t.series.k401 });

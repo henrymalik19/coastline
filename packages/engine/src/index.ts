@@ -12,4 +12,4 @@ export { simulatePlan, isHighInterest, paysExtra, rateIn, k401Cost, nextDue, set
 export { project, fireNumber, coastNumberAt, coastCrossing } from "./project";
 export { monteCarlo } from "./montecarlo";
 export { run, MC_SEED } from "./run";
-export { mulberry32 } from "./util";
+export { addMonths, monthsBetween, mulberry32 } from "./util";

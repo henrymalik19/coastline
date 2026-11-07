@@ -209,6 +209,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     // recurring goals: set aside what's still needed ÷ months left (so a late start catches up),
     // spend it in the due month, then start again for the next due date
     let setAside = 0;
+    const setAsideBy: Record<string, number> = {};
     for (const gl of goals) {
       const r = gl.recurring;
       if (!r || gl.target <= 0) continue;
@@ -216,6 +217,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       const put = setAsideFor(gl, monthStr);
       gl.saved += put;
       setAside += put;
+      setAsideBy[gl.id] = put;
       if (r.due === monthStr) {
         gl.saved = Math.max(0, gl.saved - gl.target);
         r.due = addMonths(r.due, r.every);
@@ -361,7 +363,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     }
 
     out.push({
-      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payRoth, payHsaEmployer, setAside, payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency,
+      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payRoth, payHsaEmployer, setAside, setAsideBy, payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency,
       alloc,
       cash,
       debtTotal: sum(debts.map((x) => x.balance)),

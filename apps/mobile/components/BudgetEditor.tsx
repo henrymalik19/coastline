@@ -1,4 +1,4 @@
-import { nextDue, setAsideFor, type BudgetItem } from "@coastfi/engine";
+import { monthsBetween, nextDue, setAsideFor, type BudgetItem, type Goal, type MonthRow } from "@coastfi/engine";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../lib/confirm";
@@ -8,7 +8,7 @@ import { paycheckFor } from "../lib/loans";
 import { monthKey } from "../lib/store";
 import { goalFromItem, suggestFor, type Suggestion } from "../lib/budgetSuggest";
 import { dueLabel, everyLabel } from "./RecurringGoalFields";
-import { money } from "../lib/format";
+import { money, monthLabel } from "../lib/format";
 import { HELP } from "../lib/help";
 import { useLayout } from "../lib/layout";
 import { usePlan } from "../lib/plan";
@@ -42,7 +42,7 @@ function grouped(items: BudgetItem[]) {
 /** Budget: groups on the right (pick one), that group's items on the left. Fills its container. */
 export function BudgetEditor() {
   const t = useTheme();
-  const { state, result, start } = usePlan();
+  const { state, result, start, actual } = usePlan();
   const update = useStore((s) => s.update);
   // compact rows when the items pane itself is narrow (phones, or two panes on a mid-size window)
   const { contentWidth } = useLayout();
@@ -282,21 +282,7 @@ export function BudgetEditor() {
       detail={
         onSet
           ? setRows.map((g) => (
-              <View key={g.id} style={[styles.row, { borderBottomColor: t.border }]}>
-                <View style={{ flex: 1, minWidth: 0, paddingVertical: 4 }}>
-                  <Text numberOfLines={2} style={[type.body, { color: t.text }]}>{g.name || "Goal"}</Text>
-                  <Text style={[type.caption, { color: t.text3 }]}>
-                    {money(g.target)} {everyLabel(g.recurring!.every)} · next due {dueLabel(nextDue(g.recurring!, thisMonth))}
-                    {g.recurring!.paidThrough && g.recurring!.paidThrough >= thisMonth
-                      ? " · already set aside this month"
-                      : Math.abs(setAsideFor(g, thisMonth) - g.target / g.recurring!.every) > 0.005
-                        ? ` · usually ${money(g.target / g.recurring!.every)}/mo`
-                        : ""}
-                  </Text>
-                </View>
-                <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(setAsideFor(g, thisMonth))}</Text>
-                <View style={[styles.actions, { width: cols.actions }]} />
-              </View>
+              <SetAsideRow key={g.id} goal={g} months={actual.months} start={start} thisMonth={thisMonth} cols={cols} />
             ))
           : onDebts
           ? debtRows.map((x) => {
@@ -374,6 +360,70 @@ export function BudgetEditor() {
         </Text>
       ) : current ? <Button title={`Add item to ${current.name}`} icon="plus" tone="ghost" onPress={() => addItem(current.name)} style={{ alignSelf: "flex-start" }} /> : undefined}
     />
+  );
+}
+
+/**
+ * One recurring goal in the Set aside group: this month's amount, and (tap) every month until it's due,
+ * straight from the plan, so catch-up months and "already set aside" months show as they are.
+ */
+function SetAsideRow({
+  goal: g, months, start, thisMonth, cols,
+}: {
+  goal: Goal; months: MonthRow[]; start: Date; thisMonth: string; cols: ReturnType<typeof budgetCols>;
+}) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const r = g.recurring!;
+  const due = nextDue(r, thisMonth);
+  // this month through the due month, then the first month of the next round
+  const untilDue = Math.min(monthsBetween(thisMonth, due), 23);
+  const schedule = months.slice(0, untilDue + 2).map((m, k) => ({ k, amount: m.setAsideBy[g.id] ?? 0, isDue: k === untilDue }));
+  const now = schedule[0]?.amount ?? setAsideFor(g, thisMonth);
+  const next = schedule[1]?.amount;
+  const paidNow = !!r.paidThrough && r.paidThrough >= thisMonth;
+  return (
+    <View style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border }}>
+      <Pressable
+        role="button"
+        aria-expanded={open}
+        accessibilityLabel={`${g.name || "Goal"}: ${money(now)} this month. Show each month`}
+        onPress={() => setOpen((o) => !o)}
+        style={[styles.row, { borderBottomWidth: 0 }]}
+      >
+        <View style={{ flex: 1, minWidth: 0, paddingVertical: 4 }}>
+          <Text numberOfLines={2} style={[type.body, { color: t.text }]}>{g.name || "Goal"}</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>
+            {money(g.target)} {everyLabel(r.every)} · due {dueLabel(due)}
+            {paidNow ? " · already set aside this month" : ""}
+            {next !== undefined ? ` · next month ${money(next)}` : ""}
+          </Text>
+        </View>
+        <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(now)}</Text>
+        <View style={[styles.actions, { width: cols.actions }]}>
+          <View style={{ transform: [{ rotate: open ? "90deg" : "0deg" }] }}>
+            <Icon name="chevron" size={16} color={t.text3} />
+          </View>
+        </View>
+      </Pressable>
+      {open ? (
+        <View style={{ paddingHorizontal: space.lg, paddingBottom: space.md, gap: 2 }}>
+          <Text style={[type.overline, { color: t.text3, marginBottom: 2 }]}>Each month</Text>
+          {schedule.map((x) => (
+            <View key={x.k} style={styles.schedRow}>
+              <Text style={[type.caption, { color: x.k === 0 ? t.text : t.text2, flex: 1, fontWeight: x.k === 0 ? "700" : "400" }]}>
+                {x.k === 0 ? `This month (${monthLabel(start, 0)})` : monthLabel(start, x.k)}
+                {x.isDue ? " · due, spent this month" : ""}
+              </Text>
+              <Text style={[type.caption, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(x.amount)}</Text>
+            </View>
+          ))}
+          <Text style={[type.caption, { color: t.text3, marginTop: 4 }]}>
+            Each month sets aside what's still needed ÷ months left, so it evens out if you start late or save extra. After it's spent, it starts again.
+          </Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -635,6 +685,7 @@ const styles = StyleSheet.create({
   debtNote: { borderRadius: radius.sm, padding: space.md },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   chip: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 6, minHeight: 32, justifyContent: "center" },
+  schedRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: 3 },
   hint: { flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: radius.sm, paddingVertical: space.xs, paddingLeft: space.md, paddingRight: space.xs, flexWrap: "wrap" },
   reorderBar: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.lg, marginBottom: space.sm, paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.sm },
   moveBtn: { minHeight: 34, paddingHorizontal: space.md },

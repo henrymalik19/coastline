@@ -302,6 +302,8 @@ export type MonthRow = {
   payHsaEmployer: number;
   /** Set aside this month for recurring goals (included in `expenses`). */
   setAside: number;
+  /** `setAside` per recurring goal, by goal id. */
+  setAsideBy: Record<string, number>;
   /** Scheduled payroll 401(k) not deferred because the annual limit was reached (pre-tax $). */
   payCut: number;
   /** One-off income change this month (+ bonus / − lost pay), already included in `income`. */

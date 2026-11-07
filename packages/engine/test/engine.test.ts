@@ -486,6 +486,8 @@ describe("recurring goals (holidays, yearly bills)", () => {
     const s = base({ goals: [{ id: "x", name: "Christmas", target: 1200, saved: 0, recurring: { every: 12, due: "2026-12" } }] });
     const plan = simulatePlan(s, derive(s, START));
     expect(plan.months[0]!.setAside).toBeCloseTo(600, 9); // Nov: 1200 / 2 months left
+    expect(plan.months[0]!.setAsideBy.x).toBeCloseTo(600, 9);
+    expect(plan.months[2]!.setAsideBy.x).toBeCloseTo(100, 9);
     expect(plan.months[1]!.setAside).toBeCloseTo(600, 9); // Dec: the rest, then it's spent
     expect(plan.months[2]!.setAside).toBeCloseTo(100, 9); // from Jan: 1200 / 12 toward next Dec
     expect(plan.months[0]!.expenses).toBeCloseTo(600, 9);
