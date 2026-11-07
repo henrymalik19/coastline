@@ -243,12 +243,12 @@ export default function Budget() {
     </Card>
   );
 
-  const COLW = compact ? 74 : 108;
+  const COLW = compact ? 88 : 108;
   /** PILL_IN: the Available pill's inner padding, so header and group totals line up with its text. */
   const PILL_IN = 8;
   const num = (v: number, color: string, bold = false, inset = 0) => (
     <Text style={[type.caption, { width: COLW, paddingRight: inset, textAlign: "right", color, fontWeight: bold ? "700" : "500", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
-      {money(v, { whole: compact && Math.abs(v) >= 1000 })}
+      {money(v)}
     </Text>
   );
   const pill = (l: BudgetLine, c: BudgetCategory) => {
@@ -258,7 +258,7 @@ export default function Budget() {
     const fg = over ? t.bad : under ? t.warn : l.available > 0.5 ? t.good : t.text3;
     return (
       <View style={[styles.pill, { backgroundColor: bg }]}>
-        <Text style={[type.caption, { color: fg, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(l.available, { whole: compact && Math.abs(l.available) >= 1000 })}</Text>
+        <Text style={[type.caption, { color: fg, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(l.available)}</Text>
       </View>
     );
   };
