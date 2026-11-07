@@ -76,7 +76,8 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
     const maxed = yearIn >= yr.limit - 1;
     // the plan filled the room it sees, but it only counts this year from today (nothing entered for earlier months)
     const partYear = !maxed && pl.maxedYears[k].includes(y0);
-    const notEntered = start.getMonth() > 0 && !c && k === "ira";
+    // nothing entered for this year: the 401(k) / HSA assume earlier paychecks; the IRA assumes nothing
+    const notEntered = start.getMonth() > 0 && !c;
     const nextYear = a.years.find((y) => y.year === y0 + 1);
     const nextMaxed = pl.maxedYears[k].includes(y0 + 1);
     const nothing = yearIn < 0.5 && a.start < 0.5;
@@ -93,7 +94,11 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
             ? `${y0}: the plan fills the room it sees from ${monthLabel(start, 0)} on`
             : `${money(Math.max(0, yr.limit - yearIn), { whole: true })} of room left in ${y0}`) +
         (nextYear ? ` · ${y0 + 1}: ${nextMaxed ? "maxed" : `about ${money(nextYear.employee || nextYear.total, { whole: true })}`}` : ""),
-      tip2: notEntered ? `Add what's already in your IRA for ${y0} (Settings → Your money → Accounts) to see your real room.` : undefined,
+      tip2: notEntered
+        ? k === "ira"
+          ? `Counts only what the plan puts in from ${monthLabel(start, 0)}. Add what's already in for ${y0} (Settings → Your money → Accounts) for your real room.`
+          : `Includes about ${money(before, { whole: true })} assumed from this year's earlier paychecks. Enter the real amount (Settings → Your money → Accounts).`
+        : undefined,
       tip: k === "k401" || (k === "hsa" && state.plan.hsaPayroll !== false) ? tipFor(k) : undefined,
       color: t.series[k],
       done: maxed,

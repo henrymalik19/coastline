@@ -4,7 +4,7 @@ import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
 import { useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
-import { FieldRow, NumberInput, Segmented } from "./form";
+import { Button, FieldRow, NumberInput, Segmented } from "./form";
 import { Card, Divider } from "./ui";
 
 /**
@@ -13,7 +13,7 @@ import { Card, Divider } from "./ui";
  */
 export function ContributionsCard() {
   const t = useTheme();
-  const { state, start } = usePlan();
+  const { state, start, actual } = usePlan();
   const update = useStore((s) => s.update);
   const thisYear = start.getFullYear();
   const beforeDeadline = start.getMonth() <= 3; // Jan–Apr: last year's IRA/HSA can still be made
@@ -30,6 +30,15 @@ export function ContributionsCard() {
     hsa: state.plan.hsaEligible ? (state.plan.hsaFamily ? L.hsaFamily : L.hsaSelf) + (age >= 55 ? L.hsaCatch : 0) : 0,
   };
   const left = (k: keyof typeof caps) => Math.max(0, caps[k] - values[k]);
+  // nothing entered for this year: say what the plan assumes instead (earlier paychecks at today's amounts)
+  const entered = !!c && c.year === year;
+  const est = year === thisYear && start.getMonth() > 0 ? actual.ytdBefore : undefined;
+  const hint = (k: keyof typeof caps, what: string) =>
+    entered
+      ? `${what} · ${money(left(k))} of ${money(caps[k])} left`
+      : k === "ira"
+        ? `Not entered · the plan assumes nothing went in yet this year`
+        : `Not entered · the plan assumes about ${money(est?.[k] ?? 0, { whole: true })} from this year's earlier paychecks`;
 
   return (
     <Card style={{ gap: space.sm }}>
@@ -46,24 +55,31 @@ export function ContributionsCard() {
           onChange={(v) => update((p) => { p.contributed = { year: Number(v), k401: 0, ira: 0, hsa: 0, ...(c && c.year === Number(v) ? c : null) }; })}
         />
       ) : null}
-      <FieldRow label="Your 401(k)" hint={`Your own contributions · ${money(left("k401"))} of ${money(caps.k401)} left`}>
+      <FieldRow label="Your 401(k)" hint={hint("k401", "Your own contributions")}>
         <NumberInput kind="money" label={`401(k) contributed in ${year}`} value={values.k401} onChange={(v) => set({ k401: v })} />
       </FieldRow>
       <Divider />
-      <FieldRow label="IRA" hint={`Traditional + Roth together · ${money(left("ira"))} of ${money(caps.ira)} left`}>
+      <FieldRow label="IRA" hint={hint("ira", "Traditional + Roth together")}>
         <NumberInput kind="money" label={`IRA contributed for ${year}`} value={values.ira} onChange={(v) => set({ ira: v })} />
       </FieldRow>
       {state.plan.hsaEligible ? (
         <>
           <Divider />
-          <FieldRow label="HSA" hint={`Yours + your employer's · ${money(left("hsa"))} of ${money(caps.hsa)} left`}>
+          <FieldRow label="HSA" hint={hint("hsa", "Yours + your employer's")}>
             <NumberInput kind="money" label={`HSA contributed for ${year}`} value={values.hsa} onChange={(v) => set({ hsa: v })} />
           </FieldRow>
         </>
       ) : null}
+      {!entered ? (
+        // a 0 that's right (nothing went in yet) looks the same as nothing entered: say so explicitly
+        <View style={{ gap: 6 }}>
+          <Button title="These are right" icon="check" tone="primary" onPress={() => set({})} style={{ alignSelf: "flex-start", minHeight: 40 }} />
+          <Text style={[type.caption, { color: t.text3 }]}>Use these amounts as entered, even $0, instead of the plan&apos;s guess.</Text>
+        </View>
+      ) : null}
       <View>
         <Text style={[type.caption, { color: t.text3 }]}>
-          IRA and HSA contributions for {year} can be made until April 15, {year + 1}. A 401(k) only counts what comes out of paychecks in {year}.
+          Your 401(k): only what came out of your own paychecks (not the employer match). HSA: yours plus your employer&apos;s. IRA and HSA contributions for {year} can be made until April 15, {year + 1}. A 401(k) only counts what comes out of paychecks in {year}.
         </Text>
       </View>
     </Card>
