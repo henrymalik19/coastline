@@ -66,6 +66,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     : s;
   const p: Partial<PlanSettings> = { ...(sb.plan ?? {}), ...mergeAccountSchedules(sb) };
   const mode = opts.mode || p.projectWith || "plan";
+  const autoFill = opts.autoFill !== false;
   const extraMonthly = (opts.extraMonthly ?? (s.whatif && s.whatif.extra)) || 0;
   const months = Math.max(opts.months || 0, d.years * 12, 36);
   const y0 = d.start.getFullYear();
@@ -539,7 +540,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         doStep(step);
         avail += held;
       }
-      for (const step of order) {
+      for (const step of autoFill ? order : []) {
         if (avail <= 1e-9) break;
         if (handSet.has(step) || scheduledStep(step)) continue;
         // a step with a share gets only that part of what's left; the rest goes on to the next steps
@@ -551,7 +552,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       }
     }
     alloc.leftover = avail;
-    cash += avail;
+    if (autoFill) cash += avail;
 
     // milestones / events
     if (starterTarget > 0 && cash >= starterTarget - 0.5) mark("starterEF", m, "Starter emergency fund done");
@@ -591,5 +592,5 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       post: payRoth + alloc.k401 * d.rothShare + payHsaEmployer + payHsa + alloc.hsa + alloc.ira + alloc.taxable,
     });
   }
-  return { months: out, events, firstFund, maxedYears, starterTarget, fullTarget, mode, ...(ytdBefore ? { ytdBefore } : {}) };
+  return { months: out, events, firstFund, maxedYears, starterTarget, fullTarget, mode, ...(autoFill ? {} : { autoFill: false }), ...(ytdBefore ? { ytdBefore } : {}) };
 }

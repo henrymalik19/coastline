@@ -43,8 +43,10 @@ export function effectivePlan(saved: PlanState): PlanState {
  * Runs the engine on the saved plan. Re-runs only when the plan changes.
  * `result` includes any what-ifs (projections, dates, odds). `actual` is the month-by-month plan
  * without them: what to really do this month (to-dos, Monthly) never includes hypothetical money.
+ * `forecast` is the Forecast tab's view: only the amounts you set (paychecks, match, minimums, your
+ * schedules and budget), with nothing added from what's left over.
  */
-export function usePlan(): { state: PlanState; result: RunResult; start: Date; actual: PlanResult; whatIfOn: boolean } {
+export function usePlan(): { state: PlanState; result: RunResult; start: Date; actual: PlanResult; forecast: PlanResult; whatIfOn: boolean } {
   const saved = useStore((s) => s.plan);
   const state = useMemo(() => effectivePlan(saved), [saved]);
   const start = useToday();
@@ -55,7 +57,11 @@ export function usePlan(): { state: PlanState; result: RunResult; start: Date; a
     const real = { ...state, whatif: { extra: 0, retDelta: 0, spendDelta: 0 } };
     return simulatePlan(real, derive(real, start));
   }, [state, start, result]);
-  return { state, result, start, actual, whatIfOn };
+  const forecast = useMemo(() => {
+    const real = state.whatif?.extra ? { ...state, whatif: { extra: 0, retDelta: 0, spendDelta: 0 } } : state;
+    return simulatePlan(real, derive(real, start), { autoFill: false });
+  }, [state, start]);
+  return { state, result, start, actual, forecast, whatIfOn };
 }
 
 /** Plain-English line for a month that comes up short. */

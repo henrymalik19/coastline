@@ -484,11 +484,22 @@ export type PlanResult = {
   starterTarget: number;
   fullTarget: number;
   mode: ProjectWith;
+  /** False when only your set amounts ran (nothing extra from what's left over). */
+  autoFill?: boolean;
   /** Estimated payroll 401(k)/HSA put in this year before the plan starts (when not entered). */
   ytdBefore?: { k401: number; hsa: number };
 };
 
-export type SimulateOptions = { mode?: ProjectWith; extraMonthly?: number; months?: number };
+export type SimulateOptions = {
+  mode?: ProjectWith;
+  extraMonthly?: number;
+  months?: number;
+  /**
+   * false: only the amounts you set (paychecks as they are, match, minimums, your schedules and
+   * budget). What's left over isn't put anywhere, not even cash. Default true: the priority order fills it.
+   */
+  autoFill?: boolean;
+};
 
 export type Projection = { series: Float64Array; final: number; preShareFinal: number };
 

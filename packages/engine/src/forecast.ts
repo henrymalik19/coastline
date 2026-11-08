@@ -73,7 +73,7 @@ export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: 
     mk("taxable", startOf("taxable"), true, (i) => [0, rows[i]!.alloc.taxable, 0]),
     // accounts you marked as other investments: they grow, the plan doesn't add to them
     mk("other", startOf("other"), true, () => [0, 0, 0]),
-    mk("cash", d.bal.cash, false, (i) => [0, rows[i]!.alloc.ef + rows[i]!.alloc.leftover, 0], (i) => rows[i]!.cash),
+    mk("cash", d.bal.cash, false, (i) => [0, rows[i]!.alloc.ef + (plan.autoFill === false ? 0 : rows[i]!.alloc.leftover), 0], (i) => rows[i]!.cash),
   ];
   // one-off goals: what's saved toward each
   for (const g of s.goals ?? []) {

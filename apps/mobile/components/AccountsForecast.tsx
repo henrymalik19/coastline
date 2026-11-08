@@ -83,7 +83,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
   const sorted = (list: ScheduleEntry[]) => [...list].sort((a, b) => (a.from < b.from ? -1 : 1));
   const planText = (k: AccountKey) => {
     const list = sorted(schedule[k] ?? []);
-    if (!list.length) return "Your plan: follows your steps";
+    if (!list.length) return "Your plan: none set";
     return "Your plan: " + list.map((e) => `${money(e.amount)}/mo from ${monthName(e.from)}`).join(" → ");
   };
 
@@ -100,7 +100,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
     [
       m.loan > 0.5 ? `${money(m.loan)} 401(k) loan repayment (back into your account, not toward the limit)` : "",
       m.paycheck > 0.5 ? `${money(m.paycheck)} from your paychecks` : "",
-      m.plan > 0.5 ? `${m.paycheck > 0.5 ? "+" : ""}${money(m.plan)} ${k === "k401" || (k === "hsa" && payrollHsa) ? "more per check from the plan" : "from what's left"}` : "",
+      m.plan > 0.5 ? `${m.paycheck > 0.5 ? "+" : ""}${money(m.plan)} ${k === "k401" || (k === "hsa" && payrollHsa) ? "more per check, as you set it" : "you set (Budget)"}` : "",
       m.employer > 0.5 ? `${money(m.employer)} from your employer` : "",
     ].filter(Boolean).join(" · ");
 
@@ -155,7 +155,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
           {schedulable(k) ? (
             <>
               <Text style={[type.caption, { color: schedule[k]?.length ? t.accent : t.text2, fontWeight: "700" }]}>
-                {schedule[k]?.length ? planText(k).replace("Your plan: ", "Monthly amount: ") : "Monthly amount: none set, so it gets what your steps give it"}
+                {schedule[k]?.length ? planText(k).replace("Your plan: ", "Monthly amount: ") : "Monthly amount: none set, so nothing goes in"}
               </Text>
               <Pressable role="link" onPress={() => router.push("/budget")} hitSlop={6} style={styles.link}>
                 <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change it (Budget tab)</Text>
@@ -178,7 +178,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
           <Text style={[type.caption, { color: t.text2 }]}>
             <Text style={{ color: t.text, fontWeight: "600" }}>This month: {debt ? `${money(m0a.paycheck + m0a.plan)} paid` : money(m0a.total)}</Text>
             {m0a.total > 0.5 && !debt && k !== "cash" ? ` (${parts(m0a, k)})` : ""}
-            {debt && m0a.paycheck + m0a.plan > 0.5 ? ` (${money(m0a.paycheck)} minimum${state.debts.find((x) => "debt:" + x.id === k)?.payroll ? " from your paychecks" : ""}${m0a.plan > 0.5 ? ` + ${money(m0a.plan)} extra` : ""})` : ""}
+            {debt && m0a.paycheck + m0a.plan > 0.5 ? ` (${money(m0a.paycheck)} minimum${state.debts.find((x) => "debt:" + x.id === k)?.payroll ? " from your paychecks" : ""}${m0a.plan > 0.5 ? ` + ${money(m0a.plan)} extra you set` : ""})` : ""}
             {m0a.total <= 0.5 ? (() => { const f = a.months.findIndex((m) => m.total > 0.5); return f > 0 ? ` · starts ${monthLabel(start, f)}` : ""; })() : ""}
           </Text>
           {(() => {
@@ -243,9 +243,6 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
   const mine = all
     .filter((a) => scheduleAmount(merged, a.key, thisMonth) !== undefined)
     .map((a) => ({ k: a.key, ask: scheduleAmount(merged, a.key, thisMonth)!, got: a.months[0]!.plan + (a.key === "cash" ? 0 : 0) }));
-  const toSteps = all
-    .filter((a) => scheduleAmount(merged, a.key, thisMonth) === undefined && a.months[0]!.plan > 0.5)
-    .map((a) => ({ k: a.key, v: a.months[0]!.plan }));
   const notPlanned = Math.max(0, row0.available - row0.plannedGot);
   const shortMonths = pl.months.slice(0, 24).map((m, i) => ({ i, v: m.plannedShort })).filter((x) => x.v > 0.5);
   const line = (labelText: string, value: string, opts?: { strong?: boolean; color?: string; href?: string; hint?: string }) => (
@@ -268,7 +265,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
       <Text style={[type.overline, { color: t.text3 }]}>This month ({monthLabel(start, 0)})</Text>
       {fromPay.length ? (
         <>
-          <Text style={[type.caption, { color: t.text3, marginTop: 2 }]}>Comes out of your paychecks first (set on your job, not from what's left)</Text>
+          <Text style={[type.caption, { color: t.text3, marginTop: 2 }]}>Comes out of your paychecks first (set on your job)</Text>
           {fromPay.map((x) => line(x.label, money(x.amount), { href: x.href, hint: x.where || undefined }))}
           <View style={[styles.rule, { backgroundColor: t.border }]} />
         </>
@@ -279,13 +276,15 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
       {row0.setAside > 0.5 ? line("Set aside for recurring goals", `− ${money(row0.setAside)}`, { href: "/money/goals" }) : null}
       {line("Left after bills", money(row0.available), { strong: true, color: row0.available < 0 ? t.bad : t.text })}
       <View style={[styles.rule, { backgroundColor: t.border }]} />
-      <Text style={[type.caption, { color: t.text3 }]}>Your plan</Text>
+      <Text style={[type.caption, { color: t.text3 }]}>You set (Budget)</Text>
       {mine.length ? mine.map((x) => line(label(x.k).replace(" (what you owe)", isDebt(x.k) ? " (extra)" : ""), `− ${money(x.ask)}`)) : (
         <Text style={[type.caption, { color: t.text3 }]}>Nothing set yet. Assign amounts on the Budget tab.</Text>
       )}
       {row0.plannedShort > 0.5
         ? line("Short this month", money(-row0.plannedShort), { strong: true, color: t.bad, hint: "Your plan asks for more than is left after bills. Lower an amount, or move one to a later month." })
-        : line("Not planned yet", money(notPlanned), { strong: true, color: t.good, hint: notPlanned > 0.5 ? (toSteps.length ? `Goes to your steps: ${toSteps.map((x) => `${label(x.k).replace(" (what you owe)", " (extra)")} ${money(x.v)}`).join(", ")}` : "Stays in cash") : undefined })}
+        : notPlanned > 0.5
+          ? line("Not assigned", money(notPlanned), { color: t.text2, hint: "Not counted in the forecast. Assign it on the Budget tab to see it here." })
+          : null}
       {shortMonths.length && !(shortMonths.length === 1 && shortMonths[0]!.i === 0) ? (
         <Text style={[type.caption, { color: t.bad }]}>
           Short later: {shortMonths.filter((x) => x.i > 0).slice(0, 4).map((x) => `${monthLabel(start, x.i)} by ${money(x.v)}`).join(", ")}{shortMonths.length > 5 ? "…" : ""}. See the table.
@@ -474,17 +473,17 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
     <Pressable
       role="button"
       aria-expanded={showCheck}
-      accessibilityLabel={`${monthLabel(start, 0)}: ${money(row0.available)} left after bills, ${money(row0.plannedAsk)} planned, ${row0.plannedShort > 0.5 ? `short ${money(row0.plannedShort)}` : `${money(notPlanned)} not planned`}. ${showCheck ? "Hide" : "Show"} details`}
+      accessibilityLabel={`${monthLabel(start, 0)}: ${money(row0.income)} take-home, ${money(row0.expenses)} bills and debt payments, ${money(row0.plannedAsk)} you set${row0.plannedShort > 0.5 ? `, short ${money(row0.plannedShort)}` : ""}. ${showCheck ? "Hide" : "Show"} where it comes from`}
       onPress={() => setShowCheck((v) => !v)}
       hitSlop={4}
       style={[styles.summary, { backgroundColor: row0.plannedShort > 0.5 ? t.badSoft : t.surface2 }]}
     >
       {[
-        { k: "Left after bills", v: money(row0.available, { whole: compact }), c: t.text },
-        { k: "Planned", v: money(row0.plannedAsk, { whole: compact }), c: t.text },
+        { k: "Take-home", v: money(row0.income, { whole: compact }), c: t.text },
+        { k: "Bills & debts", v: money(row0.expenses, { whole: compact }), c: t.text },
         row0.plannedShort > 0.5
           ? { k: "Short", v: money(row0.plannedShort, { whole: compact }), c: t.bad }
-          : { k: "Not planned", v: money(notPlanned, { whole: compact }), c: t.good },
+          : { k: "You set", v: money(row0.plannedAsk, { whole: compact }), c: t.text },
       ].map((x) => (
         <View key={x.k} style={{ flex: 1, minWidth: 0 }}>
           <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{x.k}</Text>

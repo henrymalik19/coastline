@@ -36,10 +36,10 @@ type Row = {
 
 export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void }) {
   const t = useTheme();
-  const { state, result, actual, start } = usePlan();
+  const { state, result, forecast, start } = usePlan();
   const txns = useStore((s) => s.txns);
   const d = result.d;
-  const pl = actual;
+  const pl = forecast;
   const fc = accountForecasts(state, d, pl, d.r);
   const y0 = start.getFullYear();
   const when = (m: number | undefined) => (m === undefined ? undefined : m <= 0 ? "this month" : monthLabel(start, m));
@@ -118,10 +118,8 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       status:
         (thisYear ? "In so far · " : `${selY} starts fresh · `) +
         (fullThen
-          ? `plan: maxed by ${selLabel}`
-          : thisYear && partYear && atI >= defaultAt
-            ? `plan fills the room it sees from ${monthLabel(start, 0)} on`
-            : `plan: about ${money(byThen, { whole: true })} by ${selLabel}`),
+          ? `maxed by ${selLabel}`
+          : `about ${money(byThen, { whole: true })} by ${selLabel}`),
       tip2: notEntered && thisYear
         ? k === "ira"
           ? `Add what's already in for ${y0} (Settings → Your money → Accounts) so the plan knows your real room.`
@@ -208,7 +206,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
         <Text style={[type.caption, { color: t.text3, marginTop: -space.xs }]}>Where each one stands and when it gets there. Tap one for its forecast.</Text>
         <View style={styles.key}>
           <View style={styles.keyItem}><View style={[styles.keySw, { backgroundColor: t.accent }]} /><Text style={[type.caption, { color: t.text3 }]}>In now</Text></View>
-          <View style={styles.keyItem}><View style={[styles.keySw, { backgroundColor: t.accent, opacity: 0.35 }]} /><Text style={[type.caption, { color: t.text3 }]}>By {selLabel}, with the plan</Text></View>
+          <View style={styles.keyItem}><View style={[styles.keySw, { backgroundColor: t.accent, opacity: 0.35 }]} /><Text style={[type.caption, { color: t.text3 }]}>By {selLabel}, at your amounts</Text></View>
         </View>
       </View>
       {rows.map((r, i) => (

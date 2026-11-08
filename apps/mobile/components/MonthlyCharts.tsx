@@ -30,7 +30,7 @@ function splits(m: MonthRow, t: Theme, mt: number, rothShare = 0, hsaPayroll = f
   if (a.debt > 0.5) segs.push({ key: "debt", label: "Extra debt payments", value: a.debt, color: t.series.debt });
   if (a.hsa > 0.5) segs.push({ key: "hsa", label: hsaPayroll ? `Extra HSA from paychecks (${money(a.hsa)} in)` : "HSA", value: hsaTakeHome(m, mt, hsaPayroll), color: t.series.hsa });
   if (a.goals > 0.5) segs.push({ key: "goals", label: "Savings goals", value: a.goals, color: t.series.goals });
-  if (a.leftover > 0.5) segs.push({ key: "left", label: "Unassigned, stays in cash", value: a.leftover, color: t.surface2 });
+  if (a.leftover > 0.5) segs.push({ key: "left", label: "Not assigned yet", value: a.leftover, color: t.surface2 });
   return segs;
 }
 
@@ -108,7 +108,7 @@ function MonthCard({ m, title, start, state, wide }: { m: MonthRow; title: strin
 export function MonthlyCharts() {
   const t = useTheme();
   const { twoColumn } = useLayout();
-  const { state, result: o, start, actual } = usePlan();
+  const { state, result: o, start, forecast: actual } = usePlan();
   const [selected, setSelected] = useState<number | null>(null);
   const [showTable, setShowTable] = useState(false);
 

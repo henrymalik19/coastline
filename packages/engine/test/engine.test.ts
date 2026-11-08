@@ -530,6 +530,28 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     expect(m[1]!.pre).toBeCloseTo(1500, 9);
   });
 
+  it("autoFill off: only what you set; nothing left over goes anywhere", () => {
+    const base = sampleState();
+    const s: PlanState = {
+      ...base,
+      accounts: [],
+      incomes: [{ ...job, net: 8000 }],
+      debts: [{ id: "c", name: "Card", kind: "credit_card", balance: 5000, apr: 0.25, minPayment: 100 }],
+      plan: { ...blank().plan, steps: ["highDebt", "ira", "taxable"], schedule: { ira: [{ from: "2026-11", amount: 300 }] } },
+    };
+    const d = derive(s, START);
+    const off = simulatePlan(s, d, { autoFill: false });
+    const m = off.months[0]!;
+    expect(off.autoFill).toBe(false);
+    expect(m.alloc.ira).toBeCloseTo(300, 9); // your schedule
+    expect(m.alloc.debt).toBe(0); // no extra on the card
+    expect(m.alloc.taxable).toBe(0);
+    expect(m.alloc.leftover).toBeGreaterThan(0);
+    expect(m.cash).toBeCloseTo(d.bal.cash, 9); // leftover isn't added to cash either
+    const on = simulatePlan(s, d).months[0]!;
+    expect(on.alloc.debt).toBeGreaterThan(0);
+  });
+
   it("mortgage escrow: part of the payment, not the loan, and it keeps going after payoff and in retirement", () => {
     const s = blank({
       incomes: [{ ...job, net: 8000 }],

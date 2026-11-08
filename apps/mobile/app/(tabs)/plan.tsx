@@ -24,8 +24,8 @@ export default function Forecast() {
   const { twoColumn, contentWidth } = useLayout();
   const compact = contentWidth < 600;
   const [whyOpen, setWhyOpen] = useState(false);
-  const { state, result: o, start, actual } = usePlan();
-  const real = { ...o, plan: actual };
+  const { state, result: o, start, forecast } = usePlan();
+  const real = { ...o, plan: forecast };
   const { view } = useLocalSearchParams<{ view?: string }>();
   const [tab, setTab] = useState<"overview" | "table" | "charts">(view === "charts" ? "charts" : view === "forecast" || view === "table" ? "table" : "overview");
   // tapping an account in the overview opens its forecast in the table
@@ -136,6 +136,9 @@ export default function Forecast() {
           onChange={(v) => { setTab(v); if (v !== "table") setPick(undefined); }}
         />
       </View>
+      <Text style={[type.caption, { color: t.text3 }]}>
+        Only what you've set: your paychecks, your employer's match, debt payments, and what you assign in Budget. Money you haven't assigned isn't added anywhere.
+      </Text>
       {tab === "table" ? (
         <AccountsForecast key={pick ?? "all"} state={state} o={real} start={start} fill initialPick={pick} />
       ) : tab === "charts" ? (
