@@ -3,7 +3,7 @@ import { Platform, Text, View } from "react-native";
 import { confirm } from "../lib/confirm";
 import { usePlan } from "../lib/plan";
 import { budgetAccounts } from "../lib/register";
-import { inviteMember, loadMembers, removeMember, updateMember, useSharing, type MemberRow } from "../lib/sharing";
+import { inviteMember, loadMembers, removeMember, SHARE_RULES, updateMember, useSharing, type MemberRow } from "../lib/sharing";
 import { syncConfigured } from "../lib/supabase";
 import { useSync } from "../lib/sync";
 import { space, type, useTheme } from "../lib/theme";
@@ -81,9 +81,9 @@ export function SharingEditor() {
   return (
     <View style={{ gap: space.lg }}>
       <Text style={[type.body, { color: t.text2 }]}>
-        Let someone add purchases on cards you pick, from their own phone. They see only those cards, their transactions, and what's left in each category this
-        month. They can't see your plan, balances, income or other accounts, or change your budget.
+        Let someone add purchases on cards you pick, from their own phone. They sign in with their own email.
       </Text>
+      <ShareRules who="They" />
       {error ? <Text role="alert" style={[type.caption, { color: t.bad }]}>{error}</Text> : null}
       {members.map((m) => (
         <MemberCard key={m.email} m={m} toggles={toggles} acctName={acctName} />
@@ -106,6 +106,29 @@ export function SharingEditor() {
         {msg ? <Text role="status" style={[type.caption, { color: t.text2 }]}>{msg}</Text> : null}
       </Card>
     </View>
+  );
+}
+
+/** The sharing rules as three short lists. `who` is "They" (the owner's view) or "You" (the member's). */
+export function ShareRules({ who }: { who: "They" | "You" }) {
+  const t = useTheme();
+  const list = (title: string, items: readonly string[], mark: string, color: string) => (
+    <View style={{ gap: space.xs }}>
+      <Text style={[type.label, { color: t.text }]}>{title}</Text>
+      {items.map((s) => (
+        <View key={s} style={{ flexDirection: "row", gap: space.sm }}>
+          <Text aria-hidden style={[type.body, { color, width: 14, fontWeight: "700" }]}>{mark}</Text>
+          <Text style={[type.body, { color: t.text2, flex: 1 }]}>{s}</Text>
+        </View>
+      ))}
+    </View>
+  );
+  return (
+    <Card style={{ gap: space.md }}>
+      {list(`${who} can see`, SHARE_RULES.sees, "✓", t.good)}
+      {list(`${who} can`, who === "You" ? SHARE_RULES.does.map((s) => s.replace(" they added", " you added")) : SHARE_RULES.does, "✓", t.good)}
+      {list(`${who} can't see or do`, who === "You" ? SHARE_RULES.cant.map((s) => s.replace("someone else added", "you didn't add")) : SHARE_RULES.cant.map((s) => s.replace("someone else added", "they didn't add")), "✕", t.bad)}
+    </Card>
   );
 }
 

@@ -8,6 +8,7 @@ import { isoDay } from "../lib/categories";
 import { confirm } from "../lib/confirm";
 import { money } from "../lib/format";
 import { newId, useStore } from "../lib/store";
+import { ShareRules } from "../components/SharingEditor";
 import { availableNow, saveMemberTxn, useMembership } from "../lib/sharing";
 import { signOut, useSync } from "../lib/sync";
 import { space, type, useTheme } from "../lib/theme";
@@ -21,7 +22,7 @@ const dayText = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString([], 
  */
 export default function Shared() {
   const t = useTheme();
-  const { status, row, txns } = useMembership();
+  const { status, row, txns, mine: myIds } = useMembership();
   const email = useSync((s) => s.email);
   const onboarded = useStore((s) => s.onboarded);
   const view = row?.view ?? null;
@@ -95,23 +96,43 @@ export default function Shared() {
         <SectionLabel>Transactions on your cards</SectionLabel>
         {mine.length ? (
           <Card padded={false}>
-            {(showAll ? mine : mine.slice(0, 25)).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.updatedAt - a.updatedAt)).map((x, i) => (
-              <View key={x.id}>
-                {i > 0 ? <Divider /> : null}
-                <Pressable role="button" accessibilityLabel={`Edit ${x.payee || "transaction"} ${money(Math.abs(x.amount))}`} onPress={() => setEditing(x)} style={(st) => [styles.row, { backgroundColor: st.pressed ? t.surface2 : "transparent" }]}>
+            {(showAll ? mine : mine.slice(0, 25)).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.updatedAt - a.updatedAt)).map((x, i) => {
+              const own = myIds.includes(x.id);
+              const body = (
+                <>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text numberOfLines={1} style={[type.body, { color: t.text, fontWeight: "500" }]}>{x.payee || "No payee"}</Text>
-                    <Text numberOfLines={1} style={[type.caption, { color: t.text3 }]}>{dayText(x.date)} · {acctName(x.accountId)} · {catName(x.categoryId)}</Text>
+                    <Text numberOfLines={1} style={[type.caption, { color: t.text3 }]}>
+                      {dayText(x.date)} · {acctName(x.accountId)} · {catName(x.categoryId)}{own ? "" : " · not added by you"}
+                    </Text>
                   </View>
                   <Text style={[type.body, { color: x.amount > 0 ? t.good : t.text, fontVariant: ["tabular-nums"] }]}>{x.amount > 0 ? "+" : ""}{money(x.amount)}</Text>
-                </Pressable>
-              </View>
-            ))}
+                </>
+              );
+              return (
+                <View key={x.id}>
+                  {i > 0 ? <Divider /> : null}
+                  {own ? (
+                    <Pressable role="button" accessibilityLabel={`Edit ${x.payee || "transaction"} ${money(Math.abs(x.amount))}`} onPress={() => setEditing(x)} style={(st) => [styles.row, { backgroundColor: st.pressed ? t.surface2 : "transparent" }]}>
+                      {body}
+                    </Pressable>
+                  ) : (
+                    <View style={styles.row}>{body}</View>
+                  )}
+                </View>
+              );
+            })}
           </Card>
         ) : (
           <Text style={[type.caption, { color: t.text3 }]}>None yet.</Text>
         )}
+        {mine.length ? <Text style={[type.caption, { color: t.text3 }]}>Tap one you added to change or delete it.</Text> : null}
         {!showAll && mine.length > 25 ? <Button title={`Show all ${mine.length}`} tone="ghost" onPress={() => setShowAll(true)} style={{ alignSelf: "flex-start" }} /> : null}
+      </View>
+
+      <View style={{ gap: space.sm }}>
+        <SectionLabel>What&apos;s shared with you</SectionLabel>
+        <ShareRules who="You" />
       </View>
 
       <Button

@@ -35,6 +35,23 @@ export type MemberRow = {
 
 const missingTable = (e: unknown) => /PGRST205|PGRST202|42P01|42883|does not exist|Could not find/i.test(String((e as { message?: string })?.message ?? "") + String((e as { code?: string })?.code ?? ""));
 
+/** What sharing shows and allows, said the same way on both sides. */
+export const SHARE_RULES = {
+  sees: [
+    "The names of the shared cards (not their balances)",
+    "Every transaction on those cards, whoever added it",
+    "Spending and bill categories, with what's left this month in each",
+  ],
+  does: ["Add purchases and refunds on the shared cards", "Change or delete purchases they added"],
+  cant: [
+    "Balances, income or other accounts",
+    "The plan: Coast FI, retirement accounts, forecast or priorities",
+    "How much is assigned to each category, or savings categories",
+    "Move money between categories, transfer or split",
+    "Change or delete transactions someone else added",
+  ],
+} as const;
+
 /* ---------- the owner's side ---------- */
 
 export const useSharing = create<{ members: MemberRow[]; available: boolean; error?: string }>(() => ({ members: [], available: true }));
@@ -127,13 +144,16 @@ type MemberState = {
   status: "unknown" | "none" | "member";
   row?: MemberRow;
   txns: Txn[];
+  /** ids of the transactions the member added (the only ones they can edit) */
+  mine: string[];
   error?: string;
 };
-export const useMembership = create<MemberState>(() => ({ status: "unknown", txns: [] }));
+export const useMembership = create<MemberState>(() => ({ status: "unknown", txns: [], mine: [] }));
 
 type TxnRow = {
   id: string; account_id: string; date: string; amount: number | string; payee: string | null; memo: string | null;
   category_id: string | null; splits: Txn["splits"] | null; cleared: Txn["cleared"]; source: Txn["source"]; deleted: boolean; client_updated_at: number | string;
+  created_by?: string | null;
 };
 const fromRow = (r: TxnRow): Txn | null => {
   const p = TxnSchema.safeParse({
@@ -149,7 +169,12 @@ async function loadMemberTxns(owner: string): Promise<void> {
   if (!supabase) return;
   const res = await supabase.from("transactions").select("*").eq("user_id", owner).order("date", { ascending: false }).limit(500);
   if (res.error) return;
-  useMembership.setState({ txns: ((res.data ?? []) as TxnRow[]).map(fromRow).filter((x): x is Txn => !!x) });
+  const me = (await supabase.auth.getUser()).data.user?.id;
+  const rows = (res.data ?? []) as TxnRow[];
+  useMembership.setState({
+    txns: rows.map(fromRow).filter((x): x is Txn => !!x),
+    mine: me ? rows.filter((r) => r.created_by === me).map((r) => r.id) : [],
+  });
 }
 
 async function refreshMembership(): Promise<void> {
@@ -170,9 +195,9 @@ export async function saveMemberTxn(t: Txn): Promise<void> {
     },
     { onConflict: "user_id,id" },
   );
-  if (res.error) throw new Error(res.error.message);
-  const others = useMembership.getState().txns.filter((x) => x.id !== t.id);
-  useMembership.setState({ txns: [t, ...others] });
+  if (res.error) throw new Error(/row-level security/i.test(res.error.message) ? "You can only change purchases you added." : res.error.message);
+  const { txns, mine } = useMembership.getState();
+  useMembership.setState({ txns: [t, ...txns.filter((x) => x.id !== t.id)], mine: mine.includes(t.id) ? mine : [...mine, t.id] });
 }
 
 /**
@@ -222,6 +247,6 @@ export function onSharingSignOut(): void {
   memberChannel = null;
   signedInEmail = "";
   published.clear();
-  useMembership.setState({ status: "unknown", row: undefined, txns: [], error: undefined });
+  useMembership.setState({ status: "unknown", row: undefined, txns: [], mine: [], error: undefined });
   useSharing.setState({ members: [], error: undefined });
 }
