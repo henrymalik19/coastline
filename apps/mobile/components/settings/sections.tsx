@@ -37,7 +37,7 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
     items: [
       { key: "account", title: "Account & sync", subtitle: "Sign in to use your plan on every device", icon: "user" },
       { key: "profile", title: "You", subtitle: "Age, retirement age and health insurance", icon: "user" },
-      { key: "sharing", title: "Sharing", subtitle: "Let someone add purchases on cards you pick", icon: "card" },
+      { key: "sharing", title: "Sharing", subtitle: "Share your plan with a spouse or partner", icon: "user" },
       { key: "appearance", title: "Appearance", subtitle: "Light, dark, or match your device", icon: "sparkle" },
     ],
   },

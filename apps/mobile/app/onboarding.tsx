@@ -10,6 +10,7 @@ import { Icon } from "../components/Icon";
 import { RetirementIncomeEditor } from "../components/RetirementIncomeEditor";
 import { GoalEditor } from "../components/GoalEditor";
 import { useFillPage } from "../components/MasterDetail";
+import { useMembership } from "../lib/sharing";
 import { ProgressBar, ProgressRing } from "../components/ProgressRing";
 import { IncomesEditor } from "../components/IncomeEditor";
 import { Card, Divider, Screen } from "../components/ui";
@@ -36,9 +37,12 @@ export default function Onboarding() {
   const syncEmail = useSync((s) => s.email);
   // a second device: once sign-in pulls down a finished plan, go straight to it
   const onboarded = useStore((s) => s.onboarded);
+  // someone who adds purchases on another plan's cards: their shared budget
+  const member = useMembership((s) => s.status);
   useEffect(() => {
     if (onboarded) router.replace("/home");
-  }, [onboarded, router]);
+    else if (member === "member") router.replace("/shared");
+  }, [onboarded, member, router]);
 
   const next = () => setStep(STEPS[Math.min(STEPS.length - 1, i + 1)]!);
   const back = () => setStep(STEPS[Math.max(0, i - 1)]!);

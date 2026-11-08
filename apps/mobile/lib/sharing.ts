@@ -23,8 +23,13 @@ export type MemberView = {
   categories: { key: string; name: string; group: string; available: number }[];
 };
 
+export type MemberRole = "cards" | "full";
+
 export type MemberRow = {
   owner_id: string;
+  /** "cards": adds purchases on the cards picked. "full": shares the whole plan. */
+  role: MemberRole;
+  owner_email: string | null;
   email: string;
   name: string | null;
   member_id: string | null;
@@ -32,6 +37,8 @@ export type MemberRow = {
   accounts: string[];
   view: MemberView | null;
 };
+
+const COLS = "owner_id, owner_email, email, name, role, member_id, joined_at, accounts, view";
 
 const missingTable = (e: unknown) => /PGRST205|PGRST202|42P01|42883|does not exist|Could not find/i.test(String((e as { message?: string })?.message ?? "") + String((e as { code?: string })?.code ?? ""));
 
@@ -59,7 +66,7 @@ export const useSharing = create<{ members: MemberRow[]; available: boolean; err
 /** Load the people you've invited. */
 export async function loadMembers(): Promise<void> {
   if (!supabase) return;
-  const res = await supabase.from("plan_members").select("owner_id, email, name, member_id, joined_at, accounts, view").eq("owner_id", (await supabase.auth.getUser()).data.user?.id ?? "");
+  const res = await supabase.from("plan_members").select(COLS).eq("owner_id", (await supabase.auth.getUser()).data.user?.id ?? "");
   if (res.error) {
     useSharing.setState(missingTable(res.error) ? { available: false, members: [] } : { error: res.error.message });
     return;
@@ -67,18 +74,18 @@ export async function loadMembers(): Promise<void> {
   useSharing.setState({ members: (res.data ?? []) as MemberRow[], available: true, error: undefined });
 }
 
-export async function inviteMember(email: string, name: string, accounts: string[]): Promise<void> {
+export async function inviteMember(email: string, name: string, accounts: string[], role: MemberRole = "cards"): Promise<void> {
   if (!supabase) throw new Error("Sync isn't set up in this build.");
   const clean = email.trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean)) throw new Error("That doesn't look like an email address.");
   if (clean === useSyncEmail()) throw new Error("That's your own email.");
-  const res = await supabase.from("plan_members").insert({ email: clean, name: name.trim() || null, accounts });
+  const res = await supabase.from("plan_members").insert({ email: clean, name: name.trim() || null, accounts: role === "full" ? [] : accounts, role });
   if (res.error) throw new Error(/duplicate|unique/i.test(res.error.message) ? "That email is already invited (here or to another plan)." : res.error.message);
   await loadMembers();
   await publishViews(true);
 }
 
-export async function updateMember(email: string, patch: { name?: string | null; accounts?: string[] }): Promise<void> {
+export async function updateMember(email: string, patch: { name?: string | null; accounts?: string[]; role?: MemberRole }): Promise<void> {
   if (!supabase) return;
   const res = await supabase.from("plan_members").update(patch).eq("email", email);
   if (res.error) throw new Error(res.error.message);
@@ -125,6 +132,7 @@ export async function publishViews(now = false): Promise<void> {
   const { members, available } = useSharing.getState();
   if (!supabase || !available || !members.length || !useStore.getState().onboarded) return;
   for (const m of members) {
+    if (m.role === "full") continue;
     try {
       const v = memberView(m.accounts);
       const key = JSON.stringify({ ...v, at: 0 });
@@ -141,7 +149,7 @@ export async function publishViews(now = false): Promise<void> {
 
 type MemberState = {
   /** unknown until checked after sign-in */
-  status: "unknown" | "none" | "member";
+  status: "unknown" | "none" | "member" | "full";
   row?: MemberRow;
   txns: Txn[];
   /** ids of the transactions the member added (the only ones they can edit) */
@@ -177,12 +185,6 @@ async function loadMemberTxns(owner: string): Promise<void> {
   });
 }
 
-async function refreshMembership(): Promise<void> {
-  if (!supabase) return;
-  const res = await supabase.from("plan_members").select("owner_id, email, name, member_id, joined_at, accounts, view").eq("member_id", (await supabase.auth.getUser()).data.user?.id ?? "").maybeSingle<MemberRow>();
-  if (!res.error && res.data) useMembership.setState({ row: res.data });
-}
-
 /** Save one of the member's transactions (new or edited) on the owner's plan. */
 export async function saveMemberTxn(t: Txn): Promise<void> {
   const row = useMembership.getState().row;
@@ -213,33 +215,59 @@ export function availableNow(view: MemberView, txns: Txn[]): Record<string, numb
   return out;
 }
 
+/** Called when the signed-in member's access changes (invited, removed, or cards ↔ full). */
+let membershipListener: (() => void) | null = null;
+export function onMembershipChange(fn: () => void): void {
+  membershipListener = fn;
+}
+
+/**
+ * Link any invite for this email and return this person's membership: a row, null (not a member,
+ * or sharing isn't on this server), or "error" (couldn't check, e.g. offline: keep what we had).
+ */
+export async function checkMembership(): Promise<MemberRow | null | "error"> {
+  if (!supabase) return null;
+  const join = await supabase.rpc("member_join");
+  if (join.error) {
+    if (missingTable(join.error)) {
+      useSharing.setState({ available: false });
+      useMembership.setState({ status: "none", row: undefined });
+      return null;
+    }
+    if (useMembership.getState().status === "unknown") useMembership.setState({ status: "none" });
+    return "error";
+  }
+  const row = ((join.data ?? []) as MemberRow[])[0] ?? null;
+  const prev = useMembership.getState();
+  const status = !row ? "none" : row.role === "full" ? "full" : "member";
+  useMembership.setState(row ? { status, row } : { status, row: undefined, txns: [], mine: [] });
+  if (prev.status !== status && prev.status !== "unknown") membershipListener?.();
+  return row;
+}
+
 /**
  * After sign-in: link any invite for this email, and load what the member needs. The owner's side
  * loads the people they've invited.
  */
-export async function onSharingSignIn(userId: string, email: string | undefined): Promise<void> {
-  if (!supabase) return;
+export async function onSharingSignIn(userId: string, email: string | undefined): Promise<MemberRow | null | "error"> {
+  if (!supabase) return null;
   signedInEmail = (email ?? "").toLowerCase();
-  const join = await supabase.rpc("member_join");
-  if (join.error) {
-    useMembership.setState({ status: "none" });
-    if (missingTable(join.error)) useSharing.setState({ available: false });
-    return;
-  }
-  const rows = (join.data ?? []) as MemberRow[];
-  if (rows[0]) {
-    const row = rows[0];
-    useMembership.setState({ status: "member", row });
-    await loadMemberTxns(row.owner_id);
-    memberChannel?.unsubscribe();
-    for (const c of supabase.getChannels()) if (c.topic === `realtime:member-${userId}`) void supabase.removeChannel(c);
-    memberChannel = supabase
+  const row = await checkMembership();
+  memberChannel?.unsubscribe();
+  memberChannel = null;
+  for (const c of supabase.getChannels()) if (c.topic === `realtime:member-${userId}`) void supabase.removeChannel(c);
+  if (row && row !== "error") {
+    if (row.role === "cards") await loadMemberTxns(row.owner_id);
+    let ch = supabase
       .channel(`member-${userId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "plan_members", filter: `member_id=eq.${userId}` }, () => void refreshMembership())
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `user_id=eq.${row.owner_id}` }, () => void loadMemberTxns(row.owner_id))
-      .subscribe();
-  } else useMembership.setState({ status: "none" });
+      .on("postgres_changes", { event: "*", schema: "public", table: "plan_members", filter: `member_id=eq.${userId}` }, () => void checkMembership());
+    if (row.role === "cards") {
+      ch = ch.on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `user_id=eq.${row.owner_id}` }, () => void loadMemberTxns(row.owner_id));
+    }
+    memberChannel = ch.subscribe();
+  }
   await loadMembers();
+  return row;
 }
 
 export function onSharingSignOut(): void {

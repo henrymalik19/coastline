@@ -24,6 +24,11 @@ export type AppState = {
   /** Ticked to-dos per month: { "2026-11": ["debt", "ira"] } */
   todoDone: Record<string, string[]>;
   updatedAt: number;
+  /**
+   * The last copy of the plan this device synced with the server (for merging two people's edits),
+   * and whose plan it is (the signed-in user, or the owner of a plan shared with them).
+   */
+  syncBase?: SyncBase;
   hydrated: boolean;
 
   /** Edit the plan with a mutating function on a copy. */
@@ -45,6 +50,8 @@ export type AppState = {
   /** Clear the plan and go back through setup (check-ins are kept). */
   startFresh: () => void;
 };
+
+export type SyncBase = { owner: string; at: number; plan: PlanState; todoDone: Record<string, string[]> };
 
 const now = () => Date.now();
 
@@ -155,7 +162,7 @@ export const useStore = create<AppState>()(
       name: "coastfi.app",
       version: 1,
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt }),
+      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase }),
       // never trust stored data blindly: validate, and fall back to a blank plan
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState> & { isSampleData?: boolean; seenWelcome?: boolean };
@@ -170,6 +177,11 @@ export const useStore = create<AppState>()(
           txns: (() => { const r = z.array(TxnSchema).safeParse(p.txns ?? []); return r.success ? r.data : []; })(),
           todoDone: p.todoDone && typeof p.todoDone === "object" ? p.todoDone : {},
           updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : 0,
+          syncBase: (() => {
+            const b = p.syncBase;
+            const bp = b && PlanStateSchema.safeParse(b.plan);
+            return b && bp?.success && typeof b.owner === "string" && typeof b.at === "number" ? { ...b, plan: bp.data, todoDone: b.todoDone ?? {} } : undefined;
+          })(),
         };
       },
       onRehydrateStorage: () => () => useStore.setState({ hydrated: true }),

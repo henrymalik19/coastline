@@ -1,4 +1,5 @@
 import { Redirect, Tabs } from "expo-router";
+import { useMembership } from "../../lib/sharing";
 import { useStore } from "../../lib/store";
 import { Platform, StyleSheet } from "react-native";
 import { Icon, type IconName } from "../../components/Icon";
@@ -20,8 +21,10 @@ export default function TabsLayout() {
   const wide = useIsWide();
   const hydrated = useStore((s) => s.hydrated);
   const onboarded = useStore((s) => s.onboarded);
-  // the app has nothing to show until setup is done (e.g. a bookmarked link on a fresh device)
-  if (hydrated && !onboarded) return <Redirect href="/onboarding" />;
+  const member = useMembership((s) => s.status);
+  // the app has nothing to show until setup is done (e.g. a bookmarked link on a fresh device);
+  // someone who adds purchases on another plan's cards goes to their shared budget
+  if (hydrated && !onboarded) return <Redirect href={member === "member" ? "/shared" : "/onboarding"} />;
   return (
     <Tabs
       // Desktop web: sidebar on the left. Phones (native and narrow web): bottom tabs.
