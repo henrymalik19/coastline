@@ -3,7 +3,8 @@
  * 401(k) / HSA / IRA, a goal) or its payoff (a debt), and when it gets there. Tap one for its month by
  * month forecast.
  */
-import { accountForecasts, accountGroup, BUCKET_LABELS, type AccountKey } from "@coastfi/engine";
+import { accountForecasts, accountGroup, BUCKET_LABELS, isSpouseIra, type AccountKey } from "@coastfi/engine";
+import { spouseIraLabel } from "../lib/spouse";
 import { useStore } from "../lib/store";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -79,29 +80,31 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
     });
   }
   // accounts with a yearly limit
-  for (const k of ["k401", "hsa", "ira"] as const) {
+  const spIra = fc.some((x) => x.key === "iraSpouse");
+  const maxedIn = (k: "k401" | "hsa" | "ira" | "iraSpouse") => (k === "iraSpouse" ? pl.maxedYears.iraSpouse ?? [] : pl.maxedYears[k]);
+  for (const k of ["k401", "hsa", "ira", "iraSpouse"] as const) {
     const a = fc.find((x) => x.key === k);
     if (!a) continue;
     const yr = a.years.find((y) => y.year === y0);
     const yrSel = a.years.find((y) => y.year === selY);
     if (!yr?.limit || !yrSel?.limit) continue;
-    const before = start.getMonth() === 0 ? 0 : k === "k401" ? c?.k401 ?? pl.ytdBefore?.k401 ?? 0 : k === "hsa" ? c?.hsa ?? pl.ytdBefore?.hsa ?? 0 : c?.ira ?? 0;
+    const before = start.getMonth() === 0 ? 0 : k === "k401" ? c?.k401 ?? pl.ytdBefore?.k401 ?? 0 : k === "hsa" ? c?.hsa ?? pl.ytdBefore?.hsa ?? 0 : k === "iraSpouse" ? c?.iraSpouse ?? 0 : c?.ira ?? 0;
     const yearIn = (k === "hsa" ? yr.total : yr.employee) + before;
     const maxed = yearIn >= yr.limit - 1;
     // the plan filled the room it sees, but it only counts this year from today (nothing entered for earlier months)
-    const partYear = !maxed && pl.maxedYears[k].includes(y0);
+    const partYear = !maxed && maxedIn(k).includes(y0);
     // nothing entered for this year: the 401(k) / HSA assume earlier paychecks; the IRA assumes nothing
     const notEntered = start.getMonth() > 0 && !c;
     const nextYear = a.years.find((y) => y.year === y0 + 1);
-    const nextMaxed = pl.maxedYears[k].includes(y0 + 1);
+    const nextMaxed = maxedIn(k).includes(y0 + 1);
     const nothing = yearIn < 0.5 && a.start < 0.5;
     if (nothing && !(nextYear && nextYear.total > 0.5)) continue;
     // what's really in so far this year: what you entered, plus transfers you've recorded into these accounts
-    const ids = new Set(state.accounts.filter((x) => accountGroup(x) === k).map((x) => x.id));
+    const ids = new Set(state.accounts.filter((x) => (isSpouseIra(state, x) ? "iraSpouse" : accountGroup(x)) === k).map((x) => x.id));
     const moved = txns
       .filter((x) => !x.deleted && x.date.startsWith(String(y0)) && ((x.transferAccountId && ids.has(x.transferAccountId) && x.amount < 0) || (x.categoryId && [...ids].some((id) => x.categoryId === "acct:" + id) && x.amount < 0)))
       .reduce((sum, x) => sum + Math.abs(x.amount), 0);
-    const soFar = (k === "k401" ? c?.k401 ?? 0 : k === "hsa" ? c?.hsa ?? 0 : c?.ira ?? 0) + moved;
+    const soFar = (k === "k401" ? c?.k401 ?? 0 : k === "hsa" ? c?.hsa ?? 0 : k === "iraSpouse" ? c?.iraSpouse ?? 0 : c?.ira ?? 0) + moved;
     // the plan, from January (or today) of the picked month's year through that month
     const thisYear = selY === y0;
     const byThen =
@@ -111,7 +114,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
     const fullThen = byThen >= limitSel - 1;
     rows.push({
       key: k,
-      name: k === "ira" ? "IRA" : BUCKET_LABELS[k],
+      name: k === "iraSpouse" ? spouseIraLabel(state) : k === "ira" ? (spIra ? "Your IRA" : "IRA") : BUCKET_LABELS[k],
       value: thisYear ? `${money(soFar, { whole: true })} of ${money(limitSel, { whole: true })}` : `${selY}: ${money(limitSel, { whole: true })} limit`,
       progress: thisYear ? Math.min(1, soFar / limitSel) : 0,
       later: Math.min(1, byThen / limitSel),
@@ -121,12 +124,12 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
           ? `maxed by ${selLabel}`
           : `about ${money(byThen, { whole: true })} by ${selLabel}`),
       tip2: notEntered && thisYear
-        ? k === "ira"
+        ? k === "ira" || k === "iraSpouse"
           ? `Add what's already in for ${y0} (Money → Accounts) so the plan knows your real room.`
           : `Not entered yet, so the plan assumes about ${money(before, { whole: true })} from this year's earlier paychecks. Enter the real amount (Money → Accounts).`
         : undefined,
       tip: k === "k401" || (k === "hsa" && state.plan.hsaPayroll !== false) ? tipFor(k) : undefined,
-      color: t.series[k],
+      color: t.series[k === "iraSpouse" ? "ira" : k],
       done: thisYear && maxed,
     });
   }

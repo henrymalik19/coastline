@@ -3,7 +3,7 @@ import { limitsFor } from "./limits";
 import { checksInMonth } from "./paychecks";
 import type { Adjustment, Alloc, Debt, Derived, FundKey, MonthRow, PlanEvent, PlanResult, PlanSettings, PlanState, SimulateOptions, Goal, RecurringGoal, Limits } from "./types";
 import { addMonths, monthsBetween, num, sum } from "./util";
-import { budgetScheduleMonths, mergeAccountSchedules, mergeMonths, PAY401, PAYHSA, payPerCheck, scheduleAmount } from "./schedule";
+import { budgetScheduleMonths, isSpouseIra, mergeAccountSchedules, mergeMonths, PAY401, PAYHSA, payPerCheck, scheduleAmount } from "./schedule";
 import { matchFor } from "./match";
 export { scheduleAmount } from "./schedule";
 
@@ -133,15 +133,28 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   const iraCapFor = (lim: Limits, age: number) => lim.ira + (age >= 50 ? lim.iraCatch : 0);
   const hsaCapFor = (lim: Limits, age: number) => (p.hsaEligible ? (p.hsaFamily ? lim.hsaFamily : lim.hsaSelf) + (age >= 55 ? lim.hsaCatch : 0) : 0);
   let prior = { ira: 0, hsa: 0, year: 0 };
+  // your spouse's IRA (a spousal IRA when you file jointly): their own limit, by their own age
+  const spouse = s.spouse;
+  const hasSpIra = !!spouse && (s.accounts ?? []).some((a) => isSpouseIra(s, a));
+  const spAge0 = num(spouse?.age);
+  let ytdSp = 0;
+  let priorSp = 0;
   if (known && num(known.year) === y0) {
     ytd = { k401: num(known.k401), ira: num(known.ira), hsa: num(known.hsa) };
+    ytdSp = num(known.iraSpouse);
     scale = 1;
   } else if (known && num(known.year) === y0 - 1 && mo0 <= 3) {
     const Lp = limitsFor(s.limits, y0 - 1);
     prior = { ira: Math.max(0, iraCapFor(Lp, d.age) - num(known.ira)), hsa: Math.max(0, hsaCapFor(Lp, d.age) - num(known.hsa)), year: y0 - 1 };
+    if (hasSpIra) priorSp = Math.max(0, iraCapFor(Lp, spAge0) - num(known.iraSpouse));
     scale = 1;
   }
-  const order = p.steps ?? [];
+  const steps0: string[] = p.steps ?? [];
+  // the spouse's IRA step: where you put it, else right after yours
+  const order: string[] = !hasSpIra ? steps0.filter((k) => k !== "iraSpouse")
+    : steps0.includes("iraSpouse") ? steps0
+    : steps0.includes("ira") ? steps0.flatMap((k) => (k === "ira" ? [k, "iraSpouse"] : [k]))
+    : steps0;
   // Payroll steps: a steady amount per paycheck (yearly limit ÷ paychecks per year at most)
   const payrollSteps = !!p.payrollSteps;
   const jobIdx = d.incomes.map((inc, i) => ((inc.kind ?? "job") === "job" ? i : -1)).filter((i) => i >= 0);
@@ -163,7 +176,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   // paycheck changes (pay401:, payhsa:) are handled with the paychecks, not from what's left
   const schedKeys = [...new Set([...Object.keys(schedule), ...Object.keys(scheduleMonths)])].filter((k) => !k.startsWith(PAY401) && !k.startsWith(PAYHSA));
   // debts first, then cash, goals, HSA, IRA, brokerage
-  const rank = (k: string) => (k.startsWith("debt:") ? 0 : k === "cash" ? 1 : k.startsWith("goal:") ? 2 : k === "hsa" ? 3 : k === "ira" ? 4 : 5);
+  const rank = (k: string) => (k.startsWith("debt:") ? 0 : k === "cash" ? 1 : k.startsWith("goal:") ? 2 : k === "hsa" ? 3 : k === "ira" || k === "iraSpouse" ? 4 : 5);
   schedKeys.sort((a, b) => rank(a) - rank(b));
   const scheduled = (key: string, month: string) => scheduleAmount(p, key, month);
   // Payroll caps aren't prorated: real paychecks have been putting money in since January. When we
@@ -189,7 +202,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     }
   };
   const firstFund: Partial<Record<FundKey, number>> = {};
-  const maxedYears: PlanResult["maxedYears"] = { k401: [], ira: [], hsa: [] };
+  const maxedYears: PlanResult["maxedYears"] = { k401: [], ira: [], hsa: [], ...(hasSpIra ? { iraSpouse: [] } : {}) };
 
   for (let m = 0; m < months; m++) {
     const absMo = mo0 + m;
@@ -201,11 +214,16 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         const Lp = limitsFor(s.limits, y - 1);
         const ageEnd = d.age + (m - 1) / 12;
         prior = { ira: Math.max(0, iraCapFor(Lp, ageEnd) - ytd.ira), hsa: Math.max(0, hsaCapFor(Lp, ageEnd) - ytd.hsa), year: y - 1 };
+        if (hasSpIra) priorSp = Math.max(0, iraCapFor(Lp, spAge0 + (m - 1) / 12) - ytdSp);
       }
       ytd = { k401: 0, ira: 0, hsa: 0 };
+      ytdSp = 0;
       scale = 1;
     }
-    if (mo > 3) prior = { ira: 0, hsa: 0, year: 0 }; // after April 15, last year's room is gone
+    if (mo > 3) {
+      prior = { ira: 0, hsa: 0, year: 0 }; // after April 15, last year's room is gone
+      priorSp = 0;
+    }
     const L = limitsFor(s.limits, y);
     const g = Math.pow(1 + cg, Math.floor(m / 12));
     const ageNow = d.age + m / 12;
@@ -365,6 +383,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     let borrowed = 0;
     let priorIra = 0;
     let priorHsa = 0;
+    let iraSp = 0;
+    let priorIraSp = 0;
     if (avail < 0) {
       // a short month draws on cash first; anything beyond that goes on a credit card
       shortfall = -avail;
@@ -388,6 +408,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     const capK401 = Math.max(0, capK401Full - ytd.k401 - futurePre);
     const capIra = Math.max(0, (L.ira + (ageNow >= 50 ? L.iraCatch : 0)) * scale - ytd.ira);
     const capHsa = p.hsaEligible ? Math.max(0, capHsaFull - ytd.hsa) : 0;
+    const spAgeNow = spAge0 + m / 12;
+    const capSp = hasSpIra ? Math.max(0, iraCapFor(L, spAgeNow) * scale - ytdSp) : 0;
 
     // accounts on a schedule this month: they get exactly that, and the steps leave them alone
     const onSchedule = new Map<string, number>();
@@ -472,6 +494,17 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
             alloc.ira += put;
             ytd.ira += put - toPrior;
             avail -= put;
+          } else if (step === "iraSpouse") {
+            // your spouse's IRA: last year's room first (Jan–Apr), then this year's
+            const put = Math.min(avail, priorSp + capSp - iraSp + priorIraSp);
+            if (put <= 0) return;
+            const toPrior = Math.min(put, priorSp);
+            priorSp -= toPrior;
+            priorIraSp += toPrior;
+            iraSp += put;
+            alloc.ira += put;
+            ytdSp += put - toPrior;
+            avail -= put;
           } else if (step === "k401") {
             const cost = k401Cost(mt, d.rothShare); // $1 of pre-tax 401(k) costs (1 - marginal rate) of take-home; Roth costs $1
             let room = Math.max(0, capK401 * cost - alloc.k401TakeHome);
@@ -522,7 +555,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
           alloc.debt += put;
           if (isLoan(dt)) loanBack += put;
           avail -= put;
-        } else if (k === "ira" || k === "taxable" || (k === "hsa" && !hsaPayroll) || k.startsWith("goal:")) {
+        } else if (k === "ira" || k === "iraSpouse" || k === "taxable" || (k === "hsa" && !hsaPayroll) || k.startsWith("goal:")) {
           const held = Math.max(0, avail - v);
           avail -= held;
           doStep(k);
@@ -578,13 +611,14 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     if (mo === 11 || m === months - 1) {
       if (ytd.k401 >= capK401Full - 1) maxedYears.k401.push(y);
       if (ytd.ira >= (L.ira + (ageNow >= 50 ? L.iraCatch : 0)) * scale - 1) maxedYears.ira.push(y);
+      if (hasSpIra && ytdSp >= iraCapFor(L, spAgeNow) * scale - 1) maxedYears.iraSpouse!.push(y);
       if (p.hsaEligible && ytd.hsa >= ((p.hsaFamily ? L.hsaFamily : L.hsaSelf) + (ageNow >= 55 ? L.hsaCatch : 0)) * hScale - 1) {
         maxedYears.hsa.push(y);
       }
     }
 
     out.push({
-      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payRoth, payHsaEmployer, payHsa, setAside, setAsideBy, priorIra, priorHsa, payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency,
+      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payRoth, payHsaEmployer, payHsa, setAside, setAsideBy, priorIra, priorHsa, ...(hasSpIra ? { iraSpouse: iraSp, priorIraSpouse: priorIraSp } : {}), payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency,
       alloc,
       cash,
       debtTotal: sum(debts.map((x) => x.balance)),

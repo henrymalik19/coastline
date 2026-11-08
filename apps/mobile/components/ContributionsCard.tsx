@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
 import { useStore } from "../lib/store";
+import { spouseIraLabel } from "../lib/spouse";
 import { space, type, useTheme } from "../lib/theme";
 import { Button, FieldRow, NumberInput, Segmented } from "./form";
 import { Card, Divider } from "./ui";
@@ -19,7 +20,8 @@ export function ContributionsCard() {
   const beforeDeadline = start.getMonth() <= 3; // Jan–Apr: last year's IRA/HSA can still be made
   const c = state.contributed;
   const year = c && (c.year === thisYear || (beforeDeadline && c.year === thisYear - 1)) ? c.year : thisYear;
-  const values = c && c.year === year ? c : { year, k401: 0, ira: 0, hsa: 0 };
+  const values = c && c.year === year ? { ...c, iraSpouse: c.iraSpouse ?? 0 } : { year, k401: 0, ira: 0, hsa: 0, iraSpouse: 0 };
+  const spIra = !!state.spouse && state.accounts.some((a) => a.owner === "spouse");
   const set = (patch: Partial<typeof values>) => update((p) => { p.contributed = { ...values, ...patch, year }; });
 
   const L = limitsFor(state.limits, year);
@@ -28,6 +30,7 @@ export function ContributionsCard() {
     k401: L.k401 + (age >= 50 ? L.k401Catch : 0),
     ira: L.ira + (age >= 50 ? L.iraCatch : 0),
     hsa: state.plan.hsaEligible ? (state.plan.hsaFamily ? L.hsaFamily : L.hsaSelf) + (age >= 55 ? L.hsaCatch : 0) : 0,
+    iraSpouse: L.ira + ((state.spouse?.age ?? 0) + (year - thisYear) >= 50 ? L.iraCatch : 0),
   };
   const left = (k: keyof typeof caps) => Math.max(0, caps[k] - values[k]);
   // nothing entered for this year: say what the plan assumes instead (earlier paychecks at today's amounts)
@@ -36,7 +39,7 @@ export function ContributionsCard() {
   const hint = (k: keyof typeof caps, what: string) =>
     entered
       ? `${what} · ${money(left(k))} of ${money(caps[k])} left`
-      : k === "ira"
+      : k === "ira" || k === "iraSpouse"
         ? `Not entered · the plan assumes nothing went in yet this year`
         : `Not entered · the plan assumes about ${money(est?.[k] ?? 0, { whole: true })} from this year's earlier paychecks`;
 
@@ -59,9 +62,17 @@ export function ContributionsCard() {
         <NumberInput kind="money" label={`401(k) contributed in ${year}`} value={values.k401} onChange={(v) => set({ k401: v })} />
       </FieldRow>
       <Divider />
-      <FieldRow label="IRA" hint={hint("ira", "Traditional + Roth together")}>
+      <FieldRow label={spIra ? "Your IRA" : "IRA"} hint={hint("ira", "Traditional + Roth together")}>
         <NumberInput kind="money" label={`IRA contributed for ${year}`} value={values.ira} onChange={(v) => set({ ira: v })} />
       </FieldRow>
+      {spIra ? (
+        <>
+          <Divider />
+          <FieldRow label={spouseIraLabel(state)} hint={hint("iraSpouse", "Their own limit")}>
+            <NumberInput kind="money" label={`${spouseIraLabel(state)} contributed for ${year}`} value={values.iraSpouse} onChange={(v) => set({ iraSpouse: v })} />
+          </FieldRow>
+        </>
+      ) : null}
       {state.plan.hsaEligible ? (
         <>
           <Divider />

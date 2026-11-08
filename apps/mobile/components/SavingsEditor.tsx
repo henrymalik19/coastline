@@ -3,7 +3,8 @@
  * Paychecks set the 401(k) (and a paycheck HSA); everything else is set here, from what's left after
  * your budget and debt payments. The Plan tab's Forecast only shows the forecast.
  */
-import { accountForecasts, accountPlanKey, ACCOUNT_KEY, setAsideFor } from "@coastfi/engine";
+import { accountForecasts, accountPlanKey, ACCOUNT_KEY, isSpouseIra, setAsideFor } from "@coastfi/engine";
+import { spouseIraLabel } from "../lib/spouse";
 import { monthKey } from "../lib/store";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -27,9 +28,10 @@ export function SavingsEditor() {
 
   const now = monthKey(start);
   // one row per account you add to; a kind with no account yet (or an amount set for the whole kind) gets its own
-  const KINDS: { k: "cash" | "ira" | "hsa" | "taxable"; label: string }[] = [
+  const KINDS: { k: "cash" | "ira" | "iraSpouse" | "hsa" | "taxable"; label: string }[] = [
     { k: "cash", label: "Emergency fund (cash)" },
-    { k: "ira", label: "IRA" },
+    { k: "ira", label: state.spouse ? "Your IRA" : "IRA" },
+    ...(state.accounts.some((a) => isSpouseIra(state, a)) ? [{ k: "iraSpouse" as const, label: spouseIraLabel(state) }] : []),
     ...(payrollHsa ? [] : [{ k: "hsa" as const, label: "HSA" }]),
     { k: "taxable", label: "Brokerage" },
   ];

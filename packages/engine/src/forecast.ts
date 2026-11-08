@@ -1,10 +1,10 @@
 import { limitsFor } from "./limits";
 import { rateIn } from "./plan";
 import { num } from "./util";
-import { accountGroup } from "./schedule";
+import { accountGroup, isSpouseIra } from "./schedule";
 import type { Derived, PlanAccount, PlanResult, PlanState } from "./types";
 
-export type AccountKey = "k401" | "hsa" | "ira" | "taxable" | "other" | "cash" | `debt:${string}` | `goal:${string}`;
+export type AccountKey = "k401" | "hsa" | "ira" | "iraSpouse" | "taxable" | "other" | "cash" | `debt:${string}` | `goal:${string}`;
 
 export { accountGroup } from "./schedule";
 
@@ -50,6 +50,9 @@ export type AccountForecast = {
 export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: number): AccountForecast[] {
   const rm = Math.pow(1 + r, 1 / 12) - 1;
   const rows = plan.months;
+  // your spouse's IRA is its own line (its own limit); yours is the rest of the IRA money
+  const groupOf = (x: PlanState["accounts"][number]): AccountKey | null => (isSpouseIra(s, x) ? "iraSpouse" : accountGroup(x));
+  const hasSpouseIra = rows.some((m) => m.iraSpouse !== undefined);
   const mk = (key: AccountKey, start: number, invested: boolean, pick: (i: number) => [number, number, number, number?, number?], balanceAt?: (i: number) => number) => {
     let bal = start;
     const months: AccountMonth[] = rows.map((m, i) => {
@@ -58,10 +61,10 @@ export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: 
       bal = balanceAt ? balanceAt(i) : bal * (invested ? 1 + rm : 1) + total;
       return { m: m.m, y: m.y, mo: m.mo, paycheck, plan: planIn, employer, loan, total, balance: bal, ...(prior > 0.005 ? { prior } : {}) };
     });
-    const accounts = (s.accounts ?? []).filter((x) => accountGroup(x) === key).map((x) => ({ id: x.id, name: x.name, balance: +x.balance || 0 }));
+    const accounts = (s.accounts ?? []).filter((x) => groupOf(x) === key).map((x) => ({ id: x.id, name: x.name, balance: +x.balance || 0 }));
     return { key, start, months, years: [] as AccountYear[], invested, accounts };
   };
-  const startOf = (g: PlanAccount | "cash") => (s.accounts ?? []).filter((x) => accountGroup(x) === g).reduce((a, x) => a + (+x.balance || 0), 0);
+  const startOf = (g: PlanAccount | "iraSpouse" | "cash") => (s.accounts ?? []).filter((x) => groupOf(x) === g).reduce((a, x) => a + (+x.balance || 0), 0);
   const out: AccountForecast[] = [
     mk("k401", startOf("k401"), true, (i) => {
       const m = rows[i]!;
@@ -71,7 +74,8 @@ export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: 
       const m = rows[i]!;
       return [m.payHsa ?? 0, m.alloc.hsa, m.payHsaEmployer, 0, m.priorHsa ?? 0];
     }),
-    mk("ira", startOf("ira"), true, (i) => [0, rows[i]!.alloc.ira, 0, 0, rows[i]!.priorIra ?? 0]),
+    mk("ira", startOf("ira"), true, (i) => [0, rows[i]!.alloc.ira - (rows[i]!.iraSpouse ?? 0), 0, 0, rows[i]!.priorIra ?? 0]),
+    ...(hasSpouseIra ? [mk("iraSpouse", startOf("iraSpouse"), true, (i) => [0, rows[i]!.iraSpouse ?? 0, 0, 0, rows[i]!.priorIraSpouse ?? 0])] : []),
     mk("taxable", startOf("taxable"), true, (i) => [0, rows[i]!.alloc.taxable, 0]),
     // accounts you marked as other investments: they grow, the plan doesn't add to them
     mk("other", startOf("other"), true, () => [0, 0, 0]),
@@ -132,6 +136,7 @@ export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: 
       const age = d.age + (yr.year - d.start.getFullYear());
       if (a.key === "k401") yr.limit = L.k401 + (age >= 50 ? L.k401Catch : 0);
       else if (a.key === "ira") yr.limit = L.ira + (age >= 50 ? L.iraCatch : 0);
+      else if (a.key === "iraSpouse") yr.limit = L.ira + (num(s.spouse?.age) + (yr.year - d.start.getFullYear()) >= 50 ? L.iraCatch : 0);
       else if (a.key === "hsa" && s.plan.hsaEligible) yr.limit = (s.plan.hsaFamily ? L.hsaFamily : L.hsaSelf) + (age >= 55 ? L.hsaCatch : 0);
       // the HSA limit counts your employer's money too
       if (a.key === "hsa") yr.employee = yr.total;

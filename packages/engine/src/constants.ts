@@ -12,6 +12,7 @@ export const STEP_LABELS: Record<BaseStepKey, string> = {
   fullEF: "Full emergency fund",
   hsa: "Max out HSA",
   ira: "Max out IRA",
+  iraSpouse: "Max out your spouse's IRA",
   k401: "Max out 401(k)",
   lowDebt: "Pay down low-interest debt",
   taxable: "Invest in brokerage",

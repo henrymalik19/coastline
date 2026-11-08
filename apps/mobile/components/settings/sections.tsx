@@ -162,7 +162,48 @@ function Profile() {
           ]}
         </Rows>
       </Group>
+      <SpouseGroup />
     </>
+  );
+}
+
+/**
+ * Your spouse: their age (for their IRA catch-up at 50). With a spouse, an IRA you mark as theirs gets
+ * its own yearly limit. When you file jointly they can put money in even with no income of their own.
+ */
+function SpouseGroup() {
+  const { state } = usePlan();
+  const update = useStore((s) => s.update);
+  const sp = state.spouse;
+  const joint = (state.filingStatus ?? "single") === "mfj";
+  if (!sp && !joint) return null;
+  const theirs = state.accounts.filter((a) => a.owner === "spouse").length;
+  return (
+    <Group
+      title="Your spouse"
+      hint={
+        !sp ? "Turn on to plan your spouse's IRA too. It gets its own yearly limit, separate from yours."
+        : !joint ? "A spouse with little or no income can only put money in an IRA when you file jointly."
+        : theirs ? `${theirs} account${theirs === 1 ? "" : "s"} marked as theirs (Money → Accounts).`
+        : "Add their IRA in Money → Accounts and set Whose account to them."
+      }
+    >
+      <Rows>
+        {[
+          <ToggleRow key="on" label="Plan for your spouse's IRA" value={!!sp} onChange={(v) => update((p) => { p.spouse = v ? { name: "", age: p.age } : undefined; })} />,
+          sp ? (
+            <FieldRow key="name" label="Their name" hint="Shown on their accounts">
+              <TextField label="Spouse's name" value={sp.name} placeholder="Spouse" width={180} onChange={(v) => update((p) => { if (p.spouse) p.spouse.name = v; })} />
+            </FieldRow>
+          ) : null,
+          sp ? (
+            <FieldRow key="age" label="Their age" hint="From 50, their IRA limit is higher too">
+              <NumberInput kind="int" label="Spouse's age" value={sp.age} max={100} onChange={(v) => update((p) => { if (p.spouse) p.spouse.age = v; })} />
+            </FieldRow>
+          ) : null,
+        ]}
+      </Rows>
+    </Group>
   );
 }
 

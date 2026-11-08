@@ -2,7 +2,8 @@
  * Plan-step status for the Plan tab (port of the prototype's stepInfo/renderPlan).
  * Reads engine output only; no money math beyond display.
  */
-import { BUCKET_LABELS, payPerCheck, scheduleAmount, isHighInterest, k401Cost, limitsFor, paysExtra, PERIODS, STEP_LABELS, type MonthRow, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
+import { spouseIraLabel } from "./spouse";
+import { BUCKET_LABELS, isSpouseIra, payPerCheck, scheduleAmount, isHighInterest, k401Cost, limitsFor, paysExtra, PERIODS, STEP_LABELS, type MonthRow, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
 import { debtLabel } from "./debts";
 import { money, monthLabel, percent } from "./format";
 
@@ -161,6 +162,22 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
               return `${list.map((x) => `${debtLabel(x)} ${money(x.balance)}`).join(", ")}${mine ? ` · your plan: ${mine}` : paceText} · paid off in order: ${orderText}`;
             })(),
     };
+  }
+  if (step === "iraSpouse") {
+    // your spouse's IRA: only with a spouse and an IRA marked as theirs
+    if (!s.spouse || !s.accounts.some((a) => isSpouseIra(s, a))) return null;
+    const L = limitsFor(s.limits, start.getFullYear() + 1);
+    const cap = L.ira + (s.spouse.age + 1 >= 50 ? L.iraCatch : 0);
+    const ff = pl.months.findIndex((m) => (m.iraSpouse ?? 0) > 0.5);
+    const mx = pl.maxedYears.iraSpouse ?? [];
+    const c = s.contributed;
+    const left = c && c.year === start.getFullYear() ? Math.max(0, L.ira - (c.iraSpouse ?? 0)) : null;
+    let meta = ff < 0 ? "Not reached within the plan" : mx.length ? `Starts ${when(ff)} · fills the ${money(cap)} yearly limit from ${mx[0]}` : `Starts ${when(ff)}`;
+    if (scheduleText(s, "iraSpouse")) meta = scheduleText(s, "iraSpouse").replace(/^./, (x) => x.toUpperCase()) + (ff >= 0 ? ` · starts ${when(ff)}` : "");
+    if (left !== null) meta += left <= 0.5 ? ` · ${c!.year} is maxed` : ` · ${c!.year}: ${money(left)} left`;
+    if (s.filingStatus !== "mfj") meta += " · needs filing jointly when they have little or no income";
+    if (ff >= 0) meta += untilCoast(ff);
+    return { key: step, label: `Max out ${spouseIraLabel(s)} (${money(cap)}/yr)`, done: false, meta };
   }
   if (step === "hsa" || step === "ira" || step === "k401") {
     if (step === "hsa" && !s.plan.hsaEligible) return { key: step, label: STEP_LABELS.hsa, done: false, skip: true, meta: "Skipped: no HSA-eligible health plan (change in Settings)" };

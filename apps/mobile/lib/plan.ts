@@ -81,7 +81,7 @@ export type Todo = { key: string; title: string; detail?: string; amount?: numbe
 /** Take-home an HSA contribution costs: pre-tax from a paycheck, or dollar for dollar. */
 export const hsaTakeHome = (m: MonthRow, marginalTax: number, payroll?: boolean) => (payroll ? m.alloc.hsa * (1 - Math.min(0.6, Math.max(0, marginalTax))) : m.alloc.hsa);
 
-export function monthTodos(m: MonthRow, t: Theme, marginalTax: number, rothShare = 0, hsaPayroll = false): Todo[] {
+export function monthTodos(m: MonthRow, t: Theme, marginalTax: number, rothShare = 0, hsaPayroll = false, spouseIra = "your spouse's IRA"): Todo[] {
   const a = m.alloc;
   const out: Todo[] = [];
   if (m.emergency) {
@@ -99,7 +99,9 @@ export function monthTodos(m: MonthRow, t: Theme, marginalTax: number, rothShare
         ? { key: "hsa", title: "Raise your HSA paycheck contribution", detail: `${money(a.hsa)} into your HSA this month, pre-tax`, amount: hsaTakeHome(m, marginalTax, true), color: t.series.hsa }
         : { key: "hsa", title: "Contribute to your HSA", amount: a.hsa, color: t.series.hsa },
     );
-  if (a.ira > 0.5) out.push({ key: "ira", title: "Contribute to your IRA", amount: a.ira, color: t.series.ira });
+  const sp = m.iraSpouse ?? 0;
+  if (a.ira - sp > 0.5) out.push({ key: "ira", title: "Contribute to your IRA", amount: a.ira - sp, color: t.series.ira });
+  if (sp > 0.5) out.push({ key: "iraSpouse", title: `Contribute to ${spouseIra}`, amount: sp, color: t.series.ira });
   if (a.goals > 0.5) out.push({ key: "goals", title: "Save toward your goals", amount: a.goals, color: t.series.goals });
   if (a.k401Step > 0.5)
     out.push({ key: "k401", title: "Put extra into your 401(k)", detail: `${money(a.k401Step / k401Cost(marginalTax, rothShare))} into your 401(k)`, amount: a.k401Step, color: t.series.k401 });

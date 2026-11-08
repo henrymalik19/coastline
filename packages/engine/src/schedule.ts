@@ -29,6 +29,14 @@ export function accountGroup(a: Pick<Account, "name" | "type" | "counts">): Plan
   return a.type === "pretax" ? "k401" : "ira";
 }
 
+/**
+ * Your spouse's IRA: an IRA account marked as theirs, when the plan has a spouse. It has its own yearly
+ * limit, its own plan step ("iraSpouse") and its own line in the forecast.
+ */
+export function isSpouseIra(s: Pick<PlanState, "spouse">, a: Pick<Account, "name" | "type" | "counts" | "owner">): boolean {
+  return !!s.spouse && a.owner === "spouse" && accountGroup(a) === "ira";
+}
+
 /** A job's 401(k) / HSA per paycheck, changed by month ("pay401:<job id>", "payhsa:<job id>"). */
 export const PAY401 = "pay401:";
 export const PAYHSA = "payhsa:";
@@ -59,9 +67,13 @@ export const ACCOUNT_KEY = "acct:";
  * The plan key an account's own monthly amount adds to (cash, IRA, HSA, brokerage), or null when the
  * account is set some other way: the 401(k) and a paycheck HSA per paycheck, property and "other" not at all.
  */
-export function accountPlanKey(s: Pick<PlanState, "plan">, a: Pick<Account, "name" | "type" | "counts">): "cash" | "ira" | "hsa" | "taxable" | null {
+export function accountPlanKey(
+  s: Pick<PlanState, "plan"> & Partial<Pick<PlanState, "spouse">>,
+  a: Pick<Account, "name" | "type" | "counts" | "owner">,
+): "cash" | "ira" | "iraSpouse" | "hsa" | "taxable" | null {
   const g = accountGroup(a);
   if (!g || g === "other" || g === "k401") return null;
+  if (isSpouseIra(s, a)) return "iraSpouse";
   if (g === "hsa" && s.plan?.hsaPayroll !== false) return null;
   return g;
 }
@@ -71,7 +83,7 @@ export function accountPlanKey(s: Pick<PlanState, "plan">, a: Pick<Account, "nam
  * $300 and $200 a month make the IRA's $500. A kind's own amount (set before accounts had theirs) adds in
  * too. Amounts for accounts that no longer exist, or that the plan doesn't add to, are dropped.
  */
-export function mergeAccountSchedules(s: Pick<PlanState, "plan" | "accounts">): Pick<PlanSettings, "schedule" | "scheduleMonths"> {
+export function mergeAccountSchedules(s: Pick<PlanState, "plan" | "accounts"> & Partial<Pick<PlanState, "spouse">>): Pick<PlanSettings, "schedule" | "scheduleMonths"> {
   const sched = s.plan?.schedule ?? {};
   const months = s.plan?.scheduleMonths ?? {};
   const keys = [...new Set([...Object.keys(sched), ...Object.keys(months)])];

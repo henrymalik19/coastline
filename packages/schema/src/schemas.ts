@@ -63,6 +63,7 @@ export const AccountSchema = z.object({
   balance: money,
   plaidAccountId: z.string().optional(),
   counts: z.enum(["k401", "ira", "hsa", "taxable", "other"]).optional(),
+  owner: z.literal("spouse").optional(),
 });
 export const DebtKindSchema = z.enum(["credit_card", "car", "student", "mortgage", "personal", "medical", "k401_loan", "other"]);
 export const DebtSchema = z.object({
@@ -113,7 +114,7 @@ export const LimitsRowSchema = z.object({
   hsaCatch: nonNeg,
 });
 
-export const BASE_STEP_KEYS = ["starterEF", "match", "highDebt", "fullEF", "hsa", "ira", "k401", "lowDebt", "taxable"] as const;
+export const BASE_STEP_KEYS = ["starterEF", "match", "highDebt", "fullEF", "hsa", "ira", "iraSpouse", "k401", "lowDebt", "taxable"] as const;
 export const StepKeySchema = z.union([z.enum(BASE_STEP_KEYS), z.templateLiteral(["goal:", z.string()])]);
 
 export const PlanSettingsSchema = z.object({
@@ -176,7 +177,8 @@ export const PlanStateSchema = z.object({
   emergency: EmergencyModeSchema.optional(),
   filingStatus: z.enum(["single", "mfj", "hoh"]).optional(),
   retirementIncome: z.array(RetirementIncomeSchema).optional(),
-  contributed: z.object({ year: z.number().int(), k401: nonNeg, ira: nonNeg, hsa: nonNeg }).optional(),
+  contributed: z.object({ year: z.number().int(), k401: nonNeg, ira: nonNeg, hsa: nonNeg, iraSpouse: nonNeg.optional() }).optional(),
+  spouse: z.object({ name: z.string(), age: z.number().min(0).max(120) }).optional(),
   budgetPlan: z
     .object({
       start: z.string().regex(/^\d{4}-\d{2}$/),

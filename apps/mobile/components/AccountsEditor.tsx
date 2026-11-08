@@ -13,6 +13,7 @@ import { Card, Divider } from "./ui";
 import { contributionKey, MonthlyAmount, PayrollNote, plannedNow } from "./ScheduleEditor";
 import { money } from "../lib/format";
 import { monthKey } from "../lib/store";
+import { ensureSpouseStep, spouseName } from "../lib/spouse";
 
 export const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: "pretax", label: "Pre-tax" },
@@ -59,9 +60,11 @@ export function AccountsEditor() {
   const [reorder, setReorder] = useState(false);
   const accounts = state.accounts;
 
-  const add = (q: (typeof QUICK_ADD)[number]) => {
+  const sp = state.spouse ? spouseName(state) : null;
+  const quick: { name: string; type: AccountType; owner?: "spouse" }[] = sp ? [...QUICK_ADD.slice(0, 4), { name: `${sp} Roth IRA`, type: "roth", owner: "spouse" }, ...QUICK_ADD.slice(4)] : QUICK_ADD;
+  const add = (q: (typeof quick)[number]) => {
     const id = newId();
-    update((p) => { p.accounts.push({ id, name: q.name === "Other" ? "" : q.name, type: q.type, balance: 0 }); });
+    update((p) => { p.accounts.push({ id, name: q.name === "Other" ? "" : q.name, type: q.type, balance: 0, ...(q.owner ? { owner: q.owner, counts: "ira" as const } : {}) }); if (q.owner) ensureSpouseStep(p); });
     setOpen(id);
   };
   const move = (i: number, by: -1 | 1) =>
@@ -117,6 +120,7 @@ export function AccountsEditor() {
                       <Text style={[type.body, { color: a.name.trim() ? t.text : t.text3 }]} numberOfLines={1}>{name}</Text>
                       <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>
                         {typeLabel(a.type)}
+                        {sp && a.owner === "spouse" ? ` · ${sp}'s` : ""}
                         {per !== undefined ? <Text style={{ color: t.accent, fontWeight: "700" }}> · +{money(per)}/mo</Text> : null}
                       </Text>
                     </View>
@@ -170,6 +174,17 @@ export function AccountsEditor() {
                         <Text style={[type.caption, { color: t.text3 }]}>
                           Which account it is in your budget and forecast. The plan adds to your 401(k), IRA, HSA and brokerage; pick Other for accounts it doesn't add to (an old employer's plan, a pension, a rollover).
                         </Text>
+                        {sp && accountGroup(a) === "ira" ? (
+                          <>
+                            <Choice
+                              label="Whose account"
+                              options={[{ value: "you", label: "Yours" }, { value: "spouse", label: `${sp}'s` }]}
+                              value={a.owner === "spouse" ? "spouse" : "you"}
+                              onChange={(v) => update((p) => { if (v === "spouse") { p.accounts[i]!.owner = "spouse"; ensureSpouseStep(p); } else delete p.accounts[i]!.owner; })}
+                            />
+                            <Text style={[type.caption, { color: t.text3 }]}>Each of you has your own IRA limit. Your Traditional and Roth IRAs share yours.</Text>
+                          </>
+                        ) : null}
                       </>
                     ) : null}
                     <View style={[styles.row, { justifyContent: "space-between" }]}>
@@ -193,7 +208,7 @@ export function AccountsEditor() {
       <View style={{ gap: space.sm }}>
         <Text style={[type.label, { color: t.text2 }]}>Add an account</Text>
         <View style={styles.chips}>
-          {QUICK_ADD.map((q) => (
+          {quick.map((q) => (
             <Button key={q.name} title={q.name} icon="plus" onPress={() => add(q)} style={{ minHeight: 36, paddingHorizontal: space.md }} />
           ))}
         </View>

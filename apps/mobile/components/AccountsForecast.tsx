@@ -8,6 +8,7 @@ import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { debtLabel } from "../lib/debts";
+import { spouseIraLabel } from "../lib/spouse";
 import { money, monthLabel } from "../lib/format";
 import { useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
@@ -88,7 +89,8 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
       return x ? `${debtLabel(x)} (what you owe)` : "Debt";
     }
     if (k.startsWith("goal:")) return `Goal: ${state.goals.find((g) => "goal:" + g.id === k)?.name ?? "Goal"}`;
-    if (k === "ira") return "IRA";
+    if (k === "ira") return state.spouse && all.some((a) => a.key === "iraSpouse") ? "Your IRA" : "IRA";
+    if (k === "iraSpouse") return spouseIraLabel(state);
     if (k === "other") return "Other investments";
     return BUCKET_LABELS[k as "k401" | "hsa" | "taxable"];
   };
@@ -143,9 +145,9 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
     const y0 = start.getFullYear();
     const thisYear = a.years.find((y) => y.year === y0);
     const c = state.contributed && state.contributed.year === y0 ? state.contributed : undefined;
-    const before = start.getMonth() === 0 ? 0 : k === "k401" ? c?.k401 ?? pl.ytdBefore?.k401 ?? 0 : k === "hsa" ? c?.hsa ?? pl.ytdBefore?.hsa ?? 0 : k === "ira" ? c?.ira ?? 0 : 0;
+    const before = start.getMonth() === 0 ? 0 : k === "k401" ? c?.k401 ?? pl.ytdBefore?.k401 ?? 0 : k === "hsa" ? c?.hsa ?? pl.ytdBefore?.hsa ?? 0 : k === "ira" ? c?.ira ?? 0 : k === "iraSpouse" ? c?.iraSpouse ?? 0 : 0;
     const yearIn = thisYear ? (k === "hsa" ? thisYear.total : thisYear.employee) + before : 0;
-    const guessed = start.getMonth() > 0 && !c && (k === "k401" || k === "hsa" || k === "ira");
+    const guessed = start.getMonth() > 0 && !c && (k === "k401" || k === "hsa" || k === "ira" || k === "iraSpouse");
     const at = (m: number) => a.months[Math.max(0, Math.min(a.months.length - 1, m))]!.balance;
     const points: { label: string; v: number }[] = [{ label: "Today", v: a.start }, { label: "In 1 year", v: at(11) }];
     if (a.invested) {
@@ -217,7 +219,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
             <View style={{ gap: 4, maxWidth: 360 }}>
               <Text style={[type.caption, { color: t.text2 }]}>
                 {y0}: {money(yearIn)} of the {money(thisYear.limit)} limit{k === "hsa" ? " (yours + employer's)" : ""}
-                {guessed ? (k === "ira" ? " · add what you've put in this year (Money → Accounts)" : " · counts this year's earlier paychecks at today's amounts") : ""}
+                {guessed ? (k === "ira" || k === "iraSpouse" ? " · add what you've put in this year (Money → Accounts)" : " · counts this year's earlier paychecks at today's amounts") : ""}
               </Text>
               <ProgressBar progress={Math.min(1, yearIn / thisYear.limit)} color={t.good} />
             </View>
@@ -423,12 +425,12 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
   // contributed vs. the yearly limit (401(k), HSA, IRA): in so far, and by December with what's set
   const yNow = yr;
   const cNow = state.contributed && state.contributed.year === yNow ? state.contributed : undefined;
-  const limitRows = (["k401", "hsa", "ira"] as const)
+  const limitRows = (["k401", "hsa", "ira", "iraSpouse"] as const)
     .map((k) => {
       const a = all.find((x) => x.key === k);
       const yr = a?.years.find((y) => y.year === yNow);
       if (!a || !yr?.limit || (pick !== "all" && pick !== k)) return null;
-      const soFar = later || start.getMonth() === 0 ? 0 : k === "k401" ? cNow?.k401 ?? pl.ytdBefore?.k401 ?? 0 : k === "hsa" ? cNow?.hsa ?? pl.ytdBefore?.hsa ?? 0 : cNow?.ira ?? 0;
+      const soFar = later || start.getMonth() === 0 ? 0 : k === "k401" ? cNow?.k401 ?? pl.ytdBefore?.k401 ?? 0 : k === "hsa" ? cNow?.hsa ?? pl.ytdBefore?.hsa ?? 0 : k === "iraSpouse" ? cNow?.iraSpouse ?? 0 : cNow?.ira ?? 0;
       const byDec = soFar + (k === "hsa" ? yr.total : yr.employee);
       return { k, limit: yr.limit, soFar, byDec };
     })

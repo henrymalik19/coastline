@@ -8,6 +8,7 @@ import { Card, Divider, Pill, SectionLabel } from "./ui";
 import { bucketValues, total } from "../lib/chart";
 import { money, monthLabel } from "../lib/format";
 import { useLayout } from "../lib/layout";
+import { spouseIraLabel } from "../lib/spouse";
 import { hsaTakeHome, monthTodos, shortfallText, usePlan } from "../lib/plan";
 import { radius, space, type, useTheme, type Theme } from "../lib/theme";
 
@@ -39,7 +40,7 @@ function MonthCard({ m, title, start, state, wide }: { m: MonthRow; title: strin
   const rothShare = usePlan().result.d.rothShare;
   const segs = splits(m, t, state.plan.marginalTax, rothShare, state.plan.hsaPayroll);
   const sum = segs.reduce((a, s) => a + s.value, 0) || 1;
-  const todos = monthTodos(m, t, state.plan.marginalTax, rothShare, state.plan.hsaPayroll);
+  const todos = monthTodos(m, t, state.plan.marginalTax, rothShare, state.plan.hsaPayroll, spouseIraLabel(state).replace(/^Your/, "your"));
   const key = `${m.y}-${String(m.mo + 1).padStart(2, "0")}`;
   const oneOffs = (state.adjustments ?? []).filter((a) => a.month === key);
   const checks = state.incomes

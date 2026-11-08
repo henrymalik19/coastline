@@ -12,6 +12,7 @@ import { ProgressRing } from "../../components/ProgressRing";
 import { Card, Divider, Pill, Screen, SectionLabel, Stat, type Tone } from "../../components/ui";
 import { ageLabel, money, monthLabel, percent } from "../../lib/format";
 import { useLayout } from "../../lib/layout";
+import { spouseIraLabel } from "../../lib/spouse";
 import { monthTodos, shortfallText, usePlan, type Todo } from "../../lib/plan";
 import { NetWorthCard } from "../../components/MoneyCards";
 import { monthKey, useStore } from "../../lib/store";
@@ -28,7 +29,7 @@ export default function Home() {
   const d = o.d;
   // this month's to-dos come from the real plan (no what-ifs)
   const m0 = actual.months[0]!;
-  const todos = monthTodos(m0, t, state.plan.marginalTax, d.rothShare, state.plan.hsaPayroll);
+  const todos = monthTodos(m0, t, state.plan.marginalTax, d.rothShare, state.plan.hsaPayroll, spouseIraLabel(state).replace(/^Your/, "your"));
   const mk = monthKey(start);
   // once the budget is started, this month's to-dos follow what's assigned there
   const budgeting = !!state.budgetPlan && mk >= state.budgetPlan.start;

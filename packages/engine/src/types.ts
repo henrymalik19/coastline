@@ -84,6 +84,8 @@ export type Account = {
   plaidAccountId?: string;
   /** What this account counts as in the plan. Missing = guessed from the name and type. */
   counts?: PlanAccount;
+  /** Whose account this is. Missing = yours. Only an IRA's owner changes the math (each person has their own IRA limit). */
+  owner?: "spouse";
 };
 /** What kind of debt this is. Display only; payoff math is the same for every kind. */
 export type DebtKind = "credit_card" | "car" | "student" | "mortgage" | "personal" | "medical" | "k401_loan" | "other";
@@ -162,7 +164,7 @@ export type LimitsRow = {
 };
 export type Limits = Omit<LimitsRow, "year"> & { year?: number };
 
-export type BaseStepKey = "starterEF" | "match" | "highDebt" | "fullEF" | "hsa" | "ira" | "k401" | "lowDebt" | "taxable";
+export type BaseStepKey = "starterEF" | "match" | "highDebt" | "fullEF" | "hsa" | "ira" | "iraSpouse" | "k401" | "lowDebt" | "taxable";
 export type StepKey = BaseStepKey | `goal:${string}`;
 export type ProjectWith = "plan" | "current";
 
@@ -266,6 +268,7 @@ export type PlanState = {
    * January through April (the April 15 deadline).
    */
   contributed?: Contributed;
+  spouse?: Spouse;
   /** The monthly (envelope) budget: what you assigned, spent and received each month. */
   budgetPlan?: BudgetState;
 };
@@ -326,6 +329,14 @@ export type Contributed = {
   ira: number;
   /** HSA contributions so far, yours and your employer's. */
   hsa: number;
+  /** Your spouse's IRA contributions so far (their own limit). */
+  iraSpouse?: number;
+};
+
+/** Your spouse, when you plan as a couple. Their IRA has its own limit (a spousal IRA when you file jointly). */
+export type Spouse = {
+  name: string;
+  age: number;
 };
 
 export type FilingStatus = "single" | "mfj" | "hoh";
@@ -443,6 +454,9 @@ export type MonthRow = {
   /** Part of `alloc.ira` / `alloc.hsa` that counts toward last year (Jan–Apr, before the April 15 deadline). */
   priorIra: number;
   priorHsa: number;
+  /** Part of `alloc.ira` that went to your spouse's IRA, and the part of that for last year. Only with a spouse's IRA. */
+  iraSpouse?: number;
+  priorIraSpouse?: number;
   /** Scheduled payroll 401(k) not deferred because the annual limit was reached (pre-tax $). */
   payCut: number;
   /** One-off income change this month (+ bonus / − lost pay), already included in `income`. */
@@ -482,7 +496,7 @@ export type PlanResult = {
   months: MonthRow[];
   events: PlanEvent[];
   firstFund: Partial<Record<FundKey, number>>;
-  maxedYears: { k401: number[]; ira: number[]; hsa: number[] };
+  maxedYears: { k401: number[]; ira: number[]; hsa: number[]; iraSpouse?: number[] };
   starterTarget: number;
   fullTarget: number;
   mode: ProjectWith;
