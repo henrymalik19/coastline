@@ -14,11 +14,9 @@ import { findSection, SECTION_SCREENS, SECTIONS } from "./sections";
 /** The "Your money" pages live in the Money tab; the rest stay in Settings. */
 export const MONEY_GROUP = "Your money";
 export type SectionBase = "/money" | "/settings";
-// Settings has every page (Your money first); the old Money list keeps just its own
+// Money has the "Your money" pages; Settings has the rest (old /settings/income links still open)
 export const groupsFor = (base: SectionBase) =>
-  base === "/settings"
-    ? [...SECTIONS.filter((g) => g.title === MONEY_GROUP), ...SECTIONS.filter((g) => g.title !== MONEY_GROUP)]
-    : SECTIONS.filter((g) => g.title === MONEY_GROUP);
+  base === "/settings" ? SECTIONS.filter((g) => g.title !== MONEY_GROUP) : SECTIONS.filter((g) => g.title === MONEY_GROUP);
 
 /** One-line summary under each page's name. */
 function useSummaries(): Record<string, string> {
@@ -46,15 +44,24 @@ function useSummaries(): Record<string, string> {
 
 /** A list of pages (Money tab or Settings), each row opening `${base}/${key}`. */
 export function SectionIndex({ base, title, subtitle }: { base: SectionBase; title: string; subtitle: string }) {
+  return (
+    <Screen title={title} subtitle={subtitle} narrow hideSettings={base === "/settings"}>
+      <SectionGroups base={base} />
+    </Screen>
+  );
+}
+
+/** The page rows on their own (the Money tab puts its accounts above them). */
+export function SectionGroups({ base, heading }: { base: SectionBase; heading?: string }) {
   const t = useTheme();
   const router = useRouter();
   const summary = useSummaries();
   const groups = groupsFor(base);
   return (
-    <Screen title={title} subtitle={subtitle} narrow hideSettings={base === "/settings"}>
+    <>
       {groups.map((group) => (
         <View key={group.title} style={{ gap: space.sm }}>
-          {groups.length > 1 ? <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.xs }]}>{group.title}</Text> : null}
+          {groups.length > 1 || heading ? <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.xs }]}>{heading ?? group.title}</Text> : null}
           <Card padded={false}>
             {group.items.filter((s) => !s.hidden).map((s, i) => (
               <View key={s.key}>
@@ -82,7 +89,7 @@ export function SectionIndex({ base, title, subtitle }: { base: SectionBase; tit
           </Card>
         </View>
       ))}
-    </Screen>
+    </>
   );
 }
 

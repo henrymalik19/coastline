@@ -122,8 +122,8 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
           : `about ${money(byThen, { whole: true })} by ${selLabel}`),
       tip2: notEntered && thisYear
         ? k === "ira"
-          ? `Add what's already in for ${y0} (Settings → Your money → Accounts) so the plan knows your real room.`
-          : `Not entered yet, so the plan assumes about ${money(before, { whole: true })} from this year's earlier paychecks. Enter the real amount (Settings → Your money → Accounts).`
+          ? `Add what's already in for ${y0} (Money → Accounts) so the plan knows your real room.`
+          : `Not entered yet, so the plan assumes about ${money(before, { whole: true })} from this year's earlier paychecks. Enter the real amount (Money → Accounts).`
         : undefined,
       tip: k === "k401" || (k === "hsa" && state.plan.hsaPayroll !== false) ? tipFor(k) : undefined,
       color: t.series[k],
@@ -233,7 +233,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
           </Pressable>
         </View>
       ))}
-      {!rows.length ? <Text style={[type.caption, { color: t.text3, padding: space.lg }]}>Add your accounts and debts under Settings → Your money.</Text> : null}
+      {!rows.length ? <Text style={[type.caption, { color: t.text3, padding: space.lg }]}>Add your accounts and debts on the Money tab.</Text> : null}
     </Card>
   );
 }

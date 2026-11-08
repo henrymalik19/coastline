@@ -24,6 +24,8 @@ export type AccountMonth = {
   total: number;
   /** Balance at the end of the month (for debts: what's still owed). */
   balance: number;
+  /** Part of `plan` that counts toward last year's limit (IRA/HSA, January to the April 15 deadline). */
+  prior?: number;
 };
 
 export type AccountYear = { year: number; total: number; employee: number; limit?: number };
@@ -48,13 +50,13 @@ export type AccountForecast = {
 export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: number): AccountForecast[] {
   const rm = Math.pow(1 + r, 1 / 12) - 1;
   const rows = plan.months;
-  const mk = (key: AccountKey, start: number, invested: boolean, pick: (i: number) => [number, number, number, number?], balanceAt?: (i: number) => number) => {
+  const mk = (key: AccountKey, start: number, invested: boolean, pick: (i: number) => [number, number, number, number?, number?], balanceAt?: (i: number) => number) => {
     let bal = start;
     const months: AccountMonth[] = rows.map((m, i) => {
-      const [paycheck, planIn, employer, loan = 0] = pick(i);
+      const [paycheck, planIn, employer, loan = 0, prior = 0] = pick(i);
       const total = paycheck + planIn + employer + loan;
       bal = balanceAt ? balanceAt(i) : bal * (invested ? 1 + rm : 1) + total;
-      return { m: m.m, y: m.y, mo: m.mo, paycheck, plan: planIn, employer, loan, total, balance: bal };
+      return { m: m.m, y: m.y, mo: m.mo, paycheck, plan: planIn, employer, loan, total, balance: bal, ...(prior > 0.005 ? { prior } : {}) };
     });
     const accounts = (s.accounts ?? []).filter((x) => accountGroup(x) === key).map((x) => ({ id: x.id, name: x.name, balance: +x.balance || 0 }));
     return { key, start, months, years: [] as AccountYear[], invested, accounts };
@@ -67,9 +69,9 @@ export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: 
     }),
     mk("hsa", startOf("hsa"), true, (i) => {
       const m = rows[i]!;
-      return [m.payHsa ?? 0, m.alloc.hsa, m.payHsaEmployer];
+      return [m.payHsa ?? 0, m.alloc.hsa, m.payHsaEmployer, 0, m.priorHsa ?? 0];
     }),
-    mk("ira", startOf("ira"), true, (i) => [0, rows[i]!.alloc.ira, 0]),
+    mk("ira", startOf("ira"), true, (i) => [0, rows[i]!.alloc.ira, 0, 0, rows[i]!.priorIra ?? 0]),
     mk("taxable", startOf("taxable"), true, (i) => [0, rows[i]!.alloc.taxable, 0]),
     // accounts you marked as other investments: they grow, the plan doesn't add to them
     mk("other", startOf("other"), true, () => [0, 0, 0]),
@@ -105,14 +107,25 @@ export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: 
     );
   }
 
-  // totals per calendar year, with the employee limit where there is one
+  // totals per tax year, with the employee limit where there is one. IRA/HSA money put in January to
+  // April for last year counts toward last year.
   for (const a of out) {
     const byYear = new Map<number, AccountYear>();
+    const yearOf = (y: number) => {
+      const yr = byYear.get(y) ?? { year: y, total: 0, employee: 0 };
+      byYear.set(y, yr);
+      return yr;
+    };
     for (const m of a.months) {
-      const yr = byYear.get(m.y) ?? { year: m.y, total: 0, employee: 0 };
-      yr.total += m.total;
-      yr.employee += a.key.startsWith("debt:") ? 0 : m.paycheck + m.plan;
-      byYear.set(m.y, yr);
+      const pr = m.prior ?? 0;
+      const yr = yearOf(m.y);
+      yr.total += m.total - pr;
+      yr.employee += a.key.startsWith("debt:") ? 0 : m.paycheck + m.plan - pr;
+      if (pr > 0) {
+        const last = yearOf(m.y - 1);
+        last.total += pr;
+        last.employee += pr;
+      }
     }
     for (const yr of byYear.values()) {
       const L = limitsFor(s.limits, yr.year);

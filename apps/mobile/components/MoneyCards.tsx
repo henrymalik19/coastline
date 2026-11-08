@@ -1,6 +1,6 @@
 /**
  * Cards that used to live on the Money tab: what you own and owe (on Home), and savings goals
- * (on Progress). Editing happens in Settings → Your money.
+ * (on Progress). Editing happens on the Money tab.
  */
 import { nextDue, type AccountType } from "@coastfi/engine";
 import { useRouter } from "expo-router";
@@ -35,7 +35,6 @@ export function NetWorthCard({ startOpen = false }: { startOpen?: boolean }) {
   const property = d.bal.property ?? 0;
   const worth = netWorth(d, state);
   const debts = state.debts.filter((x) => x.balance > 0);
-  const registered = new Set(Object.keys(state.budgetPlan?.registers ?? {}));
   const budgetIds = new Set(budgetAccounts(state).map((a) => a.id));
 
   return (
@@ -59,7 +58,7 @@ export function NetWorthCard({ startOpen = false }: { startOpen?: boolean }) {
       {open ? (
         <>
           <Divider />
-          <Group title="What you own" total={money(d.invested + cash + property)} manage="/settings/accounts">
+          <Group title="What you own" total={money(d.invested + cash + property)} manage="/money/accounts">
             {state.accounts.length ? (
               state.accounts.map((a) => {
                 const ck = contributionKey(state, a);
@@ -71,7 +70,7 @@ export function NetWorthCard({ startOpen = false }: { startOpen?: boolean }) {
                     label={a.name.trim() || "Unnamed account"}
                     hint={hint}
                     value={money(a.balance)}
-                    href={budgetIds.has(a.id) && registered.has(a.id) ? `/money/register?account=${a.id}` : "/settings/accounts"}
+                    href={budgetIds.has(a.id) ? `/budget?view=transactions&account=${a.id}` : "/money/accounts"}
                   />
                 );
               })
@@ -79,13 +78,13 @@ export function NetWorthCard({ startOpen = false }: { startOpen?: boolean }) {
               <Empty text="No accounts yet" />
             )}
           </Group>
-          <Group title="What you owe" total={debts.length ? money(d.debtTotal) : undefined} manage="/settings/debts">
+          <Group title="What you owe" total={debts.length ? money(d.debtTotal) : undefined} manage="/money/debts">
             {debts.length ? (
               debts.map((x) => {
                 const link = paycheckFor(state, x.id);
                 const pay = link ? `${money(link.deduction.amount)}/paycheck` : `${money(x.minPayment)}/mo`;
                 const rate = x.promoUntil ? `${pct(x.promoApr ?? 0)} intro` : pct(x.apr);
-                return <Line key={x.id} label={debtLabel(x)} hint={`${rate} · ${pay}`} value={money(x.balance)} href={registered.has(x.id) ? `/money/register?account=${x.id}` : "/settings/debts"} />;
+                return <Line key={x.id} label={debtLabel(x)} hint={`${rate} · ${pay}`} value={money(x.balance)} href={budgetIds.has(x.id) ? `/budget?view=transactions&account=${x.id}` : "/money/debts"} />;
               })
             ) : (
               <Empty text="No debts" />
@@ -113,7 +112,7 @@ export function GoalsCard() {
     <Card style={{ gap: space.xs }}>
       <View style={[styles.line, { marginBottom: space.xs }]}>
         <Text role="heading" aria-level={2} style={[type.heading, { color: t.text, flex: 1 }]}>Savings goals</Text>
-        <Pressable role="link" accessibilityLabel="Edit savings goals" onPress={() => router.push("/settings/goals")} hitSlop={8} style={styles.manage}>
+        <Pressable role="link" accessibilityLabel="Edit savings goals" onPress={() => router.push("/money/goals")} hitSlop={8} style={styles.manage}>
           <Text style={[type.label, { color: t.accent, fontWeight: "700" }]}>Edit</Text>
           <Icon name="chevron" size={14} color={t.accent} />
         </Pressable>

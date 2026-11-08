@@ -34,3 +34,20 @@ describe("accountGroup", () => {
     expect(accountGroup({ name: "Irving Trust", type: "roth" })).toBe("ira");
   });
 });
+
+describe("IRA money put in January to April for last year", () => {
+  it("counts toward last year's total, not the year it goes in", () => {
+    const s = sampleState();
+    const o = run(s, START);
+    const f0 = accountForecasts(s, derive(s, START), o.plan, o.d.r).find((a) => a.key === "ira")!;
+    // pretend $1,000 of February's IRA money was for last year
+    const i = o.plan.months.findIndex((m, j) => j > 0 && m.mo === 1);
+    const months = o.plan.months.map((m, j) => (j === i ? { ...m, alloc: { ...m.alloc, ira: m.alloc.ira + 1000 }, priorIra: 1000 } : m));
+    const f = accountForecasts(s, derive(s, START), { ...o.plan, months }, o.d.r).find((a) => a.key === "ira")!;
+    const y = o.plan.months[i]!.y;
+    const yr = (a: typeof f, year: number) => a.years.find((x) => x.year === year)!;
+    expect(f.months[i]!.prior).toBe(1000);
+    expect(yr(f, y - 1).employee).toBeCloseTo(yr(f0, y - 1).employee + 1000, 6);
+    expect(yr(f, y).employee).toBeCloseTo(yr(f0, y).employee, 6);
+  });
+});

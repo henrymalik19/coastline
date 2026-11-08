@@ -5,11 +5,12 @@
  */
 import { budgetCategories, budgetView, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
+import { TransactionsList } from "../../components/TransactionsList";
 import { budgetAccounts, cardMap } from "../../lib/register";
 import { duplicateOf } from "../../lib/budgetDupes";
 import { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Select } from "../../components/form";
+import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Segmented, Select } from "../../components/form";
 import { MonthlyAmount } from "../../components/ScheduleEditor";
 import { groupOf, groupOrder, moveGroup, moveItem, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
 import { newId } from "../../lib/store";
@@ -50,9 +51,15 @@ export default function Budget() {
   const [groupDraft, setGroupDraft] = useState("");
   const router = useRouter();
   // opened from a link (a plan step, a to-do): show this month with that line open
-  const { focus } = useLocalSearchParams<{ focus?: string }>();
+  const { focus, view: viewParam, account: acctParam } = useLocalSearchParams<{ focus?: string; view?: string; account?: string }>();
+  // Categories (assign money) or Transactions (what came in and went out), for the same month
+  const [tab, setTab] = useState<"categories" | "transactions">(viewParam === "transactions" ? "transactions" : "categories");
+  useEffect(() => {
+    if (viewParam === "transactions") setTab("transactions");
+  }, [viewParam, acctParam]);
   useEffect(() => {
     if (!focus) return;
+    setTab("categories");
     setMonth(thisMonth);
     setOpen(focus);
     if (Platform.OS === "web" && typeof document !== "undefined")
@@ -346,7 +353,7 @@ export default function Budget() {
                 title="I don't add to this account"
                 icon="close"
                 onPress={async () => {
-                  if (!(await confirm(`Hide ${c.name}?`, "Its line leaves the budget and the plan stops adding to it. It still counts in your net worth and investments. To undo, set its Counts as under Settings → Your money → Accounts.", "Hide"))) return;
+                  if (!(await confirm(`Hide ${c.name}?`, "Its line leaves the budget and the plan stops adding to it. It still counts in your net worth and investments. To undo, set its Counts as under Money → Accounts.", "Hide"))) return;
                   setOpen(null);
                   update((p) => {
                     const a = p.accounts.find((x) => "acct:" + x.id === c.key);
@@ -487,6 +494,18 @@ export default function Budget() {
     <Screen title="Budget" subtitle={compact ? undefined : "Give every dollar a job"}>
       {monthBar}
       {view.started ? (
+        <View style={{ maxWidth: 360 }}>
+          <Segmented
+            label="Budget view"
+            options={[{ value: "categories", label: "Categories" }, { value: "transactions", label: "Transactions" }]}
+            value={tab}
+            onChange={(v) => { setTab(v); if (v === "categories" && acctParam) router.setParams({ account: undefined, view: undefined }); }}
+          />
+        </View>
+      ) : null}
+      {view.started && tab === "transactions" ? (
+        <TransactionsList key={acctParam ?? "all"} month={month} account={acctParam} />
+      ) : view.started ? (
         <>
           {rtaCard}
           <Card style={{ gap: space.sm }}>
