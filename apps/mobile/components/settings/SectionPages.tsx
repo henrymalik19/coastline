@@ -5,6 +5,7 @@ import { money } from "../../lib/format";
 import { usePlan } from "../../lib/plan";
 import { syncConfigured } from "../../lib/supabase";
 import { useSync } from "../../lib/sync";
+import { useSharing } from "../../lib/sharing";
 import { radius, space, type, useTheme } from "../../lib/theme";
 import { Icon } from "../Icon";
 import { useFillPage } from "../MasterDetail";
@@ -23,9 +24,11 @@ function useSummaries(): Record<string, string> {
   const { state, result } = usePlan();
   const syncEmail = useSync((s) => s.email);
   const appearance = useAppearance((s) => s.appearance);
+  const members = useSharing((s) => s.members);
   const retire = state.retirementIncome ?? [];
   return {
     appearance: { system: "Match device", light: "Light", dark: "Dark" }[appearance],
+    sharing: members.length ? `${members.length} ${members.length === 1 ? "person" : "people"}` : "Not shared",
     account: syncConfigured ? (syncEmail ? `Signed in as ${syncEmail}` : "Not signed in") : "Saved on this device",
     profile: `Age ${state.age} · retire at ${state.retireAge}`,
     retirementIncome: retire.length ? `${retire.length} · ${money(result.d.retireIncomeAnnual / 12)}/mo` : "None added",

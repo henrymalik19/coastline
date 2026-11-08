@@ -6,6 +6,7 @@ import { Button } from "../components/form";
 import { Card, Screen } from "../components/ui";
 import { useStore } from "../lib/store";
 import { useSync } from "../lib/sync";
+import { useMembership } from "../lib/sharing";
 import { space, type, useTheme } from "../lib/theme";
 
 /** Returning users: sign in with an emailed code and load the plan from the account. */
@@ -14,14 +15,17 @@ export default function SignIn() {
   const router = useRouter();
   const onboarded = useStore((s) => s.onboarded);
   const { email, status } = useSync();
+  const member = useMembership((s) => s.status);
 
-  // once the account's plan arrives (or this device already has one), go to it
+  // once the account's plan arrives (or this device already has one), go to it; someone invited to
+  // another plan goes to their shared budget
   useEffect(() => {
     if (onboarded) router.replace("/home");
-  }, [onboarded, router]);
+    else if (member === "member") router.replace("/shared");
+  }, [onboarded, member, router]);
 
-  const loading = !!email && (status === "syncing" || status === "signedOut");
-  const noPlan = !!email && !onboarded && (status === "synced" || status === "offline" || status === "error");
+  const loading = !!email && (status === "syncing" || status === "signedOut" || member === "unknown");
+  const noPlan = !!email && !onboarded && member === "none" && (status === "synced" || status === "offline" || status === "error");
 
   return (
     <Screen title="Sign in" subtitle="Load your plan from your Coastline account" narrow hideSettings back={() => (router.canGoBack() ? router.back() : router.replace("/"))}>

@@ -11,6 +11,7 @@ import { radius, space, type, useTheme } from "../../lib/theme";
 import { AccountPanel } from "../AccountPanel";
 import { useAppearance } from "../../lib/appearance";
 import { AccountsEditor } from "../AccountsEditor";
+import { SharingEditor } from "../SharingEditor";
 import { ContributionsCard } from "../ContributionsCard";
 import { RetirementIncomeEditor } from "../RetirementIncomeEditor";
 import { GoalEditor } from "../GoalEditor";
@@ -27,7 +28,7 @@ import { HealthcareSuggestion } from "../HealthcareSuggestion";
 
 /* ---------- registry ---------- */
 
-type SectionKey = "account" | "appearance" | "profile" | "retirementIncome" | "income" | "budget" | "savings" | "accounts" | "debts" | "goals" | "assumptions" | "priorities" | "limits" | "data";
+type SectionKey = "account" | "sharing" | "appearance" | "profile" | "retirementIncome" | "income" | "budget" | "savings" | "accounts" | "debts" | "goals" | "assumptions" | "priorities" | "limits" | "data";
 type SectionMeta = { key: SectionKey; title: string; subtitle: string; icon: IconName; /** Not listed (moved elsewhere; old links still work). */ hidden?: boolean };
 
 export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
@@ -36,6 +37,7 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
     items: [
       { key: "account", title: "Account & sync", subtitle: "Sign in to use your plan on every device", icon: "user" },
       { key: "profile", title: "You", subtitle: "Age, retirement age and health insurance", icon: "user" },
+      { key: "sharing", title: "Sharing", subtitle: "Let someone add purchases on cards you pick", icon: "card" },
       { key: "appearance", title: "Appearance", subtitle: "Light, dark, or match your device", icon: "sparkle" },
     ],
   },
@@ -584,6 +586,7 @@ function DataSection() {
 
 export const SECTION_SCREENS: Record<SectionKey, ComponentType> = {
   account: () => <AccountPanel />,
+  sharing: () => <SharingEditor />,
   appearance: AppearanceSection,
   profile: Profile,
   retirementIncome: () => <RetirementIncomeSection />,

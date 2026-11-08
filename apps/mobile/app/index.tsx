@@ -5,6 +5,7 @@ import Svg, { Circle, Defs, LinearGradient, Line, Path, Stop, Text as SvgText } 
 import { Button } from "../components/form";
 import { Icon, type IconName } from "../components/Icon";
 import { Card } from "../components/ui";
+import { useMembership } from "../lib/sharing";
 import { useStore } from "../lib/store";
 import { syncConfigured } from "../lib/supabase";
 import { radius, space, type, useTheme } from "../lib/theme";
@@ -16,8 +17,11 @@ import { radius, space, type, useTheme } from "../lib/theme";
 export default function Index() {
   const hydrated = useStore((s) => s.hydrated);
   const onboarded = useStore((s) => s.onboarded);
+  const member = useMembership((s) => s.status);
   if (!hydrated) return null;
   if (onboarded) return <Redirect href="/home" />;
+  // someone invited to another plan: their shared budget
+  if (member === "member") return <Redirect href="/shared" />;
   return <Landing />;
 }
 

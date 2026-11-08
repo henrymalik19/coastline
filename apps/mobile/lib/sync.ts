@@ -12,6 +12,7 @@ import { CheckinSchema, PlanStateSchema, TxnSchema } from "@coastfi/schema";
 import type { RealtimeChannel, Session } from "@supabase/supabase-js";
 import { AppState, Platform } from "react-native";
 import { create } from "zustand";
+import { onSharingSignIn, onSharingSignOut, publishViews } from "./sharing";
 import { useStore } from "./store";
 import { supabase } from "./supabase";
 
@@ -127,6 +128,8 @@ async function pullTxns(userId: string): Promise<void> {
   applyingRemote = true;
   useStore.getState().mergeTxns(remote);
   applyingRemote = false;
+  // a member's new purchase changes what's available: tell them
+  void publishViews();
 }
 
 let started = false;
@@ -156,6 +159,7 @@ async function push(): Promise<void> {
       if (ci.error) throw ci.error;
     }
     await pushTxns();
+    void publishViews();
     setSync({ status: "synced", lastSyncedAt: Date.now(), error: undefined });
   } catch (e) {
     setSync(isNetworkError(e) ? { status: "offline" } : { status: "error", error: String((e as Error)?.message ?? e) });
@@ -238,6 +242,8 @@ async function onSignedIn(session: Session) {
   if (useSync.getState().userId === session.user.id) return;
   setSync({ userId: session.user.id, email: session.user.email ?? undefined });
   await syncNow();
+  // someone who was invited to another plan (or the owner's invites)
+  void onSharingSignIn(session.user.id, session.user.email).catch(() => undefined);
   channel?.unsubscribe();
   // a channel with this name may still be open (e.g. after a reload in development): close it first
   for (const c of supabase.getChannels()) if (c.topic === `realtime:plan-${session.user.id}`) void supabase.removeChannel(c);
@@ -254,6 +260,7 @@ async function onSignedIn(session: Session) {
 }
 
 function onSignedOut() {
+  onSharingSignOut();
   channel?.unsubscribe();
   channel = null;
   setSync({ status: supabase ? "signedOut" : "off", userId: undefined, email: undefined, lastSyncedAt: undefined, error: undefined });
