@@ -43,6 +43,8 @@ export type Income = {
   rothShare?: number;
   /** What your employer puts in your HSA, per year. Counts toward the HSA limit. */
   hsaEmployer?: number;
+  /** When the employer HSA money comes: a month (1–12) for a once-a-year deposit. Missing = spread evenly over the months. */
+  hsaEmployerMonth?: number;
   /** What you put in your HSA from each paycheck (pre-tax). Already out of take-home; counts toward the HSA limit. */
   hsaPre?: number;
 };

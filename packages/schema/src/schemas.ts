@@ -42,6 +42,7 @@ export const IncomeSchema = z.object({
     .optional(),
   rothShare: rate.min(0).max(1).optional(),
   hsaEmployer: nonNeg.optional(),
+  hsaEmployerMonth: z.number().int().min(1).max(12).optional(),
   hsaPre: nonNeg.optional(),
 });
 

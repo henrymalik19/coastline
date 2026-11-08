@@ -8,7 +8,9 @@ import { DEDUCTION_KINDS, paycheck, withAutoNet } from "../lib/paycheck";
 import { MATCH_PRESETS } from "../lib/presets";
 import { estimatePaycheckTaxes, FILING_LABELS } from "../lib/tax";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { Button, DateField, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "./form";
+import { Button, DateField, FieldRow, IconButton, NumberInput, Segmented, Select, TextField, ToggleRow } from "./form";
+
+const HSA_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 import { AddChip, MasterDetail } from "./MasterDetail";
 import { Card, Divider } from "./ui";
 import { PaycheckChanges } from "./ScheduleEditor";
@@ -285,6 +287,29 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
         <FieldRow label="Your employer puts in" hint="Per year. Free money that counts toward your HSA limit" info={HELP.hsaEmployer}>
           <NumberInput kind="money" label="Employer HSA contribution per year" value={inc.hsaEmployer ?? 0} onChange={(v) => change({ hsaEmployer: v || undefined })} />
         </FieldRow>
+        {(inc.hsaEmployer ?? 0) > 0 ? (
+          <FieldRow
+            label="It comes"
+            hint={inc.hsaEmployerMonth ? `All ${money(inc.hsaEmployer ?? 0)} at once, in ${HSA_MONTHS[inc.hsaEmployerMonth - 1]}` : `${money((inc.hsaEmployer ?? 0) / 12)} a month`}
+          >
+            <View style={{ gap: space.sm }}>
+              <Segmented
+                label="How your employer's HSA money comes"
+                options={[{ value: "monthly", label: "Spread over the year" }, { value: "lump", label: "Once a year" }]}
+                value={inc.hsaEmployerMonth ? "lump" : "monthly"}
+                onChange={(v) => change({ hsaEmployerMonth: v === "lump" ? 1 : undefined })}
+              />
+              {inc.hsaEmployerMonth ? (
+                <Select
+                  label="Month it comes"
+                  options={HSA_MONTHS.map((n, i) => ({ value: String(i + 1), label: n }))}
+                  value={String(inc.hsaEmployerMonth)}
+                  onChange={(v) => change({ hsaEmployerMonth: Number(v) })}
+                />
+              ) : null}
+            </View>
+          </FieldRow>
+        ) : null}
         {((inc.hsaEmployer ?? 0) > 0 || (inc.hsaPre ?? 0) > 0) && !state.plan.hsaEligible ? (
           <Text style={[type.caption, { color: t.warn }]}>
             Turn on "I have an HSA-eligible health plan" in Settings → Assumptions & plan rules so your plan can add to it too.

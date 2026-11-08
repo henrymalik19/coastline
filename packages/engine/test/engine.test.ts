@@ -530,6 +530,21 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     expect(m[1]!.pre).toBeCloseTo(1500, 9);
   });
 
+  it("employer HSA money: spread a twelfth a month, or all at once in its month", () => {
+    const base = sampleState();
+    const mk = (hsaEmployerMonth?: number): PlanState => ({
+      ...base,
+      incomes: [{ ...job, net: 8000, hsaEmployer: 1200, ...(hsaEmployerMonth ? { hsaEmployerMonth } : {}) }],
+      plan: { ...base.plan, hsaEligible: true },
+    });
+    const spread = simulatePlan(mk(), derive(mk(), START)).months;
+    expect(spread[0]!.payHsaEmployer).toBeCloseTo(100, 9);
+    const lump = simulatePlan(mk(1), derive(mk(1), START)).months;
+    expect(lump[0]!.payHsaEmployer).toBe(0); // Nov 2026
+    expect(lump[2]!.payHsaEmployer).toBeCloseTo(1200, 9); // Jan 2027
+    expect(lump[3]!.payHsaEmployer).toBe(0);
+  });
+
   it("autoFill off: only what you set; nothing left over goes anywhere", () => {
     const base = sampleState();
     const s: PlanState = {

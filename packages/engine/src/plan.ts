@@ -108,6 +108,13 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   d.incomes.forEach((inc, i) => {
     for (const x of inc.deductions ?? []) if (x.debtId && num(x.amount) > 0) loanPerCheck.set(x.debtId, { i, amount: num(x.amount) });
   });
+  // employer HSA money in a calendar month (0–11): a once-a-year deposit in its month, or a twelfth every month
+  const hsaEmployerIn = (mo: number) =>
+    sum(d.incomes.map((inc) => {
+      const yr = Math.max(0, num(inc.hsaEmployer));
+      const at = num(inc.hsaEmployerMonth);
+      return at >= 1 && at <= 12 ? (mo === at - 1 ? yr : 0) : yr / 12;
+    }));
   const ymOf = (absMo: number) => `${y0 + Math.floor(absMo / 12)}-${String((absMo % 12) + 1).padStart(2, "0")}`;
   // Scheduled payroll 401(k) per month (before the annual cap), so the waterfall can
   // leave room for the paychecks still to come this year.
@@ -169,7 +176,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         ytd.k401 += num(inc.pretax) * c;
         if (hsaPayroll) ytd.hsa += Math.max(0, num(inc.hsaPre)) * c;
       }
-    if (hsaPayroll) ytd.hsa += (d.hsaEmployerAnnual / 12) * mo0;
+    if (hsaPayroll) for (let mo = 0; mo < mo0; mo++) ytd.hsa += hsaEmployerIn(mo);
     if (mo0 > 0) ytdBefore = { k401: ytd.k401, hsa: ytd.hsa };
   }
   const out: MonthRow[] = [];
@@ -261,7 +268,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
 
     // employer HSA contributions count toward the year's HSA limit
     const capHsaFull = ((p.hsaFamily ? L.hsaFamily : L.hsaSelf) + (ageNow >= 55 ? L.hsaCatch : 0)) * hScale;
-    const payHsaEmployer = Math.min(d.hsaEmployerAnnual / 12, Math.max(0, capHsaFull - ytd.hsa));
+    const payHsaEmployer = Math.min(hsaEmployerIn(mo), Math.max(0, capHsaFull - ytd.hsa));
     ytd.hsa += payHsaEmployer;
     const hsaSched = sum(d.incomes.map((inc, i) => perCheck(inc, "hsa", ymNow) * checks[i]! * g));
     // a payroll HSA changed by month: the difference comes back as (or comes out of) take-home
