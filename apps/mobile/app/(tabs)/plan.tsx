@@ -91,8 +91,20 @@ export default function Forecast() {
         </>
       )}
       {o.fire > 0 ? <View style={{ gap: 4, marginTop: space.xs }}>
+        <View style={{ flexDirection: "row", gap: space.md, marginBottom: 4 }}>
+          {[
+            { k: "Coast FI number", v: o.coastNow, c: t.text },
+            { k: "Invested now", v: o.d.invested, c: t.text },
+            { k: "Still to go", v: Math.max(0, o.coastNow - o.d.invested), c: o.coastNow - o.d.invested <= 0.5 ? t.good : t.text },
+          ].map((x) => (
+            <View key={x.k} style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} style={[type.caption, { color: t.text3 }]}>{x.k}</Text>
+              <Text numberOfLines={1} style={[type.label, { color: x.c, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(x.v, { whole: true })}</Text>
+            </View>
+          ))}
+        </View>
         <ProgressBar progress={o.progress} color={coastM === 0 ? t.good : t.accent} />
-        <Text style={[type.caption, { color: t.text3 }]}>{Math.round(Math.min(1, o.progress) * 100)}% of the way to Coast FI today</Text>
+        <Text style={[type.caption, { color: t.text3 }]}>{Math.round(Math.min(1, o.progress) * 100)}% of the way. The number is what you'd need invested today; it rises a little each year.</Text>
       </View> : null}
     </Card>
   );
