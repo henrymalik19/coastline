@@ -70,8 +70,8 @@ describe("monthly budget", () => {
     const m = simulatePlan(s, derive(s, START)).months;
     expect(m[0]!.alloc.ira).toBeCloseTo(700, 6);
     expect(m[0]!.alloc.debt).toBeCloseTo(1000, 6); // $1,100 assigned − the $100 minimum
-    // cash you assign (the emergency fund, even the cash you started with) isn't new saving for the plan
-    const withCash = blank({ ...s, budgetPlan: { start: "2026-11", startCash: 13000, months: { "2026-11": { assigned: { "acct:cash": 13000, "acct:ira": 700 } } } } });
+    // cash you assign that's already in the account (the emergency fund) isn't new saving for the plan
+    const withCash = blank({ ...s, accounts: s.accounts.map((x) => (x.id === "cash" ? { ...x, balance: 13000 } : x)), budgetPlan: { start: "2026-11", startCash: 13000, months: { "2026-11": { assigned: { "acct:cash": 13000, "acct:ira": 700 } } } } });
     const mc = simulatePlan(withCash, derive(withCash, START)).months[0]!;
     expect(mc.plannedAsk).toBeCloseTo(700, 6);
     expect(mc.plannedShort).toBe(0);
@@ -114,5 +114,14 @@ describe("monthly budget", () => {
     const db = derive(busy, START);
     expect(budgetCategories(busy, db, simulatePlan(busy, db), START, "2026-11").find((x) => x.key === "taxable")).toBeUndefined();
     expect(budgetScheduleMonths({ debts: [], goals: [], budgetPlan: { start: "2026-11", startCash: 0, months: { "2026-11": { assigned: { taxable: 400 } } } } })).toEqual({ taxable: { "2026-11": 400 } });
+  });
+
+  it("cash assigned in the first month: only the part above what's already there is new saving", () => {
+    const accounts = [{ id: "ef", name: "Emergency Fund", type: "cash" as const, balance: 13000 }];
+    const months = { "2026-11": { assigned: { "acct:ef": 13500 } }, "2026-12": { assigned: { "acct:ef": 1500 } } };
+    expect(budgetScheduleMonths({ debts: [], goals: [], accounts, budgetPlan: { start: "2026-11", startCash: 0, months } })).toEqual({ "acct:ef": { "2026-11": 500, "2026-12": 1500 } });
+    // all of it already there: nothing new
+    const same = { "2026-11": { assigned: { "acct:ef": 13000 } } };
+    expect(budgetScheduleMonths({ debts: [], goals: [], accounts, budgetPlan: { start: "2026-11", startCash: 0, months: same } })).toBeUndefined();
   });
 });

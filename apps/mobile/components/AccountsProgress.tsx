@@ -239,7 +239,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
 }
 
 /** Solid: what's there now. Lighter, behind it: where the plan has it by year end. */
-function TwoBar({ now, later, color }: { now: number; later?: number; color: string }) {
+export function TwoBar({ now, later, color }: { now: number; later?: number; color: string }) {
   const t = useTheme();
   const pct = (v: number) => `${Math.round(Math.max(0, Math.min(1, v)) * 1000) / 10}%` as const;
   return (

@@ -134,12 +134,15 @@ export function budgetScheduleMonths(s: Pick<PlanState, "debts" | "goals" | "bud
   for (const [month, e] of Object.entries(b.months)) {
     for (const [key, v] of Object.entries(e.assigned ?? {})) {
       let amount: number | undefined;
-      // money assigned to cash (the emergency fund) stays in your cash either way: it isn't new saving
-      // for the plan, and it may be cash you already had (assigning it shouldn't look like a shortfall)
       if (key.startsWith(ACCOUNT_KEY)) {
         const a = (s.accounts ?? []).find((x) => ACCOUNT_KEY + x.id === key);
-        if (a?.type === "cash") continue;
-        amount = Math.max(0, num(v));
+        // a cash account (the emergency fund): in the budget's first month, what's already in it isn't new
+        // saving, only the part above it is. Later months' amounts are new money going in.
+        if (a?.type === "cash") {
+          const had = month === b.start ? Math.max(0, num(b.registers?.[a.id]?.opening ?? a.balance)) : 0;
+          amount = Math.max(0, num(v) - had);
+          if (amount <= 0.005) continue;
+        } else amount = Math.max(0, num(v));
       }
       // a kind with no account yet ("ira", "taxable", "hsa")
       else if (key === "ira" || key === "hsa" || key === "taxable") amount = Math.max(0, num(v));

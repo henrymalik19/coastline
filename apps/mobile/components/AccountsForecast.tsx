@@ -16,6 +16,7 @@ import { Icon } from "./Icon";
 import { ScheduleEditor } from "./ScheduleEditor";
 import { useLayout } from "../lib/layout";
 import { ProgressBar } from "./ProgressRing";
+import { TwoBar } from "./AccountsProgress";
 import { Card, Divider, SectionLabel } from "./ui";
 
 type Props = {
@@ -217,7 +218,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
           </View>
           <Text style={[type.caption, { color: t.text3 }]}>
             {schedulable(k) ? "" : "Set per paycheck, so it's steady."}
-            {k === "cash" ? " Cash also collects anything not given to a step." : ""}
+            
             {a.invested ? ` Balances grow at your assumed ${(d.r * 100).toFixed(1)}% return after inflation.` : ""}
           </Text>
         </View>
@@ -399,6 +400,43 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
     }
   };
   const one = pick !== "all" ? cols[0] : undefined;
+  // contributed vs. the yearly limit (401(k), HSA, IRA): in so far, and by December with what's set
+  const yNow = start.getFullYear();
+  const cNow = state.contributed && state.contributed.year === yNow ? state.contributed : undefined;
+  const limitRows = (["k401", "hsa", "ira"] as const)
+    .map((k) => {
+      const a = all.find((x) => x.key === k);
+      const yr = a?.years.find((y) => y.year === yNow);
+      if (!a || !yr?.limit || (pick !== "all" && pick !== k)) return null;
+      const soFar = start.getMonth() === 0 ? 0 : k === "k401" ? cNow?.k401 ?? pl.ytdBefore?.k401 ?? 0 : k === "hsa" ? cNow?.hsa ?? pl.ytdBefore?.hsa ?? 0 : cNow?.ira ?? 0;
+      const byDec = soFar + (k === "hsa" ? yr.total : yr.employee);
+      const next = a.years.find((y) => y.year === yNow + 1);
+      const guessed = start.getMonth() > 0 && !cNow;
+      return { k, limit: yr.limit, soFar, byDec, next, guessed };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+  const limits = limitRows.length ? (
+    <View style={{ gap: space.sm }}>
+      {limitRows.map((r) => (
+        <View key={r.k} style={{ gap: 4 }}>
+          <View style={{ flexDirection: "row", alignItems: "baseline", gap: space.sm }}>
+            <Text style={[type.caption, { color: t.text, fontWeight: "700", flexShrink: 0 }]}>{label(r.k).replace(" (what you owe)", "")} {yNow}</Text>
+            <View style={{ flex: 1 }} />
+            <Text numberOfLines={1} style={[type.caption, { color: t.text2, fontVariant: ["tabular-nums"] }]}>
+              {money(r.soFar, { whole: true })} in · {money(r.byDec, { whole: true })} by Dec · of {money(r.limit, { whole: true })}
+            </Text>
+          </View>
+          <TwoBar now={r.soFar / r.limit} later={r.byDec / r.limit} color={r.k === "k401" ? t.series.k401 : r.k === "hsa" ? t.series.hsa : t.series.ira} />
+          <Text style={[type.caption, { color: t.text3 }]}>
+            {r.byDec >= r.limit - 1 ? "Maxed by December" : `${money(r.limit - r.byDec, { whole: true })} of room left in ${yNow}`}
+            {r.k === "hsa" ? " (yours + employer's)" : ""}
+            {r.next?.limit ? ` · ${yNow + 1}: ${money(r.k === "hsa" ? r.next.total : r.next.employee, { whole: true })} of ${money(r.next.limit, { whole: true })} at today's amounts` : ""}
+            {r.guessed && r.soFar > 0.5 && r.k !== "ira" ? " · in so far is estimated from your paychecks" : ""}
+          </Text>
+        </View>
+      ))}
+    </View>
+  ) : null;
   const sCell = (v: string, color: string, bold = false) => (
     <Text numberOfLines={1} style={[type.caption, styles.sNum, { color, fontWeight: bold ? "700" : "500" }]}>{v}</Text>
   );
@@ -568,6 +606,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
           </Pressable>
         </Modal>
         {summary}
+        {!selected ? limits : null}
         {showCheck ? (
           <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ maxHeight: 340, flexGrow: 0 }}>{check}</ScrollView>
         ) : null}
