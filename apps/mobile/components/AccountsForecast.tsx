@@ -410,9 +410,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
       if (!a || !yr?.limit || (pick !== "all" && pick !== k)) return null;
       const soFar = start.getMonth() === 0 ? 0 : k === "k401" ? cNow?.k401 ?? pl.ytdBefore?.k401 ?? 0 : k === "hsa" ? cNow?.hsa ?? pl.ytdBefore?.hsa ?? 0 : cNow?.ira ?? 0;
       const byDec = soFar + (k === "hsa" ? yr.total : yr.employee);
-      const next = a.years.find((y) => y.year === yNow + 1);
-      const guessed = start.getMonth() > 0 && !cNow;
-      return { k, limit: yr.limit, soFar, byDec, next, guessed };
+      return { k, limit: yr.limit, soFar, byDec };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
   const limits = limitRows.length ? (
@@ -423,16 +421,10 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
             <Text style={[type.caption, { color: t.text, fontWeight: "700", flexShrink: 0 }]}>{label(r.k).replace(" (what you owe)", "")} {yNow}</Text>
             <View style={{ flex: 1 }} />
             <Text numberOfLines={1} style={[type.caption, { color: t.text2, fontVariant: ["tabular-nums"] }]}>
-              {money(r.soFar, { whole: true })} in · {money(r.byDec, { whole: true })} by Dec · of {money(r.limit, { whole: true })}
+              {money(r.soFar, { whole: true })} of {money(r.limit, { whole: true })}
             </Text>
           </View>
           <TwoBar now={r.soFar / r.limit} later={r.byDec / r.limit} color={r.k === "k401" ? t.series.k401 : r.k === "hsa" ? t.series.hsa : t.series.ira} />
-          <Text style={[type.caption, { color: t.text3 }]}>
-            {r.byDec >= r.limit - 1 ? "Maxed by December" : `${money(r.limit - r.byDec, { whole: true })} of room left in ${yNow}`}
-            {r.k === "hsa" ? " (yours + employer's)" : ""}
-            {r.next?.limit ? ` · ${yNow + 1}: ${money(r.k === "hsa" ? r.next.total : r.next.employee, { whole: true })} of ${money(r.next.limit, { whole: true })} at today's amounts` : ""}
-            {r.guessed && r.soFar > 0.5 && r.k !== "ira" ? " · in so far is estimated from your paychecks" : ""}
-          </Text>
         </View>
       ))}
     </View>
