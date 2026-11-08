@@ -54,7 +54,6 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
   const { twoColumn, contentWidth } = useLayout();
   // phones: narrower columns, one "left over" column for the plan, details in place of the table
   const compact = contentWidth < 600;
-  const [span, setSpan] = useState(12);
   const pl = o.plan;
   const d = o.d;
   const all = accountForecasts(state, d, pl, d.r);
@@ -65,6 +64,19 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
   const coastM = o.crossing === null ? null : Math.round(o.crossing * 12);
   const retireM = Math.min(pl.months.length, d.years * 12) - 1;
   const thisMonth = ym(start, 0);
+  // the table shows one calendar year at a time: this year from now on, later years January to December
+  const y0 = start.getFullYear();
+  const m0 = start.getMonth();
+  const lastYear = y0 + Math.floor((pl.months.length - 1 + m0) / 12);
+  const [year, setYear] = useState(y0);
+  const yr = Math.min(Math.max(year, y0), lastYear);
+  const later = yr > y0;
+  const lo = later ? (yr - y0) * 12 - m0 : 0;
+  const hi = Math.min(pl.months.length - 1, (yr - y0 + 1) * 12 - m0 - 1);
+  const rows = Array.from({ length: Math.max(0, hi - lo + 1) }, (_, j) => lo + j);
+  /** What an account starts the shown year with: today's balance, or where December left it. */
+  const openBal = (a: AccountForecast) => (lo === 0 ? a.start : a.months[lo - 1]!.balance);
+  const startText = later ? `Jan 1, ${yr}` : "Today";
 
   const payrollHsa = state.plan.hsaPayroll !== false;
   /** Accounts you can put on a schedule (the 401(k) and a paycheck HSA are set per paycheck). */
@@ -229,7 +241,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
   /* ---------- the table: months down, accounts across ---------- */
   const COL = compact ? 84 : 108;
   /** "Nov 2026", or "Nov '26" on phones. */
-  const mLabel = (i: number) => (compact ? monthLabel(start, i).replace(/ \d\d(\d\d)$/, " '$1") : monthLabel(start, i));
+  const mLabel = (i: number) => MON[(m0 + i) % 12]!;
   /* ---------- this month: what's set elsewhere, your plan, and what's not planned (or short) ---------- */
   const row0 = pl.months[0]!;
   const jobs = state.incomes.filter((x) => (x.kind ?? "job") === "job");
@@ -341,16 +353,16 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
   );
   const todayRow = (
     <View style={[styles.gr, { backgroundColor: t.surface }]}>
-      {monthCell(<Text style={[type.caption, { color: t.text3 }]}>Today</Text>, t.surface)}
+      {monthCell(<Text style={[type.caption, { color: t.text3 }]}>{startText}</Text>, t.surface)}
       {cols.map((x) => (
         <View key={x.key} style={[{ flexDirection: "row" }, groupEdge]}>
           {num("", t.text3)}
-          {num(money(x.start), t.text2)}
+          {num(money(openBal(x)), t.text2)}
         </View>
       ))}
     </View>
   );
-  const bodyRows = Array.from({ length: span }, (_, i) => {
+  const bodyRows = rows.map((i) => {
     const r = pl.months[i]!;
     const short = r.plannedShort > 0.5;
     const bg = short ? t.badSoft : i === 0 ? t.accentSoft : i % 2 ? t.surface2 : t.surface;
@@ -401,14 +413,14 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
   };
   const one = pick !== "all" ? cols[0] : undefined;
   // contributed vs. the yearly limit (401(k), HSA, IRA): in so far, and by December with what's set
-  const yNow = start.getFullYear();
+  const yNow = yr;
   const cNow = state.contributed && state.contributed.year === yNow ? state.contributed : undefined;
   const limitRows = (["k401", "hsa", "ira"] as const)
     .map((k) => {
       const a = all.find((x) => x.key === k);
       const yr = a?.years.find((y) => y.year === yNow);
       if (!a || !yr?.limit || (pick !== "all" && pick !== k)) return null;
-      const soFar = start.getMonth() === 0 ? 0 : k === "k401" ? cNow?.k401 ?? pl.ytdBefore?.k401 ?? 0 : k === "hsa" ? cNow?.hsa ?? pl.ytdBefore?.hsa ?? 0 : cNow?.ira ?? 0;
+      const soFar = later || start.getMonth() === 0 ? 0 : k === "k401" ? cNow?.k401 ?? pl.ytdBefore?.k401 ?? 0 : k === "hsa" ? cNow?.hsa ?? pl.ytdBefore?.hsa ?? 0 : cNow?.ira ?? 0;
       const byDec = soFar + (k === "hsa" ? yr.total : yr.employee);
       return { k, limit: yr.limit, soFar, byDec };
     })
@@ -421,7 +433,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
             <Text style={[type.caption, { color: t.text, fontWeight: "700", flexShrink: 0 }]}>{label(r.k).replace(" (what you owe)", "")} {yNow}</Text>
             <View style={{ flex: 1 }} />
             <Text numberOfLines={1} style={[type.caption, { color: t.text2, fontVariant: ["tabular-nums"] }]}>
-              {money(r.soFar, { whole: true })} of {money(r.limit, { whole: true })}
+              {later ? `${money(r.byDec, { whole: true })} planned` : money(r.soFar, { whole: true })} of {money(r.limit, { whole: true })}
             </Text>
           </View>
           <TwoBar now={r.soFar / r.limit} later={r.byDec / r.limit} color={r.k === "k401" ? t.series.k401 : r.k === "hsa" ? t.series.hsa : t.series.ira} />
@@ -441,11 +453,11 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
       </View>
       <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1 }}>
         <View style={[styles.sRow, { backgroundColor: t.surface }]}>
-          <Text style={[type.caption, styles.sMonth, { color: t.text3 }]}>Today</Text>
+          <Text style={[type.caption, styles.sMonth, { color: t.text3 }]}>{startText}</Text>
           {sCell("", t.text3)}
-          {sCell(money(one.start), t.text2, true)}
+          {sCell(money(openBal(one)), t.text2, true)}
         </View>
-        {Array.from({ length: span }, (_, i) => {
+        {rows.map((i) => {
           const r = pl.months[i]!;
           const m = one.months[i]!;
           const short = r.plannedShort > 0.5;
@@ -499,30 +511,37 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
       {card(selected)}
     </ScrollView>
   ) : null;
+  const yearSum = (f: (m: typeof row0) => number) => rows.reduce((a, i) => a + f(pl.months[i]!), 0);
+  const sum0 = later
+    ? { income: yearSum((m) => m.income), expenses: yearSum((m) => m.expenses), plannedAsk: yearSum((m) => m.plannedAsk), plannedShort: yearSum((m) => m.plannedShort) }
+    : row0;
   const summary = (
     <Pressable
       role="button"
       aria-expanded={showCheck}
-      accessibilityLabel={`${monthLabel(start, 0)}: ${money(row0.income)} take-home, ${money(row0.expenses)} bills and debt payments, ${money(row0.plannedAsk)} you set${row0.plannedShort > 0.5 ? `, short ${money(row0.plannedShort)}` : ""}. ${showCheck ? "Hide" : "Show"} where it comes from`}
+      accessibilityLabel={`${later ? yr : monthLabel(start, 0)}: ${money(sum0.income)} take-home, ${money(sum0.expenses)} bills and debt payments, ${money(sum0.plannedAsk)} you set${sum0.plannedShort > 0.5 ? `, short ${money(sum0.plannedShort)}` : ""}. ${showCheck ? "Hide" : "Show"} where it comes from`}
+      disabled={later}
       onPress={() => setShowCheck((v) => !v)}
       hitSlop={4}
-      style={[styles.summary, { backgroundColor: row0.plannedShort > 0.5 ? t.badSoft : t.surface2 }]}
+      style={[styles.summary, { backgroundColor: sum0.plannedShort > 0.5 ? t.badSoft : t.surface2 }]}
     >
       {[
-        { k: "Take-home", v: money(row0.income, { whole: compact }), c: t.text },
-        { k: "Bills & debts", v: money(row0.expenses, { whole: compact }), c: t.text },
-        row0.plannedShort > 0.5
-          ? { k: "Short", v: money(row0.plannedShort, { whole: compact }), c: t.bad }
-          : { k: "You set", v: money(row0.plannedAsk, { whole: compact }), c: t.text },
+        { k: later ? `Take-home ${yr}` : "Take-home", v: money(sum0.income, { whole: compact }), c: t.text },
+        { k: "Bills & debts", v: money(sum0.expenses, { whole: compact }), c: t.text },
+        sum0.plannedShort > 0.5
+          ? { k: "Short", v: money(sum0.plannedShort, { whole: compact }), c: t.bad }
+          : { k: "You set", v: money(sum0.plannedAsk, { whole: compact }), c: t.text },
       ].map((x) => (
         <View key={x.k} style={{ flex: 1, minWidth: 0 }}>
           <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{x.k}</Text>
           <Text style={[type.label, { color: x.c, fontWeight: "700", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>{x.v}</Text>
         </View>
       ))}
-      <View style={{ transform: [{ rotate: showCheck ? "-90deg" : "90deg" }] }}>
-        <Icon name="chevron" size={14} color={t.accent} />
-      </View>
+      {later ? null : (
+        <View style={{ transform: [{ rotate: showCheck ? "-90deg" : "90deg" }] }}>
+          <Icon name="chevron" size={14} color={t.accent} />
+        </View>
+      )}
     </Pressable>
   );
   return (
@@ -562,11 +581,20 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
                   </Pressable>
                 </View>
               ) : null}
-              {[12, 24, 36, 60].map((n) => (
-                <Pressable key={n} role="radio" aria-checked={span === n} onPress={() => setSpan(n)} hitSlop={6} style={[styles.chip, { borderColor: span === n ? t.accent : t.border, backgroundColor: span === n ? t.accentSoft : t.surface }]}>
-                  <Text style={[type.caption, { color: span === n ? t.accent : t.text2, fontWeight: "700" }]}>{compact ? `${n / 12}y` : `${n} mo`}</Text>
+              <View style={[styles.arrows, { borderColor: t.border, alignItems: "center" }]}>
+                <Pressable role="button" accessibilityLabel="Previous year" disabled={yr <= y0} onPress={() => setYear(yr - 1)} hitSlop={4} style={[styles.arrow, { opacity: yr <= y0 ? 0.35 : 1 }]}>
+                  <Icon name="back" size={16} color={t.accent} />
                 </Pressable>
-              ))}
+                <Text accessibilityLabel={`Showing ${yr}`} style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"], minWidth: 44, textAlign: "center" }]}>{yr}</Text>
+                <Pressable role="button" accessibilityLabel="Next year" disabled={yr >= lastYear} onPress={() => setYear(yr + 1)} hitSlop={4} style={[styles.arrow, { opacity: yr >= lastYear ? 0.35 : 1 }]}>
+                  <Icon name="chevron" size={16} color={t.accent} />
+                </Pressable>
+              </View>
+              {later ? (
+                <Pressable role="button" onPress={() => setYear(y0)} hitSlop={6} style={[styles.chip, { borderColor: t.border, backgroundColor: t.surface }]}>
+                  <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{compact ? "Now" : "Back to now"}</Text>
+                </Pressable>
+              ) : null}
             </View>
           </View>
         )}
@@ -599,7 +627,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
         </Modal>
         {summary}
         {!selected ? limits : null}
-        {showCheck ? (
+        {showCheck && !later ? (
           <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ maxHeight: 340, flexGrow: 0 }}>{check}</ScrollView>
         ) : null}
         {!selected ? (

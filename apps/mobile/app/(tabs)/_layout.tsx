@@ -10,6 +10,7 @@ const TABS: { name: string; title: string; icon: IconName }[] = [
   { name: "home", title: "Home", icon: "home" },
   { name: "plan", title: "Forecast", icon: "plan" },
   { name: "budget", title: "Budget", icon: "card" },
+  { name: "transactions", title: "Transactions", icon: "receipt" },
   { name: "progress", title: "Progress", icon: "trend" },
 ];
 const ICONS = { ...Object.fromEntries(TABS.map((t) => [t.name, t.icon])), settings: "gear" } as Record<string, IconName>;
