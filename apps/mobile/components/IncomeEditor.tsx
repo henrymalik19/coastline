@@ -6,7 +6,7 @@ import { HELP } from "../lib/help";
 import { isLoanDeduction, monthlyFromPaycheck } from "../lib/loans";
 import { DEDUCTION_KINDS, paycheck, withAutoNet } from "../lib/paycheck";
 import { MATCH_PRESETS } from "../lib/presets";
-import { estimatePaycheckTaxes, FILING_LABELS } from "../lib/tax";
+import { estimateJobTaxes, FILING_LABELS, sameTaxes, taxesFollowEstimate, taxTotal } from "../lib/tax";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, DateField, FieldRow, IconButton, NumberInput, Segmented, Select, TextField, ToggleRow } from "./form";
 import { Icon } from "./Icon";
@@ -14,7 +14,7 @@ import { Icon } from "./Icon";
 const HSA_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 import { AddChip, MasterDetail } from "./MasterDetail";
 import { Card, Divider } from "./ui";
-import { ChangesLater, monthName, PaycheckChanges } from "./ScheduleEditor";
+import { ChangesLater, monthName } from "./ScheduleEditor";
 import { hsaEverEligible } from "./HsaEligibility";
 import { confirm } from "../lib/confirm";
 import { usePlan } from "../lib/plan";
@@ -159,17 +159,9 @@ function RentalValue({ inc }: { inc: Income }) {
 function useTaxEstimate(id: string) {
   const { state } = usePlan();
   const status = state.filingStatus ?? "single";
-  const otherJobs = state.incomes
-    .filter((j) => j.id !== id && (j.kind ?? "job") === "job" && (j.gross ?? 0) > 0)
-    .map((j) => {
-      const p = paycheck(j);
-      return { gross: p.gross * PERIODS[j.freq], pretax: (p.k401Pretax + p.pretaxDeductions) * PERIODS[j.freq] };
-    });
-  const estimate = (inc: Income): PayTaxes => {
-    const p = paycheck(inc);
-    return estimatePaycheckTaxes(inc.gross ?? 0, PERIODS[inc.freq], p.k401Pretax + p.pretaxDeductions, status, otherJobs);
-  };
-  return { estimate, status, otherJobs: otherJobs.length };
+  const estimate = (inc: Income): PayTaxes => estimateJobTaxes(state, inc);
+  const otherJobs = state.incomes.filter((j) => j.id !== id && (j.kind ?? "job") === "job" && (j.gross ?? 0) > 0).length;
+  return { estimate, status, otherJobs };
 }
 
 const TAX_KEYS = ["federal", "state", "socialSecurity", "medicare"] as const;
@@ -177,17 +169,6 @@ const TAX_KEYS = ["federal", "state", "socialSecurity", "medicare"] as const;
 const CHECKS_IN_NORMAL_MONTH: Record<PayFreq, number> = { weekly: 4, biweekly: 2, semimonthly: 2, monthly: 1 };
 /** 4% rather than 4.00%; 4.5% keeps its decimal. */
 const pctShort = (x: number) => percent(x, Math.round(x * 10000) % 100 === 0 ? 0 : 2);
-const taxTotal = (x: PayTaxes) => TAX_KEYS.reduce((s, k) => s + (x[k] ?? 0), 0);
-const sameTaxes = (a: PayTaxes, b: PayTaxes) => TAX_KEYS.every((k) => Math.abs((a[k] ?? 0) - (b[k] ?? 0)) < 0.01);
-
-/**
- * True while a job's taxes are still the estimate (or empty): then they follow pay changes, so
- * nobody has to press "estimate" again after changing their pay or 401(k).
- */
-function taxesFollowEstimate(inc: Income, estimate: (i: Income) => PayTaxes): boolean {
-  const taxes = inc.taxes ?? { federal: 0, state: 0, socialSecurity: 0, medicare: 0 };
-  return taxTotal(taxes) === 0 || ((inc.gross ?? 0) > 0 && sameTaxes(taxes, estimate(inc)));
-}
 
 /** A part of the paycheck that opens to fill in; closed, it shows a one-line summary. */
 function PaySection({
@@ -390,7 +371,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
           </>
         )}
         {(inc.matchMode === "pct" && hasGross) || inc.matchMode === "usd" ? <IncomeSummary inc={inc} marginalTax={marginalTax} /> : null}
-        <PaycheckChanges k={PAY401 + inc.id} label={`${inc.name || "This job"} 401(k)`} base={r.pretax} gross={inc.gross} />
+        <ChangesLater k={PAY401 + inc.id} label="Your 401(k)" base={r.pretax} unit="/check" gross={inc.gross} lead="You: " prompt="Changing your 401(k) later?" />
         <FieldRow label="Roth 401(k)" hint={rothHint(inc.rothShare ?? 0)} info={HELP.roth401k}>
           <NumberInput kind="percent" label="Share of your 401(k) that goes to Roth" value={inc.rothShare ?? 0} max={1} onChange={(v) => change({ rothShare: v || undefined })} />
         </FieldRow>
@@ -420,11 +401,11 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
         <FieldRow label="You put in per paycheck" hint="Your own HSA contribution, pre-tax. Counts toward the HSA limit">
           <NumberInput kind="money" label="Your HSA contribution per paycheck" value={inc.hsaPre ?? 0} onChange={(v) => change({ hsaPre: v || undefined })} />
         </FieldRow>
-        <PaycheckChanges k={PAYHSA + inc.id} label={`${inc.name || "This job"} HSA`} base={inc.hsaPre ?? 0} gross={inc.gross} />
+        <ChangesLater k={PAYHSA + inc.id} label="Your HSA" base={inc.hsaPre ?? 0} unit="/check" lead="You: " prompt="Starting or changing yours later?" />
         <FieldRow label="Your employer puts in" hint="Per year. Free money that counts toward your HSA limit" info={HELP.hsaEmployer}>
           <NumberInput kind="money" label="Employer HSA contribution per year" value={inc.hsaEmployer ?? 0} onChange={(v) => change({ hsaEmployer: v || undefined })} />
         </FieldRow>
-        <ChangesLater k={HSAEMP + inc.id} label="Employer HSA" base={inc.hsaEmployer ?? 0} unit="/yr" prompt="Starting or changing later?" />
+        <ChangesLater k={HSAEMP + inc.id} label="Employer HSA" base={inc.hsaEmployer ?? 0} unit="/yr" lead="Employer: " prompt="Is your employer's amount changing later?" />
         {(inc.hsaEmployer ?? 0) > 0 ? (
           <FieldRow
             label="It comes"

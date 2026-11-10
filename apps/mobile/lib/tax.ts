@@ -1,4 +1,4 @@
-import { PERIODS, type FilingStatus, type Income } from "@coastfi/engine";
+import { PERIODS, type FilingStatus, type Income, type PayTaxes } from "@coastfi/engine";
 import { paycheck } from "./paycheck";
 
 /**
@@ -124,4 +124,32 @@ export function estimateBracket(incomes: Income[], status: FilingStatus = "singl
   const taxable = Math.max(0, base - TAX_TABLES[status].standard);
   const federal = federalBracket(taxable, status);
   return { federal, state: STATE_RATE, total: federal + STATE_RATE, taxable };
+}
+
+/**
+ * Estimated taxes for one paycheck of a job in a plan (the plan's other jobs share the tax return,
+ * and the filing status comes from the plan).
+ */
+export function estimateJobTaxes(s: { incomes: Income[]; filingStatus?: FilingStatus }, inc: Income): PayTaxes {
+  const otherJobs = s.incomes
+    .filter((j) => j.id !== inc.id && (j.kind ?? "job") === "job" && (j.gross ?? 0) > 0)
+    .map((j) => {
+      const p = paycheck(j);
+      return { gross: p.gross * PERIODS[j.freq], pretax: (p.k401Pretax + p.pretaxDeductions) * PERIODS[j.freq] };
+    });
+  const p = paycheck(inc);
+  return estimatePaycheckTaxes(inc.gross ?? 0, PERIODS[inc.freq], p.k401Pretax + p.pretaxDeductions, s.filingStatus ?? "single", otherJobs);
+}
+
+const TAX_KEYS = ["federal", "state", "socialSecurity", "medicare"] as const;
+export const taxTotal = (x: PayTaxes) => TAX_KEYS.reduce((a, k) => a + (x[k] ?? 0), 0);
+export const sameTaxes = (a: PayTaxes, b: PayTaxes) => TAX_KEYS.every((k) => Math.abs((a[k] ?? 0) - (b[k] ?? 0)) < 0.01);
+
+/**
+ * True while a job's taxes are still the estimate (or empty): then they follow pay changes, so
+ * nobody has to press "estimate" again after changing their pay or 401(k).
+ */
+export function taxesFollowEstimate(inc: Income, estimate: (i: Income) => PayTaxes): boolean {
+  const taxes = inc.taxes ?? { federal: 0, state: 0, socialSecurity: 0, medicare: 0 };
+  return taxTotal(taxes) === 0 || ((inc.gross ?? 0) > 0 && sameTaxes(taxes, estimate(inc)));
 }

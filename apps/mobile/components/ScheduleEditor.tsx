@@ -253,8 +253,12 @@ export function PaycheckChanges({ k, label, base, gross }: { k: string; label: s
  * "Changes later?" under an amount (pay, a deduction, a bill): opens the list of changes, and says
  * what's coming when there are some ("$3,300/check from Jan 2027").
  */
-export function ChangesLater({ k, label, base, unit = "/mo", note, prompt = "Changes later?" }: {
+export function ChangesLater({ k, label, base, unit = "/mo", note, prompt = "Changes later?", gross, lead = "" }: {
   k: string; label: string; base: number; unit?: string; note?: string; prompt?: string;
+  /** Gross pay per check: lets a paycheck amount (401(k)) be set as a % of pay. */
+  gross?: number;
+  /** Before the summary, so two links in one place read apart ("You: …", "Employer: …"). */
+  lead?: string;
 }) {
   const t = useTheme();
   const { list, oneOffs } = useSchedule(k);
@@ -262,7 +266,7 @@ export function ChangesLater({ k, label, base, unit = "/mo", note, prompt = "Cha
   const singles = Object.keys(oneOffs).length;
   const any = list.length > 0 || singles > 0;
   const text = any
-    ? [list.map((e) => `${money(e.amount)}${unit} from ${monthName(e.from)}`).join(" → "), singles ? `${singles} one-month change${singles === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ")
+    ? lead + [list.map((e) => `${e.pct !== undefined && gross ? `${+(e.pct * 100).toFixed(2)}% of pay` : `${money(e.amount)}${unit}`} from ${monthName(e.from)}`).join(" → "), singles ? `${singles} one-month change${singles === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ")
     : prompt;
   return (
     <View style={{ gap: 6 }}>
@@ -271,7 +275,7 @@ export function ChangesLater({ k, label, base, unit = "/mo", note, prompt = "Cha
         <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}> {open ? "Hide" : any ? "Change" : "Set it by month"}</Text>
         <Icon name="chevron" size={12} color={t.accent} />
       </Pressable>
-      {open ? <ScheduleEditor k={k} label={label} unit={unit} base={base} note={note} value onCleared={() => setOpen(false)} /> : null}
+      {open ? <ScheduleEditor k={k} label={label} unit={unit} base={base} note={note} value perCheck={unit === "/check" && gross !== undefined} gross={gross && gross > 0 ? gross : undefined} onCleared={() => setOpen(false)} /> : null}
     </View>
   );
 }
