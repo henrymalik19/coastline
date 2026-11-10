@@ -5,8 +5,9 @@
  */
 import { BUDGET_ITEM, budgetCategories, budgetView, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
+import { BudgetAccounts } from "../../components/BudgetAccounts";
 import { TransactionsList } from "../../components/TransactionsList";
-import { budgetAccounts, cardMap, liveBudget } from "../../lib/register";
+import { cardMap, liveBudget } from "../../lib/register";
 import { duplicateOf } from "../../lib/budgetDupes";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -53,10 +54,11 @@ export default function Budget() {
   const router = useRouter();
   // opened from a link (a plan step, a to-do): show this month with that line open
   const { focus, view: viewParam, account: acctParam } = useLocalSearchParams<{ focus?: string; view?: string; account?: string }>();
-  // Categories (assign money) or Transactions (what came in and went out), for the same month
-  const [tab, setTab] = useState<"categories" | "transactions">(viewParam === "transactions" ? "transactions" : "categories");
+  // Categories (assign money), Accounts (what's in each), or Transactions (what came in and went out)
+  type View3 = "categories" | "accounts" | "transactions";
+  const [tab, setTab] = useState<View3>(viewParam === "transactions" || viewParam === "accounts" ? viewParam : "categories");
   useEffect(() => {
-    if (viewParam === "transactions") setTab("transactions");
+    if (viewParam === "transactions" || viewParam === "accounts") setTab(viewParam);
   }, [viewParam, acctParam]);
   useEffect(() => {
     if (!focus) return;
@@ -72,9 +74,8 @@ export default function Budget() {
   const txns = useStore((s) => s.txns);
   const cards = useMemo(() => cardMap(state), [state]);
   const view = budgetView(b, cats, month, { txns, cards });
-  const [adding, setAdding] = useState<{ txn?: Txn; categoryId?: string; kind?: "out" | "in"; amount?: number } | null>(null);
+  const [adding, setAdding] = useState<{ txn?: Txn; categoryId?: string; kind?: "out" | "in"; amount?: number; from?: string } | null>(null);
   const monthTxns = txns.filter((x) => !x.deleted && x.date.startsWith(month));
-  const accts = budgetAccounts(state);
   const i = between(thisMonth, month);
   const expected = i >= 0 ? actual.months[i]?.income ?? 0 : 0;
   const entry = b?.months?.[month];
@@ -499,35 +500,25 @@ export default function Budget() {
     <Screen title="Budget" subtitle={compact ? undefined : "Give every dollar a job"}>
       {monthBar}
       {view.started ? (
-        <View style={{ maxWidth: 360 }}>
-          <Segmented
-            label="Budget view"
-            options={[{ value: "categories", label: "Categories" }, { value: "transactions", label: "Transactions" }]}
-            value={tab}
-            onChange={(v) => { setTab(v); if (v === "categories" && acctParam) router.setParams({ account: undefined, view: undefined }); }}
-          />
+        <View style={[styles.editRow, { justifyContent: "space-between" }]}>
+          <View style={{ flexGrow: 1, flexShrink: 1, maxWidth: 440 }}>
+            <Segmented
+              label="Budget view"
+              options={[{ value: "categories", label: "Categories" }, { value: "accounts", label: "Accounts" }, { value: "transactions", label: compact ? "Activity" : "Transactions" }]}
+              value={tab}
+              onChange={(v) => { setTab(v); if (v !== "transactions" && (acctParam || viewParam)) router.setParams({ account: undefined, view: undefined }); }}
+            />
+          </View>
+          {tab === "categories" ? <Button title={compact ? "Add" : "Add a transaction"} icon="plus" tone="primary" onPress={() => setAdding({})} style={{ minHeight: 36 }} /> : null}
         </View>
       ) : null}
       {view.started && tab === "transactions" ? (
         <TransactionsList key={acctParam ?? "all"} month={month} account={acctParam} />
+      ) : view.started && tab === "accounts" ? (
+        <BudgetAccounts onAdd={() => setAdding({})} onTransfer={(from) => setAdding({ from })} />
       ) : view.started ? (
         <>
           {rtaCard}
-          <Card style={{ gap: space.sm }}>
-            <View style={[styles.editRow, { justifyContent: "space-between" }]}>
-              <SectionLabel>Accounts</SectionLabel>
-              <Button title="Add a transaction" icon="plus" tone="primary" onPress={() => setAdding({})} style={{ minHeight: 36 }} />
-            </View>
-            {accts.map((a) => (
-              <Pressable key={a.id} role="link" accessibilityLabel={`${a.name} register`} onPress={() => router.push(`/money/register?account=${a.id}`)} style={styles.acctRow}>
-                <Text style={[type.body, { color: t.text, flex: 1 }]} numberOfLines={1}>{a.name}</Text>
-                <Text style={[type.body, { color: a.balance < 0 ? t.text2 : t.text, fontVariant: ["tabular-nums"] }]}>{a.kind === "card" ? `${money(-a.balance)} owed` : money(a.balance)}</Text>
-                <Icon name="chevron" size={14} color={t.text3} />
-              </Pressable>
-            ))}
-            {!accts.length ? <Text style={[type.caption, { color: t.text3 }]}>Add a cash account or credit card under Money to track transactions.</Text> : null}
-            <Text style={[type.caption, { color: t.text3 }]}>Tap an account for its transactions. A credit card missing here? Set its type to Credit card under Money → Debts.</Text>
-          </Card>
           <View style={[styles.colHead, { paddingHorizontal: compact ? space.md : space.lg }]}>
             <Text style={[type.caption, styles.colName, { color: t.text3, flex: 1 }]}>Category</Text>
             {(compact ? ["Assigned", "Available"] : ["Assigned", "Spent", "Available"]).map((h) => (
@@ -623,7 +614,7 @@ export default function Budget() {
           <Text style={[type.body, { color: t.text2 }]}>Your budget starts in {nameOf(b.start)}.</Text>
         </Card>
       )}
-      {adding ? <TxnForm txn={adding.txn} categoryId={adding.categoryId} initialKind={adding.kind} initialAmount={adding.amount} onClose={() => setAdding(null)} /> : null}
+      {adding ? <TxnForm txn={adding.txn} categoryId={adding.categoryId} initialKind={adding.kind} initialAmount={adding.amount} transferFrom={adding.from} onClose={() => setAdding(null)} /> : null}
       {month === thisMonth && i === 0 ? <View style={{ height: 1 }} /> : <Pill tone="neutral">{i > 0 ? "A future month: assign ahead if you like" : "A past month"}</Pill>}
     </Screen>
   );
@@ -641,7 +632,6 @@ const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   editor: { gap: space.md, marginHorizontal: space.md, marginBottom: space.md, padding: space.md, borderRadius: radius.md },
   editRow: { flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" },
-  acctRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: 6 },
   dupBox: { gap: 6, borderWidth: 1, borderRadius: radius.md, padding: space.md },
   txnRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, minHeight: 46 },
   link: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" },

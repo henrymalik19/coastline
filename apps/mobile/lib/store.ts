@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { transferPair, type PlanState, type Txn } from "@coastfi/engine";
 import { CheckinSchema, PlanStateSchema, TxnSchema, type Checkin } from "@coastfi/schema";
-import { applyRegisterBalances, budgetAccounts, ensureRegister } from "./register";
+import { applyRegisterBalances, applyTracked, budgetAccounts, ensureRegister } from "./register";
 import { z } from "zod";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -105,6 +105,8 @@ export const useStore = create<AppState>()(
         ensureRegister(plan, t.accountId, today);
         if (bothBudget) ensureRegister(plan, t.transferAccountId!, today);
         applyRegisterBalances(plan, list);
+        // a transfer to or from an IRA, brokerage account or loan moves its balance too
+        applyTracked(plan, t.id, t);
         set({ txns: list, plan, updatedAt: now() });
       },
       deleteTxn: (id) => {
@@ -114,6 +116,7 @@ export const useStore = create<AppState>()(
         const list = get().txns.map((x) => (x.id === id || (t.transferId && x.id === t.transferId) ? { ...x, deleted: true, updatedAt: stamp } : x));
         const plan = structuredClone(get().plan);
         applyRegisterBalances(plan, list);
+        applyTracked(plan, id, null);
         set({ txns: list, plan, updatedAt: stamp });
       },
       clearTxns: () => {

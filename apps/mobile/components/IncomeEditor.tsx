@@ -1,4 +1,4 @@
-import { HSAEMP, k401Cost, PAY401, PAYDED, PAYGROSS, PAYHSA, PAYNET, PERIODS, resolveIncome, type Income, type IncomeKind, type PayFreq, type PayTaxes } from "@coastfi/engine";
+import { HSAEMP, k401Cost, PAY401, PAYDED, PAYGROSS, PAYHSA, PAYNET, PERIODS, resolveIncome, type Debt, type Income, type IncomeKind, type PayFreq, type PayTaxes } from "@coastfi/engine";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money, percent } from "../lib/format";
@@ -133,6 +133,7 @@ export function IncomeEditor({
         </>
       )}
       {kind === "rental" ? <RentalValue inc={inc} /> : null}
+      {kind === "rental" ? <RentalMortgage inc={inc} /> : null}
     </Wrap>
   );
 }
@@ -158,8 +159,67 @@ function RentalValue({ inc }: { inc: Income }) {
         <NumberInput kind="money" label="Rental property value" value={account?.balance ?? 0} onChange={setValue} />
       </FieldRow>
       <Text style={[type.caption, { color: t.text3 }]}>
-        It's listed under Accounts as a property. Add its mortgage under Debts so net worth subtracts what you owe.
+        It's listed under Accounts as a property.
       </Text>
+    </View>
+  );
+}
+
+/** A rental's mortgage, kept as a Debt (same id every time), so it's added here instead of under Debts. */
+export const rentalMortgageId = (incomeId: string) => `mort-${incomeId}`;
+
+function RentalMortgage({ inc }: { inc: Income }) {
+  const t = useTheme();
+  const { state } = usePlan();
+  const update = useStore((s) => s.update);
+  const id = rentalMortgageId(inc.id);
+  const debt = state.debts.find((d) => d.id === id);
+  const label = inc.name.trim() || "Rental";
+  const set = (patch: Partial<Debt>) =>
+    update((p) => {
+      const d = p.debts.find((x) => x.id === id);
+      if (d) Object.assign(d, patch);
+      else p.debts.push({ id, name: `${label} mortgage`, kind: "mortgage", balance: 0, apr: 0.065, minPayment: 0, ...patch });
+    });
+  const remove = () => update((p) => { p.debts = p.debts.filter((x) => x.id !== id); });
+  const rent = (inc.net * PERIODS[inc.freq]) / 12;
+  const other = state.debts.filter((d) => d.kind === "mortgage" && !d.id.startsWith("mort-"));
+  if (!debt)
+    return (
+      <View style={{ gap: space.xs }}>
+        <Button title="Add its mortgage" icon="plus" onPress={() => set({})} style={{ alignSelf: "flex-start" }} />
+        <Text style={[type.caption, { color: t.text3 }]}>
+          {other.length
+            ? `Already listed it under Debts (${other.map((d) => d.name || "Mortgage").join(", ")})? Then you're set: adding it here too would count it twice.`
+            : "Owe money on it? Add the mortgage here and it's listed under Debts for you."}
+        </Text>
+      </View>
+    );
+  const keep = rent - debt.minPayment;
+  return (
+    <View style={{ gap: space.sm, marginTop: space.xs }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+        <Text style={[type.label, { color: t.text2, flex: 1 }]}>Its mortgage</Text>
+        <IconButton icon="trash" color={t.bad} label={`Remove ${label} mortgage`} onPress={remove} />
+      </View>
+      <FieldRow label="Still owed" hint="The loan balance today">
+        <NumberInput kind="money" label={`${label} mortgage balance`} value={debt.balance} onChange={(v) => set({ balance: v })} />
+      </FieldRow>
+      <FieldRow label="Interest rate" hint="Per year">
+        <NumberInput kind="percent" label={`${label} mortgage rate`} value={debt.apr} max={1} onChange={(v) => set({ apr: v })} />
+      </FieldRow>
+      <FieldRow label="Monthly payment" hint="The whole payment, including escrow">
+        <NumberInput kind="money" label={`${label} mortgage payment`} value={debt.minPayment} onChange={(v) => set({ minPayment: v })} />
+      </FieldRow>
+      <View style={{ backgroundColor: t.surface2, borderRadius: radius.md, padding: space.md, gap: 4 }}>
+        <Text style={[type.caption, { color: t.text2 }]}>
+          Rent after costs {money(rent)}/mo − mortgage {money(debt.minPayment)}/mo ={" "}
+          <Text style={{ color: keep < 0 ? t.bad : t.text, fontWeight: "700" }}>{money(keep)}/mo</Text> you keep.
+        </Text>
+        <Text style={[type.caption, { color: t.text3 }]}>
+          The payment is in your budget as a debt, so don't subtract it from the amount above. Escrow, extra payments and the payoff date are under Debts.
+        </Text>
+      </View>
     </View>
   );
 }
@@ -609,11 +669,14 @@ export function IncomesEditor() {
   const remove = async () => {
     if (!inc) return;
     const hasProperty = state.accounts.some((a) => a.id === rentalAccountId(inc.id));
-    const msg = `"${inc.name || "This income"}" will be removed from your plan${hasProperty ? ", along with its property value in Accounts" : ""}.`;
+    const hasMortgage = state.debts.some((d) => d.id === rentalMortgageId(inc.id));
+    const also = [hasProperty ? "its property value in Accounts" : "", hasMortgage ? "its mortgage in Debts" : ""].filter(Boolean).join(" and ");
+    const msg = `"${inc.name || "This income"}" will be removed from your plan${also ? `, along with ${also}` : ""}.`;
     if (await confirm("Remove this income?", msg, "Remove"))
       update((p) => {
         p.incomes.splice(idx, 1);
         p.accounts = p.accounts.filter((a) => a.id !== rentalAccountId(inc.id));
+        p.debts = p.debts.filter((d) => d.id !== rentalMortgageId(inc.id));
       });
   };
 

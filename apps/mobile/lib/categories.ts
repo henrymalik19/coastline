@@ -24,6 +24,8 @@ export function useCategories(month?: string): NamedCategory[] {
 /** "Groceries", "Ready to assign", "Transfer", or "Split (3)" for a transaction's category. */
 export function categoryText(cats: NamedCategory[], t: { categoryId?: string; splits?: unknown[]; transferAccountId?: string }, accountName: (id: string) => string): string {
   if (t.splits?.length) return `Split (${t.splits.length})`;
+  // a withdrawal from an IRA or brokerage account: money in, ready to assign
+  if (t.categoryId === "ready" && t.transferAccountId) return `Withdrawal · ${accountName(t.transferAccountId)} (ready to assign)`;
   if (t.categoryId === "ready") return "Ready to assign";
   const c = t.categoryId ? cats.find((x) => x.key === t.categoryId)?.label : undefined;
   if (t.transferAccountId) return `Transfer · ${accountName(t.transferAccountId)}${c ? ` (${c})` : ""}`;

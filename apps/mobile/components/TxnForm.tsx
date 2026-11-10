@@ -11,22 +11,24 @@ import { Icon } from "./Icon";
 import { categoryText, isoDay, useCategories } from "../lib/categories";
 import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
-import { budgetAccounts, isCard } from "../lib/register";
+import { budgetAccounts, trackingAccounts } from "../lib/register";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, IconButton, Segmented, Select } from "./form";
 
 type Kind = "out" | "in" | "transfer";
 
-export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount, onClose }: {
+export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount, transferFrom, onClose }: {
   /** Change this one; missing = a new transaction. */
   txn?: Txn;
   /** Starting account / category for a new one. */
   accountId?: string;
   categoryId?: string;
   /** For a new one: money in or out, and an amount to start from (e.g. the expected paycheck). */
-  initialKind?: "out" | "in";
+  initialKind?: Kind;
   initialAmount?: number;
+  /** For a new transfer: the account it comes out of (can be an IRA or brokerage account: a withdrawal). */
+  transferFrom?: string;
   onClose: () => void;
 }) {
   const t = useTheme();
@@ -37,18 +39,20 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const cats = useCategories();
   const accounts = budgetAccounts(state);
   // accounts you can transfer to: other budget accounts, and the ones the plan adds to or you owe on
-  const tracking = [
-    ...state.accounts.filter((a) => a.type !== "cash" && a.type !== "property").map((a) => ({ id: a.id, name: a.name.trim() || "Account", key: "acct:" + a.id })),
-    ...state.debts.filter((d) => !isCard(d) && d.balance > 0 && !d.payroll).map((d) => ({ id: d.id, name: d.name?.trim() || "Loan", key: "debt:" + d.id })),
-  ];
+  const tracking = trackingAccounts(state);
+  // money can come out of an investment account into checking (a withdrawal), not out of a loan
+  const withdrawable = tracking.filter((a) => a.kind === "acct");
+  const isTracking = (id: string) => tracking.some((a) => a.id === id);
+  // a withdrawal is kept on the budget account's side: money in, from the IRA
+  const withdrawal = !!txn?.transferAccountId && txn.amount > 0 && isTracking(txn.transferAccountId);
   const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? tracking.find((a) => a.id === id)?.name ?? "Account";
 
-  const [kind, setKind] = useState<Kind>(txn ? (txn.transferAccountId ? "transfer" : txn.amount > 0 ? "in" : "out") : initialKind ?? "out");
+  const [kind, setKind] = useState<Kind>(txn ? (txn.transferAccountId ? "transfer" : txn.amount > 0 ? "in" : "out") : transferFrom ? "transfer" : initialKind ?? "out");
   const [amount, setAmount] = useState(Math.abs(txn?.amount ?? initialAmount ?? 0));
   const [payee, setPayee] = useState(txn?.payee ?? "");
   const [cat, setCat] = useState(txn?.categoryId ?? categoryId ?? "");
-  const [acct, setAcct] = useState(txn?.accountId ?? accountId ?? accounts[0]?.id ?? "");
-  const [to, setTo] = useState(txn?.transferAccountId ?? "");
+  const [acct, setAcct] = useState(withdrawal ? txn!.transferAccountId! : txn?.accountId ?? transferFrom ?? accountId ?? accounts[0]?.id ?? "");
+  const [to, setTo] = useState(withdrawal ? txn!.accountId : txn?.transferAccountId ?? (transferFrom && isTracking(transferFrom) ? accounts.find((a) => a.kind === "cash")?.id ?? "" : ""));
   const [date, setDate] = useState(txn?.date ?? isoDay(new Date()));
   const [memo, setMemo] = useState(txn?.memo ?? "");
   const [cleared, setCleared] = useState(txn ? txn.cleared !== "uncleared" : false);
@@ -80,7 +84,10 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const known = payee.trim().length >= 2 ? [...payees.keys()].filter((p) => p.startsWith(payee.trim().toLowerCase()) && p !== payee.trim().toLowerCase()).slice(0, 3) : [];
 
   const toTracking = tracking.find((a) => a.id === to);
-  const valid = amount > 0 && !!acct && (kind === "transfer" ? !!to && to !== acct : kind === "in" || !!cat);
+  const fromTracking = kind === "transfer" ? withdrawable.find((a) => a.id === acct) : undefined;
+  // only a transfer can start from an investment account
+  const acctOk = !!acct && (kind === "transfer" || accounts.some((a) => a.id === acct));
+  const valid = amount > 0 && acctOk && (kind === "transfer" ? !!to && to !== acct && !(fromTracking && isTracking(to)) && !(fromTracking && amount > fromTracking.balance + 0.005) : kind === "in" || !!cat);
   const save = () => {
     if (!valid) return;
     const base = {
@@ -95,7 +102,8 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
       importId: txn?.importId,
       transferId: txn?.transferId,
     };
-    if (kind === "transfer") saveTxn({ ...base, transferAccountId: to, categoryId: toTracking?.key }, isoDay(start));
+    if (kind === "transfer" && fromTracking) saveTxn({ ...base, accountId: to, amount, transferAccountId: acct, categoryId: "ready" }, isoDay(start));
+    else if (kind === "transfer") saveTxn({ ...base, transferAccountId: to, categoryId: toTracking?.key }, isoDay(start));
     else saveTxn({ ...base, transferAccountId: undefined, categoryId: kind === "in" ? cat || "ready" : cat }, isoDay(start));
     onClose();
   };
@@ -124,7 +132,12 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
               label="Kind"
               options={[{ value: "out", label: "Spent" }, { value: "in", label: "Money in" }, { value: "transfer", label: "Transfer" }]}
               value={kind}
-              onChange={(v) => { setKind(v); if (v === "in" && !cat) setCat("ready"); if (v === "out" && cat === "ready") setCat(""); }}
+              onChange={(v) => {
+                setKind(v);
+                if (v === "in" && !cat) setCat("ready");
+                if (v === "out" && cat === "ready") setCat("");
+                if (v !== "transfer" && !accounts.some((a) => a.id === acct)) setAcct(accounts[0]?.id ?? "");
+              }}
             />
 
             {/* the amount, big */}
@@ -172,7 +185,19 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                   {divider}
                 </>
               ) : null}
-              {listRow(kind === "transfer" ? "From" : "Account", <Select plain label="Account" value={acct} options={accounts.map((a) => ({ value: a.id, label: a.name, hint: a.kind === "card" ? "Credit card · owe " + money(-a.balance) : money(a.balance) }))} onChange={setAcct} />)}
+              {listRow(
+                kind === "transfer" ? "From" : "Account",
+                <Select
+                  plain
+                  label="Account"
+                  value={acct}
+                  options={[
+                    ...accounts.map((a) => ({ value: a.id, label: a.name, hint: a.kind === "card" ? "Credit card · owe " + money(-a.balance) : money(a.balance) })),
+                    ...(kind === "transfer" ? withdrawable.map((a) => ({ value: a.id, label: a.name, hint: `A withdrawal · ${money(a.balance)}` })) : []),
+                  ]}
+                  onChange={(v) => { setAcct(v); if (withdrawable.some((a) => a.id === v) && isTracking(to)) setTo(""); }}
+                />,
+              )}
               {kind === "transfer" ? (
                 <>
                   {divider}
@@ -185,8 +210,8 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                       value={to}
                       options={[
                         { value: "", label: "Choose" },
-                        ...accounts.filter((x) => x.id !== acct).map((x) => ({ value: x.id, label: x.name, hint: x.kind === "card" ? "A card payment" : "Between budget accounts" })),
-                        ...tracking.map((x) => ({ value: x.id, label: x.name, hint: x.key.startsWith("debt:") ? "A loan payment" : "Counts as saving" })),
+                        ...accounts.filter((x) => x.id !== acct && (!fromTracking || x.kind === "cash")).map((x) => ({ value: x.id, label: x.name, hint: x.kind === "card" ? "A card payment" : "Between budget accounts" })),
+                        ...(fromTracking ? [] : tracking.map((x) => ({ value: x.id, label: x.name, hint: x.kind === "debt" ? "A loan payment" : "Counts as saving" }))),
                       ]}
                       onChange={setTo}
                     />,
@@ -214,13 +239,20 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                 />,
               )}
             </View>
-            {kind === "transfer" && toTracking ? (
-              <Text style={[type.caption, { color: t.text3 }]}>Comes out of the {cats.find((c) => c.key === toTracking.key)?.label ?? toTracking.name} category.</Text>
+            {kind === "transfer" && toTracking && !fromTracking ? (
+              <Text style={[type.caption, { color: t.text3 }]}>
+                Comes out of the {cats.find((c) => c.key === toTracking.key)?.label ?? toTracking.name} category, and {toTracking.kind === "debt" ? "lowers what you owe on" : "adds to"} {toTracking.name}.
+              </Text>
+            ) : null}
+            {fromTracking ? (
+              <Text style={[type.caption, { color: t.text3 }]}>
+                A withdrawal: {fromTracking.name} goes down and the money is ready to assign. Taxes or a penalty on it aren't taken out here.
+              </Text>
             ) : null}
 
             {!valid ? (
               <Text style={[type.caption, { color: t.text3, textAlign: "center" }]}>
-                {!(amount > 0) ? "Enter an amount" : !acct ? "Choose an account" : kind === "transfer" ? (!to ? "Choose where it goes" : "Pick two different accounts") : "Choose a category"} to save.
+                {!(amount > 0) ? "Enter an amount" : fromTracking && amount > fromTracking.balance + 0.005 ? `${fromTracking.name} has ${money(fromTracking.balance)}. Enter that or less` : !acct ? "Choose an account" : kind === "transfer" ? (!to ? "Choose where it goes" : "Pick two different accounts") : "Choose a category"} to save.
               </Text>
             ) : null}
             <Button title={txn ? "Save changes" : "Save"} tone="primary" disabled={!valid} onPress={save} style={{ minHeight: 48 }} />

@@ -318,6 +318,12 @@ export type BudgetState = {
   months: Record<string, BudgetMonthEntry>;
   /** Where each budget account's register starts: its balance then (a card: − what you owed). */
   registers?: Record<string, { opening: number; since: string }>;
+  /**
+   * Transfers between a budget account and one you don't budget (an IRA, a brokerage account, a loan)
+   * that moved that account's balance: transaction id → the account and the amount applied, so a
+   * change or delete moves it back by exactly that much.
+   */
+  tracked?: Record<string, { to: string; amount: number }>;
 };
 
 export type Contributed = {

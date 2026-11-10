@@ -20,7 +20,7 @@ export const HELP = {
   businessAmount:
     "What you keep after business costs and taxes. If it varies, use a typical month (or this year's total ÷ 12) and pick Monthly.",
   rentalAmount:
-    "What you keep after property costs (repairs, insurance, management, taxes). If the rental's mortgage is in your budget, don't subtract it here too.",
+    "What you keep after property costs (repairs, insurance, management, taxes). Not the mortgage: add that below and it comes out of your budget as a debt payment.",
   otherAmount: "After-tax amount each time it comes in: a side gig, pension, benefits, alimony, and so on.",
 
   budget: "Your monthly spending today, not counting debt payments (those go under Debts so the plan can pay them off).",

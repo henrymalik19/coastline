@@ -56,3 +56,48 @@ export function applyRegisterBalances(p: PlanState, txns: Txn[]): void {
     if (d) d.balance = Math.max(0, -bal);
   }
 }
+
+/** Accounts you don't budget from that a transfer can move money to or from: investments and loans. */
+export type TrackingAccount = { id: string; name: string; kind: "acct" | "debt"; key: string; balance: number };
+export function trackingAccounts(p: PlanState): TrackingAccount[] {
+  return [
+    ...p.accounts.filter((a) => a.type !== "cash" && a.type !== "property").map((a) => ({ id: a.id, name: a.name.trim() || "Account", kind: "acct" as const, key: "acct:" + a.id, balance: a.balance })),
+    ...p.debts.filter((d) => !isCard(d) && !d.payroll && d.balance > 0).map((d) => ({ id: d.id, name: d.name?.trim() || "Loan", kind: "debt" as const, key: "debt:" + d.id, balance: d.balance })),
+  ];
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Move an account you don't budget by `amount` (money into it: an IRA grows, a loan's balance drops). */
+function moveTracking(p: PlanState, id: string, amount: number): void {
+  const a = p.accounts.find((x) => x.id === id);
+  if (a) {
+    a.balance = round2((+a.balance || 0) + amount);
+    return;
+  }
+  const d = p.debts.find((x) => x.id === id);
+  if (d) d.balance = Math.max(0, round2(d.balance - amount));
+}
+
+/**
+ * Keep an investment account or loan in step with a transfer to or from it: first undo what this
+ * transaction moved before (if anything), then apply it as it is now. `t` null = it was deleted.
+ */
+export function applyTracked(p: PlanState, txnId: string, t: Txn | null): void {
+  if (!p.budgetPlan) return;
+  const tracked = { ...(p.budgetPlan.tracked ?? {}) };
+  const prev = tracked[txnId];
+  if (prev) {
+    moveTracking(p, prev.to, -prev.amount);
+    delete tracked[txnId];
+  }
+  const to = t && !t.deleted ? t.transferAccountId : undefined;
+  const isTracking = !!to && !budgetAccounts(p).some((a) => a.id === to) && (p.accounts.some((a) => a.id === to) || p.debts.some((d) => d.id === to));
+  if (t && to && isTracking) {
+    // money out of checking (−) goes into the account (+), and the other way for a withdrawal
+    const amount = round2(-t.amount);
+    moveTracking(p, to, amount);
+    tracked[txnId] = { to, amount };
+  }
+  p.budgetPlan.tracked = Object.keys(tracked).length ? tracked : undefined;
+}
