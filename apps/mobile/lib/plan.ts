@@ -1,16 +1,9 @@
 import { derive, k401Cost, run, simulatePlan, type MonthRow, type PlanResult, type PlanState, type RunResult } from "@coastfi/engine";
-import { useMemo } from "react";
 import { money } from "./format";
 import { useStore } from "./store";
 import { syncPaycheckLoans } from "./loans";
 import { estimateBracket } from "./tax";
 import type { Theme } from "./theme";
-
-/** Today, as a stable Date that changes at most once a day (the engine never reads the clock). */
-function useToday(): Date {
-  const key = new Date().toDateString();
-  return useMemo(() => new Date(), [key]);
-}
 
 /**
  * The plan as the engine should see it:
@@ -46,22 +39,38 @@ export function effectivePlan(saved: PlanState): PlanState {
  * `forecast` is the Forecast tab's view: only the amounts you set (paychecks, match, minimums, your
  * schedules and budget), with nothing added from what's left over.
  */
-export function usePlan(): { state: PlanState; result: RunResult; start: Date; actual: PlanResult; forecast: PlanResult; whatIfOn: boolean } {
-  const saved = useStore((s) => s.plan);
-  const state = useMemo(() => effectivePlan(saved), [saved]);
-  const start = useToday();
-  const result = useMemo(() => run(state, start), [state, start]);
+type PlanRun = { state: PlanState; result: RunResult; start: Date; actual: PlanResult; forecast: PlanResult; whatIfOn: boolean };
+
+/**
+ * One engine run per saved plan, shared by every screen piece that calls usePlan. (A useMemo in
+ * each caller ran the whole engine once per component on every edit, which made typing lag.)
+ */
+let shared: { saved: PlanState; start: Date; value: PlanRun } | null = null;
+
+function computePlan(saved: PlanState, start: Date): PlanRun {
+  if (shared && shared.saved === saved && shared.start === start) return shared.value;
+  const state = effectivePlan(saved);
+  const result = run(state, start);
   const whatIfOn = !!(state.whatif && (state.whatif.extra || state.whatif.retDelta || state.whatif.spendDelta));
-  const actual = useMemo(() => {
-    if (!state.whatif?.extra) return result.plan;
-    const real = { ...state, whatif: { extra: 0, retDelta: 0, spendDelta: 0 } };
-    return simulatePlan(real, derive(real, start));
-  }, [state, start, result]);
-  const forecast = useMemo(() => {
-    const real = state.whatif?.extra ? { ...state, whatif: { extra: 0, retDelta: 0, spendDelta: 0 } } : state;
-    return simulatePlan(real, derive(real, start), { autoFill: false });
-  }, [state, start]);
-  return { state, result, start, actual, forecast, whatIfOn };
+  const real = state.whatif?.extra ? { ...state, whatif: { extra: 0, retDelta: 0, spendDelta: 0 } } : state;
+  const actual = state.whatif?.extra ? simulatePlan(real, derive(real, start)) : result.plan;
+  const forecast = simulatePlan(real, derive(real, start), { autoFill: false });
+  const value = { state, result, start, actual, forecast, whatIfOn };
+  shared = { saved, start, value };
+  return value;
+}
+
+/** Today as one shared Date that changes at most once a day (the engine never reads the clock), so every caller hits the same cached run. */
+let today: { key: string; date: Date } | null = null;
+function sharedToday(key: string): Date {
+  if (!today || today.key !== key) today = { key, date: new Date() };
+  return today.date;
+}
+
+export function usePlan(): PlanRun {
+  const saved = useStore((s) => s.plan);
+  const start = sharedToday(new Date().toDateString());
+  return computePlan(saved, start);
 }
 
 /** Plain-English line for a month that comes up short. */

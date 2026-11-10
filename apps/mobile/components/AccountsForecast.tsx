@@ -340,7 +340,8 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
             role="button"
             accessibilityLabel={`${label(x.key)}: plan and forecast`}
             onPress={() => setSel(on ? null : x.key)}
-            style={[{ width: COL * 2, justifyContent: "center", paddingHorizontal: 6, backgroundColor: on ? t.accentSoft : t.surface }, groupEdge]}
+            // the rows below are two COL cells plus the edge line, so the header spans the same (else each column drifts 1px)
+            style={[{ width: COL * 2 + StyleSheet.hairlineWidth, justifyContent: "center", paddingHorizontal: 6, backgroundColor: on ? t.accentSoft : t.surface }, groupEdge]}
           >
             <Text numberOfLines={1} style={[type.overline, { color: on || planned ? t.accent : t.text2, textAlign: "center", textDecorationLine: "underline", textDecorationColor: t.border }]}>
               {label(x.key).replace(" (what you owe)", "")}{planned ? " ●" : ""}

@@ -171,6 +171,8 @@ export type ProjectWith = "plan" | "current";
 export type PlanSettings = {
   steps: StepKey[];
   starterEF: number;
+  /** When set, the starter cushion is this many months of expenses (follows your spending) instead of `starterEF` dollars. */
+  starterEFMonths?: number;
   efMonths: number;
   highApr: number;
   marginalTax: number;

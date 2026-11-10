@@ -354,7 +354,7 @@ function AssumptionsSection() {
       <Group title="Plan rules">
         <Rows>
           {[
-            <FieldRow key="e" label="Emergency fund" hint={`${state.plan.efMonths} months · starter ${money(state.plan.starterEF)}. Set under Savings goals`}>
+            <FieldRow key="e" label="Emergency fund" hint={`${state.plan.efMonths} months · starter ${state.plan.starterEFMonths != null ? `${state.plan.starterEFMonths} mo` : money(state.plan.starterEF)}. Set under Savings goals`}>
               <Button title="Savings goals" onPress={() => router.push("/money/goals")} />
             </FieldRow>,
             pct("hi", '"High-interest" debt starts at', HELP.highApr, state.plan.highApr, (v) => update((p) => { p.plan.highApr = v; })),
@@ -448,39 +448,38 @@ function LimitsSection() {
         const isOpen = open.has(i);
         return (
           <Card key={`${row.year}-${i}`} style={{ gap: space.xs, paddingVertical: isOpen ? space.lg : space.md }}>
-            <Pressable
-              role="button"
-              aria-expanded={isOpen}
-              accessibilityLabel={`${row.year} limits`}
-              accessibilityState={{ expanded: isOpen }}
-              onPress={() => toggle(i)}
-              style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}
-            >
-              <View style={{ transform: [{ rotate: isOpen ? "90deg" : "0deg" }] }}>
-                <Icon name="chevron" size={18} color={t.text3} />
-              </View>
-              <Text style={[type.heading, { color: t.text, fontVariant: ["tabular-nums"] }]}>{row.year}</Text>
-              {!isOpen ? (
-                <Text numberOfLines={1} style={[type.caption, { color: t.text3, flex: 1, fontVariant: ["tabular-nums"] }]}>
-                  401(k) {money(row.k401)} · IRA {money(row.ira)} · HSA {money(row.hsaSelf)}
-                </Text>
-              ) : <View style={{ flex: 1 }} />}
-            </Pressable>
+            {/* the year itself is fixed: Add year makes the next one, so years never collide or jump around while you type */}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+              <Pressable
+                role="button"
+                aria-expanded={isOpen}
+                accessibilityLabel={`${row.year} limits`}
+                accessibilityState={{ expanded: isOpen }}
+                onPress={() => toggle(i)}
+                style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 36 }}
+              >
+                <View style={{ transform: [{ rotate: isOpen ? "90deg" : "0deg" }] }}>
+                  <Icon name="chevron" size={18} color={t.text3} />
+                </View>
+                <Text style={[type.heading, { color: t.text, fontVariant: ["tabular-nums"] }]}>{row.year}</Text>
+                {!isOpen ? (
+                  <Text numberOfLines={1} style={[type.caption, { color: t.text3, flex: 1, fontVariant: ["tabular-nums"] }]}>
+                    401(k) {money(row.k401)} · IRA {money(row.ira)} · HSA {money(row.hsaSelf)}
+                  </Text>
+                ) : null}
+              </Pressable>
+              {isOpen ? (
+                <IconButton
+                  icon="trash"
+                  color={t.bad}
+                  label={`Remove ${row.year}`}
+                  disabled={state.limits.length <= 1}
+                  onPress={() => { setOpen(new Set()); update((p) => { p.limits.splice(i, 1); }); }}
+                />
+              ) : null}
+            </View>
             {isOpen ? (
               <>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: space.xs }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                <Text style={[type.label, { color: t.text2 }]}>Year</Text>
-                <NumberInput kind="int" width={100} label="Year" value={row.year} min={2000} max={2100} onChange={(v) => update((p) => { p.limits[i]!.year = v; })} />
-              </View>
-              <IconButton
-                icon="trash"
-                color={t.bad}
-                label={`Remove ${row.year}`}
-                disabled={state.limits.length <= 1}
-                onPress={() => { setOpen(new Set()); update((p) => { p.limits.splice(i, 1); }); }}
-              />
-            </View>
             <Rows>
               {fields.map((f) => (
                 <FieldRow key={f.k} label={f.label} info={f.catchUp ? HELP.catchUp : undefined}>

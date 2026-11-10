@@ -6,7 +6,7 @@ import { HELP } from "../lib/help";
 import { usePlan } from "../lib/plan";
 import { useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { FieldRow, NumberInput } from "./form";
+import { FieldRow, NumberInput, Segmented } from "./form";
 import { Icon } from "./Icon";
 import { MonthlyAmount } from "./ScheduleEditor";
 import { Card, Divider, Pill } from "./ui";
@@ -26,7 +26,7 @@ export function EmergencyFundNote({ linkToSettings = true }: { linkToSettings?: 
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Your emergency fund is already part of your plan</Text>
           <Text style={[type.caption, { color: t.text2 }]}>
-            No need to add it as a goal. The plan builds a starter cushion of <Text style={{ fontWeight: "700", color: t.text }}>{money(state.plan.starterEF)}</Text> first,
+            No need to add it as a goal. The plan builds a starter cushion of <Text style={{ fontWeight: "700", color: t.text }}>{money(result.plan.starterTarget)}</Text> first,
             then grows it to <Text style={{ fontWeight: "700", color: t.text }}>{state.plan.efMonths} months of expenses ({money(full)})</Text>, kept in your cash accounts.
           </Text>
         </View>
@@ -70,6 +70,7 @@ export function EmergencyFundGoal() {
   const update = useStore((s) => s.update);
   const [planOpen, setPlanOpen] = useState(false);
   const [showAccounts, setShowAccounts] = useState(false);
+  const byMonths = state.plan.starterEFMonths != null;
   const hasSchedule = (k: string) => (state.plan.schedule?.[k]?.length ?? 0) > 0 || Object.keys(state.plan.scheduleMonths?.[k] ?? {}).length > 0;
   const full = actual.fullTarget;
   const cash = result.d.bal.cash;
@@ -90,8 +91,31 @@ export function EmergencyFundGoal() {
         <NumberInput kind="decimal" label="Full emergency fund in months" value={state.plan.efMonths} max={24} step={1} onChange={(v) => update((p) => { p.plan.efMonths = v; })} />
       </FieldRow>
       <Divider />
-      <FieldRow label="Starter cushion" hint="Built first, before paying down high-interest debt" info={HELP.starterEF}>
-        <NumberInput kind="money" label="Starter emergency fund" value={state.plan.starterEF} onChange={(v) => update((p) => { p.plan.starterEF = v; })} />
+      <FieldRow
+        label="Starter cushion"
+        hint={byMonths ? `${state.plan.starterEFMonths} month${state.plan.starterEFMonths === 1 ? "" : "s"} of expenses = ${money(actual.starterTarget)}. Built first, before paying down high-interest debt` : "Built first, before paying down high-interest debt"}
+        info={HELP.starterEF}
+      >
+        <View style={{ gap: space.xs, alignItems: "flex-end" }}>
+          <Segmented
+            label="Starter cushion size"
+            value={byMonths ? "months" : "amount"}
+            options={[{ value: "months", label: "Months" }, { value: "amount", label: "Amount" }]}
+            onChange={(v) => update((p) => {
+              if (v === "months") p.plan.starterEFMonths = 1;
+              else {
+                // switching to a set amount starts from what the months came to
+                if (p.plan.starterEFMonths != null) p.plan.starterEF = Math.round(actual.starterTarget);
+                delete p.plan.starterEFMonths;
+              }
+            })}
+          />
+          {byMonths ? (
+            <NumberInput kind="decimal" label="Starter emergency fund in months" value={state.plan.starterEFMonths ?? 1} max={12} step={0.5} onChange={(v) => update((p) => { p.plan.starterEFMonths = v; })} />
+          ) : (
+            <NumberInput kind="money" label="Starter emergency fund" value={state.plan.starterEF} onChange={(v) => update((p) => { p.plan.starterEF = v; })} />
+          )}
+        </View>
       </FieldRow>
       <Divider />
       <View style={{ gap: 4 }}>

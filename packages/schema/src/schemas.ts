@@ -120,6 +120,7 @@ export const StepKeySchema = z.union([z.enum(BASE_STEP_KEYS), z.templateLiteral(
 export const PlanSettingsSchema = z.object({
   steps: z.array(StepKeySchema),
   starterEF: nonNeg,
+  starterEFMonths: nonNeg.optional(),
   efMonths: nonNeg,
   highApr: rate.min(0),
   marginalTax: rate.min(0).max(1),
@@ -239,6 +240,7 @@ export type PlanStateInput = z.input<typeof PlanStateSchema>;
 export const DEFAULT_PLAN: Engine.PlanSettings = {
   steps: ["starterEF", "match", "highDebt", "fullEF", "hsa", "ira", "k401", "lowDebt", "taxable"],
   starterEF: 2000,
+  starterEFMonths: 1,
   efMonths: 3,
   highApr: 0.07,
   marginalTax: 0.22,

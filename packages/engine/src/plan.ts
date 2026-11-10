@@ -134,7 +134,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     const g = Math.pow(1 + cg, Math.floor(m / 12));
     return sum(d.incomes.map((inc) => perCheck(inc, "k401", ymOf(absMo)) * checksInMonth(inc, y0 + Math.floor(absMo / 12), absMo % 12) * g));
   });
-  const starterTarget = num(p.starterEF);
+  const starterTarget = p.starterEFMonths != null ? num(p.starterEFMonths) * efBase : num(p.starterEF);
   const fullTarget = num(p.efMonths) * efBase;
   let ytd = { k401: 0, ira: 0, hsa: 0 };
   let scale = (12 - mo0) / 12; // first year: prorate caps for the months left
