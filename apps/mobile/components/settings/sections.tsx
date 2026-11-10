@@ -25,6 +25,7 @@ import { AddDebtButtons, DebtEditor, paidFromFor } from "../DebtEditor";
 import { debtLabel } from "../../lib/debts";
 import { Card, Divider } from "../ui";
 import { HealthcareSuggestion } from "../HealthcareSuggestion";
+import { hsaEverEligible, HsaEligibilityChanges } from "../HsaEligibility";
 
 /* ---------- registry ---------- */
 
@@ -358,9 +359,12 @@ function AssumptionsSection() {
             </FieldRow>,
             pct("hi", '"High-interest" debt starts at', HELP.highApr, state.plan.highApr, (v) => update((p) => { p.plan.highApr = v; })),
             <TaxBracketRow key="mt" />,
-            <ToggleRow key="h" label="I have an HSA-eligible health plan" hint="High-deductible plan" value={state.plan.hsaEligible} onChange={(v) => update((p) => { p.plan.hsaEligible = v; })} />,
-            state.plan.hsaEligible ? <ToggleRow key="hf" label="HSA family coverage" value={state.plan.hsaFamily} onChange={(v) => update((p) => { p.plan.hsaFamily = v; })} /> : null,
-            state.plan.hsaEligible ? (
+            <View key="h">
+              <ToggleRow label="I have an HSA-eligible health plan" hint="High-deductible plan" value={state.plan.hsaEligible} onChange={(v) => update((p) => { p.plan.hsaEligible = v; })} />
+              <HsaEligibilityChanges />
+            </View>,
+            hsaEverEligible(state) ? <ToggleRow key="hf" label="HSA family coverage" value={state.plan.hsaFamily} onChange={(v) => update((p) => { p.plan.hsaFamily = v; })} /> : null,
+            hsaEverEligible(state) ? (
               <ToggleRow
                 key="hp"
                 label="I add to my HSA from my paycheck"

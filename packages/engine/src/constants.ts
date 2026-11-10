@@ -2,6 +2,8 @@ import type { BaseStepKey, PayFreq } from "./types";
 
 /** Paychecks per year. */
 export const PERIODS: Record<PayFreq, number> = { weekly: 52, biweekly: 26, semimonthly: 24, monthly: 12 };
+/** Social Security + Medicare taken from each dollar of pay (6.2% + 1.45%). */
+export const FICA = 0.0765;
 /** Paychecks in a "normal" month (extra checks above this are bonus months). */
 export const BASE_CHECKS: Record<PayFreq, number> = { weekly: 4, biweekly: 2, semimonthly: 2, monthly: 1 };
 

@@ -3,7 +3,7 @@
  * categories (budget items, bills, debt payments, savings), what you don't spend carries into next
  * month, and what you assign to savings and debts is what the plan counts as done that month.
  */
-import { budgetCategories, budgetView, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
+import { BUDGET_ITEM, budgetCategories, budgetView, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
 import { TransactionsList } from "../../components/TransactionsList";
 import { budgetAccounts, cardMap } from "../../lib/register";
@@ -11,7 +11,7 @@ import { duplicateOf } from "../../lib/budgetDupes";
 import { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Segmented, Select } from "../../components/form";
-import { MonthlyAmount } from "../../components/ScheduleEditor";
+import { ChangesLater, MonthlyAmount } from "../../components/ScheduleEditor";
 import { groupOf, groupOrder, moveGroup, moveItem, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
 import { newId } from "../../lib/store";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -321,6 +321,13 @@ export default function Budget() {
               <Select plain label="Group" value={groupOf(it)} options={groups.map((g) => ({ value: g, label: g }))} onChange={(g) => update((p) => { p.budget = moveToGroup(p.budget, itemIndex(it.id), g); })} />
             </FormRow>
           </FormList>
+          <ChangesLater
+            k={BUDGET_ITEM + it.id}
+            label={it.name || "This category"}
+            base={it.amount}
+            prompt="Going up, down or ending later?"
+            note="Each month's budget and the forecast use the amount for that month."
+          />
           <View style={[styles.chips, { justifyContent: "space-between" }]}>
             <View style={styles.chips}>
               <Chip title="Up" icon="up" disabled={idx <= 0 || groupOf(state.budget[idx - 1]!) !== groupOf(it)} onPress={() => update((p) => { p.budget = moveItem(p.budget, itemIndex(it.id), -1); })} />

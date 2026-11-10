@@ -41,6 +41,36 @@ export function isSpouseIra(s: Pick<PlanState, "spouse">, a: Pick<Account, "name
 export const PAY401 = "pay401:";
 export const PAYHSA = "payhsa:";
 
+/*
+ * Other amounts that change over time. Each uses the same schedule as the rest of the plan: a change
+ * from a month on ("$3,300/check from Jan 2027", until the next change) or a one-month change.
+ */
+/** A job's gross pay per paycheck ("paygross:<job id>"): a raise, a new job, an unpaid month. */
+export const PAYGROSS = "paygross:";
+/** Take-home per payment you typed ("paynet:<income id>"): other income, or a job's typed take-home. */
+export const PAYNET = "paynet:";
+/** A paycheck deduction ("payded:<job id>:<deduction id>"): insurance going up, union dues starting. */
+export const PAYDED = "payded:";
+/** What an employer puts in your HSA per year ("hsaemp:<job id>"). */
+export const HSAEMP = "hsaemp:";
+/** A budget item's monthly amount ("item:<item id>"): rent going up, daycare ending. */
+export const BUDGET_ITEM = "item:";
+/** Whether you can put money in an HSA (1 or 0), changed by month. */
+export const HSA_ELIGIBLE = "hsaEligible";
+
+/** Keys that change an input (pay, costs, eligibility), not how much goes into an account or debt. */
+export const isValueKey = (k: string): boolean =>
+  k === HSA_ELIGIBLE || [PAY401, PAYHSA, PAYGROSS, PAYNET, PAYDED, HSAEMP, BUDGET_ITEM].some((p) => k.startsWith(p));
+
+/** An amount in a month ("YYYY-MM"): a one-month change, else the change in effect, else `base` (today's). */
+export function valueIn(p: Pick<PlanSettings, "schedule" | "scheduleMonths"> | undefined, key: string, month: string, base: number): number {
+  return scheduleAmount(p ?? {}, key, month) ?? base;
+}
+
+/** Whether you can put money in an HSA in a month: the setting, changed by month. */
+export const hsaEligibleIn = (p: Partial<Pick<PlanSettings, "schedule" | "scheduleMonths" | "hsaEligible">> | undefined, month: string): boolean =>
+  valueIn(p, HSA_ELIGIBLE, month, p?.hsaEligible ? 1 : 0) > 0;
+
 /**
  * A job's 401(k) or HSA per paycheck in a month: a one-month change, else the change in effect (a dollar
  * amount, or a share of gross pay when the job has one), else what the job says today.

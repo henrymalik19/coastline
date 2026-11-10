@@ -3,7 +3,7 @@
  * Reads engine output only; no money math beyond display.
  */
 import { spouseIraLabel } from "./spouse";
-import { BUCKET_LABELS, isSpouseIra, payPerCheck, scheduleAmount, isHighInterest, k401Cost, limitsFor, paysExtra, PERIODS, STEP_LABELS, type MonthRow, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
+import { BUCKET_LABELS, HSA_ELIGIBLE, isSpouseIra, payPerCheck, scheduleAmount, isHighInterest, k401Cost, limitsFor, paysExtra, PERIODS, STEP_LABELS, type MonthRow, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
 import { debtLabel } from "./debts";
 import { money, monthLabel, percent } from "./format";
 
@@ -180,7 +180,7 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
     return { key: step, label: `Max out ${spouseIraLabel(s)} (${money(cap)}/yr)`, done: false, meta };
   }
   if (step === "hsa" || step === "ira" || step === "k401") {
-    if (step === "hsa" && !s.plan.hsaEligible) return { key: step, label: STEP_LABELS.hsa, done: false, skip: true, meta: "Skipped: no HSA-eligible health plan (change in Settings)" };
+    if (step === "hsa" && !s.plan.hsaEligible && !(s.plan.schedule?.[HSA_ELIGIBLE] ?? []).some((e) => e.amount > 0)) return { key: step, label: STEP_LABELS.hsa, done: false, skip: true, meta: "Skipped: no HSA-eligible health plan (change in Settings)" };
     const ff = pl.firstFund[step];
     const mx = pl.maxedYears[step];
     const L = limitsFor(s.limits, start.getFullYear() + 1);

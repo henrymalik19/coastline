@@ -13,7 +13,7 @@
  */
 import { accountForecasts } from "./forecast";
 import { paysExtra, setAsideFor } from "./plan";
-import { ACCOUNT_KEY, accountPlanKey, scheduleAmount } from "./schedule";
+import { ACCOUNT_KEY, accountPlanKey, BUDGET_ITEM, hsaEligibleIn, scheduleAmount, valueIn } from "./schedule";
 import type { BudgetState, Derived, PlanResult, PlanState, Txn } from "./types";
 import { txnActivity } from "./txn";
 import { addMonths, monthsBetween, num } from "./util";
@@ -80,7 +80,7 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
     return f ? (f.months[Math.min(i, f.months.length - 1)]?.plan ?? 0) : 0;
   };
   // spending: the budget
-  for (const b of s.budget ?? []) out.push({ key: b.id, group: b.group?.trim() || "Other", name: b.name || "Budget item", kind: "spending", target: Math.max(0, num(b.amount)), moves: false });
+  for (const b of s.budget ?? []) out.push({ key: b.id, group: b.group?.trim() || "Other", name: b.name || "Budget item", kind: "spending", target: Math.max(0, valueIn(s.plan, BUDGET_ITEM + b.id, month, num(b.amount))), moves: false });
   // bills: repeating goals
   for (const g of s.goals ?? [])
     if (g.recurring) out.push({ key: "goal:" + g.id, group: g.budgetGroup?.trim() || "Bills", name: g.name || "Bill", kind: "bill", target: setAsideFor(g, month), moves: false });
@@ -113,7 +113,7 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
   const kinds: { kind: "cash" | "ira" | "hsa" | "taxable"; name: string; wanted: boolean }[] = [
     { kind: "cash", name: "Emergency fund", wanted: steps.includes("starterEF") || steps.includes("fullEF") },
     { kind: "ira", name: "IRA", wanted: steps.includes("ira") },
-    { kind: "hsa", name: "HSA", wanted: steps.includes("hsa") && !!s.plan?.hsaEligible && s.plan?.hsaPayroll === false },
+    { kind: "hsa", name: "HSA", wanted: steps.includes("hsa") && hsaEligibleIn(s.plan, month) && s.plan?.hsaPayroll === false },
     { kind: "taxable", name: "Brokerage", wanted: steps.includes("taxable") },
   ];
   for (const k of kinds) {

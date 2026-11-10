@@ -1,4 +1,4 @@
-import { k401Cost, PAY401, PAYHSA, PERIODS, resolveIncome, type Income, type IncomeKind, type PayFreq, type PayTaxes } from "@coastfi/engine";
+import { HSAEMP, k401Cost, PAY401, PAYDED, PAYGROSS, PAYHSA, PAYNET, PERIODS, resolveIncome, type Income, type IncomeKind, type PayFreq, type PayTaxes } from "@coastfi/engine";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money, percent } from "../lib/format";
@@ -14,7 +14,8 @@ import { Icon } from "./Icon";
 const HSA_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 import { AddChip, MasterDetail } from "./MasterDetail";
 import { Card, Divider } from "./ui";
-import { monthName, PaycheckChanges } from "./ScheduleEditor";
+import { ChangesLater, monthName, PaycheckChanges } from "./ScheduleEditor";
+import { hsaEverEligible } from "./HsaEligibility";
 import { confirm } from "../lib/confirm";
 import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
@@ -115,9 +116,12 @@ export function IncomeEditor({
       {isJob ? (
         <JobPay inc={inc} auto={auto} change={change} marginalTax={marginalTax} />
       ) : (
-        <FieldRow label={`Amount you keep ${inc.freq === "monthly" ? "per month" : "each time"}`} hint="After taxes and costs" info={amountHelp}>
-          <NumberInput kind="money" label="Amount you keep" value={inc.net} onChange={(v) => change({ net: v })} />
-        </FieldRow>
+        <>
+          <FieldRow label={`Amount you keep ${inc.freq === "monthly" ? "per month" : "each time"}`} hint="After taxes and costs" info={amountHelp}>
+            <NumberInput kind="money" label="Amount you keep" value={inc.net} onChange={(v) => change({ net: v })} />
+          </FieldRow>
+          <ChangesLater k={PAYNET + inc.id} label={inc.name || "This income"} base={inc.net} unit={inc.freq === "monthly" ? "/mo" : " each time"} prompt="Going up, down or ending later?" />
+        </>
       )}
       {kind === "rental" ? <RentalValue inc={inc} /> : null}
     </Wrap>
@@ -263,6 +267,14 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
       <FieldRow label="Gross pay per paycheck" hint="Before anything is taken out" info={HELP.gross}>
         <NumberInput kind="money" label="Gross pay per paycheck" value={inc.gross ?? 0} onChange={(v) => change({ gross: v })} />
       </FieldRow>
+      <ChangesLater
+        k={PAYGROSS + inc.id}
+        label="Gross pay"
+        base={inc.gross ?? 0}
+        unit="/check"
+        prompt="A raise or pay change coming?"
+        note="Take-home, a % of pay 401(k) and the match follow it; the extra is taxed at your tax bracket. For a steady raise every year, set Raises above inflation in Settings → Assumptions."
+      />
 
       {/* the result, right under the pay it comes from */}
       <View style={[styles.result, { backgroundColor: auto && pay.taxes === 0 && pay.gross > 0 ? t.warnSoft : t.accentSoft }]}>
@@ -283,6 +295,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
             <NumberInput kind="money" label="Take-home per paycheck" value={inc.net} onChange={(v) => change({ net: v })} />
           )}
         </View>
+        {!auto ? <ChangesLater k={PAYNET + inc.id} label="Take-home" base={inc.net} unit="/check" prompt="Take-home changing later?" /> : null}
         {auto && pay.gross > 0 ? (
           <Text style={[type.caption, { color: t.text3 }]}>
             {money(pay.gross)} − {money(pay.k401)} 401(k){pay.hsa > 0 ? ` − ${money(pay.hsa)} HSA` : ""} − {money(pay.taxes)} taxes
@@ -411,6 +424,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
         <FieldRow label="Your employer puts in" hint="Per year. Free money that counts toward your HSA limit" info={HELP.hsaEmployer}>
           <NumberInput kind="money" label="Employer HSA contribution per year" value={inc.hsaEmployer ?? 0} onChange={(v) => change({ hsaEmployer: v || undefined })} />
         </FieldRow>
+        <ChangesLater k={HSAEMP + inc.id} label="Employer HSA" base={inc.hsaEmployer ?? 0} unit="/yr" prompt="Starting or changing later?" />
         {(inc.hsaEmployer ?? 0) > 0 ? (
           <FieldRow
             label="It comes"
@@ -434,7 +448,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
             </View>
           </FieldRow>
         ) : null}
-        {((inc.hsaEmployer ?? 0) > 0 || (inc.hsaPre ?? 0) > 0 || hsaLater) && !state.plan.hsaEligible ? (
+        {((inc.hsaEmployer ?? 0) > 0 || (inc.hsaPre ?? 0) > 0 || hsaLater) && !hsaEverEligible(state) ? (
           <Text style={[type.caption, { color: t.warn }]}>
             Turn on "I have an HSA-eligible health plan" in Settings → Assumptions & plan rules so your plan can add to it too.
           </Text>
@@ -447,15 +461,18 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
             if (isLoanDeduction(x)) return null; // shown in the 401(k) section
             const label = DEDUCTION_KINDS.find((k) => k.value === x.kind)?.label ?? "Other";
             return (
-              <View key={x.id} style={styles.dedRow}>
-                <Text style={[type.body, { color: t.text, flex: 1 }]}>{label}</Text>
-                <NumberInput
-                  kind="money"
-                  label={`${label} per paycheck`}
-                  value={x.amount}
-                  onChange={(v) => change({ deductions: deductions.map((d, j) => (j === i ? { ...d, amount: v } : d)) })}
-                />
-                <IconButton icon="trash" color={t.bad} label={`Remove ${label}`} onPress={() => change({ deductions: deductions.filter((_, j) => j !== i) })} />
+              <View key={x.id} style={{ gap: 2 }}>
+                <View style={styles.dedRow}>
+                  <Text style={[type.body, { color: t.text, flex: 1 }]}>{label}</Text>
+                  <NumberInput
+                    kind="money"
+                    label={`${label} per paycheck`}
+                    value={x.amount}
+                    onChange={(v) => change({ deductions: deductions.map((d, j) => (j === i ? { ...d, amount: v } : d)) })}
+                  />
+                  <IconButton icon="trash" color={t.bad} label={`Remove ${label}`} onPress={() => change({ deductions: deductions.filter((_, j) => j !== i) })} />
+                </View>
+                <ChangesLater k={`${PAYDED}${inc.id}:${x.id}`} label={label} base={x.amount} unit="/check" />
               </View>
             );
           })}

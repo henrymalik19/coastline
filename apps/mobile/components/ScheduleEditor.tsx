@@ -51,8 +51,13 @@ export function useSchedule(k: string) {
   return { list, set, oneOffs, setMonth };
 }
 
-export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared, perCheck, base, gross }: {
+export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared, perCheck, base, gross, value }: {
   k: string; label: string; unit?: string; note?: string; onCleared?: () => void;
+  /**
+   * An input that changes over time (pay, a cost): today's amount is the field it's under, so the
+   * list holds only the changes after today, and nothing here is "savings".
+   */
+  value?: boolean;
   /** A paycheck amount (401(k), HSA): per check, set on the job, not from what's left. */
   perCheck?: boolean;
   /** What a new change starts at (today's per-check amount). */
@@ -69,9 +74,17 @@ export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared, perChe
   const current = [...list].filter((e) => e.from <= monthKey(start)).pop();
   const nextFrom = last
     ? monthKey(new Date(Number(last.from.slice(0, 4)), Number(last.from.slice(5, 7)), 1))
-    : monthKey(start);
+    : value ? monthKey(new Date(start.getFullYear(), start.getMonth() + 1, 1)) : monthKey(start);
+  const unitText = (u: string) => (u === "/mo" ? "/mo" : u);
   return (
     <View style={[styles.box, { backgroundColor: t.surface2 }]}>
+      {value ? (
+        <View style={[styles.row, !current ? { borderLeftWidth: 3, borderLeftColor: t.accent, paddingLeft: 6 } : null]}>
+          <Text style={[type.caption, { color: t.text2, width: 36 }]}>Now</Text>
+          <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(base ?? 0)}{unitText(unit)}</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>(the amount above)</Text>
+        </View>
+      ) : null}
       {list.map((e, n) => (
         <View key={e.from + n} style={[styles.row, e === current ? { borderLeftWidth: 3, borderLeftColor: t.accent, paddingLeft: 6 } : null]}>
           <Text style={[type.caption, { color: t.text2, width: 36 }]}>From</Text>
@@ -115,8 +128,8 @@ export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared, perChe
         </View>
       ))}
       <View style={styles.row}>
-        <Button title={list.length ? "Add a change" : perCheck ? "Change it from a month" : "Set a monthly amount"} icon="plus" onPress={() => set([...list, { from: nextFrom, amount: last?.amount ?? base ?? 0 }])} style={{ minHeight: 36 }} />
-        {list.length ? (
+        <Button title={list.length || value ? "Add a change" : perCheck ? "Change it from a month" : "Set a monthly amount"} icon="plus" onPress={() => set([...list, { from: nextFrom, amount: last?.amount ?? base ?? 0 }])} style={{ minHeight: 36 }} />
+        {list.length || value ? (
           <Button
             title="Change one month"
             tone="ghost"
@@ -124,18 +137,20 @@ export function ScheduleEditor({ k, label, unit = "/mo", note, onCleared, perChe
               // the first month after today without its own change
               let d = new Date(start.getFullYear(), start.getMonth() + 1, 1);
               while (oneOffs[monthKey(d)] !== undefined) d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-              setMonth(monthKey(d), list.filter((e) => e.from <= monthKey(d)).pop()?.amount ?? 0);
+              setMonth(monthKey(d), list.filter((e) => e.from <= monthKey(d)).pop()?.amount ?? base ?? 0);
             }}
             style={{ minHeight: 36 }}
           />
         ) : null}
-        {list.length || singles.length ? <Button title={perCheck ? "Same every paycheck" : "Follow my steps instead"} tone="ghost" onPress={() => { set(undefined); singles.forEach((m) => setMonth(m, undefined)); onCleared?.(); }} style={{ minHeight: 36 }} /> : null}
+        {list.length || singles.length ? <Button title={value ? "Remove all changes" : perCheck ? "Same every paycheck" : "Follow my steps instead"} tone="ghost" onPress={() => { set(undefined); singles.forEach((m) => setMonth(m, undefined)); onCleared?.(); }} style={{ minHeight: 36 }} /> : null}
       </View>
       <Text style={[type.caption, { color: t.text3 }]}>
-        {perCheck
+        {value
+          ? "Today's amount stays until your first change. Each change lasts until the next one; a one-month change applies to that month only. Use today's dollars (the plan adds no inflation)."
+          : perCheck
           ? "Each amount is per paycheck, from its month until your next change; a one-month change applies to that month only. Use $0 to pause. Putting in less comes back as take-home (after tax if pre-tax); putting in more comes out of it."
           : "Each amount runs from its month until your next change; a one-month change applies to that month only. It goes in before your other steps, if there's that much left after your budget. Use $0 to stop."}
-        {note ? ` ${note}` : ""}{perCheck ? "" : " Shows as savings on your budget."}
+        {note ? ` ${note}` : ""}{perCheck || value ? "" : " Shows as savings on your budget."}
       </Text>
     </View>
   );
@@ -230,6 +245,33 @@ export function PaycheckChanges({ k, label, base, gross }: { k: string; label: s
       </Pressable>
       {open ? <ScheduleEditor k={k} label={label} unit="/check" perCheck base={base} gross={gross && gross > 0 ? gross : undefined} /> : null}
       {open && !(gross && gross > 0) ? <Text style={[type.caption, { color: t.text3 }]}>Add this job's gross pay per check to set changes as a % of pay.</Text> : null}
+    </View>
+  );
+}
+
+/**
+ * "Changes later?" under an amount (pay, a deduction, a bill): opens the list of changes, and says
+ * what's coming when there are some ("$3,300/check from Jan 2027").
+ */
+export function ChangesLater({ k, label, base, unit = "/mo", note, prompt = "Changes later?" }: {
+  k: string; label: string; base: number; unit?: string; note?: string; prompt?: string;
+}) {
+  const t = useTheme();
+  const { list, oneOffs } = useSchedule(k);
+  const [open, setOpen] = useState(false);
+  const singles = Object.keys(oneOffs).length;
+  const any = list.length > 0 || singles > 0;
+  const text = any
+    ? [list.map((e) => `${money(e.amount)}${unit} from ${monthName(e.from)}`).join(" → "), singles ? `${singles} one-month change${singles === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ")
+    : prompt;
+  return (
+    <View style={{ gap: 6 }}>
+      <Pressable role="button" aria-expanded={open} accessibilityLabel={`${label}: ${text}`} onPress={() => setOpen((v) => !v)} hitSlop={6} style={styles.link}>
+        <Text style={[type.caption, { color: any ? t.accent : t.text3, fontWeight: "700", flexShrink: 1 }]}>{text}</Text>
+        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}> {open ? "Hide" : any ? "Change" : "Set it by month"}</Text>
+        <Icon name="chevron" size={12} color={t.accent} />
+      </Pressable>
+      {open ? <ScheduleEditor k={k} label={label} unit={unit} base={base} note={note} value onCleared={() => setOpen(false)} /> : null}
     </View>
   );
 }

@@ -7,6 +7,7 @@ import { spouseIraLabel } from "../lib/spouse";
 import { space, type, useTheme } from "../lib/theme";
 import { Button, FieldRow, NumberInput, Segmented } from "./form";
 import { Card, Divider } from "./ui";
+import { hsaEligibleInYear } from "./HsaEligibility";
 
 /**
  * What you've already put in for the tax year. With it, the plan knows the exact room left (and that
@@ -29,7 +30,7 @@ export function ContributionsCard() {
   const caps = {
     k401: L.k401 + (age >= 50 ? L.k401Catch : 0),
     ira: L.ira + (age >= 50 ? L.iraCatch : 0),
-    hsa: state.plan.hsaEligible ? (state.plan.hsaFamily ? L.hsaFamily : L.hsaSelf) + (age >= 55 ? L.hsaCatch : 0) : 0,
+    hsa: hsaEligibleInYear(state, year) ? (state.plan.hsaFamily ? L.hsaFamily : L.hsaSelf) + (age >= 55 ? L.hsaCatch : 0) : 0,
     iraSpouse: L.ira + ((state.spouse?.age ?? 0) + (year - thisYear) >= 50 ? L.iraCatch : 0),
   };
   const left = (k: keyof typeof caps) => Math.max(0, caps[k] - values[k]);
@@ -73,7 +74,7 @@ export function ContributionsCard() {
           </FieldRow>
         </>
       ) : null}
-      {state.plan.hsaEligible ? (
+      {hsaEligibleInYear(state, year) ? (
         <>
           <Divider />
           <FieldRow label="HSA" hint={hint("hsa", "Yours + your employer's")}>

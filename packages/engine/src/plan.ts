@@ -1,9 +1,9 @@
-import { BASE_CHECKS, PERIODS } from "./constants";
+import { BASE_CHECKS, FICA, PERIODS } from "./constants";
 import { limitsFor } from "./limits";
 import { checksInMonth } from "./paychecks";
 import type { Adjustment, Alloc, Debt, Derived, FundKey, MonthRow, PlanEvent, PlanResult, PlanSettings, PlanState, SimulateOptions, Goal, RecurringGoal, Limits } from "./types";
 import { addMonths, monthsBetween, num, sum } from "./util";
-import { budgetScheduleMonths, isSpouseIra, mergeAccountSchedules, mergeMonths, PAY401, PAYHSA, payPerCheck, scheduleAmount } from "./schedule";
+import { budgetScheduleMonths, BUDGET_ITEM, HSAEMP, hsaEligibleIn, isSpouseIra, isValueKey, mergeAccountSchedules, mergeMonths, PAYDED, PAYGROSS, PAYNET, payPerCheck, scheduleAmount, valueIn } from "./schedule";
 import { matchFor } from "./match";
 export { scheduleAmount } from "./schedule";
 
@@ -92,7 +92,9 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   // one-off adjustments, by "YYYY-MM"
   // emergency mode: waterfall paused (and optionally essentials-only spending / no payroll 401(k)) through 'until'
   const em = s.emergency?.active ? s.emergency : null;
-  const essentialBudget = sum((s.budget ?? []).filter((b) => b.essential !== false).map((b) => b.amount));
+  // the budget in a month: each item's amount then (rent going up, daycare ending), essentials only when asked
+  const budgetIn = (ym: string, essentialOnly = false) =>
+    sum((s.budget ?? []).filter((b) => !essentialOnly || b.essential !== false).map((b) => valueIn(p, BUDGET_ITEM + b.id, ym, num(b.amount))));
 
   const adjByMonth = new Map<string, Adjustment[]>();
   for (const a of s.adjustments ?? []) adjByMonth.set(a.month, [...(adjByMonth.get(a.month) ?? []), a]);
@@ -103,15 +105,24 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
 
   // A job's 401(k) / HSA per paycheck can change by month ("pay401:<job id>", "payhsa:<job id>"):
   // $0 for Nov–Dec, then back on in January. Without a change it's what the job says today.
-  const perCheck = (inc: Derived["incomes"][number], kind: "k401" | "hsa", month: string): number => payPerCheck(p, inc, kind, month);
+  // A job in a month: its gross pay then (a raise, a new job, an unpaid month), and the 401(k) and
+  // match that follow from it when the 401(k) is a % of pay.
+  const incAt = (inc: Derived["incomes"][number], ym: string): Derived["incomes"][number] => {
+    const g0 = num(inc.gross);
+    const gm = Math.max(0, valueIn(p, PAYGROSS + inc.id, ym, g0));
+    if (gm === g0) return inc;
+    const pct = inc.matchMode === "pct";
+    return { ...inc, gross: gm, pretax: pct ? gm * num(inc.contribPct) : inc.pretax, match: pct ? matchFor(gm, num(inc.contribPct), inc) : inc.match };
+  };
+  const perCheck = (inc: Derived["incomes"][number], kind: "k401" | "hsa", month: string): number => payPerCheck(p, incAt(inc, month), kind, month);
   const loanPerCheck = new Map<string, { i: number; amount: number }>();
   d.incomes.forEach((inc, i) => {
     for (const x of inc.deductions ?? []) if (x.debtId && num(x.amount) > 0) loanPerCheck.set(x.debtId, { i, amount: num(x.amount) });
   });
   // employer HSA money in a calendar month (0–11): a once-a-year deposit in its month, or a twelfth every month
-  const hsaEmployerIn = (mo: number) =>
+  const hsaEmployerIn = (mo: number, ym: string) =>
     sum(d.incomes.map((inc) => {
-      const yr = Math.max(0, num(inc.hsaEmployer));
+      const yr = Math.max(0, valueIn(p, HSAEMP + inc.id, ym, num(inc.hsaEmployer)));
       const at = num(inc.hsaEmployerMonth);
       return at >= 1 && at <= 12 ? (mo === at - 1 ? yr : 0) : yr / 12;
     }));
@@ -131,7 +142,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   // IRA/HSA room for last year can still be used January–April (the April 15 deadline).
   const known = s.contributed;
   const iraCapFor = (lim: Limits, age: number) => lim.ira + (age >= 50 ? lim.iraCatch : 0);
-  const hsaCapFor = (lim: Limits, age: number) => (p.hsaEligible ? (p.hsaFamily ? lim.hsaFamily : lim.hsaSelf) + (age >= 55 ? lim.hsaCatch : 0) : 0);
+  const hsaCapFor = (lim: Limits, age: number, ym: string) => (hsaEligibleIn(p, ym) ? (p.hsaFamily ? lim.hsaFamily : lim.hsaSelf) + (age >= 55 ? lim.hsaCatch : 0) : 0);
   let prior = { ira: 0, hsa: 0, year: 0 };
   // your spouse's IRA (a spousal IRA when you file jointly): their own limit, by their own age
   const spouse = s.spouse;
@@ -145,7 +156,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     scale = 1;
   } else if (known && num(known.year) === y0 - 1 && mo0 <= 3) {
     const Lp = limitsFor(s.limits, y0 - 1);
-    prior = { ira: Math.max(0, iraCapFor(Lp, d.age) - num(known.ira)), hsa: Math.max(0, hsaCapFor(Lp, d.age) - num(known.hsa)), year: y0 - 1 };
+    prior = { ira: Math.max(0, iraCapFor(Lp, d.age) - num(known.ira)), hsa: Math.max(0, hsaCapFor(Lp, d.age, `${y0 - 1}-12`) - num(known.hsa)), year: y0 - 1 };
     if (hasSpIra) priorSp = Math.max(0, iraCapFor(Lp, spAge0) - num(known.iraSpouse));
     scale = 1;
   }
@@ -174,7 +185,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   const schedule = p.schedule ?? {};
   const scheduleMonths = p.scheduleMonths ?? {};
   // paycheck changes (pay401:, payhsa:) are handled with the paychecks, not from what's left
-  const schedKeys = [...new Set([...Object.keys(schedule), ...Object.keys(scheduleMonths)])].filter((k) => !k.startsWith(PAY401) && !k.startsWith(PAYHSA));
+  const schedKeys = [...new Set([...Object.keys(schedule), ...Object.keys(scheduleMonths)])].filter((k) => !isValueKey(k));
   // debts first, then cash, goals, HSA, IRA, brokerage
   const rank = (k: string) => (k.startsWith("debt:") ? 0 : k === "cash" ? 1 : k.startsWith("goal:") ? 2 : k === "hsa" ? 3 : k === "ira" || k === "iraSpouse" ? 4 : 5);
   schedKeys.sort((a, b) => rank(a) - rank(b));
@@ -189,7 +200,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         ytd.k401 += num(inc.pretax) * c;
         if (hsaPayroll) ytd.hsa += Math.max(0, num(inc.hsaPre)) * c;
       }
-    if (hsaPayroll) for (let mo = 0; mo < mo0; mo++) ytd.hsa += hsaEmployerIn(mo);
+    if (hsaPayroll) for (let mo = 0; mo < mo0; mo++) ytd.hsa += hsaEmployerIn(mo, ymOf(mo));
     if (mo0 > 0) ytdBefore = { k401: ytd.k401, hsa: ytd.hsa };
   }
   const out: MonthRow[] = [];
@@ -213,7 +224,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         // unused IRA/HSA room for the year that just ended can still be filled until April 15
         const Lp = limitsFor(s.limits, y - 1);
         const ageEnd = d.age + (m - 1) / 12;
-        prior = { ira: Math.max(0, iraCapFor(Lp, ageEnd) - ytd.ira), hsa: Math.max(0, hsaCapFor(Lp, ageEnd) - ytd.hsa), year: y - 1 };
+        prior = { ira: Math.max(0, iraCapFor(Lp, ageEnd) - ytd.ira), hsa: Math.max(0, hsaCapFor(Lp, ageEnd, `${y - 1}-12`) - ytd.hsa), year: y - 1 };
         if (hasSpIra) priorSp = Math.max(0, iraCapFor(Lp, spAge0 + (m - 1) / 12) - ytdSp);
       }
       ytd = { k401: 0, ira: 0, hsa: 0 };
@@ -239,7 +250,19 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       const c = checksInMonth(inc, y, mo);
       checks.push(c);
       if (c > BASE_CHECKS[inc.freq] + 1e-9 && Number.isInteger(c)) extraCheck = true;
-      income += num(inc.net) * c * g;
+      // take-home you typed can change by month (other income, a job's typed take-home)
+      income += valueIn(p, PAYNET + inc.id, ymNow, num(inc.net)) * c * g;
+      const incM = incAt(inc, ymNow);
+      // a raise (or a pay cut) changes take-home by what's left after income tax, Social Security and Medicare
+      const dGross = num(incM.gross) - num(inc.gross);
+      if (dGross !== 0) income += dGross * c * g * Math.max(0, 1 - mt - FICA);
+      // a deduction that changes (insurance going up): the difference comes out of take-home
+      for (const x of inc.deductions ?? []) {
+        if (x.debtId) continue;
+        const a0 = num(x.amount);
+        const a = Math.max(0, valueIn(p, PAYDED + inc.id + ":" + x.id, ymNow, a0));
+        if (a !== a0) income -= (a - a0) * c * g;
+      }
       const pre0 = num(inc.pretax);
       const pre = perCheck(inc, "k401", ymNow);
       const roth = Math.min(1, Math.max(0, num(inc.rothShare)));
@@ -247,8 +270,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       // the match follows what you put in (never more than today's)
       // (exact from the match formula when the job is set as a % of pay)
       const matchNow =
-        pre === pre0 ? num(inc.match)
-        : inc.matchMode === "pct" && num(inc.gross) > 0 ? matchFor(num(inc.gross), pre / num(inc.gross), inc)
+        pre === num(incM.pretax) ? num(incM.match)
+        : inc.matchMode === "pct" && num(incM.gross) > 0 ? matchFor(num(incM.gross), pre / num(incM.gross), inc)
         : pre0 > 0 ? num(inc.match) * Math.min(1, pre / pre0) : 0;
       payMatch += matchNow * c * g;
       payRoth += pre * c * g * roth;
@@ -286,7 +309,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
 
     // employer HSA contributions count toward the year's HSA limit
     const capHsaFull = ((p.hsaFamily ? L.hsaFamily : L.hsaSelf) + (ageNow >= 55 ? L.hsaCatch : 0)) * hScale;
-    const payHsaEmployer = Math.min(hsaEmployerIn(mo), Math.max(0, capHsaFull - ytd.hsa));
+    const payHsaEmployer = Math.min(hsaEmployerIn(mo, ymNow), Math.max(0, capHsaFull - ytd.hsa));
     ytd.hsa += payHsaEmployer;
     const hsaSched = sum(d.incomes.map((inc, i) => perCheck(inc, "hsa", ymNow) * checks[i]! * g));
     // a payroll HSA changed by month: the difference comes back as (or comes out of) take-home
@@ -368,7 +391,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         r.due = addMonths(r.due, r.every);
       }
     }
-    const expenses = (inEmergency && em!.essentialsOnly ? essentialBudget : d.budgetTotal) + minPay + adjExpense + setAside;
+    const expenses = budgetIn(ymNow, inEmergency && em!.essentialsOnly) + minPay + adjExpense + setAside;
     let avail = income - expenses + extraMonthly;
     // what's left after bills this month, and how much of it your schedule asked for / got
     const available = avail;
@@ -407,7 +430,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     // deferrals already scheduled for the rest of this calendar year.
     const capK401 = Math.max(0, capK401Full - ytd.k401 - futurePre);
     const capIra = Math.max(0, (L.ira + (ageNow >= 50 ? L.iraCatch : 0)) * scale - ytd.ira);
-    const capHsa = p.hsaEligible ? Math.max(0, capHsaFull - ytd.hsa) : 0;
+    const capHsa = hsaEligibleIn(p, ymNow) ? Math.max(0, capHsaFull - ytd.hsa) : 0;
     const spAgeNow = spAge0 + m / 12;
     const capSp = hasSpIra ? Math.max(0, iraCapFor(L, spAgeNow) * scale - ytdSp) : 0;
 
@@ -471,7 +494,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
           else if (step === "lowDebt") payDebts((x) => !isHighInterest(x, thr));
           else if (step === "hsa" && hsaPayroll) {
             // from paychecks: steady per check, pre-tax, this year only (yours + employer's count)
-            const level = Math.max(0, hsaCapFor(L, ageNow) * hsaFrac - payHsaEmployer - payHsa - alloc.hsa);
+            const level = Math.max(0, hsaCapFor(L, ageNow, ymNow) * hsaFrac - payHsaEmployer - payHsa - alloc.hsa);
             const room = Math.max(0, Math.min(capHsa - alloc.hsa, level));
             const put = Math.min(avail, room * hsaCost);
             alloc.hsa += put / hsaCost;
@@ -612,7 +635,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       if (ytd.k401 >= capK401Full - 1) maxedYears.k401.push(y);
       if (ytd.ira >= (L.ira + (ageNow >= 50 ? L.iraCatch : 0)) * scale - 1) maxedYears.ira.push(y);
       if (hasSpIra && ytdSp >= iraCapFor(L, spAgeNow) * scale - 1) maxedYears.iraSpouse!.push(y);
-      if (p.hsaEligible && ytd.hsa >= ((p.hsaFamily ? L.hsaFamily : L.hsaSelf) + (ageNow >= 55 ? L.hsaCatch : 0)) * hScale - 1) {
+      if (hsaEligibleIn(p, ymNow) && ytd.hsa >= ((p.hsaFamily ? L.hsaFamily : L.hsaSelf) + (ageNow >= 55 ? L.hsaCatch : 0)) * hScale - 1) {
         maxedYears.hsa.push(y);
       }
     }

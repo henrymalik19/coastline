@@ -1,7 +1,7 @@
 import { limitsFor } from "./limits";
 import { rateIn } from "./plan";
 import { num } from "./util";
-import { accountGroup, isSpouseIra } from "./schedule";
+import { accountGroup, hsaEligibleIn, isSpouseIra } from "./schedule";
 import type { Derived, PlanAccount, PlanResult, PlanState } from "./types";
 
 export type AccountKey = "k401" | "hsa" | "ira" | "iraSpouse" | "taxable" | "other" | "cash" | `debt:${string}` | `goal:${string}`;
@@ -137,7 +137,8 @@ export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: 
       if (a.key === "k401") yr.limit = L.k401 + (age >= 50 ? L.k401Catch : 0);
       else if (a.key === "ira") yr.limit = L.ira + (age >= 50 ? L.iraCatch : 0);
       else if (a.key === "iraSpouse") yr.limit = L.ira + (num(s.spouse?.age) + (yr.year - d.start.getFullYear()) >= 50 ? L.iraCatch : 0);
-      else if (a.key === "hsa" && s.plan.hsaEligible) yr.limit = (s.plan.hsaFamily ? L.hsaFamily : L.hsaSelf) + (age >= 55 ? L.hsaCatch : 0);
+      // eligible for any part of the year: that year has a limit (it's prorated in real life; the plan keeps it simple)
+      else if (a.key === "hsa" && Array.from({ length: 12 }, (_, i) => `${yr.year}-${String(i + 1).padStart(2, "0")}`).some((m) => hsaEligibleIn(s.plan, m))) yr.limit = (s.plan.hsaFamily ? L.hsaFamily : L.hsaSelf) + (age >= 55 ? L.hsaCatch : 0);
       // the HSA limit counts your employer's money too
       if (a.key === "hsa") yr.employee = yr.total;
     }

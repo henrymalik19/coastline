@@ -1,4 +1,4 @@
-import { monthsBetween, nextDue, setAsideFor, type BudgetItem, type Debt, type Goal, type MonthRow } from "@coastfi/engine";
+import { BUDGET_ITEM, monthsBetween, nextDue, setAsideFor, type BudgetItem, type Debt, type Goal, type MonthRow } from "@coastfi/engine";
 import { useEffect, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../lib/confirm";
@@ -18,6 +18,7 @@ import { Button, IconButton, InfoTip, NumberInput, TextField, Toggle } from "./f
 import { Icon } from "./Icon";
 import { AddChip, MasterDetail, useFillPage, useTwoPane } from "./MasterDetail";
 import { SavingsPlan } from "./SavingsPlan";
+import { ChangesLater, monthName, useSchedule } from "./ScheduleEditor";
 import { Card, Pill } from "./ui";
 
 /** Key of the read-only "Debt payments" group (not a real budget group). */
@@ -763,6 +764,12 @@ function BudgetRow({
   const del = <IconButton icon="trash" color={t.bad} label={`Remove ${name}`} onPress={onRemove} />;
   const toggle = <Toggle label={`Still pay ${name} after you retire`} value={item.inRetirement} onChange={(v) => onChange({ inRetirement: v })} />;
   const moveTo = <MoveTo current={group} groups={groups} what={name} onPick={onMoveTo} />;
+  const changes = <ChangesLater k={BUDGET_ITEM + item.id} label={name} base={item.amount} prompt="Going up, down or ending later?" />;
+  // closed: say what's coming ("→ $1,700 from Jan 2027")
+  const { list: later, oneOffs } = useSchedule(BUDGET_ITEM + item.id);
+  const laterText = later.length
+    ? `→ ${later.map((e) => `${money(e.amount)} from ${monthName(e.from)}`).join(" → ")}`
+    : Object.keys(oneOffs).length ? "One-month changes" : "";
 
   if (editing && compact) {
     // phones: name on its own line, then amount + retirement switch
@@ -778,6 +785,7 @@ function BudgetRow({
           {toggle}
           <Text style={[type.caption, { color: t.text2, flex: 1 }]}>{item.inRetirement ? "Still pay after I retire" : "Stops when I retire"}</Text>
         </View>
+        {changes}
         {moveTo}
       </View>
     );
@@ -795,7 +803,10 @@ function BudgetRow({
             {del}
           </View>
         </View>
-        <View style={{ paddingHorizontal: space.lg }}>{moveTo}</View>
+        <View style={{ paddingHorizontal: space.lg, gap: space.sm }}>
+          {changes}
+          {moveTo}
+        </View>
       </View>
     );
   }
@@ -818,9 +829,13 @@ function BudgetRow({
             <View style={{ flex: 1, minWidth: 0, paddingVertical: 4 }}>
               <Text numberOfLines={2} style={[type.body, { color: item.name ? t.text : t.text3 }]}>{name}</Text>
               <Text style={[type.caption, { color: item.inRetirement ? t.good : t.text3 }]}>{item.inRetirement ? "Still pay after I retire" : "Stops when I retire"}</Text>
+              {laterText ? <Text numberOfLines={1} style={[type.caption, { color: t.accent }]}>{laterText}</Text> : null}
             </View>
           ) : (
-            <Text numberOfLines={1} style={[type.body, { flex: 1, minWidth: 0, color: item.name ? t.text : t.text3 }]}>{name}</Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} style={[type.body, { color: item.name ? t.text : t.text3 }]}>{name}</Text>
+              {laterText ? <Text numberOfLines={1} style={[type.caption, { color: t.accent }]}>{laterText}</Text> : null}
+            </View>
           )}
           <Text style={[type.body, { width: w.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(item.amount)}</Text>
           {compact ? null : (
