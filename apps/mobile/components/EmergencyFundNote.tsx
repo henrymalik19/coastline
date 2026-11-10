@@ -55,6 +55,7 @@ export function looksLikeEmergencyFund(name: string) {
 
 const styles = StyleSheet.create({
   box: { borderRadius: radius.lg, padding: space.lg, gap: space.md },
+  list: { borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, gap: 4 },
 });
 
 /**
@@ -68,6 +69,7 @@ export function EmergencyFundGoal() {
   const { state, result, actual, start } = usePlan();
   const update = useStore((s) => s.update);
   const [planOpen, setPlanOpen] = useState(false);
+  const [showAccounts, setShowAccounts] = useState(false);
   const full = actual.fullTarget;
   const cash = result.d.bal.cash;
   const monthly = result.d.monthlyExpenses;
@@ -98,11 +100,43 @@ export function EmergencyFundGoal() {
           <Text style={[type.label, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(cash)} of {money(full)}</Text>
         </View>
         {full > 0 ? <ProgressBar progress={cash / full} color={t.good} /> : null}
-        <Text style={[type.caption, { color: t.text3 }]}>
-          {cashAccounts.length ? cashAccounts.map((a) => `${a.name.trim() || "Cash"} ${money(a.balance)}`).join(" + ") : "No cash accounts yet"}
-          {full > 0 ? (cash >= full - 0.5 ? " · done" : done ? ` · done ${done.m === 0 ? "this month" : monthLabel(start, done.m)}` : " · not reached in the plan") : ""}
-        </Text>
-        <Pressable role="link" onPress={() => router.push("/money/accounts")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" }}>
+          {full > 0 ? (
+            <Text style={[type.caption, { color: cash >= full - 0.5 ? t.good : t.text3, fontWeight: "600" }]}>
+              {cash >= full - 0.5 ? "Fully funded" : done ? `Fully funded ${done.m === 0 ? "this month" : monthLabel(start, done.m)}` : "Not reached in the plan"}
+            </Text>
+          ) : null}
+          {cashAccounts.length ? (
+            <Pressable
+              role="button"
+              aria-expanded={showAccounts}
+              accessibilityLabel={`${cashAccounts.length} cash accounts, ${showAccounts ? "hide" : "show"}`}
+              onPress={() => setShowAccounts((v) => !v)}
+              hitSlop={6}
+              style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+            >
+              <Text style={[type.caption, { color: t.text3 }]}>
+                {full > 0 ? "· " : ""}In {cashAccounts.length} cash account{cashAccounts.length === 1 ? "" : "s"}
+              </Text>
+              <View style={{ transform: [{ rotate: showAccounts ? "90deg" : "0deg" }] }}>
+                <Icon name="chevron" size={12} color={t.text3} />
+              </View>
+            </Pressable>
+          ) : (
+            <Text style={[type.caption, { color: t.text3 }]}>{full > 0 ? "· " : ""}No cash accounts yet</Text>
+          )}
+        </View>
+        {showAccounts ? (
+          <View style={[styles.list, { backgroundColor: t.surface2 }]}>
+            {cashAccounts.map((a) => (
+              <View key={a.id} style={{ flexDirection: "row", gap: space.sm }}>
+                <Text numberOfLines={1} style={[type.caption, { color: t.text2, flex: 1 }]}>{a.name.trim() || "Cash"}</Text>
+                <Text style={[type.caption, { color: t.text2, fontVariant: ["tabular-nums"] }]}>{money(a.balance)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        <Pressable role="link" onPress={() => router.push("/money/accounts?from=goals")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Update cash balances →</Text>
         </Pressable>
       </View>

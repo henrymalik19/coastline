@@ -104,8 +104,10 @@ export function SectionPage({ base }: { base: SectionBase }) {
   const t = useTheme();
   const router = useRouter();
   const fillPage = useFillPage();
-  const { section } = useLocalSearchParams<{ section: string }>();
+  // `from`: the section page that linked here (e.g. Savings goals → Accounts), so Back returns to it
+  const { section, from } = useLocalSearchParams<{ section: string; from?: string }>();
   const meta = findSection(section);
+  const fromMeta = from && from !== section ? findSection(from) : undefined;
   const Body = meta ? SECTION_SCREENS[meta.key] : undefined;
   return (
     // income and budget are two-pane editors: on tall wide screens full height, scrolling inside their panes
@@ -115,7 +117,7 @@ export function SectionPage({ base }: { base: SectionBase }) {
       narrow={!(meta && FULL_PAGE.has(meta.key))}
       fill={fillPage && !!meta && FULL_PAGE.has(meta.key)}
       // always back to its list (Money or Settings), even when opened from another tab or a link
-      back={() => router.navigate(base)}
+      back={() => router.navigate(fromMeta ? `${base}/${fromMeta.key}` : base)}
       hideSettings
     >
       {Body ? <Body /> : <Text style={{ color: t.text2 }}>That page doesn't exist.</Text>}
