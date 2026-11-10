@@ -2,7 +2,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { AppState, Platform } from "react-native";
-import { rollForwardNow } from "../lib/rollForward";
+import { rollForwardNow } from "../lib/rollForwardNow";
 import { useStore } from "../lib/store";
 import { startSync } from "../lib/sync";
 import { useTheme } from "../lib/theme";
