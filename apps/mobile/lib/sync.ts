@@ -162,7 +162,12 @@ const fail = (e: unknown) => setSync(isNetworkError(e) ? { status: "offline" } :
 
 /** One sync step at a time (a save and a check never interleave). */
 let queue: Promise<void> = Promise.resolve();
-const serial = (fn: () => Promise<void>) => (queue = queue.then(fn, fn));
+const STEP_LIMIT = 45_000;
+const serial = (fn: () => Promise<void>) => {
+  // a step that never finishes (a stuck request) must not stop every later sync
+  const step = () => Promise.race([fn(), new Promise<void>((resolve) => setTimeout(resolve, STEP_LIMIT))]);
+  return (queue = queue.then(step, step));
+};
 
 /** The last synced copy, when it's of this plan. */
 const baseFor = (pid: string) => {
@@ -391,9 +396,13 @@ export function startSync() {
   // invited, removed, or given full access while signed in: sync the right plan
   onMembershipChange(() => void syncNow());
   void supabase.auth.getSession().then(({ data }) => data.session && onSignedIn(data.session));
+  // run outside the auth callback: the auth client holds a lock while it runs, and every request
+  // (which reads the session) would wait for that lock, so awaiting them here would never finish
   supabase.auth.onAuthStateChange((_event, session) => {
-    if (session) void onSignedIn(session);
-    else onSignedOut();
+    setTimeout(() => {
+      if (session) void onSignedIn(session);
+      else onSignedOut();
+    }, 0);
   });
   // upload changes made on this device
   useStore.subscribe((s, prev) => {

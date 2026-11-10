@@ -65,8 +65,8 @@ export const useSharing = create<{ members: MemberRow[]; available: boolean; err
 
 /** Load the people you've invited. */
 export async function loadMembers(): Promise<void> {
-  if (!supabase) return;
-  const res = await supabase.from("plan_members").select(COLS).eq("owner_id", (await supabase.auth.getUser()).data.user?.id ?? "");
+  if (!supabase || !signedInId) return;
+  const res = await supabase.from("plan_members").select(COLS).eq("owner_id", signedInId);
   if (res.error) {
     useSharing.setState(missingTable(res.error) ? { available: false, members: [] } : { error: res.error.message });
     return;
@@ -101,6 +101,8 @@ export async function removeMember(email: string): Promise<void> {
 }
 
 let signedInEmail = "";
+/** The signed-in user's id (set at sign-in; never ask the auth client mid-sign-in, it can wait on itself). */
+let signedInId = "";
 const useSyncEmail = () => signedInEmail;
 
 /** This month's view for a member: their accounts, and each category with what's available. */
@@ -177,7 +179,7 @@ async function loadMemberTxns(owner: string): Promise<void> {
   if (!supabase) return;
   const res = await supabase.from("transactions").select("*").eq("user_id", owner).order("date", { ascending: false }).limit(500);
   if (res.error) return;
-  const me = (await supabase.auth.getUser()).data.user?.id;
+  const me = signedInId;
   const rows = (res.data ?? []) as TxnRow[];
   useMembership.setState({
     txns: rows.map(fromRow).filter((x): x is Txn => !!x),
@@ -252,6 +254,7 @@ export async function checkMembership(): Promise<MemberRow | null | "error"> {
 export async function onSharingSignIn(userId: string, email: string | undefined): Promise<MemberRow | null | "error"> {
   if (!supabase) return null;
   signedInEmail = (email ?? "").toLowerCase();
+  signedInId = userId;
   const row = await checkMembership();
   memberChannel?.unsubscribe();
   memberChannel = null;
@@ -274,6 +277,7 @@ export function onSharingSignOut(): void {
   memberChannel?.unsubscribe();
   memberChannel = null;
   signedInEmail = "";
+  signedInId = "";
   published.clear();
   useMembership.setState({ status: "unknown", row: undefined, txns: [], mine: [], error: undefined });
   useSharing.setState({ members: [], error: undefined });
