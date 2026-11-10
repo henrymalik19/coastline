@@ -70,12 +70,12 @@ export function EmergencyFundGoal() {
   const update = useStore((s) => s.update);
   const [planOpen, setPlanOpen] = useState(false);
   const [showAccounts, setShowAccounts] = useState(false);
+  const hasSchedule = (k: string) => (state.plan.schedule?.[k]?.length ?? 0) > 0 || Object.keys(state.plan.scheduleMonths?.[k] ?? {}).length > 0;
   const full = actual.fullTarget;
   const cash = result.d.bal.cash;
   const monthly = result.d.monthlyExpenses;
   const done = actual.events.find((e) => e.key === "fullEF");
   const cashAccounts = state.accounts.filter((a) => a.type === "cash");
-  const schedule = state.plan.schedule?.cash;
   return (
     <Card style={{ gap: space.sm }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
@@ -141,13 +141,24 @@ export function EmergencyFundGoal() {
         </Pressable>
       </View>
       <Divider />
-      {cashAccounts.length ? (
-        cashAccounts.map((a) => (
-          <View key={a.id} style={{ gap: 2 }}>
-            {cashAccounts.length > 1 ? <Text style={[type.caption, { color: t.text2, fontWeight: "600" }]}>{a.name.trim() || "Cash"}</Text> : null}
-            <MonthlyAmount k={"acct:" + a.id} label={a.name.trim() || "Cash"} note="Cash can go past your goal if you plan it." />
-          </View>
-        ))
+      {/* a fixed monthly amount per account is optional: list only the ones that have one, the rest behind a button */}
+      {(planOpen ? cashAccounts : cashAccounts.filter((a) => hasSchedule("acct:" + a.id))).map((a) => (
+        <View key={a.id} style={{ gap: 2 }}>
+          {cashAccounts.length > 1 ? <Text style={[type.caption, { color: t.text2, fontWeight: "600" }]}>{a.name.trim() || "Cash"}</Text> : null}
+          <MonthlyAmount k={"acct:" + a.id} label={a.name.trim() || "Cash"} note="Cash can go past your goal if you plan it." />
+        </View>
+      ))}
+      {cashAccounts.length > 0 && !cashAccounts.every((a) => hasSchedule("acct:" + a.id)) ? (
+        <View style={{ gap: 4 }}>
+          {!planOpen && !cashAccounts.some((a) => hasSchedule("acct:" + a.id)) ? (
+            <Text style={[type.caption, { color: t.text3 }]}>
+              Each month your plan puts money here based on your priority order. You only need a fixed amount if you want to save a set sum into a specific account.
+            </Text>
+          ) : null}
+          <Pressable role="button" aria-expanded={planOpen} onPress={() => setPlanOpen((v) => !v)} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{planOpen ? "Done" : "Set a fixed monthly amount"}</Text>
+          </Pressable>
+        </View>
       ) : null}
       {!cashAccounts.length || (state.plan.schedule?.cash?.length ?? 0) > 0 || Object.keys(state.plan.scheduleMonths?.cash ?? {}).length > 0 ? (
         <MonthlyAmount k="cash" label={cashAccounts.length ? "Emergency fund (all cash)" : "Emergency fund"} note="Cash can go past your goal if you plan it." />
