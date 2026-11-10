@@ -67,12 +67,17 @@ export function Screen({
         {children}
       </View>
   );
+  // Web: every page shares the same frame, so the title sits in the same spot on every page.
+  // A form page keeps its readable column, lined up on the left of that frame instead of centered.
+  const framed = web && narrow && maxWidthProp === undefined ? (
+    <View style={{ width: "100%", maxWidth: CONTENT_MAX_WIDTH_WIDE, alignItems: "flex-start", ...(fill ? { flex: 1, minHeight: 0 } : null) }}>{body}</View>
+  ) : body;
   // plain conditional JSX (not an inline component) so inputs keep focus across renders
   return fill ? (
-    <View style={[{ flex: 1, backgroundColor: t.bg, paddingBottom: Math.max(insets.bottom, space.lg) }, pad]}>{body}</View>
+    <View style={[{ flex: 1, backgroundColor: t.bg, paddingBottom: Math.max(insets.bottom, space.lg) }, pad]}>{framed}</View>
   ) : (
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={[pad, { paddingBottom: space.xxl }]}>
-      {body}
+      {framed}
     </ScrollView>
   );
 }

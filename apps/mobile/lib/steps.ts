@@ -5,6 +5,7 @@
 import { spouseIraLabel } from "./spouse";
 import { BUCKET_LABELS, HSA_ELIGIBLE, isSpouseIra, payPerCheck, scheduleAmount, isHighInterest, k401Cost, limitsFor, paysExtra, PERIODS, STEP_LABELS, type MonthRow, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
 import { debtLabel } from "./debts";
+import { missingMatch } from "./match";
 import { money, monthLabel, percent } from "./format";
 
 export type StepInfo = {
@@ -100,7 +101,7 @@ function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, c
     };
   }
   if (step === "match") {
-    const missing = d.incomes.filter((i) => !i.fullMatch);
+    const missing = d.incomes.filter((i) => missingMatch(i, i.fullMatch));
     const any = d.incomes.some((i) => i.match > 0);
     const e = ev("match");
     const parts = missing.map((i) =>
@@ -304,7 +305,7 @@ function payrollYears(kind: "k401" | "hsa", s: PlanState, o: RunResult, start: D
   const cost = kind === "k401" ? k401Cost(s.plan.marginalTax, d.rothShare) : 1;
   const extraIn = (m: MonthRow) => (kind === "k401" ? m.alloc.k401Step / cost : m.alloc.hsa);
   // what you put in per check now (for the 401(k), after the full-match raise if the plan does it)
-  const today = kind === "k401" ? j.x.pretax + (j.x.fullMatch ? 0 : j.x.gapPre) : Math.max(0, j.x.hsaPre ?? 0);
+  const today = kind === "k401" ? j.x.pretax + (missingMatch(j.x, j.x.fullMatch) ? j.x.gapPre : 0) : Math.max(0, j.x.hsaPre ?? 0);
   // ...or what your own changes have it at that month (Money → Income → the job)
   const ymOf = (m: MonthRow) => `${m.y}-${String(m.mo + 1).padStart(2, "0")}`;
   const own = (m: MonthRow) => payPerCheck(s.plan, j.x, kind, ymOf(m));

@@ -5,6 +5,7 @@ import { money, percent } from "../lib/format";
 import { HELP } from "../lib/help";
 import { isLoanDeduction, monthlyFromPaycheck } from "../lib/loans";
 import { DEDUCTION_KINDS, paycheck, withAutoNet } from "../lib/paycheck";
+import { offersMatch, missingMatch } from "../lib/match";
 import { MATCH_PRESETS } from "../lib/presets";
 import { estimateJobTaxes, FILING_LABELS, sameTaxes, taxesFollowEstimate, taxTotal } from "../lib/tax";
 import { radius, space, type, useTheme } from "../lib/theme";
@@ -49,13 +50,21 @@ export function IncomeSummary({ inc, marginalTax }: { inc: Income; marginalTax: 
   const r = resolveIncome(inc);
   const P = PERIODS[r.freq];
   const good = r.fullMatch;
+  // no match offered: nothing to get or miss
+  const noMatch = !offersMatch(inc);
   return (
-    <View style={[styles.summary, { backgroundColor: good ? t.goodSoft : t.badSoft }]}>
+    <View style={[styles.summary, { backgroundColor: noMatch ? t.surface2 : good ? t.goodSoft : t.badSoft }]}>
       <Text style={[type.caption, { color: t.text2 }]}>
-        You put in <Text style={{ fontWeight: "700", color: t.text }}>{money(r.pretax)}</Text>/check · your employer adds{" "}
-        <Text style={{ fontWeight: "700", color: t.text }}>{money(r.match)}</Text>/check ({money(r.match * P)}/yr).
+        You put in <Text style={{ fontWeight: "700", color: t.text }}>{money(r.pretax)}</Text>/check
+        {noMatch ? "." : (
+          <>
+            {" "}· your employer adds <Text style={{ fontWeight: "700", color: t.text }}>{money(r.match)}</Text>/check ({money(r.match * P)}/yr).
+          </>
+        )}
       </Text>
-      {r.matchMode === "pct" && r.gross ? (
+      {noMatch ? (
+        <Text style={[type.caption, { color: t.text3 }]}>Your employer doesn't match, so there's no match to miss.</Text>
+      ) : r.matchMode === "pct" && r.gross ? (
         good ? (
           <Text style={[type.caption, { color: t.good, fontWeight: "600" }]}>✓ You're getting the full match.</Text>
         ) : (
@@ -222,15 +231,15 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
 
   const k401Summary =
     r.pretax <= 0
-      ? r.match > 0 || (inc.matchMode === "pct" && (inc.matchRate1 ?? 0) > 0)
+      ? offersMatch(inc)
         ? "Nothing yet. Your employer offers a match"
         : "Not contributing"
       : `${inc.matchMode === "pct" ? `${pctShort(inc.contribPct ?? 0)} · ` : ""}${money(r.pretax)}/check` +
         (r.match > 0 ? ` · employer adds ${money(r.match)}` : "") +
-        (inc.matchMode === "pct" && hasGross && !r.fullMatch ? " · missing part of the match" : r.match > 0 ? " · full match" : "") +
+        (inc.matchMode === "pct" && hasGross && missingMatch(inc, r.fullMatch) ? " · missing part of the match" : r.match > 0 ? " · full match" : "") +
         ((inc.rothShare ?? 0) > 0 ? ` · ${Math.round((inc.rothShare ?? 0) * 100)}% Roth` : "") +
         (loan ? " · repaying a loan" : "");
-  const k401Attention = inc.matchMode === "pct" && hasGross && !r.fullMatch;
+  const k401Attention = inc.matchMode === "pct" && hasGross && missingMatch(inc, r.fullMatch);
   // a change by month (e.g. nothing now, $150/check from Jan 2027)
   const hsaLater = (state.plan.schedule?.[PAYHSA + inc.id] ?? []).filter((e) => e.amount > 0 || (e.pct ?? 0) > 0).sort((a, b) => (a.from < b.from ? -1 : 1))[0];
   const hsaParts = [
