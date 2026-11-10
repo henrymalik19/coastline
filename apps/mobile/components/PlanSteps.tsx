@@ -116,8 +116,8 @@ export function PlanSteps() {
     if (key === "hsa" || key === "ira" || key === "k401" || key === "taxable") return actual.firstFund[key] ?? null;
     return null;
   };
-  // the steps as stages: everything that starts in the same month sits together (side by side on
-  // a wide screen), finished and skipped steps fold into one line at the top
+  // finished and skipped steps first, then the rest by when they start: steps that start in the same
+  // month share a line (side by side on a wide screen)
   const finished = infos.filter((i) => i.done || i.skip);
   const stageMap = new Map<number, StepInfo[]>();
   for (const info of infos) {
@@ -127,7 +127,6 @@ export function PlanSteps() {
     stageMap.set(k, [...(stageMap.get(k) ?? []), info]);
   }
   const stages = [...stageMap.entries()].sort((x, y) => x[0] - y[0]);
-  const [doneOpen, setDoneOpen] = useState(false);
   const pad = compact ? space.md : space.lg;
 
   /** Details, split and order for one step (shown under its stage when you tap it). */
@@ -151,8 +150,8 @@ export function PlanSteps() {
     const paycheck = !info.done && !info.skip && !bk && (info.key === "k401" || info.key === "match" || info.key === "hsa");
     const shareValue = amt !== undefined ? "amount" : String(shares[info.key] ?? 1);
     return (
-      <View key={"more-" + info.key} style={[styles.more, { borderColor: t.border }]}>
-        <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{info.label}</Text>
+      <View key={"more-" + info.key} style={[styles.more, { marginLeft: compact ? 48 : 60, marginRight: pad }]}>
+        {compact ? null : <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{info.label}</Text>}
         {parts.length ? (
           <FormList>
             {parts.map((d, j) => (
@@ -209,17 +208,17 @@ export function PlanSteps() {
     );
   };
 
-  /** One step: its place in the order, a specific name, why it's there, and this month's amount. */
-  const tile = (info: StepInfo, stageMonth: number) => {
+  /** One step as a row: its place in the order, its name, "Now", a split note and progress. */
+  const row = (info: StepInfo) => {
     const i = infos.indexOf(info);
     const active = activeKeys.has(info.key);
     const isOpen = openSteps.has(info.key);
-    const canShare = info.key !== "taxable" && info.key !== "match" && i < infos.length - 1;
+    const canShare = !info.done && !info.skip && info.key !== "taxable" && info.key !== "match" && i < infos.length - 1;
     const amt = canShare ? amounts[info.key] : undefined;
     const share = shares[info.key] ?? 1;
     const partner = nextOpen(info.key);
     const splitNote = canShare && (amt !== undefined || share < 1) ? `${amt !== undefined ? money(amt, { whole: true }) + "/mo" : Math.round(share * 100) + "% of what's left"}, alongside ${partner ? partner.title : "the next steps"}` : "";
-    const now = stageMonth === 0 && gets(info.key) > 0.5 ? gets(info.key) : 0;
+    const dim = info.done || info.skip;
     return (
       <Pressable
         key={info.key}
@@ -227,33 +226,56 @@ export function PlanSteps() {
         aria-expanded={isOpen}
         accessibilityLabel={`Step ${i + 1}: ${info.title}. ${isOpen ? "Hide" : "Show"} details`}
         onPress={() => toggle(info.key)}
-        style={({ pressed }) => [
-          styles.tile,
-          { borderColor: isOpen || active ? t.accent : t.border, backgroundColor: pressed ? t.surface2 : t.surface },
-          compact ? { minWidth: "100%" as unknown as number } : null,
-        ]}
+        style={({ pressed }) => [styles.step, { paddingHorizontal: pad }, compact ? { gap: space.sm } : null, pressed ? { backgroundColor: t.surface2 } : null]}
       >
-        <View style={styles.tileHead}>
-          <View style={[styles.num, { backgroundColor: active ? t.accent : t.surface2 }]}>
-            <Text style={[type.caption, { fontWeight: "700", color: active ? "#fff" : t.text2 }]}>{i + 1}</Text>
-          </View>
-          <Text style={[type.body, { fontWeight: "600", color: t.text, flex: 1 }]} numberOfLines={2}>{info.title}</Text>
-          {info.action ? <Pill tone="bad">To do</Pill> : null}
-          <View style={{ transform: [{ rotate: isOpen ? "-90deg" : "90deg" }], opacity: 0.7 }}>
-            <Icon name="chevron" size={12} color={t.text3} />
-          </View>
+        <View style={[styles.num, { backgroundColor: info.done ? t.good : active ? t.accent : t.surface2 }]}>
+          {info.done ? <Icon name="check" size={14} color="#fff" /> : <Text style={[type.caption, { fontWeight: "700", color: active ? "#fff" : t.text2 }]}>{i + 1}</Text>}
         </View>
-        {info.why ? <Text style={[type.caption, { color: t.text3 }]}>{info.why}</Text> : null}
-        {now ? <Text style={[type.caption, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(now, { whole: true })} this month</Text> : null}
-        {splitNote ? <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{splitNote}</Text> : null}
-        {info.progress !== undefined ? (
-          <View style={{ marginTop: 2 }}>
-            <ProgressBar progress={info.progress} color={t.good} />
+        <View style={{ flex: 1, gap: 3, minWidth: 0 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+            <Text numberOfLines={1} style={[type.body, { fontWeight: "600", color: dim ? t.text3 : t.text, flexShrink: 1 }]}>{info.skip ? `${info.title} (skipped)` : info.title}</Text>
+            {active ? <Pill tone="accent">Now</Pill> : null}
+            {info.action ? <Pill tone="bad">To do</Pill> : null}
           </View>
-        ) : null}
+          {splitNote ? <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]} numberOfLines={1}>{splitNote}</Text> : null}
+          {info.progress !== undefined && !info.done ? (
+            <View style={{ maxWidth: 280, marginTop: 3 }}>
+              <ProgressBar progress={info.progress} color={t.good} />
+            </View>
+          ) : null}
+        </View>
+        <View style={{ transform: [{ rotate: isOpen ? "-90deg" : "90deg" }], opacity: 0.7 }}>
+          <Icon name="chevron" size={14} color={t.text3} />
+        </View>
       </Pressable>
     );
   };
+
+  /** Steps that share a line: side by side on a wide screen, stacked on a phone; details open underneath. */
+  const line = (list: StepInfo[], key: string) => (
+    <View key={key}>
+      {compact ? (
+        list.map((info, j) => (
+          <View key={info.key}>
+            {j > 0 ? <View style={{ marginLeft: 48 }}><Divider /></View> : null}
+            {row(info)}
+            {openSteps.has(info.key) ? details(info) : null}
+          </View>
+        ))
+      ) : (
+        <>
+          <View style={{ flexDirection: "row" }}>
+            {list.map((info, j) => (
+              <View key={info.key} style={[{ flex: 1, minWidth: 0 }, j > 0 ? { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: t.border } : null]}>
+                {row(info)}
+              </View>
+            ))}
+          </View>
+          {list.filter((info) => openSteps.has(info.key)).map((info) => details(info))}
+        </>
+      )}
+    </View>
+  );
 
   const steps = (
     <Card padded={false}>
@@ -266,38 +288,23 @@ export function PlanSteps() {
           </Pressable>
         ) : (
           <Text style={[compact ? type.caption : type.body, { color: t.text2 }]}>
-            Whatever your budget doesn't assign fills these in order. Steps that run at the same time sit side by side: a step can take part of what's left while the rest keeps going down the list. Tap a step for its details, to split it, or to change the order.
+            Whatever your budget doesn't assign fills these in order. Steps that run at the same time share a line: a step can take part of what's left while the rest keeps going down the list. Tap a step for its details, to split it, or to change the order. The dates show when each one starts.
           </Text>
         )}
       </View>
-      {finished.length ? (
-        <>
-          <Divider />
-          <Pressable role="button" aria-expanded={doneOpen} onPress={() => setDoneOpen(!doneOpen)} style={({ pressed }) => [styles.doneRow, { paddingHorizontal: pad }, pressed ? { backgroundColor: t.surface2 } : null]}>
-            <View style={[styles.num, { backgroundColor: t.good }]}>
-              <Icon name="check" size={14} color="#fff" />
-            </View>
-            <Text style={[type.caption, { color: t.text2, flex: 1 }]} numberOfLines={doneOpen ? undefined : 1}>
-              <Text style={{ fontWeight: "700", color: t.text }}>Done{finished.some((x) => x.skip) ? " or skipped" : ""}: </Text>
-              {finished.map((x) => (x.skip ? `${x.title} (skipped)` : x.title)).join(" · ")}
-            </Text>
-            <View style={{ transform: [{ rotate: doneOpen ? "-90deg" : "90deg" }], opacity: 0.7 }}>
-              <Icon name="chevron" size={12} color={t.text3} />
-            </View>
-          </Pressable>
-          {doneOpen ? <View style={{ paddingHorizontal: pad, paddingBottom: space.md, gap: space.sm }}>{finished.map((x) => details(x))}</View> : null}
-        </>
-      ) : null}
+      <Divider />
+      {finished.map((info, j) => (
+        <View key={"done-" + info.key}>
+          {j > 0 ? <View style={{ marginLeft: compact ? 48 : 60 }}><Divider /></View> : null}
+          {line([info], "l-" + info.key)}
+        </View>
+      ))}
       {stages.map(([m, list]) => (
         <View key={"stage" + m}>
-          <Divider />
-          <View style={[styles.stage, { paddingHorizontal: pad }]}>
-            <Text style={[type.overline, { color: m === 0 ? t.accent : t.text3 }]}>
-              {m === 0 ? (list.length > 1 ? "Now, together" : "Now") : m >= 1e9 ? "Not reached in the plan" : `From ${monthLabel(start, m)}`}
-            </Text>
-            <View style={styles.tiles}>{list.map((info) => tile(info, m))}</View>
-            {list.filter((info) => openSteps.has(info.key)).map((info) => details(info))}
+          <View style={[styles.dateLabel, { backgroundColor: t.surface2, paddingHorizontal: pad }]}>
+            <Text style={[type.overline, { color: t.accent }]}>{m === 0 ? "This month" : m >= 1e9 ? "Not reached in the plan" : monthLabel(start, m)}</Text>
           </View>
+          {line(list, "s" + m)}
         </View>
       ))}
     </Card>
@@ -311,12 +318,7 @@ const styles = StyleSheet.create({
   step: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
   num: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   moves: { flexDirection: "row", alignItems: "center" },
-  more: { gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm },
-  tile: { flexGrow: 1, flexBasis: 220, minWidth: 220, maxWidth: "100%", borderWidth: 1, borderRadius: radius.md, padding: space.md, gap: 4 },
-  tileHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  tiles: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  stage: { paddingVertical: space.md, gap: space.sm },
-  doneRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.md },
+  more: { gap: space.sm, paddingBottom: space.md },
   budgetLink: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" },
   detailRow: { paddingHorizontal: space.md, paddingVertical: 10 },
   linkRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, minHeight: 50 },
