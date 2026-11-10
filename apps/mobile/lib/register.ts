@@ -2,7 +2,7 @@
  * Registers: the budget accounts that hold transactions (cash accounts and credit cards), where each
  * one's register starts, and keeping the plan's balances in step with the transactions.
  */
-import { registerBalance, type PlanState, type Txn } from "@coastfi/engine";
+import { budgetStartCash, registerBalance, type BudgetState, type PlanState, type Txn } from "@coastfi/engine";
 
 export type BudgetAccount = { id: string; name: string; kind: "cash" | "card"; balance: number };
 
@@ -16,6 +16,14 @@ export function budgetAccounts(p: PlanState): BudgetAccount[] {
     ...p.accounts.filter((a) => a.type === "cash").map((a) => ({ id: a.id, name: a.name.trim() || "Cash", kind: "cash" as const, balance: a.balance })),
     ...p.debts.filter(isCard).map((d) => ({ id: d.id, name: d.name?.trim() || "Credit card", kind: "card" as const, balance: -d.balance })),
   ];
+}
+
+/**
+ * The budget as it stands: it starts with the cash in every cash account, including ones added after
+ * the budget began (not only what was there on day one).
+ */
+export function liveBudget(p: PlanState): BudgetState | undefined {
+  return p.budgetPlan ? { ...p.budgetPlan, startCash: Math.round(budgetStartCash(p) * 100) / 100 } : undefined;
 }
 
 /** Credit card account id → its payment category key. */

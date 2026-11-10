@@ -37,6 +37,32 @@ const sanitize = (s: string, kind: NumberKind, allowNegative: boolean) => {
 const defaultStep: Record<NumberKind, number> = { money: 50, percent: 0.25, int: 1, decimal: 0.5 };
 
 /**
+ * Save what's typed after a short pause instead of on every key: each save re-runs the plan and
+ * redraws the page, which made typing lag. The box shows the text right away; `flush` saves now
+ * (on leaving the box). Anything still waiting is saved if the box goes away.
+ */
+function useTypingSave<T>(onChange: (v: T) => void, delay = 300) {
+  const latest = useRef(onChange);
+  latest.current = onChange;
+  const pending = useRef<{ v: T } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flush = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    const p = pending.current;
+    pending.current = null;
+    if (p) latest.current(p.v);
+  };
+  const push = (v: T) => {
+    pending.current = { v };
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(flush, delay);
+  };
+  useEffect(() => flush, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return { push, flush, waiting: () => pending.current !== null };
+}
+
+/**
  * Number-only input: typing anything else is ignored, Up/Down arrows nudge the value
  * (web), money shows thousands separators when not editing, $ / % adornments.
  * `step` is in display units (e.g. 0.25 for percent = 0.25 percentage points).
@@ -52,9 +78,10 @@ export function NumberInput({
   const t = useTheme();
   const [focused, setFocused] = useState(false);
   const [text, setText] = useState(toText(value, kind, true));
+  const typing = useTypingSave(onChange);
   useEffect(() => {
-    if (!focused) setText(toText(value, kind, true));
-  }, [value, kind, focused]);
+    if (!focused && !typing.waiting()) setText(toText(value, kind, true));
+  }, [value, kind, focused]); // eslint-disable-line react-hooks/exhaustive-deps
   const clamp = (n: number) => Math.min(max ?? Infinity, Math.max(min, n));
   const s = step ?? defaultStep[kind];
   // latest value for press-and-hold repeats (the closure would otherwise be stale)
@@ -65,6 +92,7 @@ export function NumberInput({
     const next = +(Math.round((display + dir * s) / s) * s).toFixed(6);
     const stored = clamp(kind === "percent" ? next / 100 : next);
     current.current = stored;
+    typing.flush();
     onChange(stored);
     setText(toText(stored, kind, focused ? false : true));
   };
@@ -113,13 +141,17 @@ export function NumberInput({
           const clean = sanitize(raw, kind, min < 0);
           setText(clean);
           const n = fromText(clean, kind);
-          if (n !== null) onChange(clamp(n));
+          if (n !== null) {
+            current.current = clamp(n);
+            typing.push(clamp(n));
+          }
         }}
         onFocus={() => {
           setFocused(true);
           setText(toText(value, kind, false));
         }}
         onBlur={() => {
+          typing.flush();
           setFocused(false);
           if (fromText(text, kind) === null) onChange(clamp(0));
         }}
@@ -187,16 +219,21 @@ export function TextField({
 }: { value: string; onChange: (v: string) => void; label: string; placeholder?: string; width?: number | "100%" }) {
   const t = useTheme();
   const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const typing = useTypingSave(onChange);
+  useEffect(() => {
+    if (!typing.waiting()) setDraft(value);
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View style={[styles.input, { width, borderColor: focused ? t.accent : t.border, backgroundColor: t.surface2 }]}>
       <TextInput
         accessibilityLabel={label}
-        value={value}
+        value={draft}
         placeholder={placeholder}
         placeholderTextColor={t.text3}
-        onChangeText={onChange}
+        onChangeText={(v) => { setDraft(v); typing.push(v); }}
         onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        onBlur={() => { typing.flush(); setFocused(false); }}
         style={[type.body, styles.inputText, { color: t.text }, Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null]}
       />
     </View>
@@ -452,13 +489,16 @@ export function FormRow({ label, hint, children }: { label: string; hint?: strin
 export function InlineText({ value, onChange, label, placeholder, commitOnBlur }: { value: string; onChange: (v: string) => void; label: string; placeholder?: string; commitOnBlur?: boolean }) {
   const t = useTheme();
   const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
+  const typing = useTypingSave(onChange);
+  useEffect(() => {
+    if (!typing.waiting()) setDraft(value);
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <TextInput
       accessibilityLabel={label}
-      value={commitOnBlur ? draft : value}
-      onChangeText={commitOnBlur ? setDraft : onChange}
-      onBlur={commitOnBlur ? () => draft.trim() && draft !== value && onChange(draft) : undefined}
+      value={draft}
+      onChangeText={commitOnBlur ? setDraft : (v) => { setDraft(v); typing.push(v); }}
+      onBlur={commitOnBlur ? () => draft.trim() && draft !== value && onChange(draft) : typing.flush}
       onSubmitEditing={commitOnBlur ? () => draft.trim() && draft !== value && onChange(draft) : undefined}
       placeholder={placeholder}
       placeholderTextColor={t.text3}

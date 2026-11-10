@@ -132,6 +132,16 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
 }
 
 /**
+ * The money your budget started with: every cash account's starting balance, including accounts
+ * added after the budget began (where its register starts, or its balance if it has no
+ * transactions yet). Transactions add to it from there, so ready to assign follows your cash.
+ */
+export function budgetStartCash(s: Pick<PlanState, "accounts" | "budgetPlan">): number {
+  const regs = s.budgetPlan?.registers ?? {};
+  return (s.accounts ?? []).filter((a) => a.type === "cash").reduce((t, a) => t + num(regs[a.id]?.opening ?? a.balance), 0);
+}
+
+/**
  * The budget for one month: every category's assigned, spent and available (with carry-over), and
  * what's ready to assign. `cats` says which keys exist and which move money out by themselves.
  */

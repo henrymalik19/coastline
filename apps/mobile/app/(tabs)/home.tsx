@@ -1,7 +1,7 @@
 import { budgetView, isHighInterest, paysExtra } from "@coastfi/engine";
 import { budgetKeyFor } from "../../lib/budgetLinks";
 import { useCategories } from "../../lib/categories";
-import { cardMap } from "../../lib/register";
+import { cardMap, liveBudget } from "../../lib/register";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -35,7 +35,7 @@ export default function Home() {
   const budgeting = !!state.budgetPlan && mk >= state.budgetPlan.start;
   const cats = useCategories(mk);
   const txns = useStore((s) => s.txns);
-  const bview = budgeting ? budgetView(state.budgetPlan, cats, mk, { txns, cards: cardMap(state) }) : null;
+  const bview = budgeting ? budgetView(liveBudget(state), cats, mk, { txns, cards: cardMap(state) }) : null;
   const rta = bview?.readyToAssign ?? 0;
   const assignedNow = state.budgetPlan?.months?.[mk]?.assigned ?? {};
   const done = useStore((s) => s.todoDone[mk]) ?? [];

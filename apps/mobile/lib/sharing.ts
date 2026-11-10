@@ -9,7 +9,7 @@ import { TxnSchema } from "@coastfi/schema";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { create } from "zustand";
 import { effectivePlan } from "./plan";
-import { budgetAccounts, cardMap } from "./register";
+import { budgetAccounts, cardMap, liveBudget } from "./register";
 import { monthKey, useStore } from "./store";
 import { supabase } from "./supabase";
 
@@ -116,7 +116,7 @@ export function memberView(accountIds: string[], now = new Date()): MemberView {
   const accounts = budgetAccounts(state).filter((a) => accountIds.includes(a.id)).map((a) => ({ id: a.id, name: a.name, kind: a.kind }));
   if (!state.budgetPlan) return { at: Date.now(), month, accounts, categories: [] };
   const cats = budgetCategories(state, result.d, actual, now, month).filter((c) => c.kind === "spending" || c.kind === "bill");
-  const v = budgetView(state.budgetPlan, cats, month, { txns, cards: cardMap(state) });
+  const v = budgetView(liveBudget(state), cats, month, { txns, cards: cardMap(state) });
   const categories = cats.map((c) => ({ key: c.key, name: c.name, group: c.group, available: Math.round((v.lines[c.key]?.available ?? 0) * 100) / 100 }));
   return { at: Date.now(), month, accounts, categories };
 }

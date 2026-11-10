@@ -2,7 +2,8 @@ import { BUDGET_ITEM, monthsBetween, nextDue, setAsideFor, type BudgetItem, type
 import { useEffect, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../lib/confirm";
-import { groupOf, mergeGroup, moveAmong, moveGroup, moveItem, moveToGroup, UNGROUPED } from "../lib/budgetOrder";
+import { groupOf, mergeGroup, moveGroup, moveToGroup, UNGROUPED } from "../lib/budgetOrder";
+import { DragList, reorderAmong } from "./DragList";
 import { debtLabel } from "../lib/debts";
 import { paycheckFor } from "../lib/loans";
 import { monthKey } from "../lib/store";
@@ -153,10 +154,10 @@ export function BudgetEditor() {
   };
 
   // debts and recurring goals reorder in their own lists (the same order shows on Debts / Savings goals)
-  const moveDebt = (id: string, by: -1 | 1) =>
-    update((p) => { p.debts = moveAmong(p.debts, id, by, (x) => isDebtRow(x) && !placed(x)); });
-  const moveGoal = (id: string, by: -1 | 1) =>
-    update((p) => { p.goals = moveAmong(p.goals, id, by, (g) => isSetRow(g) && !placed(g)); });
+  const moveDebt = (from: number, to: number) =>
+    update((p) => { p.debts = reorderAmong(p.debts, (x) => isDebtRow(x) && !placed(x), from, to); });
+  const moveGoal = (from: number, to: number) =>
+    update((p) => { p.goals = reorderAmong(p.goals, (g) => isSetRow(g) && !placed(g), from, to); });
   const noticeBox = notice ? (
     <View key="notice" style={{ paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.xs }}>
       <View style={[styles.hint, { backgroundColor: t.goodSoft }]}>
@@ -302,7 +303,7 @@ export function BudgetEditor() {
             <View style={[styles.cols, { paddingHorizontal: space.lg, paddingBottom: space.sm }]}>
               <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Goal</Text>
               <Text style={[type.overline, { color: t.text3, width: cols.amount, textAlign: "right" }]}>Monthly</Text>
-              <View style={{ width: reorder ? 84 : cols.actions }} />
+              <View style={{ width: cols.actions }} />
             </View>
           </View>
         ) : onDebts ? (
@@ -315,7 +316,7 @@ export function BudgetEditor() {
             <View style={[styles.cols, { paddingHorizontal: space.lg, paddingBottom: space.sm }]}>
               <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Debt</Text>
               <Text style={[type.overline, { color: t.text3, width: cols.amount, textAlign: "right" }]}>Monthly</Text>
-              <View style={{ width: reorder ? 84 : cols.actions }} />
+              <View style={{ width: cols.actions }} />
             </View>
           </View>
         ) : current ? (
@@ -352,7 +353,7 @@ export function BudgetEditor() {
                   <Text style={[type.overline, { color: t.text3, textAlign: "center", fontWeight: "600" }]}>After you retire?</Text>
                 </View>
               )}
-              <View style={{ width: reorder ? 84 : cols.actions }} />
+              <View style={{ width: cols.actions }} />
             </View>
           </View>
         ) : undefined
@@ -361,32 +362,50 @@ export function BudgetEditor() {
         onSet
           ? [
               noticeBox,
-              ...setRows.map((g, i) => (
-                <SetAsideRow
-                  key={g.id}
-                  goal={g}
-                  months={actual.months}
-                  start={start}
-                  thisMonth={thisMonth}
-                  cols={cols}
-                  reorder={reorder ? { up: i > 0, down: i < setRows.length - 1, move: (by) => moveGoal(g.id, by) } : undefined}
-                  moveTo={<MoveTo current={SET_LABEL} groups={[...groupNames]} what={g.name || "goal"} allowNew={false} onPick={(to) => place("goal", g.id, to)} />}
-                />
-              )),
+              <DragList
+                key="set-rows"
+                count={setRows.length}
+                keyOf={(i) => setRows[i]!.id}
+                nameOf={(i) => setRows[i]!.name || "goal"}
+                onMove={moveGoal}
+                renderItem={(i, grip) => {
+                  const g = setRows[i]!;
+                  return (
+                    <SetAsideRow
+                      goal={g}
+                      months={actual.months}
+                      start={start}
+                      thisMonth={thisMonth}
+                      cols={cols}
+                      reorder={reorder ? { grip } : undefined}
+                      moveTo={<MoveTo current={SET_LABEL} groups={[...groupNames]} what={g.name || "goal"} allowNew={false} onPick={(to) => place("goal", g.id, to)} />}
+                    />
+                  );
+                }}
+              />,
             ]
           : onDebts
           ? [
               noticeBox,
-              ...debtRows.map((x, i) => (
-                <DebtPaymentRow
-                  key={x.id}
-                  debt={x}
-                  from={debtFrom(x)}
-                  cols={cols}
-                  reorder={reorder ? { up: i > 0, down: i < debtRows.length - 1, move: (by) => moveDebt(x.id, by) } : undefined}
-                  moveTo={<MoveTo current={DEBT_LABEL} groups={[...groupNames]} what={debtLabel(x)} allowNew={false} onPick={(to) => place("debt", x.id, to)} />}
-                />
-              )),
+              <DragList
+                key="debt-rows"
+                count={debtRows.length}
+                keyOf={(i) => debtRows[i]!.id}
+                nameOf={(i) => debtLabel(debtRows[i]!)}
+                onMove={moveDebt}
+                renderItem={(i, grip) => {
+                  const x = debtRows[i]!;
+                  return (
+                    <DebtPaymentRow
+                      debt={x}
+                      from={debtFrom(x)}
+                      cols={cols}
+                      reorder={reorder ? { grip } : undefined}
+                      moveTo={<MoveTo current={DEBT_LABEL} groups={[...groupNames]} what={debtLabel(x)} allowNew={false} onPick={(to) => place("debt", x.id, to)} />}
+                    />
+                  );
+                }}
+              />,
             ]
           : current
           ? [
@@ -410,9 +429,16 @@ export function BudgetEditor() {
                   onDismiss={(id) => update((p) => { const b = p.budget.find((x) => x.id === id); if (b) b.noSuggest = true; })}
                 />
               ) : null,
-              ...current.rows.map(({ item, index }, i) => (
+              <DragList
+                key={"rows-" + current.name}
+                count={current.rows.length}
+                keyOf={(i) => current.rows[i]!.item.id}
+                nameOf={(i) => current.rows[i]!.item.name || "item"}
+                onMove={(from, to) => update((p) => { p.budget = reorderAmong(p.budget, (b) => groupOf(b) === current.name, from, to); })}
+                renderItem={(i, grip) => {
+                  const { item, index } = current.rows[i]!;
+                  return (
               <BudgetRow
-                key={item.id}
                 item={item}
                 group={current.name}
                 groups={groups.map((g) => g.name)}
@@ -422,7 +448,7 @@ export function BudgetEditor() {
                   update((p) => { p.budget = moveToGroup(p.budget, index, target); });
                   setNotice(`Moved "${item.name || "item"}" to ${target}.${to === NEW_GROUP ? " Rename it with ✎." : ""}`);
                 }}
-                reorder={reorder ? { up: i > 0, down: i < current.rows.length - 1, move: (by) => update((p) => { p.budget = moveItem(p.budget, index, by); }) } : undefined}
+                reorder={reorder ? { grip } : undefined}
                 editing={editing === item.id}
                 compact={compact}
                 onEdit={() => setEditing(item.id)}
@@ -430,7 +456,9 @@ export function BudgetEditor() {
                 onChange={(patch) => update((p) => { p.budget[index] = { ...p.budget[index]!, ...patch }; })}
                 onRemove={() => { setEditing(null); update((p) => { p.budget.splice(index, 1); }); }}
               />
-            )),
+                  );
+                }}
+              />,
               ...placedDebts(current.name).map((x) => (
                 <DebtPaymentRow
                   key={x.id}
@@ -478,7 +506,8 @@ function SetAsideRow({
   goal: g, months, start, thisMonth, cols, reorder, moveTo, inGroup,
 }: {
   goal: Goal; months: MonthRow[]; start: Date; thisMonth: string; cols: ReturnType<typeof budgetCols>;
-  reorder?: { up: boolean; down: boolean; move: (by: -1 | 1) => void };
+  /** Reorder mode: the drag grip, shown in place of the row's actions. */
+  reorder?: { grip: ReactNode };
   /** "Move to" chips, shown when the row is open. */
   moveTo?: ReactNode;
   /** Listed inside one of your groups: leave room for its After-you-retire column. */
@@ -514,10 +543,7 @@ function SetAsideRow({
         <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(now)}</Text>
         {inGroup && cols.retire ? <View style={{ width: cols.retire }} /> : null}
         {reorder ? (
-          <View style={[styles.actions, { width: 84 }]}>
-            <IconButton icon="up" label={`Move ${g.name || "goal"} up`} disabled={!reorder.up} onPress={() => reorder.move(-1)} />
-            <IconButton icon="down" label={`Move ${g.name || "goal"} down`} disabled={!reorder.down} onPress={() => reorder.move(1)} />
-          </View>
+          <View style={[styles.actions, { width: cols.actions }]}>{reorder.grip}</View>
         ) : (
           <View style={[styles.actions, { width: cols.actions }]}>
             <View style={{ transform: [{ rotate: open ? "90deg" : "0deg" }] }}>
@@ -553,7 +579,8 @@ function DebtPaymentRow({
   debt: x, from, cols, reorder, moveTo, inGroup,
 }: {
   debt: Debt; from: string; cols: ReturnType<typeof budgetCols>;
-  reorder?: { up: boolean; down: boolean; move: (by: -1 | 1) => void };
+  /** Reorder mode: the drag grip, shown in place of the row's actions. */
+  reorder?: { grip: ReactNode };
   moveTo: ReactNode;
   inGroup?: boolean;
 }) {
@@ -576,10 +603,7 @@ function DebtPaymentRow({
         <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(x.minPayment)}</Text>
         {inGroup && cols.retire ? <View style={{ width: cols.retire }} /> : null}
         {reorder ? (
-          <View style={[styles.actions, { width: 84 }]}>
-            <IconButton icon="up" label={`Move ${name} up`} disabled={!reorder.up} onPress={() => reorder.move(-1)} />
-            <IconButton icon="down" label={`Move ${name} down`} disabled={!reorder.down} onPress={() => reorder.move(1)} />
-          </View>
+          <View style={[styles.actions, { width: cols.actions }]}>{reorder.grip}</View>
         ) : (
           <View style={[styles.actions, { width: cols.actions }]}>
             <View style={{ transform: [{ rotate: open ? "90deg" : "0deg" }] }}>
@@ -748,13 +772,13 @@ function BudgetRow({
   /** All group names, and moving this item to one of them (or a new group). */
   groups: string[];
   onMoveTo: (group: string) => void;
-  /** Reorder mode: up/down arrows instead of the edit button. */
-  reorder?: { up: boolean; down: boolean; move: (by: -1 | 1) => void };
+  /** Reorder mode: the drag grip, shown in place of the row's actions. */
+  reorder?: { grip: ReactNode };
   onEdit: () => void; onDone: () => void; onChange: (patch: Partial<BudgetItem>) => void; onRemove: () => void;
 }) {
   const t = useTheme();
   const name = item.name || "Untitled item";
-  const w = { ...budgetCols(compact), ...(reorder ? { actions: 84 } : null) };
+  const w = budgetCols(compact);
   const nameField = (
     <View style={{ flex: 1, minWidth: 0 }}>
       <TextField label={`Item in ${group}`} placeholder="Item name" value={item.name} onChange={(v) => onChange({ name: v })} />
@@ -847,10 +871,7 @@ function BudgetRow({
           )}
           <View style={[styles.actions, { width: w.actions }]}>
             {reorder ? (
-              <>
-                <IconButton icon="up" label={`Move ${name} up`} disabled={!reorder.up} onPress={() => reorder.move(-1)} />
-                <IconButton icon="down" label={`Move ${name} down`} disabled={!reorder.down} onPress={() => reorder.move(1)} />
-              </>
+              reorder.grip
             ) : (
               <IconButton icon="edit" label={`Edit ${name}`} onPress={onEdit} />
             )}

@@ -6,13 +6,14 @@
 import { BUDGET_ITEM, budgetCategories, budgetView, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
 import { TransactionsList } from "../../components/TransactionsList";
-import { budgetAccounts, cardMap } from "../../lib/register";
+import { budgetAccounts, cardMap, liveBudget } from "../../lib/register";
 import { duplicateOf } from "../../lib/budgetDupes";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Segmented, Select } from "../../components/form";
 import { ChangesLater, MonthlyAmount } from "../../components/ScheduleEditor";
-import { groupOf, groupOrder, moveGroup, moveItem, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
+import { groupOf, groupOrder, moveGroup, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
+import { DragList, reorderAmong } from "../../components/DragList";
 import { newId } from "../../lib/store";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Icon } from "../../components/Icon";
@@ -66,7 +67,7 @@ export default function Budget() {
       setTimeout(() => document.getElementById("cat-" + focus)?.scrollIntoView({ behavior: "smooth", block: "center" }), 350);
     router.setParams({ focus: undefined });
   }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
-  const b = state.budgetPlan;
+  const b = liveBudget(state);
   const cats = useMemo(() => budgetCategories(state, result.d, actual, start, month), [state, result, actual, start, month]);
   const txns = useStore((s) => s.txns);
   const cards = useMemo(() => cardMap(state), [state]);
@@ -254,7 +255,7 @@ export default function Budget() {
           <Text style={[type.label, { color: t.text }]}>Income received</Text>
           <Text style={[type.caption, { color: t.text3 }]}>
             Money in, filed to ready to assign{expected > 0.5 ? ` · about ${money(expected)} expected` : ""}
-            {month === b.start ? ` · plus the ${money(b.startCash)} cash you started with` : ""}
+            {month === b.start ? ` · plus ${money(b.startCash)} already in your cash accounts` : ""}
           </Text>
           {(entry?.income ?? 0) > 0.005 ? (
             <Text style={[type.caption, { color: t.text3 }]}>
@@ -299,7 +300,6 @@ export default function Budget() {
     if (c.kind === "spending") {
       const it = state.budget.find((x) => x.id === c.key);
       if (!it) return null;
-      const idx = itemIndex(it.id);
       const groups = groupOrder(state.budget);
       return (
         <View style={styles.section}>
@@ -329,10 +329,7 @@ export default function Budget() {
             note="Each month's budget and the forecast use the amount for that month."
           />
           <View style={[styles.chips, { justifyContent: "space-between" }]}>
-            <View style={styles.chips}>
-              <Chip title="Up" icon="up" disabled={idx <= 0 || groupOf(state.budget[idx - 1]!) !== groupOf(it)} onPress={() => update((p) => { p.budget = moveItem(p.budget, itemIndex(it.id), -1); })} />
-              <Chip title="Down" icon="down" disabled={idx >= state.budget.length - 1 || groupOf(state.budget[idx + 1]!) !== groupOf(it)} onPress={() => update((p) => { p.budget = moveItem(p.budget, itemIndex(it.id), 1); })} />
-            </View>
+            <Text style={[type.caption, { color: t.text3, flex: 1 }]}>Drag a category's grip to reorder it.</Text>
             <Chip
               title="Delete"
               icon="trash"
@@ -381,7 +378,7 @@ export default function Budget() {
     );
   };
 
-  const line = (c: BudgetCategory) => {
+  const line = (c: BudgetCategory, grip?: ReactNode) => {
     const l = view.lines[c.key]!;
     const isOpen = open === c.key;
     const explicitSpent = entry?.spent?.[c.key] !== undefined;
@@ -390,6 +387,7 @@ export default function Budget() {
       <View key={c.key} nativeID={"cat-" + c.key}>
         <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); setMoveAmt(0); setMoveTo(""); setMoveOpen(false); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, pressed ? { backgroundColor: t.surface2 } : null]}>
           <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
+            {grip}
             <Text style={[type.body, { color: t.text, flexShrink: 1 }]} numberOfLines={2}>{label(c)}</Text>
             {dup ? <Icon name="info" size={14} color={t.warn} /> : null}
           </View>
@@ -572,12 +570,27 @@ export default function Budget() {
                     </View>
                   </View>
                 ) : null}
-                {g.cats.map((c, n) => (
-                  <View key={c.key}>
-                    {n > 0 ? <Divider /> : null}
-                    {line(c)}
-                  </View>
-                ))}
+                {g.kind === "spending" && g.cats.length > 1 ? (
+                  <DragList
+                    count={g.cats.length}
+                    keyOf={(n) => g.cats[n]!.key}
+                    nameOf={(n) => g.cats[n]!.name}
+                    onMove={(from, to) => update((p) => { p.budget = reorderAmong(p.budget, (b) => groupOf(b) === g.name, from, to); })}
+                    renderItem={(n, grip) => (
+                      <View>
+                        {n > 0 ? <Divider /> : null}
+                        {line(g.cats[n]!, grip)}
+                      </View>
+                    )}
+                  />
+                ) : (
+                  g.cats.map((c, n) => (
+                    <View key={c.key}>
+                      {n > 0 ? <Divider /> : null}
+                      {line(c)}
+                    </View>
+                  ))
+                )}
               </Card>
             );
           })}

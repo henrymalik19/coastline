@@ -229,7 +229,7 @@ function AccountsSection() {
   return (
     <>
       <Text style={[type.body, { color: t.text2 }]}>
-        Cash is your emergency fund. Everything else counts as invested. Tap an account to rename it, change its type, move it or remove it.
+        Cash is your emergency fund. Everything else counts as invested. Tap an account to rename it, change its type or remove it; drag its grip to reorder.
       </Text>
       <AccountsEditor />
       <ContributionsCard />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetCategories, budgetScheduleMonths, budgetView, derive, simulatePlan, type BudgetState, type PlanState } from "../src";
+import { budgetCategories, budgetScheduleMonths, budgetStartCash, budgetView, derive, simulatePlan, type BudgetState, type PlanState } from "../src";
 import { START } from "./fixtures";
 
 const blank = (over: Partial<PlanState> = {}): PlanState => ({
@@ -123,5 +123,27 @@ describe("monthly budget", () => {
     // all of it already there: nothing new
     const same = { "2026-11": { assigned: { "acct:ef": 13000 } } };
     expect(budgetScheduleMonths({ debts: [], goals: [], accounts, budgetPlan: { start: "2026-11", startCash: 0, months: same } })).toBeUndefined();
+  });
+});
+
+describe("budgetStartCash", () => {
+  it("counts every cash account, including ones added after the budget began", () => {
+    const s = {
+      accounts: [
+        { id: "chk", name: "Checking", type: "cash" as const, balance: 13962.11 },
+        { id: "sav", name: "Savings", type: "cash" as const, balance: 1000 },
+        { id: "ira", name: "IRA", type: "roth" as const, balance: 50000 },
+      ],
+      budgetPlan: { start: "2026-11", startCash: 13962.11, months: {} },
+    };
+    expect(budgetStartCash(s)).toBeCloseTo(14962.11, 6);
+  });
+  it("an account with transactions counts from where its register started", () => {
+    const s = {
+      accounts: [{ id: "chk", name: "Checking", type: "cash" as const, balance: 1500 }],
+      budgetPlan: { start: "2026-11", startCash: 0, months: {}, registers: { chk: { opening: 1000, since: "2026-11-02" } } },
+    };
+    // the other $500 came from transactions, which reach ready to assign on their own
+    expect(budgetStartCash(s)).toBe(1000);
   });
 });

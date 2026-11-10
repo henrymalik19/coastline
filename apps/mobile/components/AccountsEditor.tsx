@@ -10,6 +10,8 @@ import { space, type, useTheme } from "../lib/theme";
 import { Button, Choice, IconButton, NumberInput, TextField } from "./form";
 import { Icon } from "./Icon";
 import { Card, Divider } from "./ui";
+import { DragList, reorderAmong } from "./DragList";
+import { isCard } from "../lib/register";
 import { contributionKey, MonthlyAmount, PayrollNote, plannedNow } from "./ScheduleEditor";
 import { money } from "../lib/format";
 import { monthKey } from "../lib/store";
@@ -32,15 +34,24 @@ const COUNTS: { value: PlanAccount; label: string }[] = [
 ];
 const typeLabel = (k: AccountType) => ACCOUNT_TYPES.find((x) => x.value === k)?.label ?? k;
 
+/** How accounts are grouped on the page (by type). Credit cards come from Debts. */
+export const ACCOUNT_GROUPS: { key: string; label: string; types: AccountType[] }[] = [
+  { key: "cash", label: "Checking & savings", types: ["cash"] },
+  { key: "retirement", label: "Retirement & HSA", types: ["pretax", "roth", "hsa"] },
+  { key: "invest", label: "Investments", types: ["taxable"] },
+  { key: "property", label: "Property", types: ["property"] },
+];
+const groupKeyOf = (a: Account) => ACCOUNT_GROUPS.find((g) => g.types.includes(a.type))?.key ?? "invest";
+
 /** One-tap ways to add the common accounts. */
-const QUICK_ADD: { name: string; type: AccountType }[] = [
+const QUICK_ADD: { name: string; type: AccountType; label?: string }[] = [
   { name: "401(k)", type: "pretax" },
   { name: "Traditional IRA", type: "pretax" },
   { name: "Roth 401(k)", type: "roth" },
   { name: "Roth IRA", type: "roth" },
   { name: "HSA", type: "hsa" },
   { name: "Brokerage", type: "taxable" },
-  { name: "Savings", type: "cash" },
+  { name: "", type: "cash", label: "Checking / savings" },
   { name: "Home", type: "property" },
   { name: "Rental property", type: "property" },
   { name: "Other", type: "taxable" },
@@ -48,7 +59,8 @@ const QUICK_ADD: { name: string; type: AccountType }[] = [
 
 /**
  * Every account as one compact row (name, type, balance). Open a row to rename it, change its
- * type, move it up or down, or remove it. Used in setup and in Settings.
+ * type or remove it. Grouped by kind (checking & savings, retirement, investments, property, and
+ * your credit cards from Debts); drag a row's grip to reorder it within its group. Used in setup and in Settings.
  */
 export function AccountsEditor() {
   const t = useTheme();
@@ -57,22 +69,16 @@ export function AccountsEditor() {
   const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
   const thisMonth = monthKey(start);
-  const [reorder, setReorder] = useState(false);
   const accounts = state.accounts;
 
   const sp = state.spouse ? spouseName(state) : null;
-  const quick: { name: string; type: AccountType; owner?: "spouse" }[] = sp ? [...QUICK_ADD.slice(0, 4), { name: `${sp} Roth IRA`, type: "roth", owner: "spouse" }, ...QUICK_ADD.slice(4)] : QUICK_ADD;
+  const quick: { name: string; type: AccountType; owner?: "spouse"; label?: string }[] = sp ? [...QUICK_ADD.slice(0, 4), { name: `${sp} Roth IRA`, type: "roth", owner: "spouse" }, ...QUICK_ADD.slice(4)] : QUICK_ADD;
   const add = (q: (typeof quick)[number]) => {
     const id = newId();
     update((p) => { p.accounts.push({ id, name: q.name === "Other" ? "" : q.name, type: q.type, balance: 0, ...(q.owner ? { owner: q.owner, counts: "ira" as const } : {}) }); if (q.owner) ensureSpouseStep(p); });
     setOpen(id);
   };
-  const move = (i: number, by: -1 | 1) =>
-    update((p) => {
-      const j = i + by;
-      if (j < 0 || j >= p.accounts.length) return;
-      [p.accounts[i], p.accounts[j]] = [p.accounts[j]!, p.accounts[i]!];
-    });
+  const cards = state.debts.filter(isCard);
   const remove = async (a: Account, i: number) => {
     if (a.balance > 0 && !(await confirm("Remove this account?", `"${a.name || "This account"}" will be removed from your plan.`, "Remove"))) return;
     update((p) => { p.accounts.splice(i, 1); });
@@ -80,42 +86,47 @@ export function AccountsEditor() {
 
   return (
     <View style={{ gap: space.md }}>
-      {accounts.length > 1 ? (
-        <View style={[styles.row, { justifyContent: "flex-end", marginBottom: -space.sm }]}>
-          <Button
-            title={reorder ? "Done" : "Reorder"}
-            icon={reorder ? "check" : "sliders"}
-            tone="ghost"
-            onPress={() => { setOpen(null); setReorder((r) => !r); }}
-            style={{ minHeight: 36 }}
-          />
-        </View>
-      ) : null}
-      {accounts.length ? (
-        <Card style={{ paddingVertical: space.xs }}>
-          {accounts.map((a, i) => {
+      {accounts.length || cards.length ? (
+        ACCOUNT_GROUPS.map((g) => {
+          const inGroup = (x: Account) => groupKeyOf(x) === g.key;
+          const list = accounts.filter(inGroup);
+          if (!list.length) return null;
+          const total = list.reduce((sum, x) => sum + (+x.balance || 0), 0);
+          return (
+            <View key={g.key} style={{ gap: space.xs }}>
+              <View style={[styles.row, styles.groupHead]}>
+                <Text style={[type.overline, { color: t.text3, flex: 1 }]}>{g.label}</Text>
+                <Text style={[type.caption, { color: t.text3, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(total)}</Text>
+              </View>
+              <Card style={{ paddingVertical: space.xs }}>
+                <DragList
+                  count={list.length}
+                  keyOf={(n) => list[n]!.id}
+                  nameOf={(n) => list[n]!.name.trim() || "Unnamed account"}
+                  onMove={(from, to) => update((p) => { p.accounts = reorderAmong(p.accounts, inGroup, from, to); })}
+                  renderItem={(n, grip) => {
+                    const a = list[n]!;
+                    const i = accounts.indexOf(a);
             const isOpen = open === a.id;
             const name = a.name.trim() || "Unnamed account";
             const ck = contributionKey(state, a);
             const per = ck && ck !== "payroll" ? plannedNow(state, ck, thisMonth) : undefined;
             return (
-              <View key={a.id}>
-                {i > 0 ? <Divider /> : null}
+              <View>
+                {n > 0 ? <Divider /> : null}
                 <View style={[styles.row, { paddingVertical: space.md }]}>
+                  {list.length > 1 ? grip : null}
                   <Pressable
                     role="button"
                     aria-expanded={isOpen}
                     accessibilityLabel={`${name} details`}
                     accessibilityState={{ expanded: isOpen }}
-                    disabled={reorder}
                     onPress={() => setOpen(isOpen ? null : a.id)}
                     style={[styles.row, { flex: 1, minHeight: 36 }]}
                   >
-                    {reorder ? null : (
-                      <View style={{ transform: [{ rotate: isOpen ? "90deg" : "0deg" }] }}>
-                        <Icon name="chevron" size={18} color={t.text3} />
-                      </View>
-                    )}
+                    <View style={{ transform: [{ rotate: isOpen ? "90deg" : "0deg" }] }}>
+                      <Icon name="chevron" size={18} color={t.text3} />
+                    </View>
                     <View style={{ flex: 1, gap: 1 }}>
                       <Text style={[type.body, { color: a.name.trim() ? t.text : t.text3 }]} numberOfLines={1}>{name}</Text>
                       <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>
@@ -125,12 +136,7 @@ export function AccountsEditor() {
                       </Text>
                     </View>
                   </Pressable>
-                  {reorder ? (
-                    <View style={styles.row}>
-                      <IconButton icon="up" label={`Move ${name} up`} disabled={i === 0} onPress={() => move(i, -1)} />
-                      <IconButton icon="down" label={`Move ${name} down`} disabled={i === accounts.length - 1} onPress={() => move(i, 1)} />
-                    </View>
-                  ) : (
+                  {(
                     state.budgetPlan?.registers?.[a.id] ? (
                       <Pressable role="link" accessibilityLabel={`${name} register`} onPress={() => router.push(`/money/register?account=${a.id}`)} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                         <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(a.balance)}</Text>
@@ -187,29 +193,72 @@ export function AccountsEditor() {
                         ) : null}
                       </>
                     ) : null}
-                    <View style={[styles.row, { justifyContent: "space-between" }]}>
-                      <View style={styles.row}>
-                        <IconButton icon="up" label={`Move ${name} up`} disabled={i === 0} onPress={() => move(i, -1)} />
-                        <IconButton icon="down" label={`Move ${name} down`} disabled={i === accounts.length - 1} onPress={() => move(i, 1)} />
-                      </View>
+                    <View style={[styles.row, { justifyContent: "flex-end" }]}>
                       <Button title="Remove" icon="trash" tone="danger" onPress={() => void remove(a, i)} style={{ minHeight: 36 }} />
                     </View>
                   </View>
                 ) : null}
               </View>
             );
-          })}
-        </Card>
+
+                  }}
+                />
+              </Card>
+            </View>
+          );
+        })
       ) : (
         <Card style={{ alignItems: "center", paddingVertical: space.xl }}>
           <Text style={[type.body, { color: t.text3 }]}>No accounts yet</Text>
         </Card>
       )}
+      {cards.length ? (
+        <View style={{ gap: space.xs }}>
+          <View style={[styles.row, styles.groupHead]}>
+            <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Credit cards</Text>
+            <Text style={[type.caption, { color: t.text3, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(cards.reduce((sum, d) => sum + d.balance, 0))} owed</Text>
+          </View>
+          <Card style={{ paddingVertical: space.xs }}>
+            <DragList
+              count={cards.length}
+              keyOf={(n) => cards[n]!.id}
+              nameOf={(n) => cards[n]!.name?.trim() || "Credit card"}
+              onMove={(from, to) => update((p) => { p.debts = reorderAmong(p.debts, isCard, from, to); })}
+              renderItem={(n, grip) => {
+                const d = cards[n]!;
+                const name = d.name?.trim() || "Credit card";
+                const reg = !!state.budgetPlan?.registers?.[d.id];
+                return (
+                  <View>
+                    {n > 0 ? <Divider /> : null}
+                    <View style={[styles.row, { paddingVertical: space.md }]}>
+                      {cards.length > 1 ? grip : null}
+                      <Pressable
+                        role="link"
+                        accessibilityLabel={`${name}: ${reg ? "transactions" : "edit on Debts"}`}
+                        onPress={() => router.push((reg ? `/money/register?account=${d.id}` : "/money/debts") as never)}
+                        style={[styles.row, { flex: 1, minHeight: 36 }]}
+                      >
+                        <View style={{ flex: 1, gap: 1 }}>
+                          <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{name}</Text>
+                          <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>Credit card · {reg ? "transactions" : "edit on Debts"}</Text>
+                        </View>
+                        <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(d.balance)} owed</Text>
+                        <Icon name="chevron" size={14} color={t.accent} />
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              }}
+            />
+          </Card>
+        </View>
+      ) : null}
       <View style={{ gap: space.sm }}>
         <Text style={[type.label, { color: t.text2 }]}>Add an account</Text>
         <View style={styles.chips}>
           {quick.map((q) => (
-            <Button key={q.name} title={q.name} icon="plus" onPress={() => add(q)} style={{ minHeight: 36, paddingHorizontal: space.md }} />
+            <Button key={q.label ?? q.name} title={q.label ?? q.name} icon="plus" onPress={() => add(q)} style={{ minHeight: 36, paddingHorizontal: space.md }} />
           ))}
         </View>
       </View>
@@ -220,4 +269,5 @@ export function AccountsEditor() {
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: space.sm },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  groupHead: { paddingHorizontal: space.xs, marginTop: space.xs },
 });

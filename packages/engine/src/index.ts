@@ -12,7 +12,7 @@ export { simulatePlan, scheduleAmount, isHighInterest, paysExtra, rateIn, k401Co
 export { project, fireNumber, coastNumberAt, coastCrossing } from "./project";
 export { accountPlanKey, isSpouseIra, budgetScheduleMonths, mergeAccountSchedules, payPerCheck, valueIn, hsaEligibleIn, isValueKey, ACCOUNT_KEY, PAY401, PAYHSA, PAYGROSS, PAYNET, PAYDED, HSAEMP, BUDGET_ITEM, HSA_ELIGIBLE } from "./schedule";
 export { registerBalance, transferPair, txnActivity, type TxnActivity } from "./txn";
-export { SAVINGS_GROUP, budgetCategories, budgetView, type BudgetCategory, type BudgetCategoryKind, type BudgetLine, type BudgetView } from "./budget";
+export { SAVINGS_GROUP, budgetCategories, budgetStartCash, budgetView, type BudgetCategory, type BudgetCategoryKind, type BudgetLine, type BudgetView } from "./budget";
 export { accountForecasts, accountGroup, type AccountForecast, type AccountMonth, type AccountYear, type AccountKey } from "./forecast";
 export { monteCarlo } from "./montecarlo";
 export { run, MC_SEED } from "./run";
