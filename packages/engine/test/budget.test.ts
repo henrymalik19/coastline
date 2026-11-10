@@ -103,11 +103,8 @@ describe("monthly budget", () => {
     expect(by("goal:c")).toMatchObject({ kind: "bill", target: 24 }); // $120 over Nov–Mar
     expect(by("debt:v")!.kind).toBe("debt");
     expect(by("debt:v")!.target).toBeGreaterThan(100); // minimum + the plan's extra
-    // a line per account you invest in yourself (the 401(k) comes out of your paycheck: no line)
-    expect(by("acct:ira")).toMatchObject({ group: "Investing", kind: "saving", moves: true });
-    expect(by("acct:ira2")).toMatchObject({ group: "Investing", target: 50 });
-    expect(by("acct:k")).toBeUndefined();
-    expect(c.some((x) => x.key === "ira" || x.key === "taxable")).toBe(false);
+    // investing isn't a line of its own: you add a category and link it to the account
+    expect(c.some((x) => x.key.startsWith("acct:") || x.key === "ira" || x.key === "taxable")).toBe(false);
     expect(by("goal:car")!.kind).toBe("saving");
     // the emergency fund is one line when the plan has it
     const ef = blank({ ...s, plan: { ...s.plan, steps: ["starterEF", "fullEF"] }, accounts: [{ id: "sav", name: "Savings", type: "cash", balance: 0 }, { id: "chk", name: "Checking", type: "cash", balance: 0 }] });
@@ -115,6 +112,32 @@ describe("monthly budget", () => {
     const efLines = budgetCategories(ef, de, simulatePlan(ef, de), START, "2026-11").filter((x) => x.kind === "saving" && !x.key.startsWith("goal:"));
     expect(efLines).toMatchObject([{ key: "cash", name: "Emergency fund", moves: false }]);
     expect(budgetScheduleMonths({ debts: [], goals: [], budgetPlan: { start: "2026-11", startCash: 0, months: { "2026-11": { assigned: { taxable: 400 } } } } })).toEqual({ taxable: { "2026-11": 400 } });
+  });
+
+  it("a category linked to an account is investing, not spending", () => {
+    const base = blank({
+      incomes: [{ id: "j", name: "Job", freq: "monthly", net: 8000, matchMode: "usd" }],
+      budget: [
+        { id: "rent", name: "Rent", amount: 2000, inRetirement: true },
+        { id: "roth", name: "Roth IRA", amount: 500, inRetirement: true, accountId: "ira" },
+      ],
+      accounts: [{ id: "ira", name: "Roth IRA", type: "roth", balance: 0 }],
+      limits: [{ year: 2026, k401: 24500, k401Catch: 8000, ira: 7500, iraCatch: 1100, hsaSelf: 4400, hsaFamily: 8750, hsaCatch: 1000 }],
+      plan: { ...blank().plan, steps: ["taxable"] },
+    });
+    const d = derive(base, START);
+    // not in your spending or your retirement number
+    expect(d.monthlyExpenses).toBe(2000);
+    expect(d.retireMonthly).toBe(2000);
+    // its amount is the IRA's monthly contribution, even with no IRA step
+    const m = simulatePlan(base, d).months;
+    expect(m[0]!.alloc.ira).toBeCloseTo(500, 6);
+    // what you assign to it is that month's contribution
+    const s = blank({ ...base, budgetPlan: { start: "2026-11", startCash: 0, months: { "2026-11": { assigned: { roth: 700 } } } } });
+    expect(simulatePlan(s, derive(s, START)).months[0]!.alloc.ira).toBeCloseTo(700, 6);
+    // on the Budget it's a category, marked with its account
+    const c = budgetCategories(base, d, simulatePlan(base, d), START, "2026-11");
+    expect(c.find((x) => x.key === "roth")).toMatchObject({ account: "ira", target: 500 });
   });
 
   it("cash assigned in the first month: only the part above what's already there is new saving", () => {

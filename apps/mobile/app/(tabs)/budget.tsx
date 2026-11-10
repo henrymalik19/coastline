@@ -8,7 +8,7 @@ import { TxnForm } from "../../components/TxnForm";
 import { BudgetAccounts } from "../../components/BudgetAccounts";
 import { TransactionsList } from "../../components/TransactionsList";
 import { cardMap, liveBudget } from "../../lib/register";
-import { duplicateOf } from "../../lib/budgetDupes";
+import { linkableAccounts, suggestedAccount } from "../../lib/budgetDupes";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Segmented, Select } from "../../components/form";
@@ -145,29 +145,14 @@ export default function Budget() {
       a[to] = (a[to] ?? 0) + take;
       e.assigned = a;
     });
-  const removeDuplicate = async (itemId: string, lineKey: string) => {
-    const it = state.budget.find((x) => x.id === itemId);
-    if (!it) return;
-    if (!(await confirm(`Remove "${it.name}"?`, "Its monthly amount and what's assigned this month move to the account's line. It stops counting as spending (and as spending in retirement).", "Remove"))) return;
-    setOpen(lineKey);
+  /** Link a category to an account (money moved there: investing, not spending), or unlink it. */
+  const linkItem = (itemId: string, accountId: string) =>
     update((p) => {
-      // this month's money goes with it
-      if (p.budgetPlan) {
-        const e = { ...(p.budgetPlan.months[month] ?? {}) };
-        const a = { ...(e.assigned ?? {}) };
-        if (a[itemId] !== undefined) {
-          a[lineKey] = (a[lineKey] ?? 0) + a[itemId]!;
-          delete a[itemId];
-          e.assigned = a;
-          p.budgetPlan.months = { ...p.budgetPlan.months, [month]: e };
-        }
-      }
-      // its monthly amount becomes the account's plan (unless the account already has one)
-      const has = (p.plan.schedule?.[lineKey]?.length ?? 0) > 0;
-      if (!has && it.amount > 0) p.plan.schedule = { ...(p.plan.schedule ?? {}), [lineKey]: [{ from: thisMonth, amount: it.amount }] };
-      p.budget = p.budget.filter((x) => x.id !== itemId);
+      const it = p.budget.find((x) => x.id === itemId);
+      if (!it) return;
+      if (accountId) it.accountId = accountId;
+      else delete it.accountId;
     });
-  };
   const startBudget = () =>
     update((p) => {
       p.budgetPlan = { start: thisMonth, startCash: Math.round(cashNow * 100) / 100, months: {} };
@@ -270,6 +255,8 @@ export default function Budget() {
       const it = state.budget.find((x) => x.id === c.key);
       if (!it) return null;
       const groups = groupOrder(state.budget);
+      const linkable = linkableAccounts(state);
+      const linkedTo = linkable.find((a) => a.id === it.accountId);
       return (
         <View style={styles.section}>
           <Text style={[type.overline, { color: t.text3 }]}>Category</Text>
@@ -277,15 +264,28 @@ export default function Budget() {
             <FormRow label="Name">
               <InlineText label="Category name" placeholder="e.g. Groceries" value={it.name} onChange={(v) => editItem(it.id, { name: v })} />
             </FormRow>
-            <FormRow label="Each month" hint="What your plan expects">
+            <FormRow label="Money moved to" hint={linkedTo ? "Investing, not spending: your plan counts it as your contribution" : "Pick an account if this is money you invest"}>
+              <Select
+                plain
+                label="Money moved to"
+                value={linkedTo?.id ?? ""}
+                options={[{ value: "", label: "Nothing (spending)" }, ...linkable.map((a) => ({ value: a.id, label: a.name.trim() || "Account" }))]}
+                onChange={(v) => linkItem(it.id, v)}
+              />
+            </FormRow>
+            <FormRow label="Each month" hint={linkedTo ? `What you put into ${linkedTo.name.trim() || "the account"} each month` : "What your plan expects"}>
               <InlineMoney label={`${it.name || "Item"} planned each month`} value={it.amount} onChange={(v) => editItem(it.id, { amount: v })} />
             </FormRow>
-            <FormRow label="Still paid after you retire" hint="Counts toward your retirement number">
-              <InlineSwitch label="Still paid after you retire" value={it.inRetirement} onChange={(v) => editItem(it.id, { inRetirement: v })} />
-            </FormRow>
-            <FormRow label="Essential" hint="Kept in emergency mode">
-              <InlineSwitch label="Essential" value={it.essential !== false} onChange={(v) => editItem(it.id, { essential: v })} />
-            </FormRow>
+            {linkedTo ? null : (
+              <>
+                <FormRow label="Still paid after you retire" hint="Counts toward your retirement number">
+                  <InlineSwitch label="Still paid after you retire" value={it.inRetirement} onChange={(v) => editItem(it.id, { inRetirement: v })} />
+                </FormRow>
+                <FormRow label="Essential" hint="Kept in emergency mode">
+                  <InlineSwitch label="Essential" value={it.essential !== false} onChange={(v) => editItem(it.id, { essential: v })} />
+                </FormRow>
+              </>
+            )}
             <FormRow label="Group">
               <Select plain label="Group" value={groupOf(it)} options={groups.map((g) => ({ value: g, label: g }))} onChange={(g) => update((p) => { p.budget = moveToGroup(p.budget, itemIndex(it.id), g); })} />
             </FormRow>
@@ -351,7 +351,8 @@ export default function Budget() {
     const l = view.lines[c.key]!;
     const isOpen = open === c.key;
     const explicitSpent = entry?.spent?.[c.key] !== undefined;
-    const dup = c.kind === "spending" ? duplicateOf(state, c.name, cats) : undefined;
+    const dupItem = c.kind === "spending" && !c.account ? state.budget.find((x) => x.id === c.key) : undefined;
+    const dup = dupItem && !dupItem.noSuggest ? suggestedAccount(state, c.name) : undefined;
     return (
       <View key={c.key} nativeID={"cat-" + c.key}>
         <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); setMoveAmt(0); setMoveTo(""); setMoveOpen(false); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, pressed ? { backgroundColor: t.surface2 } : null]}>
@@ -368,12 +369,13 @@ export default function Budget() {
           <View style={[styles.editor, { backgroundColor: t.surface2 }]}>
             {dup ? (
               <View style={[styles.dupBox, { backgroundColor: t.warnSoft, borderColor: t.warn }]}>
-                <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Same as your {dup.name} line?</Text>
+                <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Money moved to {dup.name}?</Text>
                 <Text style={[type.caption, { color: t.text2 }]}>
-                  This item counts as spending. The {dup.name} line (in {dup.group}) is the account itself: money there counts as investing in your plan. Keep just that one.
+                  Right now this counts as spending, so it raises your retirement number and your plan counts the money twice. Link it to the account and it counts as investing instead.
                 </Text>
                 <View style={styles.chips}>
-                  <Chip title={`Remove, use ${dup.name}`} tone="accent" icon="check" onPress={() => void removeDuplicate(c.key, dup.key)} />
+                  <Chip title={`Link to ${dup.name}`} tone="accent" icon="check" onPress={() => linkItem(c.key, dup.id)} />
+                  <Chip title="It's spending" icon="close" onPress={() => editItem(c.key, { noSuggest: true })} />
                 </View>
               </View>
             ) : null}
@@ -562,7 +564,7 @@ export default function Budget() {
             <Button title={`Add to ${groupOrder(state.budget)[0] ?? UNGROUPED}`} icon="plus" tone="ghost" onPress={() => addItem(groupOrder(state.budget)[0] ?? UNGROUPED)} style={{ minHeight: 36 }} />
           </View>
           <Text style={[type.caption, { color: t.text3 }]}>
-            Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number. Bills come from repeating savings goals and debt payments from Debts; tap one to change it there. Spent and paid come from the transactions you record.
+            Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement && !x.accountId).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number. Bills come from repeating savings goals and debt payments from Debts; tap one to change it there. Spent and paid come from the transactions you record.
           </Text>
           <Button
             title="Start the budget over"

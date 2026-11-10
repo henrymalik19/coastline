@@ -107,6 +107,7 @@ export default function Emergency() {
         <View style={[styles.essentials, { backgroundColor: t.surface2 }]}>
           <Text style={[type.caption, { color: t.text3 }]}>Ticked = you'd keep paying it</Text>
           {state.budget.map((b, i) => {
+            if (b.accountId) return null; // money moved to an account, not spending
             const keep = b.essential !== false;
             return (
               <Pressable

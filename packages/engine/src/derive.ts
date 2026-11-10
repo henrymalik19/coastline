@@ -2,6 +2,7 @@ import { BASE_CHECKS, PERIODS } from "./constants";
 import { resolveIncome } from "./match";
 import type { Balances, Derived, PlanState, WhatIf } from "./types";
 import { num, sum } from "./util";
+import { isSpendingItem } from "./schedule";
 
 /** Static summary of the inputs. `startDate` is injected; the engine never reads the clock. */
 export function derive(s: PlanState, startDate: Date): Derived {
@@ -17,7 +18,8 @@ export function derive(s: PlanState, startDate: Date): Derived {
   const annualPre = sum(incomes.map((i) => num(i.pretax) * PERIODS[i.freq]));
   const annualMatch = sum(incomes.map((i) => num(i.match) * PERIODS[i.freq]));
 
-  const budget = s.budget ?? [];
+  // money moved to an account (a "Roth IRA" category linked to it) is investing, not spending
+  const budget = (s.budget ?? []).filter(isSpendingItem);
   const budgetTotal = sum(budget.map((b) => b.amount));
   // payroll-repaid debts (paycheck 401(k) loans) are already out of take-home, so they aren't budget costs
   // a paid-off mortgage's escrow (property tax + insurance) keeps going

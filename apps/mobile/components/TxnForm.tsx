@@ -58,6 +58,8 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const [cleared, setCleared] = useState(txn ? txn.cleared !== "uncleared" : false);
   const [amountText, setAmountText] = useState(txn ? String(Math.abs(txn.amount)) : initialAmount ? String(initialAmount) : "");
   const [picking, setPicking] = useState(false);
+  // a transfer to an IRA or brokerage: the category you picked ("" = the linked one, else ready to assign)
+  const [xferPick, setXferPick] = useState(txn?.transferAccountId && txn.amount < 0 && txn.categoryId && !txn.categoryId.startsWith("acct:") ? txn.categoryId : "");
   const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const dateText = date === isoDay(new Date()) ? "Today" : `${MON[Number(date.slice(5, 7)) - 1]} ${Number(date.slice(8, 10))}, ${date.slice(0, 4)}`;
   const divider = <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: t.border, marginLeft: space.md }} />;
@@ -84,7 +86,12 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const known = payee.trim().length >= 2 ? [...payees.keys()].filter((p) => p.startsWith(payee.trim().toLowerCase()) && p !== payee.trim().toLowerCase()).slice(0, 3) : [];
 
   const toTracking = tracking.find((a) => a.id === to);
-  const toLine = toTracking ? cats.find((c) => c.key === toTracking.key) : undefined;
+  // a transfer to an IRA or brokerage: you pick the category (the one linked to that account, by default)
+  const toInvest = kind === "transfer" && toTracking?.kind === "acct";
+  const linkedCat = toInvest ? cats.find((c) => c.account === toTracking.id) : undefined;
+  const xferCat = xferPick || linkedCat?.key || "ready";
+  const xferLabel = xferCat === "ready" ? undefined : cats.find((c) => c.key === xferCat)?.label;
+  const toLine = toTracking?.kind === "debt" ? cats.find((c) => c.key === toTracking.key) : undefined;
   const fromTracking = kind === "transfer" ? withdrawable.find((a) => a.id === acct) : undefined;
   // only a transfer can start from an investment account
   const acctOk = !!acct && (kind === "transfer" || accounts.some((a) => a.id === acct));
@@ -104,8 +111,8 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
       transferId: txn?.transferId,
     };
     if (kind === "transfer" && fromTracking) saveTxn({ ...base, accountId: to, amount, transferAccountId: acct, categoryId: "ready" }, isoDay(start));
-    // to a loan or an account you invest in: its own line; to one with no line (a 401(k)): out of ready to assign
-    else if (kind === "transfer") saveTxn({ ...base, transferAccountId: to, categoryId: toTracking ? (toLine ? toTracking.key : "ready") : undefined }, isoDay(start));
+    // to a loan: its payment line; to an IRA or brokerage: the category you picked (else ready to assign)
+    else if (kind === "transfer") saveTxn({ ...base, transferAccountId: to, categoryId: !toTracking ? undefined : toInvest ? xferCat : toLine ? toTracking.key : "ready" }, isoDay(start));
     else saveTxn({ ...base, transferAccountId: undefined, categoryId: kind === "in" ? cat || "ready" : cat }, isoDay(start));
     onClose();
   };
@@ -215,9 +222,24 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                         ...accounts.filter((x) => x.id !== acct && (!fromTracking || x.kind === "cash")).map((x) => ({ value: x.id, label: x.name, hint: x.kind === "card" ? "A card payment" : "Between budget accounts" })),
                         ...(fromTracking ? [] : tracking.map((x) => ({ value: x.id, label: x.name, hint: x.kind === "debt" ? "A loan payment" : "Counts as saving" }))),
                       ]}
-                      onChange={setTo}
+                      onChange={(v) => { setTo(v); setXferPick(""); }}
                     />,
                   )}
+                  {toInvest ? (
+                    <>
+                      {divider}
+                      {listRow(
+                        "Category",
+                        <Select
+                          plain
+                          label="Category"
+                          value={xferCat}
+                          options={[{ value: "ready", label: "Ready to assign", hint: "No category" }, ...cats.map((c) => ({ value: c.key, label: c.label, hint: c.account === to ? "Linked to this account" : c.group }))]}
+                          onChange={setXferPick}
+                        />,
+                      )}
+                    </>
+                  ) : null}
                 </>
               ) : null}
               {divider}
@@ -243,8 +265,9 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
             </View>
             {kind === "transfer" && toTracking && !fromTracking ? (
               <Text style={[type.caption, { color: t.text3 }]}>
-                {toLine ? `Comes out of the ${toLine.label} category, and ` : "Comes out of ready to assign, and "}
-                {toTracking.kind === "debt" ? `lowers what you owe on ${toTracking.name}.` : `adds to ${toTracking.name}.`}
+                {toTracking.kind === "debt"
+                  ? `${toLine ? `Comes out of the ${toLine.label} category` : "Comes out of ready to assign"}, and lowers what you owe on ${toTracking.name}.`
+                  : `${xferLabel ? `Comes out of ${xferLabel}` : "Comes out of ready to assign"}, and adds to ${toTracking.name}.${linkedCat ? "" : " To budget for it, add a category and link it to this account."}`}
               </Text>
             ) : null}
             {fromTracking ? (

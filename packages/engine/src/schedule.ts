@@ -67,6 +67,43 @@ export function valueIn(p: Pick<PlanSettings, "schedule" | "scheduleMonths"> | u
   return scheduleAmount(p ?? {}, key, month) ?? base;
 }
 
+/** A budget item that's spending (not money moved to one of your accounts). */
+export const isSpendingItem = (b: { accountId?: string }): boolean => !b.accountId;
+
+/**
+ * The account a budget item moves money to, when it's one the plan adds to (an IRA, a brokerage, an
+ * HSA you fund yourself). Cash, a 401(k) or an account that's gone: none.
+ */
+export function linkedAccount(s: Pick<PlanState, "plan" | "accounts"> & Partial<Pick<PlanState, "spouse">>, b: { accountId?: string }): Account | undefined {
+  if (!b.accountId) return undefined;
+  const a = (s.accounts ?? []).find((x) => x.id === b.accountId);
+  const kind = a ? accountPlanKey(s, a) : null;
+  return a && kind && kind !== "cash" ? a : undefined;
+}
+
+/**
+ * Budget items linked to an account set that account's monthly amount ("acct:<id>"), unless the
+ * account already has its own. Several items on one account add up.
+ */
+export function linkedItemSchedules(s: Pick<PlanState, "plan" | "accounts" | "budget"> & Partial<Pick<PlanState, "spouse">>): Record<string, ScheduleEntry[]> | undefined {
+  const out: Record<string, ScheduleEntry[]> = {};
+  const own = s.plan?.schedule ?? {};
+  for (const b of s.budget ?? []) {
+    const a = linkedAccount(s, b);
+    if (!a) continue;
+    const key = ACCOUNT_KEY + a.id;
+    if (own[key]?.length) continue;
+    const changes = own[BUDGET_ITEM + b.id] ?? [];
+    if (!(num(b.amount) > 0) && !changes.length) continue;
+    const list = (out[key] ??= []);
+    if (!list.length) list.push({ from: "0000-01", amount: 0 });
+    // today's amount from the start, then the item's changes (rent-style "from this month on")
+    list[0]!.amount += Math.max(0, num(b.amount));
+    for (const c of changes) list.push({ from: c.from, amount: Math.max(0, num(c.amount)) });
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 /** Whether you can put money in an HSA in a month: the setting, changed by month. */
 export const hsaEligibleIn = (p: Partial<Pick<PlanSettings, "schedule" | "scheduleMonths" | "hsaEligible">> | undefined, month: string): boolean =>
   valueIn(p, HSA_ELIGIBLE, month, p?.hsaEligible ? 1 : 0) > 0;
@@ -169,12 +206,17 @@ export function mergeAccountSchedules(s: Pick<PlanState, "plan" | "accounts"> & 
  * What you assigned to savings and debts feeds the plan for those months: an account gets exactly
  * what you assigned, a debt gets what you assigned beyond its minimum as extra.
  */
-export function budgetScheduleMonths(s: Pick<PlanState, "debts" | "goals" | "budgetPlan"> & Partial<Pick<PlanState, "accounts">>): Record<string, Record<string, number>> | undefined {
+export function budgetScheduleMonths(s: Pick<PlanState, "debts" | "goals" | "budgetPlan"> & Partial<Pick<PlanState, "accounts" | "budget" | "plan" | "spouse">>): Record<string, Record<string, number>> | undefined {
   const b = s.budgetPlan;
   if (!b?.months) return undefined;
   const out: Record<string, Record<string, number>> = {};
   for (const [month, e] of Object.entries(b.months)) {
-    for (const [key, v] of Object.entries(e.assigned ?? {})) {
+    for (const [rawKey, v] of Object.entries(e.assigned ?? {})) {
+      // a budget item linked to an account: what you assign is that account's contribution
+      const item = s.plan ? (s.budget ?? []).find((x) => x.id === rawKey) : undefined;
+      const linked = item && s.plan ? linkedAccount({ plan: s.plan, accounts: s.accounts ?? [], spouse: s.spouse }, item) : undefined;
+      if (item && !linked) continue;
+      const key = linked ? ACCOUNT_KEY + linked.id : rawKey;
       let amount: number | undefined;
       if (key.startsWith(ACCOUNT_KEY)) {
         const a = (s.accounts ?? []).find((x) => ACCOUNT_KEY + x.id === key);
@@ -206,7 +248,8 @@ export function budgetScheduleMonths(s: Pick<PlanState, "debts" | "goals" | "bud
         amount = Math.max(0, num(v) - Math.max(0, num(x.minPayment)));
       }
       if (amount === undefined) continue;
-      (out[key] ??= {})[month] = amount;
+      const row = (out[key] ??= {});
+      row[month] = (linked ? (row[month] ?? 0) : 0) + amount;
     }
   }
   return Object.keys(out).length ? out : undefined;

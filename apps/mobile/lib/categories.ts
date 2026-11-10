@@ -25,8 +25,8 @@ export function useCategories(month?: string): NamedCategory[] {
 export function categoryText(cats: NamedCategory[], t: { categoryId?: string; splits?: unknown[]; transferAccountId?: string; amount: number }, accountName: (id: string) => string): string {
   if (t.splits?.length) return `Split (${t.splits.length})`;
   // a withdrawal from an IRA or brokerage account: money in, ready to assign
-  // to or from an account with no Budget line: out of / into ready to assign
-  if (t.categoryId === "ready" && t.transferAccountId)
+  // to or from an IRA or brokerage with no category: out of / into ready to assign (older transfers carry the account's old line)
+  if ((t.categoryId === "ready" || t.categoryId?.startsWith("acct:")) && t.transferAccountId)
     return t.amount < 0
       ? `Transfer · ${accountName(t.transferAccountId)} (from ready to assign)`
       : `Withdrawal · ${accountName(t.transferAccountId)} (ready to assign)`;

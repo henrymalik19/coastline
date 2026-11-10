@@ -85,7 +85,7 @@ export function BudgetEditor() {
     if (!selected || !groups.some((g) => g.name === selected)) setSelected(groups[0]?.name);
   }, [names, debtRows.length, setRows.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const current = onDebts || onSet ? undefined : groups.find((g) => g.name === selected) ?? groups[0];
-  const retireMonthly = state.budget.filter((b) => b.inRetirement).reduce((a, b) => a + b.amount, 0);
+  const retireMonthly = state.budget.filter((b) => b.inRetirement && !b.accountId).reduce((a, b) => a + b.amount, 0);
 
   const newGroupName = () => {
     const existing = new Set(groups.map((g) => g.name));

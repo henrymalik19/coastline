@@ -54,6 +54,26 @@ export function PlanSteps() {
     add(firstOf((k) => k === "taxable"), a0.taxable);
   }
   if (!activeKeys.size && open[0]) activeKeys.add(open[0].key);
+  /** What a step gets this month (from the plan as you'll really do it). */
+  const gets = (k: string): number => {
+    if (!a0) return 0;
+    if (k === "starterEF" || k === "fullEF") return a0.ef;
+    if (k === "match") return a0.matchGain;
+    if (k === "highDebt" || k === "lowDebt") return a0.debt;
+    if (k === "hsa") return a0.hsa;
+    if (k === "ira") return a0.ira;
+    if (k === "k401") return a0.k401Step;
+    if (k.startsWith("goal:")) return a0.goals;
+    if (k === "taxable") return a0.taxable;
+    return 0;
+  };
+  const running = infos.filter((i) => activeKeys.has(i.key));
+  /** The next step still open after this one (what a split shares with). */
+  const nextOpen = (k: string) => {
+    const at = open.findIndex((x) => x.key === k);
+    return at >= 0 ? open[at + 1] : undefined;
+  };
+  const shortOf = (label: string) => label.match(/^(.*\S)\s+\(([^()]*)\)\s*$/)?.[1] ?? label;
   const amounts = state.plan.amounts ?? {};
   const amountsBy = state.plan.amountsBy ?? {};
   /** A share (0–1) or a set amount per month; picking one clears the other. */
@@ -112,14 +132,26 @@ export function PlanSteps() {
         <SectionLabel>Your priority order</SectionLabel>
         {compact && !howOpen ? (
           <Pressable role="button" aria-expanded={false} onPress={() => setHowOpen(true)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}>
-            <Text style={[type.caption, { color: t.text2 }]}>What's left fills these in order. <Text style={{ color: t.accent, fontWeight: "700" }}>How it works</Text></Text>
+            <Text style={[type.caption, { color: t.text2 }]}>What's left fills these in order, or side by side. <Text style={{ color: t.accent, fontWeight: "700" }}>How it works</Text></Text>
             <Icon name="chevron" size={12} color={t.accent} />
           </Pressable>
         ) : (
           <Text style={[compact ? type.caption : type.body, { color: t.text2 }]}>
-            Whatever your budget doesn't assign to savings or debts fills step 1, then step 2, and so on. To fund two steps at once, give one a share of what's left. Tap a step for its details, to split what's left, or to change the order. The dates between steps show when each one starts.
+            Whatever your budget doesn't assign to savings or debts fills step 1, then step 2, and so on. A step can also run alongside the next one: it takes part of what's left and the rest keeps going down the list at the same time. Tap a step for its details, to split it, or to change the order. The dates between steps show when each one starts.
           </Text>
         )}
+        {running.length ? (
+          <View style={[styles.nowBox, { backgroundColor: t.surface2 }]}>
+            <Text style={[type.overline, { color: t.text3 }]}>{running.length > 1 ? "Running together this month" : "This month"}</Text>
+            {running.map((r) => (
+              <View key={r.key} style={styles.nowRow}>
+                <View style={[styles.dot, { backgroundColor: t.accent }]} />
+                <Text style={[type.body, { color: t.text, flex: 1 }]} numberOfLines={1}>{shortOf(r.label)}</Text>
+                <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{gets(r.key) > 0.5 ? money(gets(r.key), { whole: true }) : ""}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
       </View>
       <Divider />
       {infos.map((info, i) => {
@@ -144,7 +176,15 @@ export function PlanSteps() {
         const shortLabel = paren ? paren[1]! : info.label;
         const details = parts;
         const share = shares[info.key] ?? 1;
-        const splitNote = canShare ? (amt !== undefined ? `gets ${money(amt, { whole: true })}/mo` : share < 1 ? `gets ${Math.round(share * 100)}% of what's left` : "") : "";
+        const partner = nextOpen(info.key);
+        const partnerName = partner ? shortOf(partner.label) : "the next steps";
+        const splitNote = canShare
+          ? amt !== undefined
+            ? `${money(amt, { whole: true })}/mo, alongside ${partnerName}`
+            : share < 1
+              ? `${Math.round(share * 100)}% of what's left, alongside ${partnerName}`
+              : ""
+          : "";
         const st = info.done || info.skip ? null : startOf(info.key);
         const labels = st !== null && st > lastLabel ? dateLabel(st) : null;
         if (st !== null && st > lastLabel) lastLabel = st;
@@ -216,17 +256,17 @@ export function PlanSteps() {
                         </Pressable>
                       ) : null}
                       {canShare ? (
-                        <FormRow label="Share of what's left" hint="The rest goes to the next steps">
+                        <FormRow label="Run alongside the next step" hint={shareValue === "1" ? "Off: this step finishes before the next one starts" : `The rest of what's left goes to ${partnerName} at the same time`}>
                           <Select
                             plain
-                            label={`${info.label}: share of what's left`}
+                            label={`${info.label}: run alongside the next step`}
                             value={shareValue}
                             options={[
-                              { value: "1", label: "All of it" },
-                              { value: "0.75", label: "75%" },
-                              { value: "0.5", label: "50%" },
-                              { value: "0.25", label: "25%" },
-                              ...(amt !== undefined ? [{ value: "amount", label: `${money(amt, { whole: true })} a month` }] : []),
+                              { value: "1", label: "No, finish this first" },
+                              { value: "0.75", label: "Yes, 75% here" },
+                              { value: "0.5", label: "Yes, half here" },
+                              { value: "0.25", label: "Yes, 25% here" },
+                              ...(amt !== undefined ? [{ value: "amount", label: `Yes, ${money(amt, { whole: true })} a month here` }] : []),
                             ]}
                             onChange={(v) => { if (v !== "amount") setSplit(info.key, { share: Number(v) }); }}
                           />
@@ -267,6 +307,9 @@ const styles = StyleSheet.create({
   linkRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, minHeight: 50 },
   chipRow: { flexDirection: "row", gap: space.sm, flexWrap: "wrap" },
   moveBtn: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  nowBox: { borderRadius: radius.md, padding: space.md, gap: 6, marginTop: space.sm },
+  nowRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  dot: { width: 8, height: 8, borderRadius: 4 },
   dateLabel: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: 6 },
   cmp: { flexDirection: "row", gap: space.lg },
   cmpBox: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, overflow: "hidden" },

@@ -12,11 +12,12 @@ export function budgetKeyFor(s: PlanState, what: string, month: string): string 
       .sort((a, b) => rateIn(b, month) - rateIn(a, month));
     return list[0] ? "debt:" + list[0].id : null;
   };
+  // the category you linked to an account of this kind, if you made one
   const firstAccount = (kind: "ira" | "iraSpouse" | "hsa" | "taxable") => {
-    const a = s.accounts.find((x) => accountPlanKey(s, x) === kind);
-    return a ? "acct:" + a.id : null;
+    const ids = new Set(s.accounts.filter((x) => accountPlanKey(s, x) === kind).map((x) => x.id));
+    return s.budget.find((b) => b.accountId && ids.has(b.accountId))?.id ?? null;
   };
-  // the emergency fund is one line; each account you invest in has its own
+  // the emergency fund is one line; investing is a category you link to its account
   if (what === "ef" || what === "em" || what === "starterEF" || what === "fullEF") return "cash";
   if (what === "ira" || what === "iraSpouse" || what === "taxable") return firstAccount(what);
   if (what === "hsa") return s.plan.hsaPayroll !== false ? null : firstAccount("hsa");

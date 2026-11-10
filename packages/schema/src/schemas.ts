@@ -54,6 +54,7 @@ export const BudgetItemSchema = z.object({
   group: z.string().optional(),
   essential: z.boolean().optional(),
   noSuggest: z.boolean().optional(),
+  accountId: z.string().optional(),
 });
 export const AccountTypeSchema = z.enum(["pretax", "roth", "taxable", "hsa", "cash", "property"]);
 export const AccountSchema = z.object({
@@ -247,6 +248,8 @@ export const DEFAULT_PLAN: Engine.PlanSettings = {
   hsaEligible: false,
   hsaFamily: false,
   projectWith: "plan",
+  // the full emergency fund takes half of what's left; the other half keeps investing at the same time
+  shares: { fullEF: 0.5 },
 };
 
 export function defaultPlanState(): Engine.PlanState {
@@ -262,7 +265,7 @@ export function defaultPlanState(): Engine.PlanState {
     debts: [],
     goals: [],
     limits: structuredClone(DEFAULT_LIMITS),
-    plan: { ...DEFAULT_PLAN, steps: [...DEFAULT_PLAN.steps] },
+    plan: { ...DEFAULT_PLAN, steps: [...DEFAULT_PLAN.steps], shares: { ...DEFAULT_PLAN.shares } },
     ret: 0.05,
     vol: 0.15,
     fee: 0,

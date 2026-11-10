@@ -33,12 +33,13 @@ describe("transactions in the budget", () => {
     expect(v.lines["debt:visa"]!.available).toBe(0); // funded by the spending, then paid
   });
 
-  it("a transfer to an IRA spends its line; one to an account with no line comes out of ready to assign", () => {
-    const ira = tx("chk", "2026-11-05", -500, { transferAccountId: "ira", categoryId: "acct:ira" });
-    const k401 = tx("chk", "2026-11-06", -200, { transferAccountId: "k", categoryId: "ready" });
-    const a = txnActivity([ira, k401], "2026-11", cards);
-    expect(a.spent).toEqual({ "acct:ira": 500 });
-    expect(a.income).toBe(-200);
+  it("a transfer to an IRA comes out of the category you picked, or ready to assign", () => {
+    const linked = tx("chk", "2026-11-05", -500, { transferAccountId: "ira", categoryId: "roth" });
+    const none = tx("chk", "2026-11-06", -200, { transferAccountId: "ira", categoryId: "ready" });
+    const old = tx("chk", "2026-11-07", -100, { transferAccountId: "ira", categoryId: "acct:ira" }); // filed under the account's old line
+    const a = txnActivity([linked, none, old], "2026-11", cards);
+    expect(a.spent).toEqual({ roth: 500 });
+    expect(a.income).toBe(-300);
   });
 
   it("splits spend from each category", () => {

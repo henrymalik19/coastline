@@ -39,14 +39,16 @@ describe("transfers to accounts you don't budget", () => {
     expect(p.debts[0]!.balance).toBe(4_700);
   });
 
-  it("old per-cash-account lines fold into Emergency fund; investing lines stay", () => {
+  it("old per-account lines: cash folds into Emergency fund, an IRA's into the category linked to it", () => {
     const p = plan();
-    p.accounts.push({ id: "sav", name: "Savings", type: "cash", balance: 0 });
-    p.budgetPlan!.months = { "2026-11": { assigned: { "acct:chk": 100, "acct:sav": 200, "acct:ira": 300, rent: 50, cash: 5 } } };
+    p.accounts.push({ id: "sav", name: "Savings", type: "cash", balance: 0 }, { id: "brk", name: "Brokerage", type: "taxable", balance: 0 });
+    p.budget.push({ id: "roth", name: "Roth IRA", amount: 0, inRetirement: false, accountId: "ira" });
+    p.budgetPlan!.months = { "2026-11": { assigned: { "acct:chk": 100, "acct:sav": 200, "acct:ira": 300, "acct:brk": 40, rent: 50, cash: 5 } } };
     foldSavingsLines(p);
-    expect(p.budgetPlan!.months["2026-11"]!.assigned).toEqual({ "acct:ira": 300, rent: 50, cash: 305 });
+    // the brokerage has no category: its money goes back to ready to assign
+    expect(p.budgetPlan!.months["2026-11"]!.assigned).toEqual({ rent: 50, cash: 305, roth: 300 });
     foldSavingsLines(p);
-    expect(p.budgetPlan!.months["2026-11"]!.assigned).toEqual({ "acct:ira": 300, rent: 50, cash: 305 });
+    expect(p.budgetPlan!.months["2026-11"]!.assigned).toEqual({ rent: 50, cash: 305, roth: 300 });
   });
 
   it("leaves transfers between budget accounts and plain spending alone", () => {

@@ -71,6 +71,12 @@ export type BudgetItem = {
   essential?: boolean;
   /** The user dismissed the app's suggestion for this item (better group / make it a goal). Display only. */
   noSuggest?: boolean;
+  /**
+   * Money moved to one of your accounts (an IRA, a brokerage): investing, not spending. It isn't in your
+   * spending or retirement number; its amount is that account's monthly contribution, and what you
+   * assign to it on the Budget counts as that month's contribution. Missing = spending.
+   */
+  accountId?: string;
 };
 /** "property": what a home or rental is worth. Counts in net worth, not as invested money for Coast FI. */
 export type AccountType = "pretax" | "roth" | "taxable" | "hsa" | "cash" | "property";
