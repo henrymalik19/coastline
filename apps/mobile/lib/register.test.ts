@@ -39,14 +39,14 @@ describe("transfers to accounts you don't budget", () => {
     expect(p.debts[0]!.balance).toBe(4_700);
   });
 
-  it("old per-account savings lines fold into Emergency fund; investing lines go back to ready to assign", () => {
+  it("old per-cash-account lines fold into Emergency fund; investing lines stay", () => {
     const p = plan();
     p.accounts.push({ id: "sav", name: "Savings", type: "cash", balance: 0 });
     p.budgetPlan!.months = { "2026-11": { assigned: { "acct:chk": 100, "acct:sav": 200, "acct:ira": 300, rent: 50, cash: 5 } } };
     foldSavingsLines(p);
-    expect(p.budgetPlan!.months["2026-11"]!.assigned).toEqual({ rent: 50, cash: 305 });
+    expect(p.budgetPlan!.months["2026-11"]!.assigned).toEqual({ "acct:ira": 300, rent: 50, cash: 305 });
     foldSavingsLines(p);
-    expect(p.budgetPlan!.months["2026-11"]!.assigned).toEqual({ rent: 50, cash: 305 });
+    expect(p.budgetPlan!.months["2026-11"]!.assigned).toEqual({ "acct:ira": 300, rent: 50, cash: 305 });
   });
 
   it("leaves transfers between budget accounts and plain spending alone", () => {

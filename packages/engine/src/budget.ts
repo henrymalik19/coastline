@@ -7,8 +7,8 @@
  * Categories come from what the plan already knows, so nothing is entered twice:
  * - spending: each budget item (target = its monthly amount)
  * - bills: repeating savings goals (target = this month's set-aside)
- * - savings: each account the plan adds to and each one-time goal (target = your monthly amount, or
- *   what the plan gives it that month)
+ * - savings: the emergency fund, each account you invest in yourself, and each one-time goal (target =
+ *   your monthly amount, or what the plan gives it that month)
  * - debts: each debt you pay yourself (target = minimum + the plan's extra)
  */
 import { accountForecasts } from "./forecast";
@@ -18,8 +18,10 @@ import type { BudgetState, Derived, PlanResult, PlanState, Txn } from "./types";
 import { txnActivity } from "./txn";
 import { addMonths, monthsBetween, num } from "./util";
 
-/** The built-in group for accounts you add to (named so it never merges with a group of your own). */
+/** The built-in group for the emergency fund (named so it never merges with a group of your own). */
 export const SAVINGS_GROUP = "Savings";
+/** The built-in group for accounts you invest in yourself: one line per account. */
+export const INVESTING_GROUP = "Investing";
 
 export type BudgetCategoryKind = "spending" | "bill" | "saving" | "debt";
 
@@ -90,8 +92,7 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
     const extra = paysExtra(x) ? (scheduleAmount(s.plan, "debt:" + x.id, month) ?? planned("debt:" + x.id)) : 0;
     out.push({ key: "debt:" + x.id, group: x.budgetGroup?.trim() || "Debt payments", name: x.name || "Debt", kind: "debt", target: Math.max(0, num(x.minPayment)) + Math.max(0, extra), moves: true });
   }
-  // savings: one emergency fund line for your cash (it stays in your budget accounts). Investing
-  // (IRA, brokerage, HSA) isn't a category: moving money there comes out of ready to assign.
+  // savings: one emergency fund line for your cash (it stays in your budget accounts)
   const steps = s.plan?.steps ?? [];
   const cashIds = (s.accounts ?? []).filter((a) => accountPlanKey(s, a) === "cash").map((a) => ACCOUNT_KEY + a.id);
   const cashSet = scheduleAmount(s.plan, "cash", month);
@@ -99,6 +100,24 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
   const cashTarget = cashSet ?? (perAccount.some((v) => v !== undefined) ? perAccount.reduce<number>((t, v) => t + (v ?? 0), 0) : planned("cash"));
   if (steps.includes("starterEF") || steps.includes("fullEF") || cashTarget > 0.5 || s.budgetPlan?.months?.[month]?.assigned?.cash !== undefined)
     out.push({ key: "cash", group: SAVINGS_GROUP, name: "Emergency fund", kind: "saving", target: Math.max(0, cashTarget), moves: false });
+  // investing: a line per account you move money into yourself (IRA, brokerage, an HSA you fund
+  // directly). Assign to it, then the transfer spends it. Paycheck accounts (a 401(k)) have no line.
+  const firstOfKind = new Set<string>();
+  for (const a of s.accounts ?? []) {
+    const kind = accountPlanKey(s, a);
+    if (!kind || kind === "cash") continue;
+    const own = scheduleAmount(s.plan, ACCOUNT_KEY + a.id, month);
+    let target: number;
+    if (own !== undefined) target = own;
+    else if (firstOfKind.has(kind)) target = 0;
+    else {
+      // the plan's amount for the kind goes to its first account, less what your other accounts of that kind have set
+      const others = (s.accounts ?? []).filter((y) => y.id !== a.id && accountPlanKey(s, y) === kind).reduce((t, y) => t + (scheduleAmount(s.plan, ACCOUNT_KEY + y.id, month) ?? 0), 0);
+      target = Math.max(0, (scheduleAmount(s.plan, kind, month) ?? planned(kind)) - others);
+    }
+    firstOfKind.add(kind);
+    out.push({ key: ACCOUNT_KEY + a.id, group: INVESTING_GROUP, name: a.name || "Account", kind: "saving", target, moves: true });
+  }
   for (const g of s.goals ?? [])
     if (!g.recurring) out.push({ key: "goal:" + g.id, group: "Savings goals", name: g.name || "Goal", kind: "saving", target: scheduleAmount(s.plan, "goal:" + g.id, month) ?? planned("goal:" + g.id), moves: false });
   return out;

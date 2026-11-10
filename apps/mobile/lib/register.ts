@@ -18,25 +18,28 @@ export function budgetAccounts(p: PlanState): BudgetAccount[] {
   ];
 }
 
-/** True when some month still has money on the old per-account savings lines. */
+const cashLines = (p: PlanState) => new Set(p.accounts.filter((a) => a.type === "cash").map((a) => "acct:" + a.id));
+
+/** True when some month still has money on the old per-cash-account lines. */
 export function hasOldSavingsLines(p: PlanState): boolean {
-  return Object.values(p.budgetPlan?.months ?? {}).some((e) => [e.assigned, e.spent].some((r) => r && Object.keys(r).some((k) => k.startsWith("acct:"))));
+  const cash = cashLines(p);
+  return Object.values(p.budgetPlan?.months ?? {}).some((e) => [e.assigned, e.spent].some((r) => r && Object.keys(r).some((k) => cash.has(k))));
 }
 
 /**
- * The Budget used to have a line per savings account. Now there's one Emergency fund line ("cash")
- * and investing isn't a category: money on a cash account's line moves to Emergency fund, and money on
- * an IRA/brokerage line goes back to ready to assign. Changes `p` in place; safe to run again.
+ * The Budget used to have a line per cash account. Now there's one Emergency fund line ("cash"):
+ * money on a cash account's line moves to it. Investing accounts keep their own lines. Changes `p`
+ * in place; safe to run again.
  */
 export function foldSavingsLines(p: PlanState): void {
   if (!p.budgetPlan || !hasOldSavingsLines(p)) return;
-  const cash = new Set(p.accounts.filter((a) => a.type === "cash").map((a) => "acct:" + a.id));
+  const cash = cashLines(p);
   const fold = (r: Record<string, number> | undefined) => {
     if (!r) return r;
     const out = { ...r };
     for (const k of Object.keys(out)) {
-      if (!k.startsWith("acct:")) continue;
-      if (cash.has(k)) out.cash = (out.cash ?? 0) + (out[k] ?? 0);
+      if (!cash.has(k)) continue;
+      out.cash = (out.cash ?? 0) + (out[k] ?? 0);
       delete out[k];
     }
     return Object.keys(out).length ? out : undefined;

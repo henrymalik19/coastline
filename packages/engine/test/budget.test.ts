@@ -103,8 +103,11 @@ describe("monthly budget", () => {
     expect(by("goal:c")).toMatchObject({ kind: "bill", target: 24 }); // $120 over Nov–Mar
     expect(by("debt:v")!.kind).toBe("debt");
     expect(by("debt:v")!.target).toBeGreaterThan(100); // minimum + the plan's extra
-    // investing isn't a category: no line per IRA, 401(k) or brokerage, with or without an account
-    expect(c.some((x) => x.key.startsWith("acct:") || x.key === "ira" || x.key === "taxable")).toBe(false);
+    // a line per account you invest in yourself (the 401(k) comes out of your paycheck: no line)
+    expect(by("acct:ira")).toMatchObject({ group: "Investing", kind: "saving", moves: true });
+    expect(by("acct:ira2")).toMatchObject({ group: "Investing", target: 50 });
+    expect(by("acct:k")).toBeUndefined();
+    expect(c.some((x) => x.key === "ira" || x.key === "taxable")).toBe(false);
     expect(by("goal:car")!.kind).toBe("saving");
     // the emergency fund is one line when the plan has it
     const ef = blank({ ...s, plan: { ...s.plan, steps: ["starterEF", "fullEF"] }, accounts: [{ id: "sav", name: "Savings", type: "cash", balance: 0 }, { id: "chk", name: "Checking", type: "cash", balance: 0 }] });

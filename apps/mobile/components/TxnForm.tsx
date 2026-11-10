@@ -84,6 +84,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const known = payee.trim().length >= 2 ? [...payees.keys()].filter((p) => p.startsWith(payee.trim().toLowerCase()) && p !== payee.trim().toLowerCase()).slice(0, 3) : [];
 
   const toTracking = tracking.find((a) => a.id === to);
+  const toLine = toTracking ? cats.find((c) => c.key === toTracking.key) : undefined;
   const fromTracking = kind === "transfer" ? withdrawable.find((a) => a.id === acct) : undefined;
   // only a transfer can start from an investment account
   const acctOk = !!acct && (kind === "transfer" || accounts.some((a) => a.id === acct));
@@ -103,8 +104,8 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
       transferId: txn?.transferId,
     };
     if (kind === "transfer" && fromTracking) saveTxn({ ...base, accountId: to, amount, transferAccountId: acct, categoryId: "ready" }, isoDay(start));
-    // to a loan: its payment category; to an IRA/brokerage: out of ready to assign (investing isn't a category)
-    else if (kind === "transfer") saveTxn({ ...base, transferAccountId: to, categoryId: toTracking ? (toTracking.kind === "debt" ? toTracking.key : "ready") : undefined }, isoDay(start));
+    // to a loan or an account you invest in: its own line; to one with no line (a 401(k)): out of ready to assign
+    else if (kind === "transfer") saveTxn({ ...base, transferAccountId: to, categoryId: toTracking ? (toLine ? toTracking.key : "ready") : undefined }, isoDay(start));
     else saveTxn({ ...base, transferAccountId: undefined, categoryId: kind === "in" ? cat || "ready" : cat }, isoDay(start));
     onClose();
   };
@@ -242,9 +243,8 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
             </View>
             {kind === "transfer" && toTracking && !fromTracking ? (
               <Text style={[type.caption, { color: t.text3 }]}>
-                {toTracking.kind === "debt"
-                  ? `Comes out of the ${cats.find((c) => c.key === toTracking.key)?.label ?? toTracking.name} category, and lowers what you owe on ${toTracking.name}.`
-                  : `Comes out of ready to assign, and adds to ${toTracking.name}.`}
+                {toLine ? `Comes out of the ${toLine.label} category, and ` : "Comes out of ready to assign, and "}
+                {toTracking.kind === "debt" ? `lowers what you owe on ${toTracking.name}.` : `adds to ${toTracking.name}.`}
               </Text>
             ) : null}
             {fromTracking ? (
