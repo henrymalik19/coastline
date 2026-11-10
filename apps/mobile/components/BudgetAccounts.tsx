@@ -8,7 +8,7 @@ import { useRouter } from "expo-router";
 import { useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { DragList, reorderAmong } from "./DragList";
-import { Button } from "./form";
+import { Button, InfoText, InfoTip } from "./form";
 import { Icon } from "./Icon";
 import { Card, Divider } from "./ui";
 import { money } from "../lib/format";
@@ -17,6 +17,9 @@ import { budgetAccounts, isCard, trackingAccounts } from "../lib/register";
 import { useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
 
+const TRACKING_TIP =
+  "Not in your budget: their balances only change when you move money. Withdraw records money coming out into checking (it's ready to assign); a transfer to one from checking adds to it.";
+
 export function BudgetAccounts({ onAdd, onTransfer }: { onAdd: () => void; onTransfer: (from: string) => void }) {
   const t = useTheme();
   const router = useRouter();
@@ -24,6 +27,7 @@ export function BudgetAccounts({ onAdd, onTransfer }: { onAdd: () => void; onTra
   const update = useStore((s) => s.update);
   const txns = useStore((s) => s.txns);
   const [showTracking, setShowTracking] = useState(false);
+  const [tip, setTip] = useState(false);
   const all = budgetAccounts(state);
   const cash = all.filter((a) => a.kind === "cash");
   const cards = all.filter((a) => a.kind === "card");
@@ -111,19 +115,24 @@ export function BudgetAccounts({ onAdd, onTransfer }: { onAdd: () => void; onTra
 
       {tracking.length ? (
         <View style={{ gap: space.xs }}>
-          <Pressable
-            role="button"
-            aria-expanded={showTracking}
-            accessibilityLabel={`Tracking accounts: retirement and investments, ${showTracking ? "hide" : "show"}`}
-            onPress={() => setShowTracking((v) => !v)}
-            style={[styles.head, { minHeight: 36 }]}
-          >
-            <View style={{ transform: [{ rotate: showTracking ? "90deg" : "0deg" }] }}>
-              <Icon name="chevron" size={14} color={t.text3} />
-            </View>
-            <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Tracking · retirement & investments</Text>
+          <View style={[styles.head, { minHeight: 36 }]}>
+            <Pressable
+              role="button"
+              aria-expanded={showTracking}
+              accessibilityLabel={`Tracking accounts: retirement and investments, ${showTracking ? "hide" : "show"}`}
+              onPress={() => setShowTracking((v) => !v)}
+              style={{ flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 36 }}
+            >
+              <View style={{ transform: [{ rotate: showTracking ? "90deg" : "0deg" }] }}>
+                <Icon name="chevron" size={14} color={t.text3} />
+              </View>
+              <Text style={[type.overline, { color: t.text3 }]}>Tracking · retirement & investments</Text>
+            </Pressable>
+            <InfoTip text={TRACKING_TIP} label="tracking accounts" open={tip} onToggle={setTip} />
+            <View style={{ flex: 1 }} />
             <Text style={[type.caption, { color: t.text3, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(tracking.reduce((s, a) => s + (+a.balance || 0), 0))}</Text>
-          </Pressable>
+          </View>
+          {tip ? <InfoText text={TRACKING_TIP} /> : null}
           {showTracking ? (
             <Card style={{ paddingVertical: space.xs, gap: space.xs }}>
               {tracking.map((a, n) => (
@@ -138,9 +147,6 @@ export function BudgetAccounts({ onAdd, onTransfer }: { onAdd: () => void; onTra
                   </View>
                 </View>
               ))}
-              <Text style={[type.caption, { color: t.text3, paddingBottom: space.xs }]}>
-                Not in your budget: their balances only change when you move money. Withdraw records money coming out into checking (it's ready to assign); a transfer to one from checking adds to it.
-              </Text>
             </Card>
           ) : null}
         </View>
