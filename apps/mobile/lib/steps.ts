@@ -3,7 +3,7 @@
  * Reads engine output only; no money math beyond display.
  */
 import { spouseIraLabel } from "./spouse";
-import { BUCKET_LABELS, HSA_ELIGIBLE, isSpouseIra, payPerCheck, scheduleAmount, isHighInterest, k401Cost, limitsFor, paysExtra, PERIODS, STEP_LABELS, type MonthRow, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
+import { accountGroup, BUCKET_LABELS, HSA_ELIGIBLE, isSpouseIra, payPerCheck, scheduleAmount, isHighInterest, k401Cost, limitsFor, paysExtra, PERIODS, STEP_LABELS, type MonthRow, type PlanState, type RunResult, type StepKey } from "@coastfi/engine";
 import { debtLabel } from "./debts";
 import { missingMatch } from "./match";
 import { money, monthLabel, percent } from "./format";
@@ -19,17 +19,73 @@ export type StepInfo = {
   progress?: number;
   /** What this step gets each month, from the plan (tap to see). */
   schedule?: ScheduleRow[];
+  /** A short, specific name: "Pay off Visa ($3,000)", "Roth IRA: $7,500 a year". */
+  title: string;
+  /** Why it sits where it does: "Free money from your employer". */
+  why: string;
 };
 
 export type ScheduleRow = { m: number; label: string; amount: number; note?: string; /** shown instead of the amount */ text?: string };
 
 export function stepInfo(step: StepKey, s: PlanState, o: RunResult, start: Date): StepInfo | null {
   const ctx: { schedule?: ScheduleRow[] } = {};
-  const info = stepInfoInner(step, s, o, start, ctx);
-  return info && ctx.schedule && ctx.schedule.length > 1 ? { ...info, schedule: ctx.schedule } : info;
+  const inner = stepInfoInner(step, s, o, start, ctx);
+  if (!inner) return null;
+  const info: StepInfo = { ...inner, ...titleAndWhy(step, s, o, start, inner.label) };
+  return ctx.schedule && ctx.schedule.length > 1 ? { ...info, schedule: ctx.schedule } : info;
 }
 
-function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, ctx: { schedule?: ScheduleRow[] }): StepInfo | null {
+/** Names for a list: "Visa", "Visa and Car loan", "Visa + 2 more". */
+const listNames = (xs: string[]) => (xs.length <= 1 ? xs[0] ?? "" : xs.length === 2 ? `${xs[0]} and ${xs[1]}` : `${xs[0]} + ${xs.length - 1} more`);
+
+/** The step in plain words, with your own accounts and debts, and why it's in that spot. */
+function titleAndWhy(step: StepKey, s: PlanState, o: RunResult, start: Date, fallback: string): { title: string; why: string } {
+  const pl = o.plan;
+  const L = limitsFor(s.limits, start.getFullYear() + 1);
+  const named = (pred: (a: PlanState["accounts"][number]) => boolean, def: string) => listNames(s.accounts.filter(pred).map((a) => a.name.trim()).filter(Boolean)) || def;
+  const group = (a: PlanState["accounts"][number]) => accountGroup(a);
+  switch (step) {
+    case "starterEF":
+      return { title: `Emergency cushion: ${money(pl.starterTarget, { whole: true })}`, why: "A small cushion first, so a surprise bill doesn't go on a card" };
+    case "fullEF":
+      return { title: `Emergency fund: ${money(pl.fullTarget, { whole: true })}`, why: `${s.plan.efMonths} months of expenses in case your income stops` };
+    case "match": {
+      const jobs = o.d.incomes.filter((i) => i.match > 0).map((i) => i.name);
+      return { title: jobs.length ? `Full match at ${listNames(jobs)}` : "Get the full employer match", why: "Free money: your employer adds to what you put in" };
+    }
+    case "highDebt":
+    case "lowDebt": {
+      const hi = step === "highDebt";
+      const list = s.debts.filter((x) => paysExtra(x) && isHighInterest(x, s.plan.highApr) === hi && x.balance > 0.5).sort((a, b) => b.apr - a.apr);
+      const total = list.reduce((a, x) => a + x.balance, 0);
+      if (!list.length) return { title: hi ? "Pay off high-interest debt" : "Pay down low-interest debt", why: hi ? "Nothing at a high rate right now" : "No low-rate debt left" };
+      const top = list[0]!;
+      return {
+        title: `${hi ? "Pay off" : "Pay down"} ${listNames(list.map(debtLabel))} (${money(total, { whole: true })})`,
+        why: hi ? `${percent(top.apr, 1)} interest: paying it off beats investing` : `Under ${percent(s.plan.highApr, 1)} interest, so it waits until after investing`,
+      };
+    }
+    case "hsa":
+      return { title: `${named((a) => group(a) === "hsa", "HSA")}: ${money(s.plan.hsaFamily ? L.hsaFamily : L.hsaSelf, { whole: true })} a year`, why: "Tax-free going in, growing and coming out for health costs" };
+    case "ira": {
+      const iras = s.accounts.filter((a) => group(a) === "ira" && !isSpouseIra(s, a));
+      const roth = iras.length ? iras.every((a) => a.type === "roth") : true;
+      return { title: `${listNames(iras.map((a) => a.name.trim()).filter(Boolean)) || "IRA"}: ${money(L.ira, { whole: true })} a year`, why: roth ? "Grows tax-free, and comes out tax-free in retirement" : "A tax break now, and it grows untaxed until retirement" };
+    }
+    case "iraSpouse":
+      return { title: `${named((a) => isSpouseIra(s, a), spouseIraLabel(s))}: ${money(L.ira, { whole: true })} a year`, why: "Their own yearly limit, on top of yours" };
+    case "k401":
+      return { title: `${named((a) => group(a) === "k401", "401(k)")}: up to ${money(L.k401, { whole: true })} a year`, why: "More from each paycheck, beyond the match, for a bigger tax break" };
+    case "taxable":
+      return { title: `Invest the rest in ${named((a) => group(a) === "taxable", "a brokerage account")}`, why: "No yearly limit: whatever's left keeps growing" };
+    default: {
+      const g = s.goals.find((x) => "goal:" + x.id === step);
+      return g ? { title: `${g.name || "Goal"}: ${money(g.target, { whole: true })}`, why: g.recurring ? "Set aside before it's due" : "Something you're saving for" } : { title: fallback, why: "" };
+    }
+  }
+}
+
+function stepInfoInner(step: StepKey, s: PlanState, o: RunResult, start: Date, ctx: { schedule?: ScheduleRow[] }): Omit<StepInfo, "title" | "why"> | null {
   const pl = o.plan;
   const d = o.d;
   const ev = (k: string) => pl.events.find((e) => e.key === k);
