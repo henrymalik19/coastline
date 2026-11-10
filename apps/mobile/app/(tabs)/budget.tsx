@@ -34,7 +34,8 @@ const shift = (ym: string, n: number) => {
   return `${Math.floor(k / 12)}-${String((k % 12) + 1).padStart(2, "0")}`;
 };
 const between = (a: string, b: string) => (Number(b.slice(0, 4)) - Number(a.slice(0, 4))) * 12 + Number(b.slice(5, 7)) - Number(a.slice(5, 7));
-const ORDER: Record<BudgetCategory["kind"], number> = { spending: 0, bill: 1, debt: 2, saving: 3 };
+// the built-in groups first (debt payments, savings, bills), then the groups you made
+const ORDER: Record<BudgetCategory["kind"], number> = { debt: 0, saving: 1, bill: 2, spending: 3 };
 
 export default function Budget() {
   const t = useTheme();
