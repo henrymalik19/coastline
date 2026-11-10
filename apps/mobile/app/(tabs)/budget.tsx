@@ -106,12 +106,6 @@ export default function Budget() {
       e.spent = Object.keys(sp).length ? sp : undefined;
     });
   const setIncome = (v: number | undefined) => edit((e) => { e.income = v; });
-  const fillFromPlan = () =>
-    edit((e) => {
-      const a = { ...(e.assigned ?? {}) };
-      for (const c of cats) if (a[c.key] === undefined && c.target > 0.005) a[c.key] = Math.round(c.target * 100) / 100;
-      e.assigned = a;
-    });
   const itemIndex = (id: string) => state.budget.findIndex((x) => x.id === id);
   const editItem = (id: string, patch: Partial<(typeof state.budget)[number]>) =>
     update((p) => {
@@ -206,8 +200,6 @@ export default function Budget() {
     g.cats.push(c);
   }
   const rta = view.readyToAssign;
-  const unassigned = cats.filter((c) => entry?.assigned?.[c.key] === undefined && c.target > 0.005);
-  const efCat = cats.find((c) => c.kind === "saving" && c.key.startsWith("acct:") && !c.moves);
   const canGoBack = month > b.start;
 
   const monthBar = (
@@ -242,12 +234,6 @@ export default function Budget() {
             {view.assignedLater > 0.5 ? ` ${money(view.assignedLater)} is already assigned to later months.` : ""}
             {view.overspentBefore > 0.5 ? ` ${money(view.overspentBefore)} went to overspending in earlier months.` : ""}
           </Text>
-        </View>
-        <View style={{ gap: space.sm, alignItems: compact ? "flex-start" : "flex-end" }}>
-          {unassigned.length ? <Button title="Assign planned amounts" icon="sparkle" tone="primary" onPress={fillFromPlan} style={{ minHeight: 36 }} /> : null}
-          {rta > 0.5 && efCat ? (
-            <Button title={`Put the rest in ${efCat.name}`} onPress={() => setAssigned(efCat.key, (entry?.assigned?.[efCat.key] ?? 0) + rta)} style={{ minHeight: 36 }} />
-          ) : null}
         </View>
       </View>
       <Divider />
@@ -351,7 +337,7 @@ export default function Budget() {
         <View style={styles.section}>
           <Text style={[type.overline, { color: t.text3 }]}>Plan for this account</Text>
           <MonthlyAmount k={c.key} label={label(c)} note={c.moves ? undefined : "Cash can go past your emergency fund goal if you plan it."} />
-          <Text style={[type.caption, { color: t.text3 }]}>Sets what "Assign planned amounts" puts here each month, and what the forecast expects after this month.</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>The plan amount for this category each month (its "Use plan" button), and what the forecast expects after this month.</Text>
           {c.key.startsWith("acct:") && c.moves ? (
             <View style={styles.chips}>
               <Chip
