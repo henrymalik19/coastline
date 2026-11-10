@@ -244,9 +244,9 @@ export default function Budget() {
           </Text>
         </View>
         <View style={{ gap: space.sm, alignItems: compact ? "flex-start" : "flex-end" }}>
-          {unassigned.length ? <Button title="Fill from plan" icon="sparkle" tone="primary" onPress={fillFromPlan} style={{ minHeight: 36 }} /> : null}
+          {unassigned.length ? <Button title="Assign planned amounts" icon="sparkle" tone="primary" onPress={fillFromPlan} style={{ minHeight: 36 }} /> : null}
           {rta > 0.5 && efCat ? (
-            <Button title={`Rest to ${efCat.name}`} onPress={() => setAssigned(efCat.key, (entry?.assigned?.[efCat.key] ?? 0) + rta)} style={{ minHeight: 36 }} />
+            <Button title={`Put the rest in ${efCat.name}`} onPress={() => setAssigned(efCat.key, (entry?.assigned?.[efCat.key] ?? 0) + rta)} style={{ minHeight: 36 }} />
           ) : null}
         </View>
       </View>
@@ -351,7 +351,7 @@ export default function Budget() {
         <View style={styles.section}>
           <Text style={[type.overline, { color: t.text3 }]}>Plan for this account</Text>
           <MonthlyAmount k={c.key} label={label(c)} note={c.moves ? undefined : "Cash can go past your emergency fund goal if you plan it."} />
-          <Text style={[type.caption, { color: t.text3 }]}>Sets what "Fill from plan" assigns here each month, and what the forecast expects after this month.</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>Sets what "Assign planned amounts" puts here each month, and what the forecast expects after this month.</Text>
           {c.key.startsWith("acct:") && c.moves ? (
             <View style={styles.chips}>
               <Chip
