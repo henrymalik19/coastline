@@ -239,11 +239,15 @@ export default function Budget() {
       <Divider />
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" }}>
         <View style={{ flex: 1, minWidth: 160 }}>
-          <Text style={[type.label, { color: t.text }]}>Income received</Text>
-          <Text style={[type.caption, { color: t.text3 }]}>
-            Money in, filed to ready to assign{expected > 0.5 ? ` · about ${money(expected)} expected` : ""}
-            {month === b.start ? ` · plus ${money(b.startCash)} already in your cash accounts` : ""}
-          </Text>
+          <Text style={[type.label, { color: t.text }]}>Income this month</Text>
+          {expected > 0.5 ? (
+            <Text style={[type.caption, { color: t.text3 }]}>
+              {view.income + 0.5 >= expected ? "All your expected income is in" : `About ${money(expected)} expected`}
+            </Text>
+          ) : null}
+          {month === b.start ? (
+            <Text style={[type.caption, { color: t.text3 }]}>Your budget also started with {money(b.startCash)} from your cash accounts</Text>
+          ) : null}
           {(entry?.income ?? 0) > 0.005 ? (
             <Text style={[type.caption, { color: t.text3 }]}>
               Includes {money(entry!.income!)} entered before transactions.{" "}
