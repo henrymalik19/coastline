@@ -220,7 +220,7 @@ export function PaycheckChanges({ k, label, base, gross }: { k: string; label: s
   const singles = Object.keys(oneOffs).length;
   const text = list.length
     ? list.map((e) => `${e.pct !== undefined && gross ? `${+(e.pct * 100).toFixed(2)}% of pay` : money(e.amount)}/check from ${monthName(e.from)}`).join(" → ").replace(/% of pay\/check/g, "% of pay") + (singles ? ` · ${singles} one-month change${singles === 1 ? "" : "s"}` : "")
-    : singles ? `${singles} one-month change${singles === 1 ? "" : "s"}` : "Same every paycheck. Pausing or changing it later?";
+    : singles ? `${singles} one-month change${singles === 1 ? "" : "s"}` : base > 0 ? "Same every paycheck. Pausing or changing it later?" : "Starting it later? Set it by month";
   return (
     <View style={{ gap: 6 }}>
       <Pressable role="button" aria-expanded={open} onPress={() => setOpen((v) => !v)} hitSlop={6} style={styles.link}>

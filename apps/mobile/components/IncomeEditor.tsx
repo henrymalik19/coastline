@@ -14,7 +14,7 @@ import { Icon } from "./Icon";
 const HSA_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 import { AddChip, MasterDetail } from "./MasterDetail";
 import { Card, Divider } from "./ui";
-import { PaycheckChanges } from "./ScheduleEditor";
+import { monthName, PaycheckChanges } from "./ScheduleEditor";
 import { confirm } from "../lib/confirm";
 import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
@@ -246,10 +246,13 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
         ((inc.rothShare ?? 0) > 0 ? ` · ${Math.round((inc.rothShare ?? 0) * 100)}% Roth` : "") +
         (loan ? " · repaying a loan" : "");
   const k401Attention = inc.matchMode === "pct" && hasGross && !r.fullMatch;
-  const hsaSummary =
-    (inc.hsaPre ?? 0) > 0 || (inc.hsaEmployer ?? 0) > 0
-      ? [(inc.hsaPre ?? 0) > 0 ? `${money(inc.hsaPre ?? 0)}/check` : "", (inc.hsaEmployer ?? 0) > 0 ? `employer adds ${money(inc.hsaEmployer ?? 0)}/yr` : ""].filter(Boolean).join(" · ")
-      : "None";
+  // a change by month (e.g. nothing now, $150/check from Jan 2027)
+  const hsaLater = (state.plan.schedule?.[PAYHSA + inc.id] ?? []).filter((e) => e.amount > 0 || (e.pct ?? 0) > 0).sort((a, b) => (a.from < b.from ? -1 : 1))[0];
+  const hsaParts = [
+    (inc.hsaPre ?? 0) > 0 ? `${money(inc.hsaPre ?? 0)}/check` : hsaLater ? `${money(hsaLater.pct !== undefined && hasGross ? (inc.gross ?? 0) * hsaLater.pct : hsaLater.amount)}/check from ${monthName(hsaLater.from)}` : "",
+    (inc.hsaEmployer ?? 0) > 0 ? `employer adds ${money(inc.hsaEmployer ?? 0)}/yr` : "",
+  ].filter(Boolean);
+  const hsaSummary = hsaParts.length ? hsaParts.join(" · ") : "None";
   const taxSummary = !hasGross ? "Enter your gross pay first" : taxTotal(taxes) === 0 ? "Not added yet" : `${money(taxTotal(taxes))}/check${estimated ? " (estimate)" : ""}`;
   const otherSummary = others.length
     ? `${money(others.reduce((s, x) => s + x.amount, 0))}/check · ${others.map((x) => DEDUCTION_KINDS.find((k) => k.value === x.kind)?.label ?? "Other").join(", ")}`
@@ -374,9 +377,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
           </>
         )}
         {(inc.matchMode === "pct" && hasGross) || inc.matchMode === "usd" ? <IncomeSummary inc={inc} marginalTax={marginalTax} /> : null}
-        {r.pretax > 0 || (state.plan.schedule?.[PAY401 + inc.id]?.length ?? 0) > 0 ? (
-          <PaycheckChanges k={PAY401 + inc.id} label={`${inc.name || "This job"} 401(k)`} base={r.pretax} gross={inc.gross} />
-        ) : null}
+        <PaycheckChanges k={PAY401 + inc.id} label={`${inc.name || "This job"} 401(k)`} base={r.pretax} gross={inc.gross} />
         <FieldRow label="Roth 401(k)" hint={rothHint(inc.rothShare ?? 0)} info={HELP.roth401k}>
           <NumberInput kind="percent" label="Share of your 401(k) that goes to Roth" value={inc.rothShare ?? 0} max={1} onChange={(v) => change({ rothShare: v || undefined })} />
         </FieldRow>
@@ -406,9 +407,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
         <FieldRow label="You put in per paycheck" hint="Your own HSA contribution, pre-tax. Counts toward the HSA limit">
           <NumberInput kind="money" label="Your HSA contribution per paycheck" value={inc.hsaPre ?? 0} onChange={(v) => change({ hsaPre: v || undefined })} />
         </FieldRow>
-        {(inc.hsaPre ?? 0) > 0 || (state.plan.schedule?.[PAYHSA + inc.id]?.length ?? 0) > 0 ? (
-          <PaycheckChanges k={PAYHSA + inc.id} label={`${inc.name || "This job"} HSA`} base={inc.hsaPre ?? 0} gross={inc.gross} />
-        ) : null}
+        <PaycheckChanges k={PAYHSA + inc.id} label={`${inc.name || "This job"} HSA`} base={inc.hsaPre ?? 0} gross={inc.gross} />
         <FieldRow label="Your employer puts in" hint="Per year. Free money that counts toward your HSA limit" info={HELP.hsaEmployer}>
           <NumberInput kind="money" label="Employer HSA contribution per year" value={inc.hsaEmployer ?? 0} onChange={(v) => change({ hsaEmployer: v || undefined })} />
         </FieldRow>
@@ -435,7 +434,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
             </View>
           </FieldRow>
         ) : null}
-        {((inc.hsaEmployer ?? 0) > 0 || (inc.hsaPre ?? 0) > 0) && !state.plan.hsaEligible ? (
+        {((inc.hsaEmployer ?? 0) > 0 || (inc.hsaPre ?? 0) > 0 || hsaLater) && !state.plan.hsaEligible ? (
           <Text style={[type.caption, { color: t.warn }]}>
             Turn on "I have an HSA-eligible health plan" in Settings → Assumptions & plan rules so your plan can add to it too.
           </Text>
