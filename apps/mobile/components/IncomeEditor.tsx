@@ -9,6 +9,7 @@ import { MATCH_PRESETS } from "../lib/presets";
 import { estimatePaycheckTaxes, FILING_LABELS } from "../lib/tax";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, DateField, FieldRow, IconButton, NumberInput, Segmented, Select, TextField, ToggleRow } from "./form";
+import { Icon } from "./Icon";
 
 const HSA_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 import { AddChip, MasterDetail } from "./MasterDetail";
@@ -77,8 +78,13 @@ export function IncomeEditor({
   const kind = inc.kind ?? "job";
   const isJob = kind === "job";
   const auto = isJob && inc.netMode === "auto";
-  // every change to a job in auto mode recalculates take-home
-  const change = (patch: Partial<Income>) => onChange(withAutoNet(inc, patch));
+  const { estimate } = useTaxEstimate(inc.id);
+  // every change to a job in auto mode recalculates take-home; taxes that are still the estimate follow
+  const change = (patch: Partial<Income>) => {
+    const next = { ...inc, ...patch };
+    const follow = auto && !("taxes" in patch) && (next.kind ?? "job") === "job" && (next.gross ?? 0) > 0 && taxesFollowEstimate(inc, estimate);
+    onChange(withAutoNet(inc, follow ? { ...patch, taxes: estimate(next) } : patch));
+  };
   const amountHelp = kind === "business" ? HELP.businessAmount : kind === "rental" ? HELP.rentalAmount : HELP.otherAmount;
 
   return (
@@ -145,61 +151,163 @@ function RentalValue({ inc }: { inc: Income }) {
   );
 }
 
-function SubHeading({ children, right }: { children: string; right?: ReactNode }) {
-  const t = useTheme();
-  return (
-    <View style={[styles.between, { marginTop: space.md, flexWrap: "wrap" }]}>
-      <Text style={[type.overline, { color: t.text3 }]}>{children}</Text>
-      {right}
-    </View>
-  );
-}
-
-/** Gross → deductions (401(k), taxes, other) → take-home, like a pay stub. */
-function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean; change: (p: Partial<Income>) => void; marginalTax: number }) {
-  const t = useTheme();
-  const [custom, setCustom] = useState(false);
+/** Estimated taxes for one paycheck of a job (the other jobs in the plan share the tax return). */
+function useTaxEstimate(id: string) {
   const { state } = usePlan();
-  const pay = paycheck(inc);
-  const P = PERIODS[inc.freq];
   const status = state.filingStatus ?? "single";
-  // other jobs in the plan go on the same tax return (joint filers, or one person with two jobs)
   const otherJobs = state.incomes
-    .filter((j) => j.id !== inc.id && (j.kind ?? "job") === "job" && (j.gross ?? 0) > 0)
+    .filter((j) => j.id !== id && (j.kind ?? "job") === "job" && (j.gross ?? 0) > 0)
     .map((j) => {
       const p = paycheck(j);
       return { gross: p.gross * PERIODS[j.freq], pretax: (p.k401Pretax + p.pretaxDeductions) * PERIODS[j.freq] };
     });
+  const estimate = (inc: Income): PayTaxes => {
+    const p = paycheck(inc);
+    return estimatePaycheckTaxes(inc.gross ?? 0, PERIODS[inc.freq], p.k401Pretax + p.pretaxDeductions, status, otherJobs);
+  };
+  return { estimate, status, otherJobs: otherJobs.length };
+}
+
+const TAX_KEYS = ["federal", "state", "socialSecurity", "medicare"] as const;
+/** Paychecks in a month without an extra one (matches "Take-home in a normal month"). */
+const CHECKS_IN_NORMAL_MONTH: Record<PayFreq, number> = { weekly: 4, biweekly: 2, semimonthly: 2, monthly: 1 };
+/** 4% rather than 4.00%; 4.5% keeps its decimal. */
+const pctShort = (x: number) => percent(x, Math.round(x * 10000) % 100 === 0 ? 0 : 2);
+const taxTotal = (x: PayTaxes) => TAX_KEYS.reduce((s, k) => s + (x[k] ?? 0), 0);
+const sameTaxes = (a: PayTaxes, b: PayTaxes) => TAX_KEYS.every((k) => Math.abs((a[k] ?? 0) - (b[k] ?? 0)) < 0.01);
+
+/**
+ * True while a job's taxes are still the estimate (or empty): then they follow pay changes, so
+ * nobody has to press "estimate" again after changing their pay or 401(k).
+ */
+function taxesFollowEstimate(inc: Income, estimate: (i: Income) => PayTaxes): boolean {
+  const taxes = inc.taxes ?? { federal: 0, state: 0, socialSecurity: 0, medicare: 0 };
+  return taxTotal(taxes) === 0 || ((inc.gross ?? 0) > 0 && sameTaxes(taxes, estimate(inc)));
+}
+
+/** A part of the paycheck that opens to fill in; closed, it shows a one-line summary. */
+function PaySection({
+  title, summary, attention, open, onToggle, children,
+}: { title: string; summary: string; attention?: boolean; open: boolean; onToggle: () => void; children: ReactNode }) {
+  const t = useTheme();
+  return (
+    <View style={[styles.group, { borderColor: attention && !open ? t.warn : t.border }]}>
+      <Pressable
+        role="button"
+        aria-expanded={open}
+        accessibilityLabel={`${title}: ${summary}`}
+        accessibilityState={{ expanded: open }}
+        onPress={onToggle}
+        style={[styles.between, { minHeight: 40 }]}
+      >
+        <View style={{ transform: [{ rotate: open ? "90deg" : "0deg" }] }}>
+          <Icon name="chevron" size={18} color={t.text3} />
+        </View>
+        <View style={{ flex: 1, gap: 1 }}>
+          <Text style={[type.heading, { color: t.text }]}>{title}</Text>
+          <Text numberOfLines={open ? undefined : 2} style={[type.caption, { color: attention ? t.warn : t.text3 }]}>{summary}</Text>
+        </View>
+      </Pressable>
+      {open ? <View style={{ gap: 2, marginTop: space.xs }}>{children}</View> : null}
+    </View>
+  );
+}
+
+/** Gross pay and take-home first; then each thing that comes out of the check, one section at a time. */
+function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean; change: (p: Partial<Income>) => void; marginalTax: number }) {
+  const t = useTheme();
+  const [custom, setCustom] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
+  const toggle = (k: string) => setOpen((o) => (o === k ? null : k));
+  const { state } = usePlan();
+  const { estimate, status, otherJobs } = useTaxEstimate(inc.id);
+  const pay = paycheck(inc);
+  const P = PERIODS[inc.freq];
+  const r = resolveIncome(inc);
   const taxes = inc.taxes ?? { federal: 0, state: 0, socialSecurity: 0, medicare: 0 };
   const setTax = (k: keyof PayTaxes, v: number) => change({ taxes: { ...taxes, [k]: v } });
+  const estimated = (inc.gross ?? 0) > 0 && taxTotal(taxes) > 0 && sameTaxes(taxes, estimate(inc));
   const deductions = inc.deductions ?? [];
+  const others = deductions.filter((x) => !isLoanDeduction(x));
+  const loan = deductions.find(isLoanDeduction);
   const preset = MATCH_PRESETS.find(
     (m) => (inc.matchRate1 ?? 0) === m.r1 && (inc.matchUpTo1 ?? 0) === m.u1 && (inc.matchRate2 ?? 0) === m.r2 && (inc.matchUpTo2 ?? 0) === m.u2,
   );
+  const hasGross = (inc.gross ?? 0) > 0;
+
+  const k401Summary =
+    r.pretax <= 0
+      ? r.match > 0 || (inc.matchMode === "pct" && (inc.matchRate1 ?? 0) > 0)
+        ? "Nothing yet. Your employer offers a match"
+        : "Not contributing"
+      : `${inc.matchMode === "pct" ? `${pctShort(inc.contribPct ?? 0)} · ` : ""}${money(r.pretax)}/check` +
+        (r.match > 0 ? ` · employer adds ${money(r.match)}` : "") +
+        (inc.matchMode === "pct" && hasGross && !r.fullMatch ? " · missing part of the match" : r.match > 0 ? " · full match" : "") +
+        ((inc.rothShare ?? 0) > 0 ? ` · ${Math.round((inc.rothShare ?? 0) * 100)}% Roth` : "") +
+        (loan ? " · repaying a loan" : "");
+  const k401Attention = inc.matchMode === "pct" && hasGross && !r.fullMatch;
+  const hsaSummary =
+    (inc.hsaPre ?? 0) > 0 || (inc.hsaEmployer ?? 0) > 0
+      ? [(inc.hsaPre ?? 0) > 0 ? `${money(inc.hsaPre ?? 0)}/check` : "", (inc.hsaEmployer ?? 0) > 0 ? `employer adds ${money(inc.hsaEmployer ?? 0)}/yr` : ""].filter(Boolean).join(" · ")
+      : "None";
+  const taxSummary = !hasGross ? "Enter your gross pay first" : taxTotal(taxes) === 0 ? "Not added yet" : `${money(taxTotal(taxes))}/check${estimated ? " (estimate)" : ""}`;
+  const otherSummary = others.length
+    ? `${money(others.reduce((s, x) => s + x.amount, 0))}/check · ${others.map((x) => DEDUCTION_KINDS.find((k) => k.value === x.kind)?.label ?? "Other").join(", ")}`
+    : "Health insurance, dental, union dues…";
 
   return (
     <View style={{ gap: space.xs }}>
-      <SubHeading>Pay</SubHeading>
       <FieldRow label="Gross pay per paycheck" hint="Before anything is taken out" info={HELP.gross}>
         <NumberInput kind="money" label="Gross pay per paycheck" value={inc.gross ?? 0} onChange={(v) => change({ gross: v })} />
       </FieldRow>
 
-      <SubHeading>Deductions</SubHeading>
-
-      {/* 401(k) + match */}
-      <View style={[styles.group, { borderColor: t.border }]}>
-        <View style={[styles.between, { flexWrap: "wrap" }]}>
-          <Text style={[type.heading, { color: t.text }]}>401(k)</Text>
-          <Segmented
-            label="How to enter 401(k)"
-            options={[{ value: "pct", label: "% of pay" }, { value: "usd", label: "$ per check" }]}
-            value={inc.matchMode}
-            onChange={(v) => change({ matchMode: v })}
-          />
+      {/* the result, right under the pay it comes from */}
+      <View style={[styles.result, { backgroundColor: auto && pay.taxes === 0 && pay.gross > 0 ? t.warnSoft : t.accentSoft }]}>
+        <View style={styles.between}>
+          <View style={{ flex: 1 }}>
+            <Text style={[type.label, { color: t.text2 }]}>Take-home per paycheck</Text>
+            <Text style={[type.caption, { color: t.text3 }]}>
+              {auto
+                ? hasGross
+                  ? `${money(inc.net * CHECKS_IN_NORMAL_MONTH[inc.freq])} in a normal month${CHECKS_IN_NORMAL_MONTH[inc.freq] > 1 ? ` (${CHECKS_IN_NORMAL_MONTH[inc.freq]} paychecks)` : ""}`
+                  : "Worked out from your pay and what comes out of it"
+                : "Typed from your pay stub"}
+            </Text>
+          </View>
+          {auto ? (
+            <Text style={[type.stat, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(inc.net)}</Text>
+          ) : (
+            <NumberInput kind="money" label="Take-home per paycheck" value={inc.net} onChange={(v) => change({ net: v })} />
+          )}
         </View>
+        {auto && pay.gross > 0 ? (
+          <Text style={[type.caption, { color: t.text3 }]}>
+            {money(pay.gross)} − {money(pay.k401)} 401(k){pay.hsa > 0 ? ` − ${money(pay.hsa)} HSA` : ""} − {money(pay.taxes)} taxes
+            {pay.deductions > 0 ? ` − ${money(pay.deductions)} other` : ""}
+            {pay.loanRepayment > 0 ? ` − ${money(pay.loanRepayment)} 401(k) loan` : ""}
+          </Text>
+        ) : null}
+        <ToggleRow
+          label="Type take-home from my pay stub instead"
+          hint="Skip taxes and other deductions"
+          value={!auto}
+          onChange={(manual) => change(manual ? { netMode: "manual" } : { netMode: "auto" })}
+        />
+      </View>
+
+      <Text style={[type.overline, { color: t.text3, marginTop: space.md }]}>What comes out of each paycheck</Text>
+      <Text style={[type.caption, { color: t.text3 }]}>Tap one to fill it in. Rough numbers are fine; a pay stub has the exact ones.</Text>
+
+      <PaySection title="401(k)" summary={k401Summary} attention={k401Attention} open={open === "k401"} onToggle={() => toggle("k401")}>
+        <Segmented
+          label="How to enter 401(k)"
+          options={[{ value: "pct", label: "% of pay" }, { value: "usd", label: "$ per check" }]}
+          value={inc.matchMode}
+          onChange={(v) => change({ matchMode: v })}
+        />
         {inc.matchMode === "pct" ? (
           <>
-            <FieldRow label="You put in" hint={(inc.gross ?? 0) > 0 ? `${money(pay.k401)} per check` : "% of gross pay"} info={HELP.contribPct}>
+            <FieldRow label="You put in" hint={hasGross ? `${money(pay.k401)} per check` : "% of gross pay"} info={HELP.contribPct}>
               <NumberInput kind="percent" label="Your 401(k) percent" value={inc.contribPct ?? 0} max={1} onChange={(v) => change({ contribPct: v })} />
             </FieldRow>
             <FieldRow label="Your employer's match" info={HELP.match} stacked>
@@ -265,19 +373,36 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
             </FieldRow>
           </>
         )}
-        {(inc.matchMode === "pct" && (inc.gross ?? 0) > 0) || inc.matchMode === "usd" ? <IncomeSummary inc={inc} marginalTax={marginalTax} /> : null}
-        {resolveIncome(inc).pretax > 0 || (state.plan.schedule?.[PAY401 + inc.id]?.length ?? 0) > 0 ? (
-          <PaycheckChanges k={PAY401 + inc.id} label={`${inc.name || "This job"} 401(k)`} base={resolveIncome(inc).pretax} gross={inc.gross} />
+        {(inc.matchMode === "pct" && hasGross) || inc.matchMode === "usd" ? <IncomeSummary inc={inc} marginalTax={marginalTax} /> : null}
+        {r.pretax > 0 || (state.plan.schedule?.[PAY401 + inc.id]?.length ?? 0) > 0 ? (
+          <PaycheckChanges k={PAY401 + inc.id} label={`${inc.name || "This job"} 401(k)`} base={r.pretax} gross={inc.gross} />
         ) : null}
         <FieldRow label="Roth 401(k)" hint={rothHint(inc.rothShare ?? 0)} info={HELP.roth401k}>
           <NumberInput kind="percent" label="Share of your 401(k) that goes to Roth" value={inc.rothShare ?? 0} max={1} onChange={(v) => change({ rothShare: v || undefined })} />
         </FieldRow>
         <LoanFields inc={inc} change={change} />
-      </View>
+      </PaySection>
 
-      {/* employer HSA */}
-      <View style={[styles.group, { borderColor: t.border }]}>
-        <Text style={[type.heading, { color: t.text }]}>HSA</Text>
+      {auto ? (
+        <PaySection title="Taxes" summary={taxSummary} attention={hasGross && taxTotal(taxes) === 0} open={open === "tax"} onToggle={() => toggle("tax")}>
+          <Text style={[type.caption, { color: t.text3 }]}>
+            {estimated
+              ? "Estimated from your pay, and kept up to date when your pay changes. For exact numbers, copy them from a pay stub."
+              : "Per paycheck, from a pay stub."}{" "}
+            The estimate uses {FILING_LABELS[status].toLowerCase()} (change it in About you){otherJobs ? ", counts your other job income on the same return," : ""} and about 4% state tax.
+          </Text>
+          {TAX_KEYS.map((k) => (
+            <FieldRow key={k} label={TAX_LABELS[k]}>
+              <NumberInput kind="money" label={TAX_LABELS[k]} value={taxes[k]} onChange={(v) => setTax(k, v)} />
+            </FieldRow>
+          ))}
+          {!estimated && hasGross ? (
+            <Button title="Use the estimate instead" tone="ghost" onPress={() => change({ taxes: estimate(inc) })} style={{ alignSelf: "flex-start" }} />
+          ) : null}
+        </PaySection>
+      ) : null}
+
+      <PaySection title="HSA" summary={hsaSummary} open={open === "hsa"} onToggle={() => toggle("hsa")}>
         <FieldRow label="You put in per paycheck" hint="Your own HSA contribution, pre-tax. Counts toward the HSA limit">
           <NumberInput kind="money" label="Your HSA contribution per paycheck" value={inc.hsaPre ?? 0} onChange={(v) => change({ hsaPre: v || undefined })} />
         </FieldRow>
@@ -315,43 +440,10 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
             Turn on "I have an HSA-eligible health plan" in Settings → Assumptions & plan rules so your plan can add to it too.
           </Text>
         ) : null}
-      </View>
+      </PaySection>
 
-      {/* taxes, from a pay stub (or an estimate) */}
       {auto ? (
-        <View style={[styles.group, { borderColor: t.border }]}>
-          <View style={[styles.between, { flexWrap: "wrap" }]}>
-            <Text style={[type.heading, { color: t.text }]}>Taxes</Text>
-            <Button
-              title="Fill in an estimate"
-              tone="ghost"
-              disabled={!((inc.gross ?? 0) > 0)}
-              onPress={() => change({ taxes: estimatePaycheckTaxes(inc.gross ?? 0, P, pay.k401Pretax + pay.pretaxDeductions, status, otherJobs) })}
-            />
-          </View>
-          <Text style={[type.caption, { color: t.text3 }]}>
-            Copy these from a pay stub, per paycheck. The estimate uses {FILING_LABELS[status].toLowerCase()} (change it in About you)
-            {otherJobs.length ? ", counts your other job income on the same return," : ""} and about 4% state tax.
-          </Text>
-          {(
-            [
-              ["federal", "Federal income tax"],
-              ["state", "State income tax"],
-              ["socialSecurity", "Social Security"],
-              ["medicare", "Medicare"],
-            ] as const
-          ).map(([k, label]) => (
-            <FieldRow key={k} label={label}>
-              <NumberInput kind="money" label={label} value={taxes[k]} onChange={(v) => setTax(k, v)} />
-            </FieldRow>
-          ))}
-        </View>
-      ) : null}
-
-      {/* other deductions */}
-      {auto ? (
-        <View style={[styles.group, { borderColor: t.border }]}>
-          <Text style={[type.heading, { color: t.text }]}>Other deductions</Text>
+        <PaySection title="Other deductions" summary={otherSummary} open={open === "other"} onToggle={() => toggle("other")}>
           {deductions.map((x, i) => {
             if (isLoanDeduction(x)) return null; // shown in the 401(k) section
             const label = DEDUCTION_KINDS.find((k) => k.value === x.kind)?.label ?? "Other";
@@ -381,43 +473,19 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
               </Pressable>
             ))}
           </View>
-          <Text style={[type.caption, { color: t.text3 }]}>HSA contributions aren't listed here: they're savings, and your plan's HSA step handles them.</Text>
-        </View>
+          <Text style={[type.caption, { color: t.text3 }]}>HSA contributions go in the HSA section: they're savings, and your plan's HSA step handles them.</Text>
+        </PaySection>
       ) : null}
-
-      {/* the result */}
-      <View style={[styles.result, { backgroundColor: auto && pay.taxes === 0 && pay.gross > 0 ? t.warnSoft : t.accentSoft }]}>
-        <View style={styles.between}>
-          <View style={{ flex: 1 }}>
-            <Text style={[type.label, { color: t.text2 }]}>Take-home per paycheck</Text>
-            {auto ? (
-              <Text style={[type.caption, { color: t.text3 }]}>
-                {money(pay.gross)} − {money(pay.k401)} 401(k){pay.hsa > 0 ? ` − ${money(pay.hsa)} HSA` : ""} − {money(pay.taxes)} taxes − {money(pay.deductions)} other
-                {pay.loanRepayment > 0 ? ` − ${money(pay.loanRepayment)} 401(k) loan` : ""}
-              </Text>
-            ) : (
-              <Text style={[type.caption, { color: t.text3 }]}>Typed from your pay stub</Text>
-            )}
-          </View>
-          {auto ? (
-            <Text style={[type.stat, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(inc.net)}</Text>
-          ) : (
-            <NumberInput kind="money" label="Take-home per paycheck" value={inc.net} onChange={(v) => change({ net: v })} />
-          )}
-        </View>
-        {auto && pay.taxes === 0 && pay.gross > 0 ? (
-          <Text style={[type.caption, { color: t.text }]}>Add your taxes (or fill in an estimate); without them take-home is too high.</Text>
-        ) : null}
-        <ToggleRow
-          label="Type take-home from my pay stub instead"
-          hint="Skip itemizing taxes and deductions"
-          value={!auto}
-          onChange={(manual) => change(manual ? { netMode: "manual" } : { netMode: "auto" })}
-        />
-      </View>
     </View>
   );
 }
+
+const TAX_LABELS: Record<(typeof TAX_KEYS)[number], string> = {
+  federal: "Federal income tax",
+  state: "State income tax",
+  socialSecurity: "Social Security",
+  medicare: "Medicare",
+};
 
 /** "Repaying a 401(k) loan?" switch; when on, the per-check repayment plus the loan's balance and rate (kept on its debt). */
 function LoanFields({ inc, change }: { inc: Income; change: (p: Partial<Income>) => void }) {
@@ -587,7 +655,7 @@ export function IncomesEditor() {
           </View>
         </>
       }
-      detail={inc ? <IncomeEditor bare inc={inc} marginalTax={state.plan.marginalTax} onChange={(patch) => update((p) => { p.incomes[idx] = { ...p.incomes[idx]!, ...patch }; })} onRemove={remove} /> : null}
+      detail={inc ? <IncomeEditor key={inc.id} bare inc={inc} marginalTax={state.plan.marginalTax} onChange={(patch) => update((p) => { p.incomes[idx] = { ...p.incomes[idx]!, ...patch }; })} onRemove={remove} /> : null}
     />
   );
 }
