@@ -40,7 +40,9 @@ export function txnActivity(txns: Txn[], month: string, cards: Record<string, st
     const parts = t.splits?.length ? t.splits.map((x) => ({ cat: x.categoryId, amt: num(x.amount) })) : [{ cat: t.categoryId, amt }];
     for (const p of parts) {
       if (!p.cat) continue; // a transfer between budget accounts, or not categorized yet
-      if (p.cat === "ready") {
+      // "ready", or a transfer to an IRA/brokerage you don't budget (older ones were filed under the
+      // account's own line, which is gone): in or out of ready to assign
+      if (p.cat === "ready" || p.cat.startsWith("acct:")) {
         out.income += p.amt;
         continue;
       }

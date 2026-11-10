@@ -1,7 +1,7 @@
 import type { PlanState, Txn } from "@coastfi/engine";
 import { describe, expect, it } from "vitest";
 import { freshPlan } from "./presets";
-import { applyTracked } from "./register";
+import { applyTracked, foldSavingsLines } from "./register";
 
 function plan(): PlanState {
   const p = freshPlan();
@@ -37,6 +37,16 @@ describe("transfers to accounts you don't budget", () => {
     const p = plan();
     applyTracked(p, "t1", txn({ amount: -300, transferAccountId: "car", categoryId: "debt:car" }));
     expect(p.debts[0]!.balance).toBe(4_700);
+  });
+
+  it("old per-account savings lines fold into Emergency fund; investing lines go back to ready to assign", () => {
+    const p = plan();
+    p.accounts.push({ id: "sav", name: "Savings", type: "cash", balance: 0 });
+    p.budgetPlan!.months = { "2026-11": { assigned: { "acct:chk": 100, "acct:sav": 200, "acct:ira": 300, rent: 50, cash: 5 } } };
+    foldSavingsLines(p);
+    expect(p.budgetPlan!.months["2026-11"]!.assigned).toEqual({ rent: 50, cash: 305 });
+    foldSavingsLines(p);
+    expect(p.budgetPlan!.months["2026-11"]!.assigned).toEqual({ rent: 50, cash: 305 });
   });
 
   it("leaves transfers between budget accounts and plain spending alone", () => {

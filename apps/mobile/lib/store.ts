@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { transferPair, type PlanState, type Txn } from "@coastfi/engine";
 import { CheckinSchema, PlanStateSchema, TxnSchema, type Checkin } from "@coastfi/schema";
-import { applyRegisterBalances, applyTracked, budgetAccounts, ensureRegister } from "./register";
+import { applyRegisterBalances, applyTracked, budgetAccounts, ensureRegister, foldSavingsLines } from "./register";
 import { z } from "zod";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -68,6 +68,8 @@ export const useStore = create<AppState>()(
 
       update: (fn) => {
         const draft = structuredClone(get().plan);
+        // before the change, so an amount typed into a line adds to what's folded into it, not twice
+        foldSavingsLines(draft);
         fn(draft);
         syncGoalSteps(draft);
         syncPaycheckLoans(draft);

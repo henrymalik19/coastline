@@ -2,6 +2,7 @@ import { derive, k401Cost, run, simulatePlan, type MonthRow, type PlanResult, ty
 import { money } from "./format";
 import { useStore } from "./store";
 import { syncPaycheckLoans } from "./loans";
+import { foldSavingsLines, hasOldSavingsLines } from "./register";
 import { estimateBracket } from "./tax";
 import type { Theme } from "./theme";
 
@@ -18,6 +19,12 @@ export function effectivePlan(saved: PlanState): PlanState {
   if (stale) {
     const fixed = structuredClone(saved);
     syncPaycheckLoans(fixed);
+    saved = fixed;
+  }
+  // budgets from before the single Emergency fund line: read them as if folded (saved on the next change)
+  if (hasOldSavingsLines(saved)) {
+    const fixed = structuredClone(saved);
+    foldSavingsLines(fixed);
     saved = fixed;
   }
   let plan = saved.plan;

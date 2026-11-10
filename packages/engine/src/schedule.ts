@@ -186,6 +186,12 @@ export function budgetScheduleMonths(s: Pick<PlanState, "debts" | "goals" | "bud
           if (amount <= 0.005) continue;
         } else amount = Math.max(0, num(v));
       }
+      // the Emergency fund line (all your cash): same rule, against all your cash accounts
+      else if (key === "cash") {
+        const had = month === b.start ? (s.accounts ?? []).filter((a) => a.type === "cash").reduce((t, a) => t + Math.max(0, num(b.registers?.[a.id]?.opening ?? a.balance)), 0) : 0;
+        amount = Math.max(0, num(v) - had);
+        if (amount <= 0.005) continue;
+      }
       // a kind with no account yet ("ira", "taxable", "hsa")
       else if (key === "ira" || key === "hsa" || key === "taxable") amount = Math.max(0, num(v));
       else if (key.startsWith("goal:")) {

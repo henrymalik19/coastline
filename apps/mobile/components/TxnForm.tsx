@@ -103,7 +103,8 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
       transferId: txn?.transferId,
     };
     if (kind === "transfer" && fromTracking) saveTxn({ ...base, accountId: to, amount, transferAccountId: acct, categoryId: "ready" }, isoDay(start));
-    else if (kind === "transfer") saveTxn({ ...base, transferAccountId: to, categoryId: toTracking?.key }, isoDay(start));
+    // to a loan: its payment category; to an IRA/brokerage: out of ready to assign (investing isn't a category)
+    else if (kind === "transfer") saveTxn({ ...base, transferAccountId: to, categoryId: toTracking ? (toTracking.kind === "debt" ? toTracking.key : "ready") : undefined }, isoDay(start));
     else saveTxn({ ...base, transferAccountId: undefined, categoryId: kind === "in" ? cat || "ready" : cat }, isoDay(start));
     onClose();
   };
@@ -241,7 +242,9 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
             </View>
             {kind === "transfer" && toTracking && !fromTracking ? (
               <Text style={[type.caption, { color: t.text3 }]}>
-                Comes out of the {cats.find((c) => c.key === toTracking.key)?.label ?? toTracking.name} category, and {toTracking.kind === "debt" ? "lowers what you owe on" : "adds to"} {toTracking.name}.
+                {toTracking.kind === "debt"
+                  ? `Comes out of the ${cats.find((c) => c.key === toTracking.key)?.label ?? toTracking.name} category, and lowers what you owe on ${toTracking.name}.`
+                  : `Comes out of ready to assign, and adds to ${toTracking.name}.`}
               </Text>
             ) : null}
             {fromTracking ? (

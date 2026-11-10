@@ -103,16 +103,14 @@ describe("monthly budget", () => {
     expect(by("goal:c")).toMatchObject({ kind: "bill", target: 24 }); // $120 over Nov–Mar
     expect(by("debt:v")!.kind).toBe("debt");
     expect(by("debt:v")!.target).toBeGreaterThan(100); // minimum + the plan's extra
-    expect(by("acct:ira2")!.target).toBe(50); // its own amount
-    expect(by("acct:k")).toBeUndefined(); // the 401(k) is set per paycheck
+    // investing isn't a category: no line per IRA, 401(k) or brokerage, with or without an account
+    expect(c.some((x) => x.key.startsWith("acct:") || x.key === "ira" || x.key === "taxable")).toBe(false);
     expect(by("goal:car")!.kind).toBe("saving");
-    // a plan step with no account yet still gets a line (brokerage here); one with an account doesn't
-    expect(by("taxable")).toMatchObject({ kind: "saving", name: "Brokerage (no account yet)", moves: true });
-    expect(by("ira")).toBeUndefined();
-    // ...but not when nothing goes there this month (a big debt comes first)
-    const busy = blank({ ...s, debts: [{ id: "v", name: "Visa", kind: "credit_card", balance: 90000, apr: 0.2, minPayment: 100 }] });
-    const db = derive(busy, START);
-    expect(budgetCategories(busy, db, simulatePlan(busy, db), START, "2026-11").find((x) => x.key === "taxable")).toBeUndefined();
+    // the emergency fund is one line when the plan has it
+    const ef = blank({ ...s, plan: { ...s.plan, steps: ["starterEF", "fullEF"] }, accounts: [{ id: "sav", name: "Savings", type: "cash", balance: 0 }, { id: "chk", name: "Checking", type: "cash", balance: 0 }] });
+    const de = derive(ef, START);
+    const efLines = budgetCategories(ef, de, simulatePlan(ef, de), START, "2026-11").filter((x) => x.kind === "saving" && !x.key.startsWith("goal:"));
+    expect(efLines).toMatchObject([{ key: "cash", name: "Emergency fund", moves: false }]);
     expect(budgetScheduleMonths({ debts: [], goals: [], budgetPlan: { start: "2026-11", startCash: 0, months: { "2026-11": { assigned: { taxable: 400 } } } } })).toEqual({ taxable: { "2026-11": 400 } });
   });
 

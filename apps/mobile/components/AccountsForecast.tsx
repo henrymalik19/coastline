@@ -111,13 +111,6 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
   const cols = pick === "all" ? shown : shown.filter((a) => a.key === pick);
   const isDebt = (k: AccountKey) => k.startsWith("debt:");
 
-  const parts = (m: { paycheck: number; plan: number; employer: number; loan: number }, k: AccountKey) =>
-    [
-      m.loan > 0.5 ? `${money(m.loan)} 401(k) loan repayment (back into your account, not toward the limit)` : "",
-      m.paycheck > 0.5 ? `${money(m.paycheck)} from your paychecks` : "",
-      m.plan > 0.5 ? `${m.paycheck > 0.5 ? "+" : ""}${money(m.plan)} ${k === "k401" || (k === "hsa" && payrollHsa) ? "more per check, as you set it" : "you set (Budget)"}` : "",
-      m.employer > 0.5 ? `${money(m.employer)} from your employer` : "",
-    ].filter(Boolean).join(" · ");
 
   /** The amount for a month (accent when it's a one-month change). */
   const amountCell = (a: AccountForecast, i: number, width: number) => {
@@ -156,11 +149,42 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
     }
     const paidOff = debt ? a.months.findIndex((m) => m.balance <= 0.5) : -1;
     const many = a.accounts.length > 1 || (a.accounts.length === 1 && a.accounts[0]!.name.trim() && a.accounts[0]!.name.trim() !== label(k));
+    // this month, split into where it comes from (one row each instead of one long sentence)
+    const sources: { label: string; v: number; note?: string }[] = debt
+      ? [
+          { label: state.debts.find((x) => "debt:" + x.id === k)?.payroll ? "Minimum, from your paychecks" : "Minimum", v: m0a.paycheck },
+          { label: "Extra you set", v: m0a.plan },
+        ]
+      : k === "cash"
+        ? []
+        : [
+            { label: "From your paychecks", v: m0a.paycheck },
+            { label: k === "k401" || (k === "hsa" && payrollHsa) ? "More per check, as you set it" : "You set (Budget)", v: m0a.plan },
+            { label: "From your employer", v: m0a.employer },
+            { label: "401(k) loan repayment", v: m0a.loan, note: "Back into your account, not toward the limit" },
+          ];
+    const shown = sources.filter((x) => x.v > 0.5);
+    const thisMonth = debt ? m0a.paycheck + m0a.plan : m0a.total;
+    const startsAt = thisMonth <= 0.5 ? a.months.findIndex((m) => m.total > 0.5) : -1;
+    const row = (l: string, v: string, opts?: { strong?: boolean; note?: string; color?: string }) => (
+      <View style={{ flexDirection: "row", alignItems: "baseline", gap: space.sm }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[type.caption, { color: opts?.strong ? t.text : t.text2, fontWeight: opts?.strong ? "700" : "400" }]}>{l}</Text>
+          {opts?.note ? <Text style={[type.caption, { color: t.text3, fontSize: 11 }]}>{opts.note}</Text> : null}
+        </View>
+        <Text style={[type.caption, { color: opts?.color ?? (opts?.strong ? t.text : t.text2), fontWeight: opts?.strong ? "700" : "500", fontVariant: ["tabular-nums"] }]}>{v}</Text>
+      </View>
+    );
     return (
       <View key={k}>
-        <View style={{ padding: compact ? space.md : space.lg, gap: 6 }}>
+        <View style={{ padding: compact ? space.md : space.lg, gap: space.md }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-            <Text style={[type.body, { color: t.text, fontWeight: "700", flex: 1 }]}>{label(k)}</Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[type.body, { color: t.text, fontWeight: "700" }]}>{label(k)}</Text>
+              {many ? (
+                <Text numberOfLines={2} style={[type.caption, { color: t.text3 }]}>{a.accounts.map((x) => x.name.trim() || "Unnamed account").join(" · ")}</Text>
+              ) : null}
+            </View>
             {compact ? (
               <Pressable role="button" accessibilityLabel="Back to the table" onPress={() => setSel(null)} hitSlop={8} style={styles.link}>
                 <Icon name="back" size={14} color={t.accent} />
@@ -170,60 +194,8 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
               <IconButton icon="close" label={`Close ${label(k)}`} onPress={() => setSel(null)} />
             )}
           </View>
-          {many ? (
-            <Text style={[type.caption, { color: t.text3 }]}>
-              Today is {a.accounts.map((x) => `${x.name.trim() || "Unnamed account"} ${money(x.balance)}`).join(" + ")}.{k === "cash" ? "" : " Wrong account here? Change what it counts as under Money → Accounts."}
-            </Text>
-          ) : null}
-          {schedulable(k) ? (
-            <>
-              <Text style={[type.caption, { color: schedule[k]?.length ? t.accent : t.text2, fontWeight: "700" }]}>
-                {schedule[k]?.length ? planText(k).replace("Your plan: ", "Monthly amount: ") : "Monthly amount: none set, so nothing goes in"}
-              </Text>
-              <Pressable role="link" onPress={() => router.push("/budget")} hitSlop={6} style={styles.link}>
-                <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change it (Budget tab)</Text>
-                <Icon name="chevron" size={12} color={t.accent} />
-              </Pressable>
-            </>
-          ) : (
-            <Pressable role="link" onPress={() => router.push(k === "other" ? "/money/accounts" : "/money/income")} hitSlop={6} style={styles.link}>
-              <Text style={[type.caption, { color: t.accent, fontWeight: "700", flexShrink: 1 }]}>
-                {k === "other"
-                  ? "The plan doesn't add to these. Change what an account counts as (Money → Accounts)"
-                  : (() => {
-                      const per = state.incomes.filter((x) => (x.kind ?? "job") === "job").map((x) => ({ name: x.name || "your job", v: k === "k401" ? x.pretax ?? 0 : x.hsaPre ?? 0 })).filter((x) => x.v > 0);
-                      return `Your plan: set per paycheck${per.length ? ` (${per.map((x) => `${x.name} ${money(x.v)}/check`).join(", ")})` : ""}. Change it on your job (Money → Income)`;
-                    })()}
-              </Text>
-              <Icon name="chevron" size={12} color={t.accent} />
-            </Pressable>
-          )}
-          <Text style={[type.caption, { color: t.text2 }]}>
-            <Text style={{ color: t.text, fontWeight: "600" }}>This month: {debt ? `${money(m0a.paycheck + m0a.plan)} paid` : money(m0a.total)}</Text>
-            {m0a.total > 0.5 && !debt && k !== "cash" ? ` (${parts(m0a, k)})` : ""}
-            {debt && m0a.paycheck + m0a.plan > 0.5 ? ` (${money(m0a.paycheck)} minimum${state.debts.find((x) => "debt:" + x.id === k)?.payroll ? " from your paychecks" : ""}${m0a.plan > 0.5 ? ` + ${money(m0a.plan)} extra you set` : ""})` : ""}
-            {m0a.total <= 0.5 ? (() => { const f = a.months.findIndex((m) => m.total > 0.5); return f > 0 ? ` · starts ${monthLabel(start, f)}` : ""; })() : ""}
-          </Text>
-          {(() => {
-            // a paycheck account on a job with no payday date: paychecks are averaged, so no 3-paycheck months
-            if (k !== "k401" && k !== "hsa") return null;
-            const uses = state.incomes.filter((x) => (x.kind ?? "job") === "job" && (k === "k401" ? (x.pretax ?? 0) > 0 : (x.hsaPre ?? 0) > 0));
-            const missing = uses.filter((x) => (x.freq === "biweekly" || x.freq === "weekly") && !x.nextPayday);
-            return missing.length ? (
-              <Text style={[type.caption, { color: t.warn }]}>
-                Add {missing.map((x) => x.name || "your job").join(" and ")}'s next payday (Money → Income) to see its 3-paycheck months. Until then its paychecks are spread evenly over the year.
-              </Text>
-            ) : null;
-          })()}
-          {thisYear?.limit ? (
-            <View style={{ gap: 4, maxWidth: 360 }}>
-              <Text style={[type.caption, { color: t.text2 }]}>
-                {y0}: {money(yearIn)} of the {money(thisYear.limit)} limit{k === "hsa" ? " (yours + employer's)" : ""}
-                {guessed ? (k === "ira" || k === "iraSpouse" ? " · add what you've put in this year (Money → Accounts)" : " · counts this year's earlier paychecks at today's amounts") : ""}
-              </Text>
-              <ProgressBar progress={Math.min(1, yearIn / thisYear.limit)} color={t.good} />
-            </View>
-          ) : null}
+
+          {/* the headline numbers first */}
           <View style={styles.points}>
             {points.map((p) => (
               <View key={p.label} style={{ minWidth: 92 }}>
@@ -238,11 +210,55 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
               </View>
             ) : null}
           </View>
-          <Text style={[type.caption, { color: t.text3 }]}>
-            {schedulable(k) ? "" : "Set per paycheck, so it's steady."}
-            
-            {a.invested ? ` Balances grow at your assumed ${(d.r * 100).toFixed(1)}% return after inflation.` : ""}
-          </Text>
+
+          <View style={[styles.sched, { backgroundColor: t.surface2, gap: 6 }]}>
+            {row(debt ? "Paid this month" : "This month", startsAt > 0 ? `starts ${monthLabel(start, startsAt)}` : money(thisMonth), { strong: true })}
+            {shown.length > 1 || (shown.length === 1 && shown[0]!.note) ? shown.map((x) => <View key={x.label}>{row(x.label, money(x.v), { note: x.note })}</View>) : null}
+            {thisYear?.limit ? (
+              <View style={{ gap: 4, marginTop: 4 }}>
+                {row(`${y0} limit${k === "hsa" ? " (yours + employer's)" : ""}`, `${money(yearIn)} of ${money(thisYear.limit)}`, {
+                  note: guessed ? (k === "ira" || k === "iraSpouse" ? "Add what you've put in this year under Money → Accounts" : "Counts this year's earlier paychecks at today's amounts") : undefined,
+                })}
+                <ProgressBar progress={Math.min(1, yearIn / thisYear.limit)} color={t.good} />
+              </View>
+            ) : null}
+          </View>
+
+          {/* where it's set */}
+          {schedulable(k) ? (
+            <Pressable role="link" onPress={() => router.push("/budget")} hitSlop={6} style={styles.link}>
+              <Text style={[type.caption, { color: t.accent, fontWeight: "700", flexShrink: 1 }]}>
+                {schedule[k]?.length ? planText(k).replace("Your plan: ", "Monthly amount: ") : "No monthly amount set"} · change on Budget
+              </Text>
+              <Icon name="chevron" size={12} color={t.accent} />
+            </Pressable>
+          ) : (
+            <Pressable role="link" onPress={() => router.push(k === "other" ? "/money/accounts" : "/money/income")} hitSlop={6} style={styles.link}>
+              <Text style={[type.caption, { color: t.accent, fontWeight: "700", flexShrink: 1 }]}>
+                {k === "other"
+                  ? "The plan doesn't add to these · change what an account counts as"
+                  : (() => {
+                      const per = state.incomes.filter((x) => (x.kind ?? "job") === "job").map((x) => ({ name: x.name || "your job", v: k === "k401" ? x.pretax ?? 0 : x.hsaPre ?? 0 })).filter((x) => x.v > 0);
+                      return `Set per paycheck${per.length ? ` (${per.map((x) => `${money(x.v)}/check`).join(", ")})` : ""} · change on your job`;
+                    })()}
+              </Text>
+              <Icon name="chevron" size={12} color={t.accent} />
+            </Pressable>
+          )}
+          {(() => {
+            // a paycheck account on a job with no payday date: paychecks are averaged, so no 3-paycheck months
+            if (k !== "k401" && k !== "hsa") return null;
+            const uses = state.incomes.filter((x) => (x.kind ?? "job") === "job" && (k === "k401" ? (x.pretax ?? 0) > 0 : (x.hsaPre ?? 0) > 0));
+            const missing = uses.filter((x) => (x.freq === "biweekly" || x.freq === "weekly") && !x.nextPayday);
+            return missing.length ? (
+              <Text style={[type.caption, { color: t.warn }]}>
+                Add {missing.map((x) => x.name || "your job").join(" and ")}'s next payday (Money → Income) to see its 3-paycheck months. Until then its paychecks are spread evenly over the year.
+              </Text>
+            ) : null;
+          })()}
+          {a.invested ? (
+            <Text style={[type.caption, { color: t.text3 }]}>Grows at your assumed {(d.r * 100).toFixed(1)}% return after inflation.</Text>
+          ) : null}
         </View>
       </View>
     );

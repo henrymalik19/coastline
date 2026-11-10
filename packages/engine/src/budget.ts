@@ -13,13 +13,13 @@
  */
 import { accountForecasts } from "./forecast";
 import { paysExtra, setAsideFor } from "./plan";
-import { ACCOUNT_KEY, accountPlanKey, BUDGET_ITEM, hsaEligibleIn, scheduleAmount, valueIn } from "./schedule";
+import { ACCOUNT_KEY, accountPlanKey, BUDGET_ITEM, scheduleAmount, valueIn } from "./schedule";
 import type { BudgetState, Derived, PlanResult, PlanState, Txn } from "./types";
 import { txnActivity } from "./txn";
 import { addMonths, monthsBetween, num } from "./util";
 
 /** The built-in group for accounts you add to (named so it never merges with a group of your own). */
-export const SAVINGS_GROUP = "Savings & investments";
+export const SAVINGS_GROUP = "Savings";
 
 export type BudgetCategoryKind = "spending" | "bill" | "saving" | "debt";
 
@@ -90,42 +90,15 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
     const extra = paysExtra(x) ? (scheduleAmount(s.plan, "debt:" + x.id, month) ?? planned("debt:" + x.id)) : 0;
     out.push({ key: "debt:" + x.id, group: x.budgetGroup?.trim() || "Debt payments", name: x.name || "Debt", kind: "debt", target: Math.max(0, num(x.minPayment)) + Math.max(0, extra), moves: true });
   }
-  // savings: each account the plan adds to (the kind's plan amount goes to its first account), then goals
-  const firstOfKind = new Set<string>();
-  for (const a of s.accounts ?? []) {
-    const kind = accountPlanKey(s, a);
-    if (!kind) continue;
-    const own = scheduleAmount(s.plan, ACCOUNT_KEY + a.id, month);
-    const kindSet = scheduleAmount(s.plan, kind, month);
-    let target: number;
-    if (own !== undefined) target = own;
-    else if (firstOfKind.has(kind)) target = 0;
-    else {
-      // the plan's amount for the kind, less what your other accounts of that kind have set
-      const others = (s.accounts ?? []).filter((y) => y.id !== a.id && accountPlanKey(s, y) === kind).reduce((t, y) => t + (scheduleAmount(s.plan, ACCOUNT_KEY + y.id, month) ?? 0), 0);
-      target = Math.max(0, (kindSet ?? planned(kind)) - others);
-    }
-    firstOfKind.add(kind);
-    out.push({ key: ACCOUNT_KEY + a.id, group: SAVINGS_GROUP, name: a.name || "Account", kind: "saving", target, moves: kind !== "cash" });
-  }
-  // a plan step with no account yet (an IRA you haven't opened): still a line, so you can budget for it
+  // savings: one emergency fund line for your cash (it stays in your budget accounts). Investing
+  // (IRA, brokerage, HSA) isn't a category: moving money there comes out of ready to assign.
   const steps = s.plan?.steps ?? [];
-  const kinds: { kind: "cash" | "ira" | "hsa" | "taxable"; name: string; wanted: boolean }[] = [
-    { kind: "cash", name: "Emergency fund", wanted: steps.includes("starterEF") || steps.includes("fullEF") },
-    { kind: "ira", name: "IRA", wanted: steps.includes("ira") },
-    { kind: "hsa", name: "HSA", wanted: steps.includes("hsa") && hsaEligibleIn(s.plan, month) && s.plan?.hsaPayroll === false },
-    { kind: "taxable", name: "Brokerage", wanted: steps.includes("taxable") },
-  ];
-  for (const k of kinds) {
-    if (!k.wanted || firstOfKind.has(k.kind)) continue;
-    // only when it's in use this month: the plan puts money there, you set an amount, or you assigned some
-    const inUse =
-      planned(k.kind) > 0.5 ||
-      scheduleAmount(s.plan, k.kind, month) !== undefined ||
-      s.budgetPlan?.months?.[month]?.assigned?.[k.kind] !== undefined;
-    if (!inUse) continue;
-    out.push({ key: k.kind, group: SAVINGS_GROUP, name: `${k.name} (no account yet)`, kind: "saving", target: scheduleAmount(s.plan, k.kind, month) ?? planned(k.kind), moves: k.kind !== "cash" });
-  }
+  const cashIds = (s.accounts ?? []).filter((a) => accountPlanKey(s, a) === "cash").map((a) => ACCOUNT_KEY + a.id);
+  const cashSet = scheduleAmount(s.plan, "cash", month);
+  const perAccount = cashIds.map((k) => scheduleAmount(s.plan, k, month));
+  const cashTarget = cashSet ?? (perAccount.some((v) => v !== undefined) ? perAccount.reduce<number>((t, v) => t + (v ?? 0), 0) : planned("cash"));
+  if (steps.includes("starterEF") || steps.includes("fullEF") || cashTarget > 0.5 || s.budgetPlan?.months?.[month]?.assigned?.cash !== undefined)
+    out.push({ key: "cash", group: SAVINGS_GROUP, name: "Emergency fund", kind: "saving", target: Math.max(0, cashTarget), moves: false });
   for (const g of s.goals ?? [])
     if (!g.recurring) out.push({ key: "goal:" + g.id, group: "Savings goals", name: g.name || "Goal", kind: "saving", target: scheduleAmount(s.plan, "goal:" + g.id, month) ?? planned("goal:" + g.id), moves: false });
   return out;
