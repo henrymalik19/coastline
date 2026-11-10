@@ -77,7 +77,6 @@ export default function Budget() {
   const [adding, setAdding] = useState<{ txn?: Txn; categoryId?: string; kind?: "out" | "in"; amount?: number; from?: string } | null>(null);
   const monthTxns = txns.filter((x) => !x.deleted && x.date.startsWith(month));
   const i = between(thisMonth, month);
-  const expected = i >= 0 ? actual.months[i]?.income ?? 0 : 0;
   const entry = b?.months?.[month];
   const cashNow = state.accounts.filter((a) => a.type === "cash").reduce((s, a) => s + (+a.balance || 0), 0);
 
@@ -236,33 +235,12 @@ export default function Budget() {
           </Text>
         </View>
       </View>
-      <Divider />
-      <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" }}>
-        <View style={{ flex: 1, minWidth: 160 }}>
-          <Text style={[type.label, { color: t.text }]}>Income this month</Text>
-          {expected > 0.5 ? (
-            <Text style={[type.caption, { color: t.text3 }]}>
-              {view.income + 0.5 >= expected ? "All your expected income is in" : `About ${money(expected)} expected`}
-            </Text>
-          ) : null}
-          {month === b.start ? (
-            <Text style={[type.caption, { color: t.text3 }]}>Your budget also started with {money(b.startCash)} from your cash accounts</Text>
-          ) : null}
-          {(entry?.income ?? 0) > 0.005 ? (
-            <Text style={[type.caption, { color: t.text3 }]}>
-              Includes {money(entry!.income!)} entered before transactions.{" "}
-              <Text role="button" onPress={() => setIncome(undefined)} style={{ color: t.accent, fontWeight: "700" }}>Remove it</Text>
-            </Text>
-          ) : null}
-        </View>
-        <Text style={[type.heading, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(view.income)}</Text>
-        <Button
-          title="Add income"
-          icon="plus"
-          onPress={() => setAdding({ kind: "in", categoryId: "ready", amount: Math.max(0, Math.round((expected - view.income) * 100) / 100) })}
-          style={{ minHeight: 36 }}
-        />
-      </View>
+      {(entry?.income ?? 0) > 0.005 ? (
+        <Text style={[type.caption, { color: t.text3 }]}>
+          Includes {money(entry!.income!)} of income typed in before you had transactions.{" "}
+          <Text role="button" onPress={() => setIncome(undefined)} style={{ color: t.accent, fontWeight: "700" }}>Remove it</Text>
+        </Text>
+      ) : null}
     </Card>
   );
 
