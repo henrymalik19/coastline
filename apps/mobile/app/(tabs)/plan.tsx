@@ -139,7 +139,7 @@ export default function Forecast() {
   );
 
   return (
-    <Screen title="Forecast" subtitle={compact ? undefined : "Where you're headed"} fill maxWidth={100000}>
+    <Screen title="Forecast" subtitle={compact ? undefined : "Where you're headed"} fill>
       <View style={{ maxWidth: 360 }}>
         <Segmented
           label="Forecast view"

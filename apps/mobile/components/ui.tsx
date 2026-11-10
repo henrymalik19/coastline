@@ -74,13 +74,19 @@ export function Screen({
   ) : body;
   // plain conditional JSX (not an inline component) so inputs keep focus across renders
   return fill ? (
-    <View style={[{ flex: 1, backgroundColor: t.bg, paddingBottom: Math.max(insets.bottom, space.lg) }, pad]}>{framed}</View>
+    <View style={[{ flex: 1, backgroundColor: t.bg, paddingBottom: Math.max(insets.bottom, space.lg) }, pad, gutterStyle]}>{framed}</View>
   ) : (
-    <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={[pad, { paddingBottom: space.xxl }]}>
+    <ScrollView style={[{ flex: 1, backgroundColor: t.bg }, gutterStyle]} contentContainerStyle={[pad, { paddingBottom: space.xxl }]}>
       {framed}
     </ScrollView>
   );
 }
+
+/**
+ * Web: every page keeps room for a scrollbar, whether it scrolls or not, so a long page
+ * doesn't sit a few px left of a short one.
+ */
+const gutterStyle = Platform.OS === "web" ? ({ overflowY: "auto", scrollbarGutter: "stable" } as ViewStyle) : null;
 
 export function Card({ children, style, padded = true }: { children: ReactNode; style?: ViewStyle; padded?: boolean }) {
   const t = useTheme();
