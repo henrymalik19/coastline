@@ -332,6 +332,8 @@ export type BudgetState = {
    * change or delete moves it back by exactly that much.
    */
   tracked?: Record<string, { to: string; amount: number }>;
+  /** Your name and group for the Emergency fund category (it's a category like any other). */
+  efLine?: { name?: string; group?: string };
 };
 
 export type Contributed = {

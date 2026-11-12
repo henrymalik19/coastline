@@ -18,7 +18,7 @@ import type { BudgetState, Derived, PlanResult, PlanState, Txn } from "./types";
 import { txnActivity } from "./txn";
 import { addMonths, monthsBetween, num } from "./util";
 
-/** The built-in group for the emergency fund (named so it never merges with a group of your own). */
+/** The emergency fund's group until you rename it or move it (your own categories can join it). */
 export const SAVINGS_GROUP = "Savings";
 
 export type BudgetCategoryKind = "spending" | "bill" | "saving" | "debt";
@@ -102,9 +102,9 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
   const perAccount = cashIds.map((k) => scheduleAmount(s.plan, k, month));
   const cashTarget = cashSet ?? (perAccount.some((v) => v !== undefined) ? perAccount.reduce<number>((t, v) => t + (v ?? 0), 0) : planned("cash"));
   if (steps.includes("starterEF") || steps.includes("fullEF") || cashTarget > 0.5 || s.budgetPlan?.months?.[month]?.assigned?.cash !== undefined)
-    out.push({ key: "cash", group: SAVINGS_GROUP, name: "Emergency fund", kind: "saving", target: Math.max(0, cashTarget), moves: false });
+    out.push({ key: "cash", group: s.budgetPlan?.efLine?.group?.trim() || SAVINGS_GROUP, name: s.budgetPlan?.efLine?.name?.trim() || "Emergency fund", kind: "saving", target: Math.max(0, cashTarget), moves: false });
   for (const g of s.goals ?? [])
-    if (!g.recurring) out.push({ key: "goal:" + g.id, group: "Savings goals", name: g.name || "Goal", kind: "saving", target: scheduleAmount(s.plan, "goal:" + g.id, month) ?? planned("goal:" + g.id), moves: false });
+    if (!g.recurring) out.push({ key: "goal:" + g.id, group: g.budgetGroup?.trim() || "Savings goals", name: g.name || "Goal", kind: "saving", target: scheduleAmount(s.plan, "goal:" + g.id, month) ?? planned("goal:" + g.id), moves: false });
   return out;
 }
 

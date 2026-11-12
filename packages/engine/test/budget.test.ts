@@ -110,7 +110,10 @@ describe("monthly budget", () => {
     const ef = blank({ ...s, plan: { ...s.plan, steps: ["starterEF", "fullEF"] }, accounts: [{ id: "sav", name: "Savings", type: "cash", balance: 0 }, { id: "chk", name: "Checking", type: "cash", balance: 0 }] });
     const de = derive(ef, START);
     const efLines = budgetCategories(ef, de, simulatePlan(ef, de), START, "2026-11").filter((x) => x.kind === "saving" && !x.key.startsWith("goal:"));
-    expect(efLines).toMatchObject([{ key: "cash", name: "Emergency fund", moves: false }]);
+    expect(efLines).toMatchObject([{ key: "cash", name: "Emergency fund", group: "Savings", moves: false }]);
+    // ...and a category like any other: your own name and group
+    const named = { ...ef, budgetPlan: { start: "2026-11", startCash: 0, months: {}, efLine: { name: "Rainy day", group: "Cushion" } } };
+    expect(budgetCategories(named, de, simulatePlan(named, de), START, "2026-11").find((x) => x.key === "cash")).toMatchObject({ name: "Rainy day", group: "Cushion" });
     expect(budgetScheduleMonths({ debts: [], goals: [], budgetPlan: { start: "2026-11", startCash: 0, months: { "2026-11": { assigned: { taxable: 400 } } } } })).toEqual({ taxable: { "2026-11": 400 } });
   });
 

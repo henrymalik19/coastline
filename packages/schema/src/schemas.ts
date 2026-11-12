@@ -195,6 +195,7 @@ export const PlanStateSchema = z.object({
       ),
       registers: z.record(z.string(), z.object({ opening: z.number(), since: z.string() })).optional(),
       tracked: z.record(z.string(), z.object({ to: z.string(), amount: z.number() })).optional(),
+      efLine: z.object({ name: z.string().optional(), group: z.string().optional() }).optional(),
     })
     .optional(),
 });

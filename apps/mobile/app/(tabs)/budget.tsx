@@ -3,7 +3,7 @@
  * categories (budget items, bills, debt payments, savings), what you don't spend carries into next
  * month, and what you assign to savings and debts is what the plan counts as done that month.
  */
-import { BUDGET_ITEM, budgetCategories, budgetView, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
+import { BUDGET_ITEM, budgetCategories, budgetView, SAVINGS_GROUP, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
 import { BudgetAccounts } from "../../components/BudgetAccounts";
 import { TransactionsList } from "../../components/TransactionsList";
@@ -114,9 +114,11 @@ export default function Budget() {
     });
   const addItem = (group: string) => {
     const id = newId();
+    // a category added next to your savings is saving up, not spending you keep after you retire
+    const saving = cats.some((c) => c.group === group && c.kind === "saving");
     update((p) => {
       const last = p.budget.map((x, i) => (groupOf(x) === group ? i : -1)).filter((i) => i >= 0).at(-1) ?? p.budget.length - 1;
-      p.budget.splice(last + 1, 0, { id, name: "", amount: 0, inRetirement: true, group });
+      p.budget.splice(last + 1, 0, { id, name: "", amount: 0, inRetirement: !saving, group, ...(saving ? { essential: false } : {}) });
     });
     setOpen(id);
   };
@@ -134,8 +136,15 @@ export default function Budget() {
       const name = to.trim();
       if (!name) return;
       p.budget.forEach((x) => { if (groupOf(x) === from) x.group = name; });
-      p.debts.forEach((x) => { if (x.budgetGroup === from) x.budgetGroup = name; });
-      p.goals.forEach((x) => { if (x.budgetGroup === from) x.budgetGroup = name; });
+      // everything shown in the group moves with it, including what sits there by default
+      p.debts.forEach((x) => { if ((x.budgetGroup?.trim() || "Debt payments") === from) x.budgetGroup = name; });
+      p.goals.forEach((x) => { if ((x.budgetGroup?.trim() || (x.recurring ? "Bills" : "Savings goals")) === from) x.budgetGroup = name; });
+      if (p.budgetPlan && (p.budgetPlan.efLine?.group?.trim() || SAVINGS_GROUP) === from) p.budgetPlan.efLine = { ...p.budgetPlan.efLine, group: name };
+    });
+  /** The Emergency fund category's name or group. */
+  const editEf = (patch: { name?: string; group?: string }) =>
+    update((p) => {
+      if (p.budgetPlan) p.budgetPlan.efLine = { ...p.budgetPlan.efLine, ...patch };
     });
   /** Move money between two categories this month. */
   const moveMoney = (from: string, to: string, amount: number) =>
@@ -184,6 +193,9 @@ export default function Budget() {
     if (!g) groups.push((g = { name: c.group, kind: c.kind, cats: [] }));
     g.cats.push(c);
   }
+  const groupNames = [...new Set([...groups.map((g) => g.name), ...groupOrder(state.budget)])];
+  /** A group of only your own categories can be dragged and moved; one with savings, bills or debts keeps its place. */
+  const ownGroup = (g: (typeof groups)[number]) => g.cats.every((c) => c.kind === "spending");
   const rta = view.readyToAssign;
   const canGoBack = month > b.start;
 
@@ -255,7 +267,6 @@ export default function Budget() {
     if (c.kind === "spending") {
       const it = state.budget.find((x) => x.id === c.key);
       if (!it) return null;
-      const groups = groupOrder(state.budget);
       const linkable = linkableAccounts(state);
       const linkedTo = linkable.find((a) => a.id === it.accountId);
       return (
@@ -288,7 +299,7 @@ export default function Budget() {
               </>
             )}
             <FormRow label="Group">
-              <Select plain label="Group" value={groupOf(it)} options={groups.map((g) => ({ value: g, label: g }))} onChange={(g) => update((p) => { p.budget = moveToGroup(p.budget, itemIndex(it.id), g); })} />
+              <Select plain label="Group" value={groupOf(it)} options={groupNames.map((g) => ({ value: g, label: g }))} onChange={(g) => update((p) => { p.budget = moveToGroup(p.budget, itemIndex(it.id), g); })} />
             </FormRow>
           </FormList>
           <ChangesLater
@@ -318,6 +329,19 @@ export default function Budget() {
     if (c.kind === "saving")
       return (
         <View style={styles.section}>
+          {c.key === "cash" ? (
+            <>
+              <Text style={[type.overline, { color: t.text3 }]}>Category</Text>
+              <FormList>
+                <FormRow label="Name" hint="Your plan still treats it as your emergency fund">
+                  <InlineText label="Category name" placeholder="Emergency fund" value={b.efLine?.name ?? ""} commitOnBlur onChange={(v) => editEf({ name: v.trim() || undefined })} />
+                </FormRow>
+                <FormRow label="Group">
+                  <Select plain label="Group" value={c.group} options={groupNames.map((g) => ({ value: g, label: g }))} onChange={(g) => editEf({ group: g })} />
+                </FormRow>
+              </FormList>
+            </>
+          ) : null}
           <Text style={[type.overline, { color: t.text3 }]}>Plan for this account</Text>
           <MonthlyAmount k={c.key} label={label(c)} note={c.moves ? undefined : "Cash can go past your emergency fund goal if you plan it."} />
           <Text style={[type.caption, { color: t.text3 }]}>The plan amount for this category each month (its "Use plan" button), and what the forecast expects after this month.</Text>
@@ -504,21 +528,20 @@ export default function Budget() {
               <Card key={g.name} padded={false}>
                 <Pressable
                   role="button"
-                  disabled={g.kind !== "spending"}
                   aria-expanded={groupOpen === g.name}
-                  accessibilityLabel={`${g.name} group${g.kind === "spending" ? ": rename, reorder or add a category" : ""}`}
+                  accessibilityLabel={`${g.name} group: rename${ownGroup(g) ? ", reorder" : ""} or add a category`}
                   onPress={() => { setGroupOpen(groupOpen === g.name ? null : g.name); setGroupDraft(g.name); }}
                   style={[styles.groupHead, { borderBottomColor: t.border }, compact ? { paddingHorizontal: space.md } : null]}
                 >
                   <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
                     <Text style={[type.overline, { color: t.text2, flexShrink: 1 }]} numberOfLines={2}>{g.name}</Text>
-                    {g.kind === "spending" ? <Icon name="edit" size={12} color={t.text3} /> : null}
+                    <Icon name="edit" size={12} color={t.text3} />
                   </View>
                   {num(assigned, t.text3, true)}
                   {compact ? null : num(spent, t.text3, true)}
                   {num(avail, avail < -0.5 ? t.bad : t.text2, true, PILL_IN)}
                 </Pressable>
-                {groupOpen === g.name && g.kind === "spending" ? (
+                {groupOpen === g.name ? (
                   <View style={[styles.editor, { backgroundColor: t.surface2, marginTop: space.md }]}>
                     <FormList>
                       <FormRow label="Group name">
@@ -527,12 +550,16 @@ export default function Budget() {
                     </FormList>
                     <View style={styles.chips}>
                       <Chip title="Add category" icon="plus" tone="accent" onPress={() => addItem(g.name)} />
-                      <Chip title="Earlier" icon="up" disabled={groupOrder(state.budget)[0] === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, -1); })} />
-                      <Chip title="Later" icon="down" disabled={groupOrder(state.budget).at(-1) === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, 1); })} />
+                      {ownGroup(g) ? (
+                        <>
+                          <Chip title="Earlier" icon="up" disabled={groupOrder(state.budget)[0] === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, -1); })} />
+                          <Chip title="Later" icon="down" disabled={groupOrder(state.budget).at(-1) === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, 1); })} />
+                        </>
+                      ) : null}
                     </View>
                   </View>
                 ) : null}
-                {g.kind === "spending" && g.cats.length > 1 ? (
+                {ownGroup(g) && g.cats.length > 1 ? (
                   <DragList
                     count={g.cats.length}
                     keyOf={(n) => g.cats[n]!.key}
