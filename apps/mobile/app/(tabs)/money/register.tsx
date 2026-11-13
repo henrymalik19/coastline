@@ -97,7 +97,7 @@ export default function Register() {
             <Text style={[type.caption, { color: t.text3 }]}>
               {Math.abs((card ? -bankSays : bankSays) - cleared) < 0.005
                 ? "It matches. Your cleared transactions get locked as reconciled."
-                : `It's ${money(Math.abs((card ? -bankSays : bankSays) - cleared))} ${(card ? -bankSays : bankSays) > cleared ? "more" : "less"} than your cleared balance. Reconciling adds an adjustment to ready to assign. Check for a missing transaction first.`}
+                : `It's ${money(Math.abs((card ? -bankSays : bankSays) - cleared))} ${(card ? -bankSays : bankSays) > cleared ? "more" : "less"} than your cleared balance. Reconciling adds an adjustment to Unassigned. Check for a missing transaction first.`}
             </Text>
           </View>
         ) : null}

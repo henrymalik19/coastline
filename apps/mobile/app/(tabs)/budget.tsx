@@ -1,5 +1,5 @@
 /**
- * Budget: every dollar gets a job. Money that comes in is ready to assign; you assign it to your
+ * Budget: you decide where your money goes. Money that comes in is unassigned; you assign it to your
  * categories (budget items, bills, debt payments, savings), what you don't spend carries into next
  * month, and what you assign to savings and debts is what the plan counts as done that month.
  */
@@ -165,11 +165,11 @@ export default function Budget() {
   /* ---------- not started yet ---------- */
   if (!b) {
     return (
-      <Screen title="Budget" subtitle={compact ? undefined : "Give every dollar a job"}>
+      <Screen title="Budget" subtitle={compact ? undefined : "Plan where your money goes"}>
         <Card style={{ gap: space.md }}>
           <Text style={[type.title, { color: t.text }]}>Start your monthly budget</Text>
           <Text style={[type.body, { color: t.text2 }]}>
-            Each month, the money you have gets a job: bills, spending, debt payments and savings. What you don't spend stays put for next month. What you put toward savings and debts is what your plan counts as done.
+            Each month, you decide where your money goes: bills, spending, debt payments and savings. What you don't spend stays put for next month. What you put toward savings and debts is what your plan counts as done.
           </Text>
           <Text style={[type.body, { color: t.text2 }]}>
             Your first money to assign is the cash in your accounts today: <Text style={{ color: t.text, fontWeight: "700" }}>{money(cashNow)}</Text>. Your categories come from your budget, bills, debts and savings, with amounts from your plan.
@@ -237,10 +237,10 @@ export default function Budget() {
     <Card style={{ gap: space.sm, borderColor: rta < -0.5 ? t.bad : rta > 0.5 ? t.good : t.border, backgroundColor: rta < -0.5 ? t.badSoft : t.surface }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, flexWrap: "wrap" }}>
         <View style={{ flex: 1, minWidth: 160 }}>
-          <Text style={[type.label, { color: t.text3 }]}>Ready to assign</Text>
+          <Text style={[type.label, { color: t.text3 }]}>Unassigned</Text>
           <Text style={[type.display, { color: rta < -0.5 ? t.bad : rta > 0.5 ? t.good : t.text, fontVariant: ["tabular-nums"] }]}>{money(rta)}</Text>
           <Text style={[type.caption, { color: t.text3 }]}>
-            {rta < -0.5 ? "You've assigned more than you have. Take some back from a category." : rta > 0.5 ? "Give it a job below." : "Every dollar has a job."}
+            {rta < -0.5 ? "You've assigned more than you have. Take some back from a category." : rta > 0.5 ? "Assign it to your categories below." : "All of it is assigned."}
             {view.assignedLater > 0.5 ? ` ${money(view.assignedLater)} is already assigned to later months.` : ""}
             {view.overspentBefore > 0.5 ? ` ${money(view.overspentBefore)} went to overspending in earlier months.` : ""}
           </Text>
@@ -516,7 +516,7 @@ export default function Budget() {
   };
 
   return (
-    <Screen title="Budget" subtitle={compact ? undefined : "Give every dollar a job"}>
+    <Screen title="Budget" subtitle={compact ? undefined : "Plan where your money goes"}>
       {monthBar}
       {view.started ? (
         <View style={[styles.editRow, { justifyContent: "space-between" }]}>
@@ -543,7 +543,7 @@ export default function Budget() {
               <View style={[styles.realDot, { backgroundColor: t.warn }]} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={[type.body, { color: t.text, fontWeight: "700" }]}>{needsCount} {needsCount === 1 ? "transaction needs" : "transactions need"} a category</Text>
-                <Text style={[type.caption, { color: t.text2 }]}>Until then {needsCount === 1 ? "it doesn't" : "they don't"} count in any category or in Ready to assign.</Text>
+                <Text style={[type.caption, { color: t.text2 }]}>Until then {needsCount === 1 ? "it doesn't" : "they don't"} count in any category or in Unassigned.</Text>
               </View>
               <Text style={[type.label, { color: t.accent, fontWeight: "700" }]}>Categorize</Text>
               <Icon name="chevron" size={14} color={t.accent} />

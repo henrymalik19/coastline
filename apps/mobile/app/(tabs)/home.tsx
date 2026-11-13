@@ -195,7 +195,7 @@ export default function Home() {
       <Divider />
       {budgeting ? (
         <Pressable role="link" onPress={() => router.push("/budget")} style={[styles.rtaRow, { backgroundColor: rta < -0.5 ? t.badSoft : rta > 0.5 ? t.goodSoft : t.surface2 }]}>
-          <Text style={[type.label, { color: t.text, flex: 1 }]}>Ready to assign</Text>
+          <Text style={[type.label, { color: t.text, flex: 1 }]}>Unassigned</Text>
           <Text style={[type.label, { color: rta < -0.5 ? t.bad : rta > 0.5 ? t.good : t.text2, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(rta)}</Text>
           <Icon name="chevron" size={14} color={t.text3} />
         </Pressable>

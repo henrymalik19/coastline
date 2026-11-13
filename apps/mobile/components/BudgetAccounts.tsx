@@ -18,7 +18,7 @@ import { useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
 
 const TRACKING_TIP =
-  "Not in your budget: their balances only change when you move money. Withdraw records money coming out into checking (it's ready to assign); a transfer to one from checking adds to it.";
+  "Not in your budget: their balances only change when you move money. Withdraw records money coming out into checking (it goes to Unassigned); a transfer to one from checking adds to it.";
 
 export function BudgetAccounts({ onAdd, onTransfer }: { onAdd: () => void; onTransfer: (from: string) => void }) {
   const t = useTheme();

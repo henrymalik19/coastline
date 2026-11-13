@@ -27,7 +27,7 @@ export function hasOldSavingsLines(p: PlanState): boolean {
  * The Budget used to have a line per account. Now there's one Emergency fund line ("cash"), and
  * investing is a category you add and link to its account: money on a cash account's line moves to
  * Emergency fund, money on an investing account's line moves to the category linked to it (else back
- * to ready to assign). Changes `p` in place; safe to run again.
+ * to Unassigned). Changes `p` in place; safe to run again.
  */
 export function foldSavingsLines(p: PlanState): void {
   if (!p.budgetPlan || !hasOldSavingsLines(p)) return;
@@ -71,7 +71,7 @@ export function cardMap(p: PlanState): Record<string, string> {
 
 /**
  * Start an account's register: a "Starting balance" transaction for what's in it today (a card:
- * what you owe, as a negative). A cash account's goes to ready to assign; a card's has no category.
+ * what you owe, as a negative). A cash account's goes to Unassigned; a card's has no category.
  * Null when it already has one or the budget hasn't started.
  */
 export function startTxnFor(p: PlanState, txns: Txn[], accountId: string, today: string): Txn | null {

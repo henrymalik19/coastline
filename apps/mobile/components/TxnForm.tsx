@@ -80,7 +80,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
       }
       return rest;
     });
-  // a transfer to an IRA or brokerage: the category you picked ("" = the linked one, else ready to assign)
+  // a transfer to an IRA or brokerage: the category you picked ("" = the linked one, else Unassigned)
   const [xferPick, setXferPick] = useState(txn?.transferAccountId && txn.amount < 0 && txn.categoryId && !txn.categoryId.startsWith("acct:") ? txn.categoryId : "");
   const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const dateText = date === isoDay(new Date()) ? "Today" : `${MON[Number(date.slice(5, 7)) - 1]} ${Number(date.slice(8, 10))}, ${date.slice(0, 4)}`;
@@ -133,7 +133,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
       transferId: txn?.transferId,
     };
     if (kind === "transfer" && fromTracking) saveTxn({ ...base, accountId: to, amount, transferAccountId: acct, categoryId: "ready", splits: undefined }, isoDay(start));
-    // to a loan: its payment line; to an IRA or brokerage: the category you picked (else ready to assign)
+    // to a loan: its payment line; to an IRA or brokerage: the category you picked (else Unassigned)
     else if (kind === "transfer") saveTxn({ ...base, splits: undefined, transferAccountId: to, categoryId: !toTracking ? undefined : toInvest ? xferCat : toLine ? toTracking.key : "ready" }, isoDay(start));
     else if (parts) {
       const sign = kind === "in" ? 1 : -1;
@@ -143,7 +143,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   };
 
   const catOptions = [
-    ...(kind === "in" ? [{ value: "ready", label: "Ready to assign", hint: "Income: give it a job on the Budget tab" }] : []),
+    ...(kind === "in" ? [{ value: "ready", label: "Unassigned", hint: "Income: assign it on the Budget tab" }] : []),
     ...cats.map((c) => ({ value: c.key, label: c.label, hint: c.group })),
   ];
 
@@ -309,7 +309,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                           plain
                           label="Category"
                           value={xferCat}
-                          options={[{ value: "ready", label: "Ready to assign", hint: "No category" }, ...cats.map((c) => ({ value: c.key, label: c.label, hint: c.account === to ? "Linked to this account" : c.group }))]}
+                          options={[{ value: "ready", label: "Unassigned", hint: "No category" }, ...cats.map((c) => ({ value: c.key, label: c.label, hint: c.account === to ? "Linked to this account" : c.group }))]}
                           onChange={setXferPick}
                         />,
                       )}
@@ -343,13 +343,13 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
             {kind === "transfer" && toTracking && !fromTracking ? (
               <Text style={[type.caption, { color: t.text3 }]}>
                 {toTracking.kind === "debt"
-                  ? `${toLine ? `Comes out of the ${toLine.label} category` : "Comes out of ready to assign"}, and lowers what you owe on ${toTracking.name}.`
-                  : `${xferLabel ? `Comes out of ${xferLabel}` : "Comes out of ready to assign"}, and adds to ${toTracking.name}.${linkedCat ? "" : " To budget for it, add a category and link it to this account."}`}
+                  ? `${toLine ? `Comes out of the ${toLine.label} category` : "Comes out of Unassigned"}, and lowers what you owe on ${toTracking.name}.`
+                  : `${xferLabel ? `Comes out of ${xferLabel}` : "Comes out of Unassigned"}, and adds to ${toTracking.name}.${linkedCat ? "" : " To budget for it, add a category and link it to this account."}`}
               </Text>
             ) : null}
             {fromTracking ? (
               <Text style={[type.caption, { color: t.text3 }]}>
-                A withdrawal: {fromTracking.name} goes down and the money is ready to assign. Taxes or a penalty on it aren't taken out here.
+                A withdrawal: {fromTracking.name} goes down and the money goes to Unassigned. Taxes or a penalty on it aren't taken out here.
               </Text>
             ) : null}
 

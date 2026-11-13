@@ -294,7 +294,7 @@ function AppearanceSection() {
       <Card style={{ gap: space.sm }}>
         <ToggleRow
           label="Budget: compare with what you really spend"
-          hint="Shows which categories are off from your recent spending (a line under Ready to assign, and ~$ on each one), with Plan with to update them"
+          hint="Shows which categories are off from your recent spending (a line under Unassigned, and ~$ on each one), with Plan with to update them"
           value={realSpending}
           onChange={setRealSpending}
         />

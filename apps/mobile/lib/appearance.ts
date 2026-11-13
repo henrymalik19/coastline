@@ -11,7 +11,7 @@ export type Appearance = "system" | "light" | "dark";
 export const useAppearance = create<{
   appearance: Appearance;
   setAppearance: (a: Appearance) => void;
-  /** Budget: compare categories with what you really spend (the line under Ready to assign, ~$X on rows). */
+  /** Budget: compare categories with what you really spend (the line under Unassigned, ~$X on rows). */
   realSpending: boolean;
   setRealSpending: (on: boolean) => void;
 }>()(

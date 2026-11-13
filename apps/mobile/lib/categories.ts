@@ -21,17 +21,17 @@ export function useCategories(month?: string): NamedCategory[] {
   );
 }
 
-/** "Groceries", "Ready to assign", "Transfer", or "Split (3)" for a transaction's category. */
+/** "Groceries", "Unassigned", "Transfer", or "Split (3)" for a transaction's category. */
 export function categoryText(cats: NamedCategory[], t: { id?: string; categoryId?: string; splits?: unknown[]; transferAccountId?: string; amount: number }, accountName: (id: string) => string): string {
   if (t.splits?.length) return `Split (${t.splits.length})`;
   if (t.id && isStartTxn({ id: t.id })) return t.amount < 0 && !t.categoryId ? "Starting balance (owed)" : "Starting balance";
-  // a withdrawal from an IRA or brokerage account: money in, ready to assign
-  // to or from an IRA or brokerage with no category: out of / into ready to assign (older transfers carry the account's old line)
+  // a withdrawal from an IRA or brokerage account: money in, Unassigned
+  // to or from an IRA or brokerage with no category: out of / into Unassigned (older transfers carry the account's old line)
   if ((t.categoryId === "ready" || t.categoryId?.startsWith("acct:")) && t.transferAccountId)
     return t.amount < 0
-      ? `Transfer · ${accountName(t.transferAccountId)} (from ready to assign)`
-      : `Withdrawal · ${accountName(t.transferAccountId)} (ready to assign)`;
-  if (t.categoryId === "ready") return "Ready to assign";
+      ? `Transfer · ${accountName(t.transferAccountId)} (from Unassigned)`
+      : `Withdrawal · ${accountName(t.transferAccountId)} (Unassigned)`;
+  if (t.categoryId === "ready") return "Unassigned";
   const c = t.categoryId ? cats.find((x) => x.key === t.categoryId)?.label : undefined;
   if (t.transferAccountId) return `Transfer · ${accountName(t.transferAccountId)}${c ? ` (${c})` : ""}`;
   return c ?? "Needs a category";

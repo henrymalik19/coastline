@@ -48,7 +48,7 @@ describe("transfers to accounts you don't budget", () => {
     p.budget.push({ id: "roth", name: "Roth IRA", amount: 0, inRetirement: false, accountId: "ira" });
     p.budgetPlan!.months = { "2026-11": { assigned: { "acct:chk": 100, "acct:sav": 200, "acct:ira": 300, "acct:brk": 40, rent: 50, cash: 5 } } };
     foldSavingsLines(p);
-    // the brokerage has no category: its money goes back to ready to assign
+    // the brokerage has no category: its money goes back to Unassigned
     expect(p.budgetPlan!.months["2026-11"]!.assigned).toEqual({ rent: 50, cash: 305, roth: 300 });
     foldSavingsLines(p);
     expect(p.budgetPlan!.months["2026-11"]!.assigned).toEqual({ rent: 50, cash: 305, roth: 300 });
@@ -70,7 +70,7 @@ describe("starting balances", () => {
     expect(startTxnFor(p, [start, spend], "chk", "2026-11-05")).toBeNull(); // only once
     applyRegisterBalances(p, [start, spend]);
     expect(p.accounts[0]!.balance).toBe(1_850);
-    // its money now reaches ready to assign through the starting balance, not the start cash
+    // its money now reaches Unassigned through the starting balance, not the start cash
     expect(liveBudget(p, [start, spend])!.startCash).toBe(0);
     expect(liveBudget(p, [])!.startCash).toBe(1_850);
   });

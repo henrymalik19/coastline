@@ -157,7 +157,7 @@ export default function ImportYnab() {
     </View>
   );
   const acctName = (id: string) => saved.accounts.find((a) => a.id === id)?.name ?? saved.debts.find((d) => d.id === id)?.name ?? "Account";
-  const catName = (id?: string) => (!id ? "No category" : id === "ready" ? "Ready to assign" : id === "cash" ? "Emergency fund" : saved.budget.find((b) => b.id === id)?.name ?? preview?.plan.budget.find((b) => b.id === id)?.name ?? "Category");
+  const catName = (id?: string) => (!id ? "No category" : id === "ready" ? "Unassigned" : id === "cash" ? "Emergency fund" : saved.budget.find((b) => b.id === id)?.name ?? preview?.plan.budget.find((b) => b.id === id)?.name ?? "Category");
   const day = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
   const mine = saved.budget.filter((b) => !b.accountId);
   const catOptions = [
@@ -208,6 +208,7 @@ export default function ImportYnab() {
           <Text style={[type.caption, { color: t.text3 }]}>Importing works in the web app for now.</Text>
         )}
         {error ? <Text role="alert" style={[type.label, { color: t.bad }]}>{error}</Text> : null}
+        <Text style={[type.caption, { color: t.text3 }]}>Coastline isn't affiliated with YNAB. YNAB is a trademark of its owner.</Text>
         {done ? (
           <View style={{ gap: space.sm }}>
             <Text role="status" style={[type.label, { color: t.good }]}>{done}</Text>
