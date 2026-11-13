@@ -7,6 +7,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { syncPaycheckLoans } from "./loans";
 import { freshPlan } from "./presets";
+import { canUndoImport, undoImportTxns, type ImportSnapshot } from "./importUndo";
 
 export { newId } from "./id";
 
@@ -29,6 +30,10 @@ export type AppState = {
    * and whose plan it is (the signed-in user, or the owner of a plan shared with them).
    */
   syncBase?: SyncBase;
+  /** The plan and transactions just before the last import from YNAB on this device, to undo it. */
+  lastImport?: ImportSnapshot;
+  /** When you last imported from YNAB here (ms), kept after the undo window closes. */
+  importedAt?: number;
   hydrated: boolean;
 
   /** Edit the plan with a mutating function on a copy. */
@@ -45,11 +50,13 @@ export type AppState = {
   mergeTxns: (incoming: Txn[]) => void;
   /** Bring in an import (from YNAB): the plan it made, and its transactions (same ids replace older copies). */
   importBudget: (plan: PlanState, txns: Txn[], replaced?: string[]) => void;
+  /** Put the plan and transactions back as they were just before the last import. */
+  undoImport: () => void;
   completeOnboarding: () => void;
   /** Restore a backup made by this app. Throws a readable error. */
   importJson: (text: string) => void;
   exportJson: () => string;
-  /** Clear the plan and go back through setup (check-ins are kept). */
+  /** Clear the plan and transactions and go back through setup (check-ins are kept). */
   startFresh: () => void;
 };
 
@@ -149,12 +156,22 @@ export const useStore = create<AppState>()(
       },
       importBudget: (plan, incoming, replaced = []) => {
         const stamp = now();
+        const snapshot: ImportSnapshot = { at: stamp, plan: structuredClone(get().plan), txns: get().txns };
         const by = new Map(get().txns.map((x) => [x.id, replaced.includes(x.id) ? { ...x, deleted: true, updatedAt: stamp } : x]));
         for (const t of incoming) by.set(t.id, t);
         const list = [...by.values()];
         const next = structuredClone(plan);
         applyRegisterBalances(next, list);
-        set({ plan: next, txns: list, updatedAt: now() });
+        set({ plan: next, txns: list, lastImport: snapshot, importedAt: stamp, updatedAt: now() });
+      },
+      undoImport: () => {
+        const snap = get().lastImport;
+        if (!snap) return;
+        const stamp = now();
+        const list = undoImportTxns(get().txns, snap.txns, stamp);
+        const plan = structuredClone(snap.plan);
+        applyRegisterBalances(plan, list);
+        set({ plan, txns: list, lastImport: undefined, importedAt: undefined, updatedAt: stamp });
       },
       completeOnboarding: () => set({ onboarded: true, updatedAt: now() }),
       importJson: (text) => {
@@ -176,13 +193,18 @@ export const useStore = create<AppState>()(
         const { plan, checkins, txns } = get();
         return JSON.stringify({ app: "coastfi", exportedAt: new Date().toISOString(), plan, checkins, txns: txns.filter((t) => !t.deleted) }, null, 2);
       },
-      startFresh: () => set({ plan: freshPlan(), onboarded: false, todoDone: {}, updatedAt: now() }),
+      startFresh: () => {
+        // transactions too (marked deleted, so it syncs); check-ins are kept
+        const stamp = now();
+        const txns = get().txns.map((x) => (x.deleted ? x : { ...x, deleted: true, updatedAt: stamp }));
+        set({ plan: freshPlan(), txns, onboarded: false, todoDone: {}, lastImport: undefined, importedAt: undefined, updatedAt: stamp });
+      },
     }),
     {
       name: "coastfi.app",
       version: 1,
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase }),
+      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, lastImport, importedAt }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, lastImport, importedAt }),
       // never trust stored data blindly: validate, and fall back to a blank plan
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState> & { isSampleData?: boolean; seenWelcome?: boolean };
@@ -197,6 +219,15 @@ export const useStore = create<AppState>()(
           txns: (() => { const r = z.array(TxnSchema).safeParse(p.txns ?? []); return r.success ? r.data : []; })(),
           todoDone: p.todoDone && typeof p.todoDone === "object" ? p.todoDone : {},
           updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : 0,
+          // the undo copy, while it can still be used (it's dropped once the window closes)
+          lastImport: (() => {
+            const li = p.lastImport;
+            if (!li || typeof li.at !== "number" || !canUndoImport(li, Date.now())) return undefined;
+            const lp = PlanStateSchema.safeParse(li.plan);
+            const lt = z.array(TxnSchema).safeParse(li.txns ?? []);
+            return lp.success && lt.success ? { at: li.at, plan: withProperties(lp.data), txns: lt.data } : undefined;
+          })(),
+          importedAt: typeof p.importedAt === "number" ? p.importedAt : undefined,
           syncBase: (() => {
             const b = p.syncBase;
             const bp = b && PlanStateSchema.safeParse(b.plan);

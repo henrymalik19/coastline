@@ -300,7 +300,7 @@ export function DateField({ value, onChange, label, width = 190 }: { value?: str
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** Month field: shows "Nov 2027" and opens a month + year picker. Stores "YYYY-MM". */
-export function MonthField({ value, onChange, label, width = 160 }: { value?: string; onChange: (v: string) => void; label: string; width?: number }) {
+export function MonthField({ value, onChange, label, width = 160, min, max }: { value?: string; onChange: (v: string) => void; label: string; width?: number; /** Earliest and latest month ("YYYY-MM"). */ min?: string; max?: string }) {
   const t = useTheme();
   const [picking, setPicking] = useState(false);
   const shown = value ? `${MONTH_SHORT[Number(value.slice(5, 7)) - 1]} ${value.slice(0, 4)}` : "Pick a month";
@@ -315,7 +315,7 @@ export function MonthField({ value, onChange, label, width = 160 }: { value?: st
         <Text style={[type.body, { color: value ? t.text : t.text3 }]}>{shown}</Text>
         <Icon name="calendar" size={18} color={t.text2} />
       </Pressable>
-      {picking ? <MonthModal visible title={label} value={value} onClose={() => setPicking(false)} onPick={onChange} /> : null}
+      {picking ? <MonthModal visible title={label} value={value} min={min} max={max} onClose={() => setPicking(false)} onPick={onChange} /> : null}
     </>
   );
 }

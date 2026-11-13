@@ -6,7 +6,7 @@
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { Button, InlineMoney, InlineSwitch, Segmented, Select, ToggleRow } from "../../../components/form";
+import { Button, InlineMoney, InlineSwitch, MonthField, Segmented, Select, ToggleRow } from "../../../components/form";
 import { Card, Divider, Screen } from "../../../components/ui";
 import { money } from "../../../lib/format";
 import { usePlan } from "../../../lib/plan";
@@ -17,6 +17,7 @@ import { buildImport, categoryKey, exportMonths, groupKey, parseYnab, readYnabZi
 import { sticky, stickyBottom } from "../../../lib/sticky";
 import { useLayout } from "../../../lib/layout";
 import { groupOrder } from "../../../lib/budgetOrder";
+import { canUndoImport, changedSinceImport, UNDO_DAYS } from "../../../lib/importUndo";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const ymText = (ym: string) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
@@ -56,6 +57,11 @@ export default function ImportYnab() {
   const { state, start } = usePlan();
   const saved = useStore((s) => s.plan);
   const importBudget = useStore((s) => s.importBudget);
+  const undoImport = useStore((s) => s.undoImport);
+  const lastImport = useStore((s) => s.lastImport);
+  const importedAt = useStore((s) => s.importedAt);
+  const [undoAsk, setUndoAsk] = useState(false);
+  const [undone, setUndone] = useState(false);
   const existing = useStore((s) => s.txns);
   const thisMonth = monthKey(start);
   const [data, setData] = useState<YnabData | null>(null);
@@ -124,10 +130,9 @@ export default function ImportYnab() {
   // default: the last 3 months, or all the export has if that is less
   const startPick = range || (months.includes(recentMonths(thisMonth, 2)[0]!) ? recentMonths(thisMonth, 2)[0]! : "all");
   const from = startPick === "all" ? null : startPick;
-  const monthOptions = [
-    ...months.map((m, i) => ({ value: m, label: `${ymText(m)} · ${i + 1} month${i ? "s" : ""}` })),
-    ...(months.length ? [{ value: "all", label: `Everything (from ${ymText(months[months.length - 1]!)})` }] : []),
-  ];
+  const oldest = months[months.length - 1];
+  const startMonth = from ?? oldest ?? thisMonth;
+  const monthCount = months.indexOf(startMonth) + 1;
   const opts = (k: string) => catOpts[k] ?? { inRetirement: true, essential: true };
   const preview = useMemo(
     () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, categories: catOpts, categoryMap: catMap, groupMap, amounts, removeEmpty, existing, keepBoth, newId: () => "preview" }) : null),
@@ -258,8 +263,45 @@ export default function ImportYnab() {
     </View>
   ) : null;
   const errorNote = error ? <Text role="alert" style={[type.label, { color: t.bad }]}>{error}</Text> : null;
-  const headCard = !loaded ? (
+  // already imported here: no second import; undo it for a while, then start over to bring it in again
+  const dayText = (ms: number) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const undoable = canUndoImport(lastImport, Date.now());
+  const changedSince = lastImport ? changedSinceImport(existing, lastImport) : 0;
+  const importedCard = importedAt && !data ? (
     <Card style={{ gap: space.sm }}>
+      <Text style={[type.heading, { color: t.text }]}>Imported from YNAB on {dayText(importedAt)}</Text>
+      {doneNote}
+      {undoable && lastImport ? (
+        <>
+          <Text style={[type.body, { color: t.text2 }]}>
+            Not what you expected? Undo puts your budget and transactions back to how they were just before, and you can import again. You can undo until {dayText(lastImport.at + UNDO_DAYS * 86_400_000)}.
+          </Text>
+          {undoAsk ? (
+            <View style={[styles.note, { borderColor: t.bad }]}>
+              <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Undo the import?</Text>
+              <Text style={[type.caption, { color: t.text2 }]}>
+                Everything it brought in is removed, on your other devices too.
+                {changedSince ? ` This also throws away the ${changedSince} transaction${changedSince === 1 ? "" : "s"} you added or changed since, and any budget changes.` : " Any budget changes you made since go too."}
+              </Text>
+              <View style={[styles.row, { flexWrap: "wrap" }]}>
+                <Button title="Yes, undo it" tone="danger" onPress={() => { undoImport(); setUndoAsk(false); setDone(""); setUndone(true); }} style={{ minHeight: 40 }} />
+                <Button title="Cancel" tone="ghost" onPress={() => setUndoAsk(false)} style={{ minHeight: 40 }} />
+              </View>
+            </View>
+          ) : (
+            <Button title="Undo import" onPress={() => setUndoAsk(true)} style={{ alignSelf: "flex-start" }} />
+          )}
+        </>
+      ) : (
+        <Text style={[type.caption, { color: t.text3 }]}>
+          To bring it in again, start over under Settings → Backup & restore. That clears your budget and transactions first.
+        </Text>
+      )}
+    </Card>
+  ) : null;
+  const headCard = importedCard ?? (!loaded ? (
+    <Card style={{ gap: space.sm }}>
+      {undone ? <Text role="status" style={[type.label, { color: t.good }]}>Undone. Your budget and transactions are back to how they were before the import.</Text> : null}
       <Text style={[type.body, { color: t.text2 }]}>
         In YNAB, open your budget's menu and choose Export budget. It downloads a zip; pick it here. You'll choose what comes in before anything changes.
       </Text>
@@ -283,14 +325,20 @@ export default function ImportYnab() {
       {errorNote}
       <View style={[styles.row, { flexWrap: "wrap", alignItems: "center", gap: space.md }]}>
         <Text style={[type.label, { color: t.text2 }]}>Bring in from</Text>
-        <Select label="Bring in from" value={monthOptions.some((o) => o.value === startPick) ? startPick : "all"} options={monthOptions} onChange={setRange} />
+        <MonthField label="Bring in from" value={startMonth} min={oldest} max={thisMonth} onChange={(m) => setRange(m === oldest ? "all" : m)} />
+        <Text style={[type.caption, { color: t.text3 }]}>{monthCount > 0 ? `${monthCount} month${monthCount === 1 ? "" : "s"}${startMonth === oldest ? " · everything in the export" : ""}` : ""}</Text>
+        {oldest && startMonth !== oldest ? (
+          <Pressable role="button" onPress={() => setRange("all")} hitSlop={6}>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Everything (from {ymText(oldest)})</Text>
+          </Pressable>
+        ) : null}
       </View>
       <Text style={[type.caption, { color: t.text3 }]}>
         Each account starts with its balance on the first day{from ? ` (${ymText(from)})` : ""}; transactions and what you assigned come in from then on.
       </Text>
       {doneNote}
     </Card>
-  );
+  ));
   const review = data && preview ? (
     <>
           <View onLayout={(e) => setTabsH(Math.round(e.nativeEvent.layout.height))} style={[styles.pinned, sticky(0, t.bg)]}>
@@ -438,7 +486,7 @@ export default function ImportYnab() {
           {preview.summary.categoriesRemoved} empty starter {preview.summary.categoriesRemoved === 1 ? "category" : "categories"} YNAB doesn't have will be removed.
         </Text>
       ) : null}
-      <Text style={[type.caption, { color: t.text3 }]}>Your other transactions stay. Importing again later replaces what came in this time.</Text>
+      <Text style={[type.caption, { color: t.text3 }]}>Your other transactions stay. You can undo the import for 30 days.</Text>
     </>
   ) : null;
   const confirmBox = preview ? (
@@ -541,6 +589,7 @@ const styles = StyleSheet.create({
   catRow: { gap: 2, paddingVertical: space.xs, borderTopWidth: StyleSheet.hairlineWidth },
   groupDot: { width: 8, height: 8, borderRadius: 4 },
   pill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1 },
+  note: { borderWidth: 1, borderRadius: 10, padding: space.md, gap: space.sm },
   group: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: space.md, paddingVertical: space.sm, marginTop: space.xs },
   columns: { flexDirection: "row", alignItems: "flex-start", gap: space.lg },
   side: { width: 360, gap: space.lg },

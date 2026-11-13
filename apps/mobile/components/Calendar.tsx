@@ -85,8 +85,8 @@ export function CalendarModal({
 
 /** Month + year picker: a year with ‹ › and the 12 months as a grid. Picks "YYYY-MM". */
 export function MonthModal({
-  visible, value, onPick, onClose, title,
-}: { visible: boolean; value?: string; onPick: (ym: string) => void; onClose: () => void; title: string }) {
+  visible, value, onPick, onClose, title, min, max,
+}: { visible: boolean; value?: string; onPick: (ym: string) => void; onClose: () => void; title: string; /** Earliest and latest month you can pick ("YYYY-MM"). */ min?: string; max?: string }) {
   const t = useTheme();
   const now = new Date();
   const [year, setYear] = useState(value ? Number(value.slice(0, 4)) : now.getFullYear());
@@ -98,9 +98,9 @@ export function MonthModal({
         <Pressable onPress={() => {}} style={[styles.sheet, { backgroundColor: t.surface, borderColor: t.border, gap: space.sm }]} role="dialog" aria-label={title}>
           <Text style={[type.label, { color: t.text3 }]}>{title}</Text>
           <View style={styles.head}>
-            <NavButton icon="back" label="Previous year" onPress={() => setYear((y) => y - 1)} />
+            <NavButton icon="back" label="Previous year" disabled={!!min && year <= Number(min.slice(0, 4))} onPress={() => setYear((y) => y - 1)} />
             <Text style={[type.heading, { color: t.text }]} aria-live="polite">{year}</Text>
-            <NavButton icon="chevron" label="Next year" onPress={() => setYear((y) => y + 1)} />
+            <NavButton icon="chevron" label="Next year" disabled={!!max && year >= Number(max.slice(0, 4))} onPress={() => setYear((y) => y + 1)} />
           </View>
           {rows.map((r, ri) => (
             <View key={ri} style={{ flexDirection: "row", gap: space.sm }}>
@@ -108,10 +108,13 @@ export function MonthModal({
                 const ym = `${year}-${String(mi + 1).padStart(2, "0")}`;
                 const on = ym === value;
                 const current = ym === thisMonth;
+                const off = (!!min && ym < min) || (!!max && ym > max);
                 return (
                   <Pressable
                     key={mi}
                     role="button"
+                    disabled={off}
+                    aria-disabled={off}
                     aria-selected={on}
                     accessibilityLabel={`${MONTHS[mi]} ${year}${current ? ", this month" : ""}`}
                     onPress={() => { onPick(ym); onClose(); }}
@@ -119,7 +122,7 @@ export function MonthModal({
                       const hovered = (st as typeof st & { hovered?: boolean }).hovered;
                       return [
                         styles.monthCell,
-                        { backgroundColor: on ? t.accent : st.pressed || hovered ? t.surface2 : "transparent", borderColor: current && !on ? t.accent : t.border },
+                        { backgroundColor: on ? t.accent : !off && (st.pressed || hovered) ? t.surface2 : "transparent", borderColor: current && !on ? t.accent : t.border, opacity: off ? 0.3 : 1 },
                       ];
                     }}
                   >
@@ -138,10 +141,10 @@ export function MonthModal({
   );
 }
 
-function NavButton({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+function NavButton({ icon, label, onPress, disabled }: { icon: IconName; label: string; onPress: () => void; disabled?: boolean }) {
   const t = useTheme();
   return (
-    <Pressable role="button" accessibilityLabel={label} onPress={onPress} hitSlop={6} style={({ pressed }) => [styles.nav, { backgroundColor: pressed ? t.surface2 : "transparent" }]}>
+    <Pressable role="button" accessibilityLabel={label} onPress={onPress} disabled={disabled} hitSlop={6} style={({ pressed }) => [styles.nav, { backgroundColor: pressed && !disabled ? t.surface2 : "transparent", opacity: disabled ? 0.3 : 1 }]}>
       <Icon name={icon} size={20} color={t.text2} />
     </Pressable>
   );

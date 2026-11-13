@@ -555,13 +555,13 @@ function DataSection() {
       {msg ? <Text role="status" style={[type.label, { color: msg.ok ? t.good : t.bad }]}>{msg.text}</Text> : null}
       <Group title="Start over">
         <View style={{ paddingVertical: space.sm, gap: space.md }}>
-          <Text style={[type.body, { color: t.text2 }]}>Clears your plan and takes you back through setup. Your check-in history is kept.</Text>
+          <Text style={[type.body, { color: t.text2 }]}>Clears your plan and transactions and takes you back through setup. Your check-in history is kept.</Text>
           <Button
             title="Start from scratch"
             tone="danger"
             style={{ alignSelf: "flex-start" }}
             onPress={async () => {
-              if (!(await confirm("Start from scratch?", "Your current plan will be cleared and you'll go through setup again. Download a backup first if you might want it back.", "Clear plan"))) return;
+              if (!(await confirm("Start from scratch?", "Your plan and transactions will be cleared (on your other devices too) and you'll go through setup again. Download a backup first if you might want it back.", "Clear plan"))) return;
               startFresh();
               router.replace("/onboarding");
             }}
