@@ -189,11 +189,27 @@ export default function ImportYnab() {
             <ToggleRow label="Remove my $0 categories YNAB doesn't have" hint="The starter categories you never filled in" value={removeEmpty} onChange={setRemoveEmpty} />
           </Card>
 
-          <Card style={{ gap: space.sm }}>
-            <Text style={[type.body, { color: t.text }]}>
-              {preview.summary.transactions} transactions · {preview.summary.categoriesAdded} new categories, {preview.summary.categoriesUpdated} matched
-              {preview.summary.categoriesRemoved ? `, ${preview.summary.categoriesRemoved} empty ones removed` : ""} · {preview.summary.accountsAdded} new accounts · {preview.summary.months} months of assignments
-            </Text>
+          <Card style={{ gap: space.md }}>
+            <Text style={[type.heading, { color: t.text }]}>What comes in</Text>
+            <View style={styles.stats}>
+              {[
+                { n: preview.summary.transactions, label: "Transactions", sub: "with starting balances" },
+                { n: preview.summary.categoriesAdded + preview.summary.categoriesUpdated, label: "Categories", sub: `${preview.summary.categoriesAdded} new · ${preview.summary.categoriesUpdated} matched` },
+                { n: preview.summary.accountsAdded, label: "New accounts", sub: "the rest are matched or left out" },
+                { n: preview.summary.months, label: preview.summary.months === 1 ? "Month assigned" : "Months assigned", sub: "what you gave each category" },
+              ].map((s) => (
+                <View key={s.label} style={[styles.stat, { backgroundColor: t.surface2 }]}>
+                  <Text style={[type.title, { color: t.text, fontVariant: ["tabular-nums"] }]}>{s.n}</Text>
+                  <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{s.label}</Text>
+                  <Text style={[type.caption, { color: t.text3 }]}>{s.sub}</Text>
+                </View>
+              ))}
+            </View>
+            {preview.summary.categoriesRemoved ? (
+              <Text style={[type.caption, { color: t.text2 }]}>
+                {preview.summary.categoriesRemoved} empty starter {preview.summary.categoriesRemoved === 1 ? "category" : "categories"} YNAB doesn't have will be removed.
+              </Text>
+            ) : null}
             <Text style={[type.caption, { color: t.text3 }]}>Transactions you added here yourself stay. Importing again later replaces what came in this time.</Text>
             <Button title="Import" tone="primary" onPress={run} style={{ alignSelf: "flex-start", minHeight: 44 }} />
           </Card>
@@ -206,4 +222,6 @@ export default function ImportYnab() {
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: space.sm },
   col: { width: 84, alignItems: "center", textAlign: "center" },
+  stats: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  stat: { flexGrow: 1, flexBasis: 140, borderRadius: 10, padding: space.md, gap: 2 },
 });

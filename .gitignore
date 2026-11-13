@@ -9,3 +9,6 @@ dist/
 
 .vercel
 .env*
+
+# local test files (sample imports, exports)
+.local/
