@@ -522,7 +522,6 @@ export default function Budget() {
 
   return (
     <Screen title="Budget" subtitle={compact ? undefined : "Plan where your money goes"}>
-      {!view.started || tab === "categories" ? monthBar : null}
       {view.started ? (
       <View onLayout={(e) => setBarH(Math.round(e.nativeEvent.layout.height))} style={[styles.toolbar, sticky(0, t.bg)]}>
             <View style={{ flexGrow: 1, flexShrink: 1, maxWidth: 440 }}>
@@ -542,6 +541,7 @@ export default function Budget() {
             )}
       </View>
       ) : null}
+      {!view.started || tab === "categories" ? monthBar : null}
       {view.started && tab === "transactions" ? (
         <TransactionsList key={(acctParam ?? "all") + (needsParam ?? "")} month={thisMonth} account={acctParam} onlyNeedsCategory={needsParam === "1"} stickyTop={barH} />
       ) : view.started && tab === "accounts" ? (
