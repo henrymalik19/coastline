@@ -5,7 +5,7 @@
  */
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, InlineSwitch, Segmented, Select, ToggleRow } from "../../../components/form";
 import { Card, Divider, Screen } from "../../../components/ui";
 import { confirm } from "../../../lib/confirm";
@@ -17,6 +17,18 @@ import { space, type, useTheme } from "../../../lib/theme";
 import { buildImport, categoryKey, parseYnab, readYnabZip, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabData } from "../../../lib/ynab";
 
 type Range = "3" | "12" | "all";
+
+/** A YNAB account that's closed or empty: no balance and nothing in it since `since`. */
+const quietAccount = (d: YnabData, name: string, balance: number, since: string | null) =>
+  Math.abs(balance) < 0.005 && !d.txns.some((t) => t.account === name && (!since || t.date.slice(0, 7) >= since));
+/** A YNAB category you haven't used lately: nothing assigned and nothing spent since `since`. */
+const unusedCategory = (d: YnabData, c: { group: string; name: string; average: number }, since: string | null) => {
+  const same = (g: string, n: string) => categoryKey(g, n) === categoryKey(c.group, c.name);
+  const recent = (m: string) => !since || m >= since;
+  return c.average === 0 &&
+    !d.assigned.some((a) => same(a.group, a.category) && recent(a.month) && a.assigned > 0) &&
+    !d.txns.some((t) => recent(t.date.slice(0, 7)) && (same(t.group, t.category) || (t.splits ?? []).some((x) => same(x.group, x.category))));
+};
 const KIND_LABEL = { cash: "Checking or savings", card: "Credit card", invest: "Investment (tracking)", loan: "Loan (tracking)" } as const;
 
 /** Read the picked file: YNAB's zip, or its Register CSV (with its Plan CSV if picked too). */
@@ -50,6 +62,9 @@ export default function ImportYnab() {
   const [removeEmpty, setRemoveEmpty] = useState(true);
   const [catMap, setCatMap] = useState<Record<string, CategoryChoice>>({});
   const [keepBoth, setKeepBoth] = useState<string[]>([]);
+  const [tab, setTab] = useState<"accounts" | "categories" | "matches">("accounts");
+  const [showQuiet, setShowQuiet] = useState(false);
+  const [showUnused, setShowUnused] = useState(false);
 
   const pick = () => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
@@ -64,8 +79,16 @@ export default function ImportYnab() {
         const d = await readFiles(input.files!);
         if (!d.txns.length) throw new Error("No transactions in that file.");
         setData(d);
-        setChoices(Object.fromEntries(ynabAccounts(d).map((a) => [a.name, suggestChoice(state, a)])));
-        setCatMap(Object.fromEntries(ynabCategories(d, recentMonths(thisMonth)).map((c) => [categoryKey(c.group, c.name), suggestCategory(state, c)])));
+        const since = recentMonths(thisMonth, 2)[0]!;
+        setChoices(Object.fromEntries(ynabAccounts(d).map((a) => {
+          const sug = suggestChoice(state, a);
+          return [a.name, sug.action === "add" && quietAccount(d, a.name, a.balance, since) ? { action: "skip" } : sug];
+        })));
+        setCatMap(Object.fromEntries(ynabCategories(d, recentMonths(thisMonth)).map((c) => {
+          const sug = suggestCategory(state, c);
+          return [categoryKey(c.group, c.name), sug.action === "new" && unusedCategory(d, c, since) ? { action: "skip" } : sug];
+        })));
+        setTab("accounts");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Couldn't read that file.");
       }
@@ -112,7 +135,23 @@ export default function ImportYnab() {
     setData(null);
   };
 
-  const groups = [...new Set(categories.map((c) => c.group))];
+  const since = from;
+  const quietAccounts = data ? accounts.filter((a) => quietAccount(data, a.name, a.balance, since)) : [];
+  const activeAccounts = accounts.filter((a) => !quietAccounts.includes(a));
+  const unusedCats = data ? categories.filter((c) => unusedCategory(data, c, since)) : [];
+  const activeCats = categories.filter((c) => !unusedCats.includes(c));
+  const accountRow = (a: YnabAccount, i: number) => (
+    <View key={a.name} style={{ gap: 4 }}>
+      {i > 0 ? <Divider /> : null}
+      <View style={styles.row}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[type.body, { color: choices[a.name]?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]} numberOfLines={1}>{a.name}</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>{KIND_LABEL[a.kind]} · {a.kind === "card" || a.kind === "loan" ? `owe ${money(Math.max(0, -a.balance))}` : money(a.balance)}</Text>
+        </View>
+        <Select label={`${a.name}: what it is here`} value={valueOf(choices[a.name])} options={options(a)} onChange={(v) => setChoice(a.name, v)} />
+      </View>
+    </View>
+  );
   const acctName = (id: string) => saved.accounts.find((a) => a.id === id)?.name ?? saved.debts.find((d) => d.id === id)?.name ?? "Account";
   const catName = (id?: string) => (!id ? "No category" : id === "ready" ? "Ready to assign" : id === "cash" ? "Emergency fund" : saved.budget.find((b) => b.id === id)?.name ?? preview?.plan.budget.find((b) => b.id === id)?.name ?? "Category");
   const day = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
@@ -125,6 +164,34 @@ export default function ImportYnab() {
   ];
   const catValue = (c: CategoryChoice | undefined) => (!c ? "new" : c.action === "match" ? "match:" + c.id : c.action);
   const setCat = (k: string, v: string) => setCatMap((m) => ({ ...m, [k]: v.startsWith("match:") ? { action: "match", id: v.slice(6) } : { action: v as "new" | "skip" } }));
+  const categoryRow = (c: (typeof categories)[number]) => {
+    const k = categoryKey(c.group, c.name);
+    const o = opts(k);
+    const ch = catMap[k];
+    // left out, or into the Emergency fund: it isn't spending, so the switches don't apply
+    const spending = !ch || ch.action === "new" || (ch.action === "match" && ch.id !== "cash");
+    return (
+      <View key={k} style={[styles.catRow, { borderTopColor: t.border }]}>
+        <View style={styles.row}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[type.body, { color: ch?.action === "skip" ? t.text3 : t.text }]} numberOfLines={1}>{c.name}</Text>
+            <Text style={[type.caption, { color: t.text3 }]}>{money(c.average, { whole: true })}/mo{c.group ? ` · ${c.group}` : ""}</Text>
+          </View>
+          {spending ? (
+            <>
+              <View style={styles.col}><InlineSwitch label={`${c.name}: still paid after retiring`} value={o.inRetirement} onChange={(v) => setCatOpts((s2) => ({ ...s2, [k]: { ...o, inRetirement: v } }))} /></View>
+              <View style={styles.col}><InlineSwitch label={`${c.name}: essential`} value={o.essential} onChange={(v) => setCatOpts((s2) => ({ ...s2, [k]: { ...o, essential: v } }))} /></View>
+            </>
+          ) : (
+            <Text style={[type.caption, { color: t.text3, width: 84 * 2 + space.sm, textAlign: "center" }]}>{ch?.action === "skip" ? "Not brought in" : "Savings, not spending"}</Text>
+          )}
+        </View>
+        <View style={{ alignSelf: "flex-start" }}>
+          <Select plain label={`${c.name}: where it goes`} value={catValue(ch)} options={catOptions} onChange={(v) => setCat(k, v)} />
+        </View>
+      </View>
+    );
+  };
   return (
     <Screen title="Import from YNAB" back={() => router.navigate("/budget")} narrow>
       <Card style={{ gap: space.sm }}>
@@ -155,73 +222,71 @@ export default function ImportYnab() {
             </Text>
           </Card>
 
-          <Card style={{ gap: space.sm }}>
-            <Text style={[type.heading, { color: t.text }]}>Accounts</Text>
-            {accounts.map((a, i) => (
-              <View key={a.name} style={{ gap: 4 }}>
-                {i > 0 ? <Divider /> : null}
-                <View style={styles.row}>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={[type.body, { color: t.text, fontWeight: "600" }]} numberOfLines={1}>{a.name}</Text>
-                    <Text style={[type.caption, { color: t.text3 }]}>{KIND_LABEL[a.kind]} · {a.kind === "card" || a.kind === "loan" ? `owe ${money(Math.max(0, -a.balance))}` : money(a.balance)}</Text>
-                  </View>
-                  <Select label={`${a.name}: what it is here`} value={valueOf(choices[a.name])} options={options(a)} onChange={(v) => setChoice(a.name, v)} />
-                </View>
-              </View>
-            ))}
-            <Text style={[type.caption, { color: t.text3 }]}>Tracking accounts (investments, loans) bring their balance, not their transactions.</Text>
-          </Card>
+          <Segmented
+            label="What to review"
+            options={[
+              { value: "accounts", label: `Accounts (${activeAccounts.length})` },
+              { value: "categories", label: `Categories (${activeCats.length})` },
+              ...(preview.matches.length ? [{ value: "matches" as const, label: `Matches (${preview.matches.length})` }] : []),
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
 
-          <Card style={{ gap: space.sm }}>
-            <Text style={[type.heading, { color: t.text }]}>Categories</Text>
-            <Text style={[type.caption, { color: t.text3 }]}>
-              Each comes in with what you assigned a month lately: as a new category, into one of yours, or not at all. Turn off After retiring for what you won't pay then (daycare, a car payment), and Essential for what you'd cut in a money emergency.
-            </Text>
-            <View style={styles.row}>
-              <Text style={[type.caption, { color: t.text3, flex: 1 }]} />
-              <Text style={[type.caption, styles.col, { color: t.text3 }]}>After retiring</Text>
-              <Text style={[type.caption, styles.col, { color: t.text3 }]}>Essential</Text>
-            </View>
-            {groups.map((g) => (
-              <View key={g} style={{ gap: 2 }}>
-                <Text style={[type.overline, { color: t.text2, marginTop: space.xs }]}>{g || "No group"}</Text>
-                {categories.filter((c) => c.group === g).map((c) => {
-                  const k = categoryKey(c.group, c.name);
-                  const o = opts(k);
-                  const ch = catMap[k];
-                  // left out, or into the Emergency fund: it isn't spending, so the switches don't apply
-                  const spending = !ch || ch.action === "new" || (ch.action === "match" && ch.id !== "cash");
-                  return (
-                    <View key={k} style={[styles.catRow, { borderTopColor: t.border }]}>
-                      <View style={styles.row}>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={[type.body, { color: ch?.action === "skip" ? t.text3 : t.text }]} numberOfLines={1}>{c.name}</Text>
-                          <Text style={[type.caption, { color: t.text3 }]}>{money(c.average, { whole: true })}/mo</Text>
-                        </View>
-                        {spending ? (
-                          <>
-                            <View style={styles.col}><InlineSwitch label={`${c.name}: still paid after retiring`} value={o.inRetirement} onChange={(v) => setCatOpts((s) => ({ ...s, [k]: { ...o, inRetirement: v } }))} /></View>
-                            <View style={styles.col}><InlineSwitch label={`${c.name}: essential`} value={o.essential} onChange={(v) => setCatOpts((s) => ({ ...s, [k]: { ...o, essential: v } }))} /></View>
-                          </>
-                        ) : (
-                          <Text style={[type.caption, { color: t.text3, width: 84 * 2 + space.sm, textAlign: "center" }]}>{ch?.action === "skip" ? "Not brought in" : "Savings, not spending"}</Text>
-                        )}
-                      </View>
-                      <View style={{ alignSelf: "flex-start" }}>
-                        <Select plain label={`${c.name}: where it goes`} value={catValue(ch)} options={catOptions} onChange={(v) => setCat(k, v)} />
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            ))}
-            <Divider />
-            <ToggleRow label="Remove my $0 categories YNAB doesn't have" hint="The starter categories you never filled in" value={removeEmpty} onChange={setRemoveEmpty} />
-          </Card>
-
-          {preview.matches.length ? (
+          {tab === "accounts" ? (
             <Card style={{ gap: space.sm }}>
-              <Text style={[type.heading, { color: t.text }]}>Transactions you already have</Text>
+              <Text style={[type.caption, { color: t.text3 }]}>
+                What each of your YNAB accounts is here. Tracking accounts (investments, loans) bring their balance, not their transactions.
+              </Text>
+              {activeAccounts.map((a, i) => accountRow(a, i))}
+              {quietAccounts.length ? (
+                <>
+                  <Divider />
+                  <Pressable role="button" aria-expanded={showQuiet} onPress={() => setShowQuiet((v) => !v)} hitSlop={6}>
+                    <Text style={[type.label, { color: t.accent, fontWeight: "700" }]}>
+                      {showQuiet ? "Hide" : "Show"} {quietAccounts.length} closed or empty {quietAccounts.length === 1 ? "account" : "accounts"} (left out)
+                    </Text>
+                  </Pressable>
+                  {showQuiet ? quietAccounts.map((a, i) => accountRow(a, i)) : null}
+                </>
+              ) : null}
+            </Card>
+          ) : null}
+
+          {tab === "categories" ? (
+            <Card style={{ gap: space.sm }}>
+              <Text style={[type.caption, { color: t.text3 }]}>
+                Each comes in with what you assigned a month lately: as a new category, into one of yours, or not at all. Turn off After retiring for what you won't pay then (daycare, a car payment), and Essential for what you'd cut in a money emergency.
+              </Text>
+              <View style={styles.row}>
+                <Text style={[type.caption, { color: t.text3, flex: 1 }]} />
+                <Text style={[type.caption, styles.col, { color: t.text3 }]}>After retiring</Text>
+                <Text style={[type.caption, styles.col, { color: t.text3 }]}>Essential</Text>
+              </View>
+              {[...new Set(activeCats.map((c) => c.group))].map((g) => (
+                <View key={g} style={{ gap: 2 }}>
+                  <Text style={[type.overline, { color: t.text2, marginTop: space.xs }]}>{g || "No group"}</Text>
+                  {activeCats.filter((c) => c.group === g).map(categoryRow)}
+                </View>
+              ))}
+              {unusedCats.length ? (
+                <>
+                  <Divider />
+                  <Pressable role="button" aria-expanded={showUnused} onPress={() => setShowUnused((v) => !v)} hitSlop={6}>
+                    <Text style={[type.label, { color: t.accent, fontWeight: "700" }]}>
+                      {showUnused ? "Hide" : "Show"} {unusedCats.length} {unusedCats.length === 1 ? "category" : "categories"} you haven't used lately (left out)
+                    </Text>
+                  </Pressable>
+                  {showUnused ? unusedCats.map(categoryRow) : null}
+                </>
+              ) : null}
+              <Divider />
+              <ToggleRow label="Remove my $0 categories YNAB doesn't have" hint="The starter categories you never filled in" value={removeEmpty} onChange={setRemoveEmpty} />
+            </Card>
+          ) : null}
+
+          {tab === "matches" && preview.matches.length ? (
+            <Card style={{ gap: space.sm }}>
               <Text style={[type.caption, { color: t.text3 }]}>
                 These you added here look like ones in YNAB (same account and amount, dates within 3 days). Same transaction: YNAB's copy replaces yours. Off: both stay.
               </Text>
