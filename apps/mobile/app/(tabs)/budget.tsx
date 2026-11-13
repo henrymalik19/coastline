@@ -280,12 +280,15 @@ export default function Budget() {
             <FormRow label="Name">
               <InlineText label="Category name" placeholder="e.g. Groceries" value={it.name} onChange={(v) => editItem(it.id, { name: v })} />
             </FormRow>
-            <FormRow label="Money moved to" hint={linkedTo ? "Investing, not spending: your plan counts it as your contribution" : "Pick an account if this is money you invest"}>
+            <FormRow
+              label="Spending or investing?"
+              hint={linkedTo ? `Money you move into ${linkedTo.name.trim() || "the account"}: it counts as investing, not spending, so it doesn't raise your retirement number` : "Spending. If this is money you put into an account (an IRA, a brokerage), pick the account"}
+            >
               <Select
                 plain
-                label="Money moved to"
+                label="Spending or investing"
                 value={linkedTo?.id ?? ""}
-                options={[{ value: "", label: "Nothing (spending)" }, ...linkable.map((a) => ({ value: a.id, label: a.name.trim() || "Account" }))]}
+                options={[{ value: "", label: "Spending" }, ...linkable.map((a) => ({ value: a.id, label: `Investing in ${a.name.trim() || "account"}` }))]}
                 onChange={(v) => linkItem(it.id, v)}
               />
             </FormRow>
@@ -416,33 +419,52 @@ export default function Budget() {
               <Text style={[type.overline, { color: t.text3 }]}>{nameOf(month)}</Text>
               {/* this month's money: what you give it, and buttons that change that */}
               <FormList>
-                <FormRow label="Assigned" hint={c.target > 0.5 ? `Plan: ${money(c.target)}` : undefined}>
+                <FormRow
+                  label="Assigned"
+                  hint={
+                    c.target > 0.5 || l.available < -0.005 ? (
+                      <>
+                        {c.target > 0.5 ? `Plan: ${money(c.target, { whole: true })}` : ""}
+                        {c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5 ? (
+                          <>
+                            {" · "}
+                            <Text role="button" onPress={() => setAssigned(c.key, Math.round(c.target * 100) / 100)} style={{ color: t.accent, fontWeight: "700" }}>Assign it</Text>
+                          </>
+                        ) : null}
+                        {l.available < -0.005 ? (
+                          <>
+                            {c.target > 0.5 ? " · " : ""}
+                            <Text role="button" onPress={() => setAssigned(c.key, l.assigned - l.available)} style={{ color: t.accent, fontWeight: "700" }}>Cover {money(-l.available)}</Text>
+                          </>
+                        ) : null}
+                      </>
+                    ) : undefined
+                  }
+                >
                   <InlineMoney label={`${label(c)} assigned in ${nameOf(month)}`} value={l.assigned} onChange={(v) => setAssigned(c.key, v)} />
                 </FormRow>
               </FormList>
-              {(c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5) || l.available < -0.005 ? (
-                <View style={styles.chips}>
-                  {c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5 ? <Chip title={`Assign ${money(c.target, { whole: true })} this month`} tone="accent" onPress={() => setAssigned(c.key, Math.round(c.target * 100) / 100)} /> : null}
-                  {l.available < -0.005 ? <Chip title={`Cover ${money(-l.available)}`} tone="accent" icon="check" onPress={() => setAssigned(c.key, l.assigned - l.available)} /> : null}
-                </View>
-              ) : null}
-              {/* what went out, what you really spend, and buttons that change the plan amount */}
+              {/* what went out, and what you really spend (with links to change or keep the plan amount) */}
               <FormList>
                 <FormRow label={c.moves ? "Paid" : "Spent"} hint={c.moves ? "From the payment or transfer you record" : "From transactions"}>
                   <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(l.spent)}</Text>
                 </FormRow>
                 {realBy.has(c.key) ? (
-                  <FormRow label="You really spend" hint={`About this a month (${realSpan}). Plan: ${money(realBy.get(c.key)!.plan, { whole: true })}`}>
+                  <FormRow
+                    label="You really spend"
+                    hint={
+                      <>
+                        {`About this a month (${realSpan}) · `}
+                        <Text role="button" onPress={() => editItem(c.key, { amount: realBy.get(c.key)!.avg, keptAt: undefined })} style={{ color: t.accent, fontWeight: "700" }}>Use as plan</Text>
+                        {" · "}
+                        <Text role="button" onPress={() => editItem(c.key, { keptAt: realBy.get(c.key)!.avg })} style={{ color: t.accent, fontWeight: "700" }}>Keep {money(realBy.get(c.key)!.plan, { whole: true })}</Text>
+                      </>
+                    }
+                  >
                     <Text style={[type.body, { color: t.warn, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(realBy.get(c.key)!.avg, { whole: true })}</Text>
                   </FormRow>
                 ) : null}
               </FormList>
-              {realBy.has(c.key) ? (
-                <View style={styles.chips}>
-                  <Chip title={`Change plan to ${money(realBy.get(c.key)!.avg, { whole: true })}`} onPress={() => editItem(c.key, { amount: realBy.get(c.key)!.avg, keptAt: undefined })} />
-                  <Chip title={`Keep plan at ${money(realBy.get(c.key)!.plan, { whole: true })}`} onPress={() => editItem(c.key, { keptAt: realBy.get(c.key)!.avg })} />
-                </View>
-              ) : null}
               <FormList>
                 <FormRow label="Available" hint={l.carried > 0.5 ? `${money(l.carried)} carried over` : (l.funded ?? 0) > 0.5 ? `+${money(l.funded ?? 0)} from card spending` : undefined}>
                   <Text style={[type.body, { color: l.available < -0.005 ? t.bad : l.available > 0.5 ? t.good : t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(l.available)}</Text>

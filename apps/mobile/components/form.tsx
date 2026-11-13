@@ -472,7 +472,7 @@ export function FormList({ children }: { children: ReactNode }) {
 }
 
 /** One row: the label on the left (with an optional hint under it), the value or control on the right. */
-export function FormRow({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function FormRow({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   const t = useTheme();
   return (
     <View style={styles.formRow}>
