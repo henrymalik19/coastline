@@ -2,7 +2,7 @@ import { budgetView, registerBalance, type PlanState } from "@coastfi/engine";
 import { describe, expect, it } from "vitest";
 import { freshPlan } from "./presets";
 import { cardMap } from "./register";
-import { buildImport, categoryKey, groupKey, dateParser, money, monthOf, parseCsv, parseYnab, suggestChoice, ynabAccounts, ynabCategories } from "./ynab";
+import { buildImport, categoryKey, groupKey, exportMonths, dateParser, money, monthOf, parseCsv, parseYnab, suggestChoice, ynabAccounts, ynabCategories } from "./ynab";
 
 // a small YNAB export, in the shape YNAB writes it (newest first, US dates, $ amounts)
 const REGISTER = `﻿"Account","Flag","Date","Payee","Category Group/Category","Category Group","Category","Memo","Outflow","Inflow","Cleared"
@@ -96,6 +96,19 @@ describe("importing into the plan", () => {
     };
     return { plan, d, opts };
   };
+
+  it("uses the amount a month you set in place of YNAB's average", () => {
+    const { plan, d, opts } = setup();
+    const r = buildImport(plan, d, { ...opts, amounts: { [categoryKey("Everyday", "Groceries")]: 725 } });
+    expect(r.plan.budget.find((b) => b.name === "Groceries")?.amount).toBe(725);
+  });
+
+  it("lists the export's months, newest first", () => {
+    const { d } = setup();
+    const m = exportMonths(d, "2026-11");
+    expect(m[0]).toBe("2026-11");
+    expect([...m].sort().reverse()).toEqual(m);
+  });
 
   it("puts a YNAB group's categories into the group you pick", () => {
     const { plan, d, opts } = setup();

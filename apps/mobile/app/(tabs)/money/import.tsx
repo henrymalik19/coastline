@@ -6,19 +6,20 @@
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { Button, InlineSwitch, Segmented, Select, ToggleRow } from "../../../components/form";
+import { Button, InlineMoney, InlineSwitch, Segmented, Select, ToggleRow } from "../../../components/form";
 import { Card, Divider, Screen } from "../../../components/ui";
 import { money } from "../../../lib/format";
 import { usePlan } from "../../../lib/plan";
 import { isCard } from "../../../lib/register";
 import { monthKey, newId, useStore } from "../../../lib/store";
 import { space, type, useTheme } from "../../../lib/theme";
-import { buildImport, categoryKey, groupKey, parseYnab, readYnabZip, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabData } from "../../../lib/ynab";
+import { buildImport, categoryKey, exportMonths, groupKey, parseYnab, readYnabZip, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabData } from "../../../lib/ynab";
 import { sticky, stickyBottom } from "../../../lib/sticky";
 import { useLayout } from "../../../lib/layout";
 import { groupOrder } from "../../../lib/budgetOrder";
 
-type Range = "3" | "12" | "all";
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const ymText = (ym: string) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
 
 /** A YNAB account that's closed or empty: no balance and nothing in it since `since`. */
 const quietAccount = (d: YnabData, name: string, balance: number, since: string | null) =>
@@ -62,7 +63,9 @@ export default function ImportYnab() {
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
   const [doneNeeds, setDoneNeeds] = useState(0);
-  const [range, setRange] = useState<Range>("3");
+  // the first month to bring in ("all" = everything); default: the last 3
+  const [range, setRange] = useState<string>("");
+  const [amounts, setAmounts] = useState<Record<string, number>>({});
   const [choices, setChoices] = useState<Record<string, AccountChoice>>({});
   const [catOpts, setCatOpts] = useState<Record<string, { inRetirement: boolean; essential: boolean }>>({});
   const [removeEmpty, setRemoveEmpty] = useState(true);
@@ -117,11 +120,18 @@ export default function ImportYnab() {
 
   const accounts = useMemo(() => (data ? ynabAccounts(data) : []), [data]);
   const categories = useMemo(() => (data ? ynabCategories(data, recentMonths(thisMonth)) : []), [data, thisMonth]);
-  const from = range === "all" ? null : recentMonths(thisMonth, range === "3" ? 2 : 11)[0]!;
+  const months = useMemo(() => (data ? exportMonths(data, thisMonth) : []), [data, thisMonth]);
+  // default: the last 3 months, or all the export has if that is less
+  const startPick = range || (months.includes(recentMonths(thisMonth, 2)[0]!) ? recentMonths(thisMonth, 2)[0]! : "all");
+  const from = startPick === "all" ? null : startPick;
+  const monthOptions = [
+    ...months.map((m, i) => ({ value: m, label: `${ymText(m)} · ${i + 1} month${i ? "s" : ""}` })),
+    ...(months.length ? [{ value: "all", label: `Everything (from ${ymText(months[months.length - 1]!)})` }] : []),
+  ];
   const opts = (k: string) => catOpts[k] ?? { inRetirement: true, essential: true };
   const preview = useMemo(
-    () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, categories: catOpts, categoryMap: catMap, groupMap, removeEmpty, existing, keepBoth, newId: () => "preview" }) : null),
-    [data, saved, from, thisMonth, choices, catOpts, catMap, groupMap, removeEmpty, existing, keepBoth],
+    () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, categories: catOpts, categoryMap: catMap, groupMap, amounts, removeEmpty, existing, keepBoth, newId: () => "preview" }) : null),
+    [data, saved, from, thisMonth, choices, catOpts, catMap, groupMap, amounts, removeEmpty, existing, keepBoth],
   );
 
   const options = (a: YnabAccount) => {
@@ -145,7 +155,7 @@ export default function ImportYnab() {
   const run = () => {
     if (!data) return;
     setConfirming(false);
-    const r = buildImport(saved, data, { from, thisMonth, accounts: choices, categories: catOpts, categoryMap: catMap, groupMap, removeEmpty, existing, keepBoth, newId });
+    const r = buildImport(saved, data, { from, thisMonth, accounts: choices, categories: catOpts, categoryMap: catMap, groupMap, amounts, removeEmpty, existing, keepBoth, newId });
     importBudget(r.plan, r.txns, r.replaced);
     setDone(`Imported ${r.summary.transactions} transactions and ${r.summary.categoriesAdded + r.summary.categoriesUpdated} categories.`);
     setDoneNeeds(r.summary.needsCategoryFromYnab + r.summary.needsCategoryLeftOut);
@@ -194,13 +204,24 @@ export default function ImportYnab() {
     const ch = catMap[k];
     // left out, or into the Emergency fund: it isn't spending, so the switches don't apply
     const spending = !ch || ch.action === "new" || (ch.action === "match" && ch.id !== "cash");
+    const perMonth = ch?.action !== "skip" ? (
+      <View style={[styles.row, { gap: 4 }, wide ? { width: 190 } : null, wide ? { justifyContent: "flex-end" } : null]}>
+        <InlineMoney label={`${c.name}: a month`} value={amounts[k] ?? c.average} onChange={(v) => setAmounts((m) => ({ ...m, [k]: v }))} />
+        <Text style={[type.caption, { color: t.text3 }]}>/mo</Text>
+      </View>
+    ) : null;
     return (
       <View key={k} style={[styles.catRow, { borderTopColor: t.border }]}>
         <View style={styles.row}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[type.body, { color: ch?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]} numberOfLines={1}>{c.name}</Text>
-            <Text style={[type.caption, { color: t.text3 }]}>{money(c.average, { whole: true })}/mo</Text>
+            {amounts[k] !== undefined && Math.abs(amounts[k]! - c.average) > 0.5 ? (
+              <Pressable onPress={() => setAmounts(({ [k]: _, ...m }) => m)} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+                <Text style={[type.caption, { color: t.accent }]}>Reset to YNAB's {money(c.average, { whole: true })}</Text>
+              </Pressable>
+            ) : null}
           </View>
+          {wide ? perMonth : null}
           {wide ? (
             <View style={{ width: 220 }}>
               <Select plain label={`${c.name}: where it goes`} value={catValue(ch)} options={catOptions} onChange={(v) => setCat(k, v)} />
@@ -216,7 +237,8 @@ export default function ImportYnab() {
           )}
         </View>
         {!wide ? (
-          <View style={{ alignSelf: "flex-start" }}>
+          <View style={{ gap: 4, alignItems: "flex-start" }}>
+            {perMonth}
             <Select plain label={`${c.name}: where it goes`} value={catValue(ch)} options={catOptions} onChange={(v) => setCat(k, v)} />
           </View>
         ) : null}
@@ -260,13 +282,11 @@ export default function ImportYnab() {
       </View>
       {errorNote}
       <View style={[styles.row, { flexWrap: "wrap", alignItems: "center", gap: space.md }]}>
-        <Text style={[type.label, { color: t.text2 }]}>Months to bring in</Text>
-        <View style={{ flexGrow: 1, maxWidth: 420 }}>
-          <Segmented label="Months to bring in" options={[{ value: "3", label: "Last 3 months" }, { value: "12", label: "Last 12 months" }, { value: "all", label: "Everything" }]} value={range} onChange={setRange} />
-        </View>
+        <Text style={[type.label, { color: t.text2 }]}>Bring in from</Text>
+        <Select label="Bring in from" value={monthOptions.some((o) => o.value === startPick) ? startPick : "all"} options={monthOptions} onChange={setRange} />
       </View>
       <Text style={[type.caption, { color: t.text3 }]}>
-        Each account starts with its balance on the first day{from ? ` (${from})` : ""}; transactions and what you assigned come in from then on.
+        Each account starts with its balance on the first day{from ? ` (${ymText(from)})` : ""}; transactions and what you assigned come in from then on.
       </Text>
       {doneNote}
     </Card>
@@ -325,20 +345,24 @@ export default function ImportYnab() {
               </Text>
               <View style={[styles.row, { paddingVertical: space.xs }, sticky(tabsH, t.surface)]}>
                 <Text style={[type.caption, { color: t.text3, flex: 1 }]}>Category</Text>
+                {wide ? <Text style={[type.caption, { color: t.text3, width: 190, textAlign: "right", paddingRight: 28 }]}>A month</Text> : null}
                 {wide ? <Text style={[type.caption, { color: t.text3, width: 220, textAlign: "right", paddingRight: 18 }]}>Goes to</Text> : null}
                 <Text style={[type.caption, styles.col, { color: t.text3 }]}>After retiring</Text>
                 <Text style={[type.caption, styles.col, { color: t.text3 }]}>Essential</Text>
               </View>
               {[...new Set(activeCats.map((c) => c.group))].map((g) => (
                 <View key={g} style={[styles.group, { borderColor: t.border, backgroundColor: t.surface2 }]}>
-                  <View style={[styles.row, { flexWrap: "wrap", justifyContent: "space-between", paddingBottom: space.xs }]}>
-                    <View style={{ flexShrink: 1 }}>
-                      <Text style={[type.caption, { color: t.text3 }]}>YNAB group</Text>
-                      <Text style={[type.label, { color: t.text, fontWeight: "700" }]} numberOfLines={1}>{g || "No group"}</Text>
+                  <View style={[styles.row, { flexWrap: "wrap", justifyContent: "space-between", paddingBottom: space.sm }]}>
+                    <View style={[styles.row, { flexShrink: 1, gap: space.sm }]}>
+                      <View style={[styles.groupDot, { backgroundColor: t.accent }]} />
+                      <Text style={[type.heading, { color: t.text, flexShrink: 1 }]} numberOfLines={1}>{g || "No group"}</Text>
+                      <View style={[styles.pill, { backgroundColor: t.surface }]}>
+                        <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]}>{activeCats.filter((c) => c.group === g).length}</Text>
+                      </View>
                     </View>
                     {g ? (
                       <View style={[styles.row, { flexShrink: 1 }]}>
-                        <Text style={[type.caption, { color: t.text3 }]}>Lands in</Text>
+                        <Text style={[type.caption, { color: t.text3 }]}>Into your group</Text>
                         <Select label={`${g}: lands in group`} value={groupTarget(g)} options={groupOptions(g)} onChange={(v) => setGroupMap((m) => ({ ...m, [groupKey(g)]: v }))} />
                       </View>
                     ) : null}
@@ -515,6 +539,8 @@ const styles = StyleSheet.create({
   col: { width: 84, alignItems: "center", textAlign: "center" },
   stats: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   catRow: { gap: 2, paddingVertical: space.xs, borderTopWidth: StyleSheet.hairlineWidth },
+  groupDot: { width: 8, height: 8, borderRadius: 4 },
+  pill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1 },
   group: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: space.md, paddingVertical: space.sm, marginTop: space.xs },
   columns: { flexDirection: "row", alignItems: "flex-start", gap: space.lg },
   side: { width: 360, gap: space.lg },

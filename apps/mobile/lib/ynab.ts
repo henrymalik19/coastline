@@ -331,6 +331,8 @@ export type ImportOptions = {
   categoryMap?: Record<string, CategoryChoice>;
   /** Per YNAB group (groupKey): the group its categories land in here (default: the same name). */
   groupMap?: Record<string, string>;
+  /** Per YNAB category (categoryKey): what it gets a month here, in place of YNAB's recent average. */
+  amounts?: Record<string, number>;
   /** Take out the plan's own categories that are still $0 and YNAB doesn't have. */
   removeEmpty: boolean;
   /** Transactions already here, and whether the ones YNAB also has (same account and amount, within 3 days) give way to YNAB's. */
@@ -375,6 +377,15 @@ const addMonthsTo = (ym: string, n: number) => {
   const k = Number(ym.slice(0, 4)) * 12 + Number(ym.slice(5, 7)) - 1 + n;
   return `${Math.floor(k / 12)}-${pad((k % 12) + 1)}`;
 };
+/** Every month from the export's first transaction or assignment through this one, newest first. */
+export function exportMonths(d: YnabData, thisMonth: string): string[] {
+  const all = [...d.txns.map((t) => t.date.slice(0, 7)), ...d.assigned.map((a) => a.month)].filter((m) => m && m <= thisMonth);
+  const first = all.reduce((a, m) => (m < a ? m : a), thisMonth);
+  const out: string[] = [];
+  for (let m = thisMonth; m >= first; m = addMonthsTo(m, -1)) out.push(m);
+  return out;
+}
+
 /** The full months before this one, newest last (for the averages). */
 export const recentMonths = (thisMonth: string, n = 3) => Array.from({ length: n }, (_, i) => addMonthsTo(thisMonth, i - n));
 
@@ -432,9 +443,10 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     if (hit) {
       itemOf.set(k, hit.id);
       // two of YNAB's put into one: their amounts add up
-      const amount = (matchedAmount.get(hit.id) ?? 0) + c.average;
+      const mine = o.amounts?.[k];
+      const amount = (matchedAmount.get(hit.id) ?? 0) + (mine ?? c.average);
       matchedAmount.set(hit.id, amount);
-      if (amount > 0) hit.amount = amount;
+      if (amount > 0 || mine !== undefined) hit.amount = amount;
       hit.inRetirement = opts.inRetirement;
       hit.essential = opts.essential;
       if (!matchedAmount.has(hit.id + ":group")) { hit.group = groupFor(c.group) || hit.group; matchedAmount.set(hit.id + ":group", 1); }
@@ -443,7 +455,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     }
     const id = o.newId();
     itemOf.set(k, id);
-    const item: BudgetItem = { id, name: c.name, amount: c.average, inRetirement: opts.inRetirement, group: groupFor(c.group) || undefined, essential: opts.essential };
+    const item: BudgetItem = { id, name: c.name, amount: o.amounts?.[k] ?? c.average, inRetirement: opts.inRetirement, group: groupFor(c.group) || undefined, essential: opts.essential };
     plan.budget.push(item);
     summary.categoriesAdded++;
   }
