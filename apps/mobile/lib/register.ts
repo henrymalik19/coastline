@@ -18,6 +18,9 @@ export function budgetAccounts(p: PlanState): BudgetAccount[] {
   ];
 }
 
+/** Where an account's transactions are: Budget → Transactions, showing just that account. */
+export const accountTxnsHref = (id: string) => `/budget?view=transactions&account=${encodeURIComponent(id)}`;
+
 /** True when some month still has money on the old per-account lines. */
 export function hasOldSavingsLines(p: PlanState): boolean {
   return Object.values(p.budgetPlan?.months ?? {}).some((e) => !!e.assigned && Object.keys(e.assigned).some((k) => k.startsWith("acct:")));

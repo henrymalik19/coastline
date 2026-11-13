@@ -238,6 +238,15 @@ export default function Budget() {
     </View>
   );
 
+  // Unassigned, small, in the bar that stays put: still in view while you assign further down
+  const rtaColor = rta < -0.5 ? t.bad : rta > 0.5 ? t.good : t.text2;
+  const unassignedChip = (
+    <View accessibilityLabel={`Unassigned ${money(rta)}`} style={[styles.unassigned, compact ? { alignSelf: "flex-start" } : null]}>
+      <Text style={[type.caption, { color: t.text3 }]}>Unassigned</Text>
+      <Text style={[type.label, { color: rtaColor, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(rta)}</Text>
+    </View>
+  );
+
   const rtaCard = (
     <Card style={{ gap: space.sm, borderColor: rta < -0.5 ? t.bad : rta > 0.5 ? t.good : t.border, backgroundColor: rta < -0.5 ? t.badSoft : t.surface }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, flexWrap: "wrap" }}>
@@ -532,6 +541,7 @@ export default function Budget() {
                 onChange={(v) => { setTab(v); if (v !== "transactions" && (acctParam || viewParam || needsParam)) router.setParams({ account: undefined, view: undefined, needs: undefined }); }}
               />
             </View>
+            {tab === "categories" && !compact ? unassignedChip : null}
             {compact ? (
               <Pressable role="button" accessibilityLabel="Add a transaction" onPress={() => setAdding({})} hitSlop={6} style={({ pressed }) => [styles.addRound, { backgroundColor: t.accent, opacity: pressed ? 0.8 : 1 }]}>
                 <Icon name="plus" size={18} color="#fff" />
@@ -539,6 +549,7 @@ export default function Budget() {
             ) : (
               <Button title="Add a transaction" icon="plus" tone="primary" onPress={() => setAdding({})} style={{ minHeight: 36 }} />
             )}
+            {tab === "categories" && compact ? <View style={{ width: "100%" }}>{unassignedChip}</View> : null}
       </View>
       ) : null}
       {!view.started || tab !== "accounts" ? monthBar : null}
@@ -728,7 +739,8 @@ const styles = StyleSheet.create({
   monthBar: { flexDirection: "row", alignItems: "center", gap: space.md },
   navBtn: { borderWidth: 1, borderRadius: 999, width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   addRound: { width: 40, height: 40, borderRadius: 999, alignItems: "center", justifyContent: "center" },
-  toolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm, paddingVertical: space.sm, marginVertical: -space.sm },
+  unassigned: { flexDirection: "row", alignItems: "baseline", gap: space.xs, marginLeft: "auto" },
+  toolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: space.sm, paddingVertical: space.sm, marginVertical: -space.sm },
   groupHead: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, borderBottomWidth: StyleSheet.hairlineWidth },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },
   pill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, alignItems: "flex-end", maxWidth: "100%" },

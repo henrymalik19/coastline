@@ -3,11 +3,11 @@
  * cards) for the budget's month, with search and an account filter. Tap one to change it. Each
  * account's register (reconcile) is a tap away.
  */
-import { isStartTxn, type Txn } from "@coastfi/engine";
+import { isStartTxn, registerBalance, startTxnId, type Txn } from "@coastfi/engine";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Button, Select, TextField } from "./form";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Button, NumberInput, Select, TextField } from "./form";
 import { Icon } from "./Icon";
 import { TxnForm } from "./TxnForm";
 import { Card, Divider } from "./ui";
@@ -16,7 +16,7 @@ import { money } from "../lib/format";
 import { useLayout } from "../lib/layout";
 import { usePlan } from "../lib/plan";
 import { budgetAccounts } from "../lib/register";
-import { useStore } from "../lib/store";
+import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { ClearedDot } from "./ClearedDot";
 import { sticky } from "../lib/sticky";
@@ -47,6 +47,16 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
   const [editing, setEditing] = useState<Txn | "new" | null>(null);
   // the filters' height, so each day's heading sticks just under them
   const [filtersH, setFiltersH] = useState(96);
+  const [reconciling, setReconciling] = useState(false);
+  // opened on one account (from Accounts, or a link): start at the top, not where Accounts was scrolled
+  const topRef = useRef<unknown>(null);
+  useEffect(() => {
+    if (Platform.OS !== "web" || !account) return;
+    let el = topRef.current as unknown as HTMLElement | null;
+    while (el && !(el.scrollHeight > el.clientHeight && /(auto|scroll)/.test(getComputedStyle(el).overflowY))) el = el.parentElement;
+    el?.scrollTo({ top: 0 });
+  }, [account]);
+  const [bankSays, setBankSays] = useState(0);
 
   const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? state.accounts.find((a) => a.id === id)?.name ?? state.debts.find((d) => d.id === id)?.name ?? "Account";
   const uncategorized = (x: Txn) => needsCategory(x);
@@ -94,9 +104,55 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
   }
   const picked = accounts.find((a) => a.id === acct);
 
+  // one account picked: what it holds (or owes), what has cleared, and reconcile ("does your bank say $X?")
+  const hasReg = !!picked && txns.some((x) => !x.deleted && x.id === startTxnId(picked.id));
+  const working = picked ? (hasReg ? registerBalance(0, txns, picked.id) : picked.balance) : 0;
+  const cleared = picked ? (hasReg ? registerBalance(0, txns, picked.id, true) : picked.balance) : 0;
+  const card = picked?.kind === "card";
+  const show = (v: number) => (card ? `${money(-v)} owed` : money(v));
+  const bankTarget = card ? -bankSays : bankSays;
+  const reconcile = () => {
+    if (!picked) return;
+    const diff = Math.round((bankTarget - cleared) * 100) / 100;
+    if (Math.abs(diff) > 0.004) {
+      saveTxn({ id: newId(), accountId: picked.id, date: isoDay(start), amount: diff, payee: "Reconciliation adjustment", categoryId: "ready", cleared: "reconciled", source: "manual" }, isoDay(start));
+    }
+    // everything cleared is now reconciled
+    for (const x of useStore.getState().txns.filter((y) => y.accountId === picked.id && !y.deleted && y.cleared === "cleared")) saveTxn({ ...x, cleared: "reconciled" }, isoDay(start));
+    setReconciling(false);
+  };
+  const accountCard = picked ? (
+    <Card style={{ gap: space.sm }}>
+      <View style={[styles.row, { gap: space.md, justifyContent: "space-between" }]}>
+        <View style={{ flexShrink: 1 }}>
+          <Text style={[type.label, { color: t.text3 }]}>{picked.name} · {card ? "you owe" : "balance"}</Text>
+          <Text style={[type.title, { color: working < 0 && !card ? t.bad : t.text, fontVariant: ["tabular-nums"] }]}>{card ? money(-working) : money(working)}</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>Cleared {show(cleared)}</Text>
+        </View>
+        <Button title="Reconcile" icon="check" onPress={() => { setBankSays(Math.round((card ? -cleared : cleared) * 100) / 100); setReconciling((v) => !v); }} style={{ minHeight: 36 }} />
+      </View>
+      {reconciling ? (
+        <View style={{ gap: space.sm }}>
+          <Divider />
+          <Text style={[type.body, { color: t.text }]}>What does your bank say {card ? "you owe" : "the balance is"}, counting only what has cleared?</Text>
+          <View style={[styles.row, { gap: space.sm }]}>
+            <NumberInput kind="money" label="Bank balance" value={bankSays} width={160} onChange={setBankSays} />
+            <Button title="Reconcile" tone="primary" onPress={reconcile} style={{ minHeight: 40 }} />
+            <Button title="Cancel" tone="ghost" onPress={() => setReconciling(false)} style={{ minHeight: 40 }} />
+          </View>
+          <Text style={[type.caption, { color: t.text3 }]}>
+            {Math.abs(bankTarget - cleared) < 0.005
+              ? "It matches. Your cleared transactions get locked as reconciled."
+              : `It's ${money(Math.abs(bankTarget - cleared))} ${bankTarget > cleared ? "more" : "less"} than your cleared balance. Reconciling adds an adjustment to Unassigned. Check for a missing transaction first.`}
+          </Text>
+        </View>
+      ) : null}
+    </Card>
+  ) : null;
+
   return (
     <>
-      <View onLayout={(e) => setFiltersH(Math.round(e.nativeEvent.layout.height))} style={[{ gap: space.sm, paddingVertical: space.xs, marginVertical: -space.xs }, sticky(stickyTop, t.bg)]}>
+      <View ref={topRef as never} onLayout={(e) => setFiltersH(Math.round(e.nativeEvent.layout.height))} style={[{ gap: space.sm, paddingVertical: space.xs, marginVertical: -space.xs }, sticky(stickyTop, t.bg)]}>
       <View style={[styles.row, { gap: space.sm }]}>
         <Pressable role="checkbox" aria-checked={allMonths || needsCat} disabled={needsCat} onPress={() => setAllMonths((v) => !v)} hitSlop={6} style={[styles.chip, { borderColor: allMonths || needsCat ? t.accent : t.border, backgroundColor: allMonths || needsCat ? t.accentSoft : t.surface }]}>
           <Text style={[type.caption, { color: allMonths || needsCat ? t.accent : t.text2, fontWeight: "700" }]}>All months</Text>
@@ -122,6 +178,7 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
       </View>
       </View>
 
+      {accountCard}
       <View style={[styles.summary, { backgroundColor: t.surface2 }]}>
         {[
           { k: "Money in", v: money(inTotal), c: t.good },
@@ -133,12 +190,6 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
             <Text numberOfLines={1} style={[type.label, { color: x.c, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{x.v}</Text>
           </View>
         ))}
-        {picked ? (
-          <Pressable role="link" onPress={() => router.push(`/money/register?account=${picked.id}`)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Reconcile</Text>
-            <Icon name="chevron" size={12} color={t.accent} />
-          </Pressable>
-        ) : null}
       </View>
 
       {days.length ? (

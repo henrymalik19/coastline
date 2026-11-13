@@ -13,7 +13,7 @@ import { Icon } from "./Icon";
 import { Card, Divider } from "./ui";
 import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
-import { budgetAccounts, isCard, trackingAccounts } from "../lib/register";
+import { accountTxnsHref, budgetAccounts, isCard, trackingAccounts } from "../lib/register";
 import { useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
 import { sticky } from "../lib/sticky";
@@ -52,7 +52,7 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
         <Pressable
           role="link"
           accessibilityLabel={`${a.name}: transactions`}
-          onPress={() => router.push(`/money/register?account=${a.id}`)}
+          onPress={() => router.push(accountTxnsHref(a.id) as never)}
           style={(st) => [styles.link, { opacity: st.pressed ? 0.7 : 1 }]}
         >
           <View style={{ flex: 1, minWidth: 0 }}>

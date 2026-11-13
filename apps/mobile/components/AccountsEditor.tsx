@@ -11,7 +11,7 @@ import { Button, Choice, IconButton, NumberInput, TextField } from "./form";
 import { Icon } from "./Icon";
 import { Card, Divider } from "./ui";
 import { DragList, reorderAmong } from "./DragList";
-import { hasRegister, isCard } from "../lib/register";
+import { hasRegister, isCard, accountTxnsHref } from "../lib/register";
 import { contributionKey, MonthlyAmount, PayrollNote, plannedNow } from "./ScheduleEditor";
 import { money } from "../lib/format";
 import { monthKey } from "../lib/store";
@@ -135,7 +135,7 @@ export function AccountsEditor() {
                   </Pressable>
                   {(
                     hasRegister(txns, a.id) ? (
-                      <Pressable role="link" accessibilityLabel={`${name} register`} onPress={() => router.push(`/money/register?account=${a.id}`)} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                      <Pressable role="link" accessibilityLabel={`${name} transactions`} onPress={() => router.push(accountTxnsHref(a.id) as never)} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                         <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(a.balance)}</Text>
                         <Icon name="chevron" size={14} color={t.accent} />
                       </Pressable>
@@ -147,7 +147,7 @@ export function AccountsEditor() {
                 {isOpen ? (
                   <View style={{ gap: space.sm, paddingBottom: space.md, paddingLeft: 26 }}>
                     {a.type === "cash" ? (
-                      <Pressable role="link" onPress={() => router.push(`/money/register?account=${a.id}`)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}>
+                      <Pressable role="link" onPress={() => router.push(accountTxnsHref(a.id) as never)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}>
                         <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>
                           {hasRegister(txns, a.id) ? "Transactions (the balance comes from them)" : "Transactions"}
                         </Text>
@@ -233,7 +233,7 @@ export function AccountsEditor() {
                       <Pressable
                         role="link"
                         accessibilityLabel={`${name}: ${reg ? "transactions" : "edit on Debts"}`}
-                        onPress={() => router.push((reg ? `/money/register?account=${d.id}` : "/money/debts") as never)}
+                        onPress={() => router.push((reg ? accountTxnsHref(d.id) : "/money/debts") as never)}
                         style={[styles.row, { flex: 1, minHeight: 36 }]}
                       >
                         <View style={{ flex: 1, gap: 1 }}>
