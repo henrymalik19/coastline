@@ -1,5 +1,6 @@
 import { GoalsCard } from "../../components/MoneyCards";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { NumberBreakdown } from "../../components/NumberBreakdown";
 import { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Button, NumberInput, Segmented } from "../../components/form";
@@ -31,7 +32,8 @@ export default function Progress() {
   const [sel, setSel] = useState<number | null>(null);
   const [table, setTable] = useState(false);
   const [msg, setMsg] = useState("");
-  const [view, setView] = useState<"overview" | "whatif" | "checkin" | "badges">("overview");
+  const { view: viewParam } = useLocalSearchParams<{ view?: string }>();
+  const [view, setView] = useState<"overview" | "number" | "whatif" | "checkin" | "badges">(viewParam === "number" ? "number" : "overview");
   const [spent, setSpent] = useState(0);
   const d = o.d;
   const w = state.whatif;
@@ -340,11 +342,12 @@ export default function Progress() {
 
   return (
     <Screen title="Progress" subtitle="Track it, and keep the streak" fill>
-      <View style={{ maxWidth: 520 }}>
+      <View style={{ maxWidth: 640 }}>
         <Segmented
           label="Progress view"
           options={[
             { value: "overview", label: "Overview" },
+            { value: "number", label: "Your number" },
             { value: "whatif", label: "What if" },
             { value: "checkin", label: "Check-in" },
             { value: "badges", label: "Badges" },
@@ -366,6 +369,7 @@ export default function Progress() {
           {projection}
         </>
       ) : null}
+      {view === "number" ? <NumberBreakdown /> : null}
       {view === "whatif" ? (
         <>
           {whatIfs}
