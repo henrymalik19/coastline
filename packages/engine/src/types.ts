@@ -78,6 +78,11 @@ export type BudgetItem = {
    * assign to it on the Budget counts as that month's contribution. Missing = spending.
    */
   accountId?: string;
+  /**
+   * You looked at what you really spend (this much a month) and kept your own plan amount. It's
+   * flagged again only if your spending moves well away from this.
+   */
+  keptAt?: number;
 };
 /** "property": what a home or rental is worth. Counts in net worth, not as invested money for Coast FI. */
 export type AccountType = "pretax" | "roth" | "taxable" | "hsa" | "cash" | "property";

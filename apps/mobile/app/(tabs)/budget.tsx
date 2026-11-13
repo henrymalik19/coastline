@@ -19,6 +19,7 @@ import { newId } from "../../lib/store";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Icon } from "../../components/Icon";
 import { Card, Divider, Pill, Screen, SectionLabel } from "../../components/ui";
+import { useAppearance } from "../../lib/appearance";
 import { confirm } from "../../lib/confirm";
 import { debtLabel } from "../../lib/debts";
 import { money, monthLabel } from "../../lib/format";
@@ -78,6 +79,9 @@ export default function Budget() {
   // what you really spent in recent full months, against what the plan uses
   const history = useMemo(() => spendingHistory(b, cats, thisMonth, { txns, cards }), [b, cats, thisMonth, txns, cards]);
   const [realOpen, setRealOpen] = useState(false);
+  // a display choice (Settings → Appearance), on unless turned off
+  const showReal = useAppearance((s) => s.realSpending);
+  const setShowReal = useAppearance((s) => s.setRealSpending);
   const [adding, setAdding] = useState<{ txn?: Txn; categoryId?: string; kind?: "out" | "in"; amount?: number; from?: string } | null>(null);
   const monthTxns = txns.filter((x) => !x.deleted && x.date.startsWith(month));
   const i = between(thisMonth, month);
@@ -105,7 +109,11 @@ export default function Budget() {
   const editItem = (id: string, patch: Partial<(typeof state.budget)[number]>) =>
     update((p) => {
       const i = p.budget.findIndex((x) => x.id === id);
-      if (i >= 0) p.budget[i] = { ...p.budget[i]!, ...patch };
+      if (i >= 0) {
+        const next = { ...p.budget[i]!, ...patch };
+        for (const k of Object.keys(next) as (keyof typeof next)[]) if (next[k] === undefined) delete next[k];
+        p.budget[i] = next;
+      }
     });
   const addItem = (group: string) => {
     const id = newId();
@@ -196,11 +204,16 @@ export default function Budget() {
   const ownGroup = (g: (typeof groups)[number]) => g.cats.every((c) => c.kind === "spending");
   const rta = view.readyToAssign;
   // your real spending: categories whose recent average is well off the plan amount
-  const realRows = history.months.length
+  const realRows = showReal && history.months.length
     ? cats
         .filter((c) => c.kind === "spending" && !c.account && history.avg[c.key] !== undefined)
         .map((c) => ({ c, avg: Math.round(history.avg[c.key]!), plan: c.target }))
         .filter((r) => Math.abs(r.avg - r.plan) >= Math.max(10, r.plan * 0.1))
+        // you kept your own amount after seeing this: only flag it again if spending moved well away
+        .filter((r) => {
+          const kept = state.budget.find((x) => x.id === r.c.key)?.keptAt;
+          return kept === undefined || Math.abs(r.avg - kept) >= Math.max(10, kept * 0.1);
+        })
         .sort((x, y) => Math.abs(y.avg - y.plan) - Math.abs(x.avg - x.plan))
     : [];
   const realBy = new Map(realRows.map((r) => [r.c.key, r]));
@@ -430,7 +443,8 @@ export default function Budget() {
                 </FormRow>
               </FormList>
               <View style={styles.chips}>
-                {realBy.has(c.key) ? <Chip title={`Plan with ${money(realBy.get(c.key)!.avg, { whole: true })}`} onPress={() => editItem(c.key, { amount: realBy.get(c.key)!.avg })} /> : null}
+                {realBy.has(c.key) ? <Chip title={`Plan with ${money(realBy.get(c.key)!.avg, { whole: true })}`} onPress={() => editItem(c.key, { amount: realBy.get(c.key)!.avg, keptAt: undefined })} /> : null}
+                {realBy.has(c.key) ? <Chip title={`Keep ${money(realBy.get(c.key)!.plan, { whole: true })}`} onPress={() => editItem(c.key, { keptAt: realBy.get(c.key)!.avg })} /> : null}
                 {c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5 ? <Chip title={`Use plan ${money(c.target)}`} tone="accent" onPress={() => setAssigned(c.key, Math.round(c.target * 100) / 100)} /> : null}
                 {l.available < -0.005 ? <Chip title={`Cover ${money(-l.available)}`} tone="accent" icon="check" onPress={() => setAssigned(c.key, l.assigned - l.available)} /> : null}
                 <Chip title="Transaction" icon="plus" onPress={() => setAdding({ categoryId: c.key })} />
@@ -549,17 +563,24 @@ export default function Budget() {
                           <Text style={{ color: r.avg > r.plan ? t.warn : t.good, fontWeight: "700" }}>{r.avg > r.plan ? "+" : "−"}{money(Math.abs(r.avg - r.plan), { whole: true })}</Text>
                         </Text>
                       </View>
-                      <Chip title={`Plan with ${money(r.avg, { whole: true })}`} onPress={() => editItem(r.c.key, { amount: r.avg })} />
+                      <View style={styles.realChips}>
+                        <Chip title={`Plan with ${money(r.avg, { whole: true })}`} onPress={() => editItem(r.c.key, { amount: r.avg, keptAt: undefined })} />
+                        <Chip title={`Keep ${money(r.plan, { whole: true })}`} onPress={() => editItem(r.c.key, { keptAt: r.avg })} />
+                      </View>
                     </View>
                   ))}
-                  {realRows.length > 1 ? (
-                    <Chip
-                      title="Plan with all of these"
-                      tone="accent"
-                      icon="check"
-                      onPress={() => update((p) => { for (const r of realRows) { const it = p.budget.find((x) => x.id === r.c.key); if (it) it.amount = r.avg; } })}
-                    />
-                  ) : null}
+                  <View style={styles.chips}>
+                    {realRows.length > 1 ? (
+                      <Chip
+                        title="Plan with all of these"
+                        tone="accent"
+                        icon="check"
+                        onPress={() => update((p) => { for (const r of realRows) { const it = p.budget.find((x) => x.id === r.c.key); if (it) { it.amount = r.avg; delete it.keptAt; } } })}
+                      />
+                    ) : null}
+                    <Chip title="Don't compare" icon="close" onPress={() => { setShowReal(false); setRealOpen(false); }} />
+                  </View>
+                  <Text style={[type.caption, { color: t.text3 }]}>Turn it back on in Settings → Appearance.</Text>
                 </>
               ) : null}
             </Card>
@@ -673,6 +694,7 @@ const styles = StyleSheet.create({
   realHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
   realDot: { width: 8, height: 8, borderRadius: 4 },
   realTag: { borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
+  realChips: { flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" },
   realRow: { flexDirection: "row", alignItems: "center", gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm },
   monthBar: { flexDirection: "row", alignItems: "center", gap: space.md },
   navBtn: { borderWidth: 1, borderRadius: 999, width: 36, height: 36, alignItems: "center", justifyContent: "center" },

@@ -61,7 +61,7 @@ const INCOME = auto(
 );
 const TAXES: Field[] = [["federal", "tax_federal"], ["state", "tax_state"], ["socialSecurity", "tax_social_security"], ["medicare", "tax_medicare"]];
 const DEDUCTION = auto("id", "kind", "amount", "debtId");
-const CATEGORY: Field[] = [...auto("id", "name", "amount", "inRetirement"), ["group", "group_name"], ...auto("essential", "noSuggest", "accountId")];
+const CATEGORY: Field[] = [...auto("id", "name", "amount", "inRetirement"), ["group", "group_name"], ...auto("essential", "noSuggest", "accountId", "keptAt")];
 const GOAL = auto("id", "name", "target", "saved", "budgetGroup");
 const RECURRING: Field[] = [["every", "every_months"], ["due", "due"], ["inRetirement", "in_retirement"], ["paidThrough", "paid_through"]];
 const RETIREMENT_INCOME = auto("id", "name", "kind", "monthly", "startAge");

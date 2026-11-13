@@ -40,7 +40,7 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
       { key: "account", title: "Account & sync", subtitle: "Sign in to use your plan on every device", icon: "user" },
       { key: "profile", title: "You", subtitle: "Age, retirement age and health insurance", icon: "user" },
       { key: "sharing", title: "Sharing", subtitle: "Share your plan with a spouse or partner", icon: "user" },
-      { key: "appearance", title: "Appearance", subtitle: "Light, dark, or match your device", icon: "sparkle" },
+      { key: "appearance", title: "Appearance", subtitle: "Light or dark, and what the Budget shows", icon: "sparkle" },
     ],
   },
   {
@@ -248,6 +248,8 @@ function AppearanceSection() {
   const t = useTheme();
   const appearance = useAppearance((s) => s.appearance);
   const setAppearance = useAppearance((s) => s.setAppearance);
+  const realSpending = useAppearance((s) => s.realSpending);
+  const setRealSpending = useAppearance((s) => s.setRealSpending);
   return (
     <>
       <Card style={{ gap: space.md }}>
@@ -260,6 +262,15 @@ function AppearanceSection() {
         <Text style={[type.caption, { color: t.text3 }]}>
           {appearance === "system" ? "Follows your phone or computer's setting." : "Saved on this device only."}
         </Text>
+      </Card>
+      <Card style={{ gap: space.sm }}>
+        <ToggleRow
+          label="Budget: compare with what you really spend"
+          hint="Shows which categories are off from your recent spending (a line under Ready to assign, and ~$ on each one), with Plan with to update them"
+          value={realSpending}
+          onChange={setRealSpending}
+        />
+        <Text style={[type.caption, { color: t.text3 }]}>Saved on this device only.</Text>
       </Card>
     </>
   );

@@ -24,7 +24,7 @@ export function fullPlan(): PlanState {
       { id: "j2", name: "Side", kind: "business", freq: "monthly", net: 800, matchMode: "usd", deductions: [] },
     ],
     budget: [
-      { id: "food", name: "Groceries", amount: 900, inRetirement: true, group: "Food", essential: true },
+      { id: "food", name: "Groceries", amount: 900, inRetirement: true, group: "Food", essential: true, keptAt: 1050 },
       { id: "roth", name: "Roth IRA", amount: 500, inRetirement: false, group: "Savings", essential: false, noSuggest: true, accountId: "ira" },
     ],
     accounts: [

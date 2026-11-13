@@ -55,6 +55,7 @@ export const BudgetItemSchema = z.object({
   essential: z.boolean().optional(),
   noSuggest: z.boolean().optional(),
   accountId: z.string().optional(),
+  keptAt: nonNeg.optional(),
 });
 export const AccountTypeSchema = z.enum(["pretax", "roth", "taxable", "hsa", "cash", "property"]);
 export const AccountSchema = z.object({
