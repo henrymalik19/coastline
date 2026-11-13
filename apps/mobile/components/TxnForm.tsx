@@ -58,6 +58,10 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const [cleared, setCleared] = useState(txn ? txn.cleared !== "uncleared" : false);
   const [amountText, setAmountText] = useState(txn ? String(Math.abs(txn.amount)) : initialAmount ? String(initialAmount) : "");
   const [picking, setPicking] = useState(false);
+  // reconciled = matched to a bank statement: what would change the balance is locked unless you say so
+  const [unlocked, setUnlocked] = useState(false);
+  const locked = txn?.cleared === "reconciled" && !unlocked;
+  const lockStyle = locked ? ({ opacity: 0.5, pointerEvents: "none" } as const) : null;
   // split across categories: each line's category and amount (positive); null = one category
   const [parts, setParts] = useState<{ cat: string; amount: number }[] | null>(
     txn?.splits?.length && !txn.transferAccountId ? txn.splits.map((x) => ({ cat: x.categoryId, amount: Math.abs(x.amount) })) : null,
@@ -151,13 +155,24 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
             {/* header: title, cleared, close */}
             <View style={styles.head}>
               <Text style={[type.heading, { color: t.text, flex: 1 }]}>{txn ? "Edit transaction" : "New transaction"}</Text>
-              <Pressable role="checkbox" aria-checked={cleared} onPress={() => setCleared((v) => !v)} hitSlop={6} style={[styles.pill, { borderColor: cleared ? t.good : t.border, backgroundColor: cleared ? t.goodSoft : "transparent" }]}>
+              <Pressable role="checkbox" aria-checked={cleared} disabled={locked} onPress={() => setCleared((v) => !v)} hitSlop={6} style={[styles.pill, { borderColor: cleared ? t.good : t.border, backgroundColor: cleared ? t.goodSoft : "transparent" }]}>
                 <Icon name="check" size={12} color={cleared ? t.good : t.text3} />
                 <Text style={[type.caption, { color: cleared ? t.good : t.text3, fontWeight: "700" }]}>Cleared</Text>
               </Pressable>
               <IconButton icon="close" label="Close" onPress={onClose} />
             </View>
 
+            {locked ? (
+              <View style={[styles.lockNote, { backgroundColor: t.surface2, borderColor: t.border }]}>
+                <Text style={[type.caption, { color: t.text2, flex: 1 }]}>
+                  Reconciled: this matches your bank statement, so its amount, date and account are locked. You can still change the category, payee and memo.
+                </Text>
+                <Pressable role="button" onPress={() => setUnlocked(true)} hitSlop={6}>
+                  <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Edit anyway</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            <View style={lockStyle}>
             <Segmented
               label="Kind"
               options={[{ value: "out", label: "Spent" }, { value: "in", label: "Money in" }, { value: "transfer", label: "Transfer" }]}
@@ -169,6 +184,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                 if (v !== "transfer" && !accounts.some((a) => a.id === acct)) setAcct(accounts[0]?.id ?? "");
               }}
             />
+            </View>
 
             {/* the amount, big */}
             <View style={styles.amountWrap}>
@@ -181,6 +197,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                 placeholder="0"
                 placeholderTextColor={t.text3}
                 keyboardType="decimal-pad"
+                editable={!locked}
                 autoFocus={!txn}
                 style={[styles.amount, { color: kind === "in" ? t.good : t.text, width: Math.min(260, 30 * Math.max(1, (amountText || "0").length) + 12) }, Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null]}
               />
@@ -250,6 +267,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                   {divider}
                 </>
               ) : null}
+              <View style={lockStyle}>
               {listRow(
                 kind === "transfer" ? "From" : "Account",
                 <Select
@@ -263,6 +281,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                   onChange={(v) => { setAcct(v); if (withdrawable.some((a) => a.id === v) && isTracking(to)) setTo(""); }}
                 />,
               )}
+              </View>
               {kind === "transfer" ? (
                 <>
                   {divider}
@@ -299,6 +318,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                 </>
               ) : null}
               {divider}
+              <View style={lockStyle}>
               {listRow(
                 "Date",
                 <Pressable role="button" accessibilityLabel={`Date: ${dateText}. Change`} onPress={() => setPicking(true)} style={styles.selectLike}>
@@ -306,6 +326,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                   <Icon name="calendar" size={14} color={t.text3} />
                 </Pressable>,
               )}
+              </View>
               {divider}
               {listRow(
                 "Memo",
@@ -364,6 +385,7 @@ const styles = StyleSheet.create({
   inline: { flex: 1, textAlign: "right", paddingVertical: 12 },
   selectLike: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44, flex: 1 },
   splitRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  lockNote: { flexDirection: "row", alignItems: "center", gap: space.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: space.sm },
   suggest: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: space.md, paddingBottom: space.sm, justifyContent: "flex-end" },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
 });

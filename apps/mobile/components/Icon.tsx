@@ -3,7 +3,7 @@ import Svg, { Path, Polyline, Rect } from "react-native-svg";
 
 export type IconName =
   | "home" | "plan" | "calendar" | "trend" | "check" | "info" | "sparkle"
-  | "gear" | "plus" | "minus" | "trash" | "chevron" | "back" | "up" | "down" | "user" | "wallet" | "card" | "target" | "sliders" | "database" | "shield" | "edit" | "close" | "receipt" | "grip";
+  | "gear" | "plus" | "minus" | "trash" | "chevron" | "back" | "up" | "down" | "user" | "wallet" | "card" | "target" | "sliders" | "database" | "shield" | "edit" | "close" | "receipt" | "grip" | "lock";
 
 /** Small stroke icon set (24px grid, 2px stroke), drawn with react-native-svg. */
 export function Icon({ name, size = 24, color }: { name: IconName; size?: number; color: string }) {
@@ -39,6 +39,12 @@ export function Icon({ name, size = 24, color }: { name: IconName; size?: number
         <>
           <Polyline points="3 17 9 11 13 15 21 7" {...p} />
           <Polyline points="15 7 21 7 21 13" {...p} />
+        </>
+      )}
+      {name === "lock" && (
+        <>
+          <Rect x={5} y={11} width={14} height={10} rx={2} {...p} />
+          <Path d="M8 11V7a4 4 0 0 1 8 0v4" {...p} />
         </>
       )}
       {name === "check" && <Polyline points="5 12.5 10 17.5 19 7" {...p} strokeWidth={2.5} />}

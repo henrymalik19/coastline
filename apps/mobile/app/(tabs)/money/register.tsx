@@ -15,6 +15,7 @@ import { usePlan } from "../../../lib/plan";
 import { budgetAccounts } from "../../../lib/register";
 import { newId, useStore } from "../../../lib/store";
 import { space, type, useTheme } from "../../../lib/theme";
+import { ClearedDot } from "../../../components/ClearedDot";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const dayText = (d: string) => `${MON[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}, ${d.slice(0, 4)}`;
@@ -108,17 +109,7 @@ export default function Register() {
             <View key={x.id}>
               {i > 0 ? <Divider /> : null}
               <Pressable role="button" accessibilityLabel={`${x.payee ?? "Transaction"} ${money(x.amount)} on ${dayText(x.date)}`} onPress={() => setEditing(x)} style={({ pressed }) => [styles.txn, pressed ? { backgroundColor: t.surface2 } : null]}>
-                <Pressable
-                  role="checkbox"
-                  aria-checked={x.cleared !== "uncleared"}
-                  accessibilityLabel={x.cleared === "reconciled" ? "Reconciled" : x.cleared === "cleared" ? "Cleared: tap to unclear" : "Not cleared: tap to clear"}
-                  disabled={x.cleared === "reconciled"}
-                  onPress={() => saveTxn({ ...x, cleared: x.cleared === "cleared" ? "uncleared" : "cleared" }, isoDay(start))}
-                  hitSlop={8}
-                  style={[styles.dot, { borderColor: x.cleared === "uncleared" ? t.border : t.good, backgroundColor: x.cleared === "reconciled" ? t.good : x.cleared === "cleared" ? t.goodSoft : "transparent" }]}
-                >
-                  <Text style={{ color: x.cleared === "reconciled" ? "#fff" : t.good, fontSize: 10, fontWeight: "800" }}>{x.cleared === "uncleared" ? "" : x.cleared === "reconciled" ? "R" : "C"}</Text>
-                </Pressable>
+                <ClearedDot status={x.cleared} onToggle={() => saveTxn({ ...x, cleared: x.cleared === "cleared" ? "uncleared" : "cleared" }, isoDay(start))} />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{x.payee || (x.transferAccountId ? "Transfer" : "No payee")}</Text>
                   <Text style={[type.caption, { color: x.categoryId || x.transferAccountId || x.splits?.length || isStartTxn(x) ? t.text3 : t.warn }]} numberOfLines={1}>
