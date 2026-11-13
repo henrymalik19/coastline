@@ -145,6 +145,9 @@ function YouStep() {
         <NumberInput kind="money" label="Health insurance per month until 65" value={state.healthcare} onChange={(v) => update((p) => { p.healthcare = v; })} />
       </FieldRow>
 {!medicareAge ? <HealthcareSuggestion retireAge={state.retireAge} value={state.healthcare} onUse={(v) => update((p) => { p.healthcare = v; })} /> : null}
+      <FieldRow label="Healthcare from 65" hint="Medicare premiums, a supplement and a drug plan: about $400 a month a person" info={HELP.medicare}>
+        <NumberInput kind="money" label="Healthcare per month from 65" value={state.medicare ?? 0} onChange={(v) => update((p) => { p.medicare = v; })} />
+      </FieldRow>
 </View>
     </Block>
   );

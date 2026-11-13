@@ -128,6 +128,13 @@ export function DebtEditor({
             <NumberInput kind="money" label={`${debtLabel(debt)} escrow`} value={debt.escrow ?? 0} max={debt.minPayment} onChange={(v) => onChange({ escrow: v > 0 ? v : undefined })} />
           </FieldRow>
           <Divider />
+          <ToggleRow
+            label="A rental property"
+            hint="Its rent pays the mortgage, tax and insurance, so they stay out of your retirement spending and your number. Add the rent as income (Money → Income) so today's budget balances."
+            value={!!debt.rental}
+            onChange={(on) => onChange({ rental: on || undefined })}
+          />
+          <Divider />
           <MortgageSchedule debt={debt} onChange={onChange} />
         </>
       ) : null}

@@ -26,6 +26,8 @@ export type FireBreakdown = {
   taxExtra: number;
   /** Covering retirement income that starts later, until it does (tax included). */
   bridge: number;
+  /** Your own health insurance from retirement until Medicare at 65, beyond Medicare's cost (tax included). */
+  healthBridge: number;
   /** What's still owed on a mortgage when you retire (tax included). */
   homeBridge: number;
   fire: number;
@@ -45,12 +47,12 @@ export type FireBreakdown = {
 };
 
 /** The parts of retirement spending (before what-ifs), as derive adds them up. */
-function spendingParts(s: PlanState, d: Pick<Derived, "escrowMonthly" | "homeMonthly">, essentialOnly = false) {
+function spendingParts(s: PlanState, d: Pick<Derived, "escrowMonthly" | "homeMonthly" | "healthRetired">, essentialOnly = false) {
   const budget = (s.budget ?? []).filter((b) => isSpendingItem(b) && b.inRetirement && (!essentialOnly || b.essential !== false));
   const bills = (s.goals ?? [])
     .filter((g) => g.recurring && num(g.target) > 0 && num(g.recurring.every) > 0 && g.recurring.inRetirement !== false)
     .map((g) => num(g.target) / num(g.recurring!.every));
-  return { budget: sum(budget.map((b) => b.amount)), healthcare: num(s.healthcare), bills: sum(bills), escrow: d.escrowMonthly, home: d.homeMonthly };
+  return { budget: sum(budget.map((b) => b.amount)), healthcare: d.healthRetired, bills: sum(bills), escrow: d.escrowMonthly, home: d.homeMonthly };
 }
 
 /** Yearly spending your savings supports at retirement, from a balance then (the FIRE number turned around). */
@@ -67,7 +69,7 @@ export function fireBreakdown(s: PlanState, o: RunResult): FireBreakdown {
   const delta = num(s.whatif?.spendDelta);
   const spending: SpendingLine[] = [
     { key: "budget", label: "Budget items still paid", monthly: p.budget },
-    { key: "healthcare", label: "Healthcare", monthly: p.healthcare },
+    { key: "healthcare", label: s.medicare === undefined ? "Healthcare" : "Healthcare from 65 (Medicare)", monthly: p.healthcare },
     { key: "bills", label: "Bills set aside (yearly and other)", monthly: p.bills },
     { key: "escrow", label: "Property tax + insurance (escrow)", monthly: p.escrow },
     { key: "home", label: "Home costs and upkeep", monthly: p.home },
@@ -87,7 +89,8 @@ export function fireBreakdown(s: PlanState, o: RunResult): FireBreakdown {
     swr: d.swr,
     base,
     taxExtra: base / gross - base,
-    bridge: d.retireBridge / gross,
+    bridge: (d.retireBridge - d.healthBridge) / gross,
+    healthBridge: d.healthBridge / gross,
     homeBridge: o.homeBridge / gross,
     fire: o.fire,
     years: d.years,

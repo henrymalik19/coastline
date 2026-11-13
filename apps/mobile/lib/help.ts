@@ -6,7 +6,9 @@ export const HELP = {
   filingStatus:
     "How you file your taxes. Married couples filing together pay noticeably less tax on the same income, so this makes the paycheck tax estimate closer. It doesn't change anything you've typed from a pay stub.",
   healthcare:
-    "At work, your employer usually pays most of your health insurance. If you stop working before 65, you'll buy your own until Medicare (government health insurance) starts at 65. That often costs $500–$1,500+ a month per person, so it's added to your retirement spending. Retiring at 65 or later? Leave this at $0.",
+    "At work, your employer usually pays most of your health insurance. If you stop working before 65, you'll buy your own until Medicare (government health insurance) starts at 65. That often costs $500–$1,500+ a month per person. It's counted from when you retire until 65; after that, the Medicare amount is. Retiring at 65 or later? Leave this at $0.",
+  medicare:
+    "From 65, Medicare covers most health costs, but not for free: Part B premiums, a supplement (Medigap) or Advantage plan, and a drug plan come to roughly $300–$500 a month per person. This counts for the rest of retirement; the higher amount above only runs until 65.",
   currentInvest:
     "What you already invest each month from your take-home pay (Roth IRA, brokerage). Don't include your 401(k); that comes out of your paycheck before you see it. Used only to compare your current habits with the plan.",
 

@@ -21,7 +21,7 @@ describe("your number, step by step", () => {
     const o = run(s, START);
     const b = fireBreakdown(s, o);
     expect(b.spending.reduce((a, x) => a + x.monthly, 0)).toBeCloseTo(o.d.retireMonthly, 6);
-    expect(b.base + b.taxExtra + b.bridge + b.homeBridge).toBeCloseTo(o.fire, 4);
+    expect(b.base + b.taxExtra + b.bridge + b.healthBridge + b.homeBridge).toBeCloseTo(o.fire, 4);
     expect(b.fire / b.growth).toBeCloseTo(o.coastNow, 4);
     expect(b.homeBridge).toBeGreaterThan(0);
   });

@@ -120,6 +120,8 @@ export type Debt = {
    * pay the balance down, and it keeps being a cost after the loan is paid off and in retirement.
    */
   escrow?: number;
+  /** A rental: the rent pays its costs, so its escrow and what's owed in retirement aren't your spending. */
+  rental?: boolean;
   /**
    * The loan's original schedule (a mortgage): length in months, first payment "YYYY-MM", and the
    * amount borrowed. Display only ("payment 49 of 360", ahead of schedule); payoff comes from the balance.
@@ -258,7 +260,13 @@ export type PlanState = {
   version: 2;
   age: number;
   retireAge: number;
+  /** Health insurance a month from retirement until Medicare at 65. */
   healthcare: number;
+  /**
+   * Healthcare a month from 65 on (Medicare premiums, a supplement, drug plan). Missing = the
+   * `healthcare` amount for all of retirement, as before.
+   */
+  medicare?: number;
   currentInvestMonthly: number;
   incomes: Income[];
   budget: BudgetItem[];
@@ -443,6 +451,10 @@ export type Derived = {
   escrowMonthly: number;
   /** A home's property tax, insurance and upkeep a month in retirement (homes without escrow). */
   homeMonthly: number;
+  /** Healthcare a month in retirement once Medicare starts (65). */
+  healthRetired: number;
+  /** Savings for the higher healthcare cost from retirement until 65 (part of `retireBridge`). */
+  healthBridge: number;
 };
 
 export type Alloc = {

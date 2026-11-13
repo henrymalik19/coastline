@@ -100,7 +100,7 @@ export function mortgagesAtRetirement(s: Pick<PlanState, "debts">, d: Pick<Deriv
   const row = M > 0 ? plan.months[M - 1] : undefined;
   const out: DebtAtRetirement[] = [];
   for (const x of s.debts ?? []) {
-    if (x.kind !== "mortgage" || x.payroll) continue;
+    if (x.kind !== "mortgage" || x.payroll || x.rental) continue; // a rental's rent pays it
     const balance = row ? (row.debts?.find((y) => y.id === x.id)?.balance ?? 0) : num(x.balance);
     if (!(balance > 0.5)) continue;
     const a = amortize(balance, num(x.apr), loanPayment(x));

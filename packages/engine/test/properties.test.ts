@@ -95,7 +95,7 @@ function expectParity(input: PlanState) {
   expect((od.bal as Record<string, number>).property).toBe(0);
   delete (od.bal as Record<string, number>).property;
   // new in the port (no Roth 401(k), employer HSA or retirement income on these plans)
-  for (const k of ["retireIncomeAnnual", "retireBridge", "rothShare", "hsaEmployerAnnual", "setAsideMonthly", "escrowMonthly", "homeMonthly"]) {
+  for (const k of ["retireIncomeAnnual", "retireBridge", "rothShare", "hsaEmployerAnnual", "setAsideMonthly", "escrowMonthly", "homeMonthly", "healthBridge"]) {
     expect(od[k]).toBe(0);
     delete od[k];
   }
@@ -104,6 +104,9 @@ function expectParity(input: PlanState) {
   expect(ours.homeBridge).toBe(0);
   delete ours.mortgagesAtRetire;
   delete ours.homeBridge;
+  // no Medicare amount on these plans: healthcare runs all of retirement, as in the prototype
+  expect(od.healthRetired).toBe(s.healthcare);
+  delete od.healthRetired;
   const theirs = ref.run(structuredClone(s), START) as AnyRun;
   const strip = ({ whenBalance: _a, whenCoastPct: _b, ...rest }: AnyRun) => rest;
   expect(strip(ours)).toEqual(strip(theirs));

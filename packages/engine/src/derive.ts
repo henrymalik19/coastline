@@ -25,7 +25,8 @@ export function derive(s: PlanState, startDate: Date): Derived {
   // a paid-off mortgage's escrow (property tax + insurance) keeps going
   const escrowOf = (d: { escrow?: number; minPayment: number; payroll?: boolean }) => (d.payroll ? 0 : Math.min(Math.max(0, num(d.escrow)), num(d.minPayment)));
   const debtMins = sum((s.debts ?? []).filter((d) => !d.payroll).map((d) => (num(d.balance) > 0 ? d.minPayment : escrowOf(d))));
-  const escrowMonthly = sum((s.debts ?? []).map(escrowOf));
+  // a rental's escrow is paid from its rent, so it isn't your spending in retirement
+  const escrowMonthly = sum((s.debts ?? []).filter((d) => !d.rental).map(escrowOf));
   // recurring goals are set aside every month, like a bill
   const recurring = (s.goals ?? []).filter((g) => g.recurring && num(g.target) > 0 && num(g.recurring.every) > 0);
   const setAsideMonthly = sum(recurring.map((g) => num(g.target) / num(g.recurring!.every)));
@@ -36,15 +37,18 @@ export function derive(s: PlanState, startDate: Date): Derived {
 
   // a home you own: property tax + insurance (when no mortgage escrow covers them) and upkeep
   const homeMonthly = sum((s.accounts ?? []).filter((a) => a.type === "property").map((a) => (Math.max(0, num(a.homeCosts)) + Math.max(0, num(a.balance)) * Math.max(0, num(a.upkeep))) / 12));
+  // healthcare: your own insurance until Medicare at 65, then Medicare's cost; the difference until 65 is a bridge
+  const healthRetired = s.medicare === undefined ? num(s.healthcare) : Math.max(0, num(s.medicare));
+  const healthBridge = s.medicare === undefined ? 0 : Math.max(0, num(s.healthcare) - healthRetired) * 12 * Math.max(0, 65 - s.retireAge);
   const retireMonthly =
-    (sum(budget.filter((b) => b.inRetirement).map((b) => b.amount)) + num(s.healthcare) + setAsideRetired + escrowMonthly + homeMonthly) * (1 + (w.spendDelta || 0));
+    (sum(budget.filter((b) => b.inRetirement).map((b) => b.amount)) + healthRetired + setAsideRetired + escrowMonthly + homeMonthly) * (1 + (w.spendDelta || 0));
   const years = Math.max(0, Math.round(s.retireAge - s.age));
 
   // income in retirement: the yearly total once everything has started, plus the savings
   // needed to cover whatever starts after you retire until it does (today's dollars)
   const retIncome = (s.retirementIncome ?? []).filter((x) => num(x.monthly) > 0);
   const retireIncomeAnnual = sum(retIncome.map((x) => num(x.monthly) * 12));
-  const retireBridge = sum(retIncome.map((x) => num(x.monthly) * 12 * Math.max(0, num(x.startAge) - s.retireAge)));
+  const retireBridge = sum(retIncome.map((x) => num(x.monthly) * 12 * Math.max(0, num(x.startAge) - s.retireAge))) + healthBridge;
 
   // Roth share of payroll 401(k), weighted by each job's contribution
   const prePerYear = incomes.map((i) => num(i.pretax) * PERIODS[i.freq]);
@@ -86,5 +90,7 @@ export function derive(s: PlanState, startDate: Date): Derived {
     setAsideMonthly,
     escrowMonthly,
     homeMonthly,
+    healthRetired,
+    healthBridge,
   };
 }

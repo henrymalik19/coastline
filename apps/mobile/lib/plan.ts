@@ -13,6 +13,13 @@ import type { Theme } from "./theme";
  * - unless the user typed their own tax bracket, use the estimate from their income and
  *   filing status (so it follows raises and new jobs).
  */
+/** Medicare premiums, a supplement and a drug plan: about this much a month per person. */
+export const MEDICARE_PER_PERSON = 400;
+/** What we assume healthcare costs from 65 when you haven't said: Medicare for you (and a spouse), never more than before 65. */
+export function defaultMedicare(s: Pick<PlanState, "healthcare" | "spouse">): number {
+  return Math.min(Math.max(0, s.healthcare), MEDICARE_PER_PERSON * (s.spouse ? 2 : 1));
+}
+
 export function effectivePlan(saved: PlanState): PlanState {
   // plans saved before paycheck 401(k) loans came out of take-home: bring them up to date
   const stale = saved.incomes.some((i) => i.deductions?.some((d) => d.kind === "k401_loan" && !saved.debts.find((x) => x.id === d.debtId)?.payroll));
@@ -27,6 +34,8 @@ export function effectivePlan(saved: PlanState): PlanState {
     foldSavingsLines(fixed);
     saved = fixed;
   }
+  // healthcare after 65: Medicare (about $400 a month a person), unless you've set it
+  if (saved.medicare === undefined) saved = { ...saved, medicare: defaultMedicare(saved) };
   let plan = saved.plan;
   if (plan.projectWith !== "plan") plan = { ...plan, projectWith: "plan" };
   // 401(k)/HSA steps come out of paychecks: steady per check. The HSA is from paychecks unless you say otherwise.

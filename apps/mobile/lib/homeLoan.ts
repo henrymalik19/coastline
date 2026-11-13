@@ -71,7 +71,9 @@ export function mortgageStatus(debt: Debt, result: RunResult, start: Date): Mort
       tone: "warn",
     });
     summary = `${money(atRetire.balance, { whole: true })} still owed when you retire`;
-  } else if (owes) rows.push({ label: `When you retire at ${result.d.retireAge}`, value: "Paid off", note: "Only escrow (property tax + insurance) carries on", tone: "good" });
+  } else if (debt.rental) rows.push({ label: `When you retire at ${result.d.retireAge}`, value: "Not counted", note: "A rental: its rent pays the mortgage, tax and insurance" });
+  else if (owes) rows.push({ label: `When you retire at ${result.d.retireAge}`, value: "Paid off", note: "Only escrow (property tax + insurance) carries on", tone: "good" });
 
+  if (debt.rental) summary = summary ? `Rental · ${summary}` : "Rental";
   return { rows, summary, intoRetirement: !!atRetire };
 }

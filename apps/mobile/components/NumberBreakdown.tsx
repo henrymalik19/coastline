@@ -69,6 +69,7 @@ export function NumberBreakdown() {
         {row(`${money(b.need, { whole: true })} ÷ ${percent(b.swr, 2).replace(/0%$/, "%")} withdrawal rate`, money(b.base, { whole: true }), { indent: true, sub: `Taking out ${percent(b.swr, 2).replace(/0%$/, "%")} a year is meant to last for life` })}
         {b.taxExtra > 0.5 ? row("Plus income tax on pre-tax money", `+ ${money(b.taxExtra, { whole: true })}`, { indent: true, sub: `${percent(d.taxRate)} tax on the ${percent(o.preShareFinal)} that's pre-tax` }) : null}
         {b.bridge > 0.5 ? row("Plus income that starts later", `+ ${money(b.bridge, { whole: true })}`, { indent: true, sub: "Covers you until Social Security or a pension starts" }) : null}
+        {b.healthBridge > 0.5 ? row("Plus health insurance until 65", `+ ${money(b.healthBridge, { whole: true })}`, { indent: true, sub: `${money(state.healthcare, { whole: true })}/mo from ${d.retireAge} until Medicare starts` }) : null}
         {b.homeBridge > 0.5 ? row("Plus mortgage still owed", `+ ${money(b.homeBridge, { whole: true })}`, { indent: true, sub: "What's left on it when you retire" }) : null}
         <Divider />
         {row("FIRE number", money(b.fire, { whole: true }), { strong: true, sub: `Invested by age ${d.retireAge}` })}

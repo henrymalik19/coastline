@@ -85,3 +85,28 @@ describe("loan schedule", () => {
     expect(loanSchedule(mortgage(), "2026-11")).toBeNull(); // no term or first payment
   });
 });
+
+describe("rentals and healthcare", () => {
+  it("a rental's escrow and what's owed in retirement aren't your spending", () => {
+    const own = blank({ debts: [mortgage({ minPayment: 2_099.1, escrow: 400 })] });
+    const rental = blank({ debts: [mortgage({ minPayment: 2_099.1, escrow: 400, rental: true })] });
+    const a = run(own, START);
+    const b = run(rental, START);
+    expect(a.d.retireMonthly - b.d.retireMonthly).toBeCloseTo(400, 6);
+    expect(b.mortgagesAtRetire).toEqual([]);
+    expect(b.homeBridge).toBe(0);
+    expect(b.d.monthlyExpenses).toBeCloseTo(a.d.monthlyExpenses, 6); // still a payment today
+  });
+
+  it("health insurance until 65, then Medicare", () => {
+    const s = blank({ age: 50, retireAge: 60, healthcare: 2_000, medicare: 500 });
+    const d = derive(s, START);
+    expect(d.healthRetired).toBe(500);
+    expect(d.healthBridge).toBeCloseTo((2_000 - 500) * 12 * 5, 6);
+    expect(d.retireMonthly).toBeCloseTo(1_000 + 500, 6);
+    // retiring at 65 or later: Medicare only
+    expect(derive({ ...s, age: 60, retireAge: 66 }, START).healthBridge).toBe(0);
+    // no Medicare amount: the old way, healthcare for all of retirement
+    expect(derive({ ...s, medicare: undefined }, START).retireMonthly).toBeCloseTo(3_000, 6);
+  });
+});
