@@ -1,7 +1,8 @@
 /**
  * Mortgages and retirement: when the loan really ends (from what you owe now, so extra payments you
  * made already count), how that compares with the loan's original schedule, and what's still owed
- * when you retire, which your retirement savings has to cover until the loan is paid off.
+ * when you retire. Your number counts what's owed then: that's what paying it off costs, and it's
+ * what the remaining payments are worth in today's money (their interest is the loan's own rate).
  */
 import type { Debt, Derived, PlanResult, PlanState } from "./types";
 import { addMonths, monthsBetween, num } from "./util";
@@ -82,17 +83,17 @@ export function loanSchedule(x: Debt, month: string): LoanSchedule | null {
 export type DebtAtRetirement = {
   id: string;
   name: string;
-  /** Still owed the month you retire. */
+  /** Still owed the month you retire (what your number counts). */
   balance: number;
   /** Payments left after you retire (null: the payment never pays it off; followed for 50 years). */
   months: number | null;
-  /** All of those payments added up (the loan part, without escrow). */
+  /** Those payments added up, interest included, if you keep paying monthly instead of paying it off. */
   total: number;
 };
 
 /**
- * Mortgages still owed when you retire, as your plan runs them (extra payments included), and what's
- * left to pay. Their payments keep going in retirement, so your savings has to cover them.
+ * Mortgages still owed when you retire, as your plan runs them (extra payments included): what's owed
+ * then, and what the payments left add up to if you keep paying monthly.
  */
 export function mortgagesAtRetirement(s: Pick<PlanState, "debts">, d: Pick<Derived, "years">, plan: Pick<PlanResult, "months">): DebtAtRetirement[] {
   const M = d.years * 12;

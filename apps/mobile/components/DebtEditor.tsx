@@ -265,11 +265,23 @@ function MortgageSchedule({ debt, onChange }: { debt: Debt; onChange: (patch: Pa
   const term = debt.term ? String(debt.term) : "";
   const options = [{ value: "", label: "Not set" }, ...TERMS.map((y) => ({ value: String(y * 12), label: `${y} years` }))];
   if (term && !options.some((o) => o.value === term)) options.push({ value: term, label: `${debt.term} months` });
-  const lines = [...st.schedule, st.payoff, st.retire].filter(Boolean) as string[];
   return (
     <View style={{ gap: space.sm }}>
-      <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Loan schedule (optional)</Text>
-      <Text style={[type.caption, { color: t.text3 }]}>To see which payment you're on and how far ahead of schedule extra payments put you. Payoff always comes from what you owe now.</Text>
+      {st.rows.length ? (
+        <View style={[styles.status, { backgroundColor: t.surface2 }]}>
+          {st.rows.map((r, i) => (
+            <View key={r.label} style={[styles.statusRow, i > 0 ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border } : null]}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[type.caption, { color: t.text2 }]}>{r.label}</Text>
+                {r.note ? <Text style={[type.caption, { color: r.tone === "good" ? t.good : r.tone === "warn" ? t.warn : t.text3 }]}>{r.note}</Text> : null}
+              </View>
+              <Text style={[type.body, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{r.value}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+      <Text style={[type.label, { color: t.text, fontWeight: "700", marginTop: space.xs }]}>Original loan (optional)</Text>
+      <Text style={[type.caption, { color: t.text3 }]}>Shows which payment you're on and how far ahead of schedule you are. The payoff date always comes from what you owe now.</Text>
       <FieldRow label="Loan length">
         <Select label={`${debtLabel(debt)} loan length`} value={term} options={options} onChange={(v) => onChange({ term: v ? Number(v) : undefined })} />
       </FieldRow>
@@ -279,13 +291,6 @@ function MortgageSchedule({ debt, onChange }: { debt: Debt; onChange: (patch: Pa
       <FieldRow label="Amount borrowed" hint="Optional: shows what the schedule says you'd owe now">
         <NumberInput kind="money" label={`${debtLabel(debt)} amount borrowed`} value={debt.original ?? 0} onChange={(v) => onChange({ original: v > 0 ? v : undefined })} />
       </FieldRow>
-      {lines.length ? (
-        <View style={[styles.note, { backgroundColor: st.intoRetirement ? t.warnSoft : t.surface2, gap: 4 }]}>
-          {lines.map((l, i) => (
-            <Text key={i} style={[type.caption, { color: t.text2 }]}>{l}</Text>
-          ))}
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -295,12 +300,13 @@ function MortgageLine({ debt }: { debt: Debt }) {
   const t = useTheme();
   const { result, start } = usePlan();
   const st = mortgageStatus(debt, result, start);
-  const text = st.intoRetirement ? "Runs into retirement: adds to your number" : st.schedule[1]?.replace(/:.*/, "");
-  return text ? <Text style={[type.caption, { color: st.intoRetirement ? t.warn : t.text3 }]} numberOfLines={1}>{text}</Text> : null;
+  return st.summary ? <Text style={[type.caption, { color: st.intoRetirement ? t.warn : t.good }]} numberOfLines={1}>{st.summary}</Text> : null;
 }
 
 const styles = StyleSheet.create({
   between: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  status: { borderRadius: radius.sm, paddingHorizontal: space.md },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.sm },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   chip: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 7, minHeight: 34, justifyContent: "center" },
   note: { borderRadius: radius.sm, padding: space.md },

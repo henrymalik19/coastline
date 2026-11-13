@@ -31,7 +31,7 @@ describe("mortgages in retirement", () => {
     expect(o.fire).toBeCloseTo(run(blank(), START).fire, 6);
   });
 
-  it("one that runs past retirement adds the payments left to your number", () => {
+  it("one that runs past retirement adds what's still owed then to your number", () => {
     // ~$200k left at 6% with $1,699 a month: about 15 years, so ~5 years into retirement
     const s = blank({ debts: [mortgage()] });
     const o = run(s, START);
@@ -39,14 +39,16 @@ describe("mortgages in retirement", () => {
     const left = o.mortgagesAtRetire[0]!;
     expect(left.months).toBeGreaterThan(50);
     expect(left.months).toBeLessThan(70);
-    expect(o.homeBridge).toBeCloseTo(left.total, 6);
-    expect(o.fire - run(blank(), START).fire).toBeCloseTo(left.total, 0);
+    expect(o.homeBridge).toBeCloseTo(left.balance, 6);
+    expect(o.fire - run(blank(), START).fire).toBeCloseTo(left.balance, 0);
+    // keeping up the monthly payments instead costs more in all (interest)
+    expect(left.total).toBeGreaterThan(left.balance);
   });
 
   it("escrow isn't part of the loan, and keeps counting in retirement", () => {
     const s = blank({ debts: [mortgage({ minPayment: 2_099.1, escrow: 400 })] });
     const o = run(s, START);
-    expect(o.mortgagesAtRetire[0]!.total).toBeCloseTo(run(blank({ debts: [mortgage()] }), START).mortgagesAtRetire[0]!.total, 6);
+    expect(o.mortgagesAtRetire[0]!.balance).toBeCloseTo(run(blank({ debts: [mortgage()] }), START).mortgagesAtRetire[0]!.balance, 6);
     expect(o.d.retireMonthly).toBeCloseTo(1400, 6);
   });
 

@@ -8,10 +8,10 @@ import { mortgagesAtRetirement } from "./mortgage";
 /** Monte Carlo seed used by `run` (fixed, so results are reproducible). */
 export const MC_SEED = 20261106;
 
-/** The numbers the FIRE number needs, with mortgage payments left in retirement added to the bridge. */
+/** The numbers the FIRE number needs, with what's still owed on a mortgage when you retire added to the bridge. */
 function withHome(s: PlanState, d: Derived, plan: PlanResult) {
   const mortgagesAtRetire = mortgagesAtRetirement(s, d, plan);
-  const homeBridge = mortgagesAtRetire.reduce((a, x) => a + x.total, 0);
+  const homeBridge = mortgagesAtRetire.reduce((a, x) => a + x.balance, 0);
   return { mortgagesAtRetire, homeBridge, dFire: homeBridge > 0 ? { ...d, retireBridge: d.retireBridge + homeBridge } : d };
 }
 

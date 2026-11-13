@@ -582,6 +582,6 @@ export type RunResult = {
   whenCoastPct: (f: number) => number | null;
   /** Mortgages still owed when you retire, and what's left to pay on them. */
   mortgagesAtRetire: DebtAtRetirement[];
-  /** Savings needed for those payments (part of the FIRE number, like the retirement income bridge). */
+  /** What's owed on them when you retire (part of the FIRE number, like the retirement income bridge). */
   homeBridge: number;
 };

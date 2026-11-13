@@ -172,12 +172,19 @@ export function AccountsEditor() {
                     {a.type === "property" ? (
                       <>
                         <Text style={[type.label, { color: t.text, fontWeight: "700", marginTop: space.sm }]}>Costs that keep going in retirement</Text>
-                        <FieldRow
-                          label="Property tax + insurance a year"
-                          hint={state.debts.some((x) => x.kind === "mortgage" && (x.escrow ?? 0) > 0) ? "Your mortgage escrow already counts these. Leave this at $0 unless they're paid separately." : "For a home with no mortgage escrow"}
-                        >
-                          <NumberInput kind="money" label={`${name} property tax and insurance a year`} value={a.homeCosts ?? 0} onChange={(v) => update((p) => { p.accounts[i]!.homeCosts = v > 0 ? v : undefined; })} />
-                        </FieldRow>
+                        {(() => {
+                          // escrow on a mortgage already counts property tax + insurance (and keeps counting once it's paid off)
+                          const escrow = state.debts.filter((x) => x.kind === "mortgage" && !x.payroll).reduce((t2, x) => t2 + Math.min(Math.max(0, x.escrow ?? 0), x.minPayment), 0);
+                          return escrow > 0.5 && !a.homeCosts ? (
+                            <Text style={[type.caption, { color: t.text2 }]}>
+                              Property tax + insurance: counted from your mortgage escrow ({money(escrow, { whole: true })}/mo), which keeps going after the loan is paid off.
+                            </Text>
+                          ) : (
+                            <FieldRow label="Property tax + insurance a year" hint={escrow > 0.5 ? "Your mortgage escrow counts these too: set this to $0 so they aren't counted twice" : "Paid on your own (no mortgage escrow)"}>
+                              <NumberInput kind="money" label={`${name} property tax and insurance a year`} value={a.homeCosts ?? 0} onChange={(v) => update((p) => { p.accounts[i]!.homeCosts = v > 0 ? v : undefined; })} />
+                            </FieldRow>
+                          );
+                        })()}
                         <FieldRow label="Upkeep a year" hint={`Repairs and maintenance, as a share of its value. About 1% is common${(a.upkeep ?? 0) > 0 ? ` (${money(a.balance * (a.upkeep ?? 0), { whole: true })} a year)` : ""}.`}>
                           <NumberInput kind="percent" label={`${name} upkeep a year`} value={a.upkeep ?? 0} max={0.1} onChange={(v) => update((p) => { p.accounts[i]!.upkeep = v > 0 ? v : undefined; })} />
                         </FieldRow>

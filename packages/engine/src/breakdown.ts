@@ -26,7 +26,7 @@ export type FireBreakdown = {
   taxExtra: number;
   /** Covering retirement income that starts later, until it does (tax included). */
   bridge: number;
-  /** Mortgage payments left after you retire (tax included). */
+  /** What's still owed on a mortgage when you retire (tax included). */
   homeBridge: number;
   fire: number;
   years: number;
