@@ -3,20 +3,17 @@
  * (that's what builds your retirement number) and whether it's essential (what you'd keep in a money
  * emergency). One list, so you can answer it all at once.
  */
-import { useLocalSearchParams, useRouter } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
-import { InlineSwitch } from "../../../components/form";
-import { Card, Divider, Screen } from "../../../components/ui";
-import { groupOf, groupOrder } from "../../../lib/budgetOrder";
-import { money } from "../../../lib/format";
-import { usePlan } from "../../../lib/plan";
-import { useStore } from "../../../lib/store";
-import { space, type, useTheme } from "../../../lib/theme";
+import { InlineSwitch } from "./form";
+import { Card, Divider } from "./ui";
+import { groupOf, groupOrder } from "../lib/budgetOrder";
+import { money } from "../lib/format";
+import { usePlan } from "../lib/plan";
+import { useStore } from "../lib/store";
+import { space, type, useTheme } from "../lib/theme";
 
-export default function RetirementAndEssentials() {
+export function RetirementEssentials() {
   const t = useTheme();
-  const router = useRouter();
-  const { from } = useLocalSearchParams<{ from?: string }>();
   const { state, result } = usePlan();
   const update = useStore((s) => s.update);
   const d = result.d;
@@ -30,10 +27,9 @@ export default function RetirementAndEssentials() {
   const afterRetiring = items.filter((b) => b.inRetirement).reduce((a, b) => a + b.amount, 0);
   const essential = items.filter((b) => b.essential !== false).reduce((a, b) => a + b.amount, 0);
   const groups = groupOrder(items);
-  const back = from === "number" ? "/progress?view=number" : from === "emergency" ? "/emergency" : "/budget";
 
   return (
-    <Screen title="Retirement & essentials" back={() => router.navigate(back)} narrow>
+    <>
       <Card style={{ gap: space.sm }}>
         <Text style={[type.body, { color: t.text2 }]}>
           For each category: would you still pay it after you retire, and is it essential (what you'd keep paying in a money emergency)?
@@ -90,7 +86,7 @@ export default function RetirementAndEssentials() {
       <Text style={[type.caption, { color: t.text3 }]}>
         Bills set aside each month come from your repeating savings goals, and investing categories (money you put into an account) aren't spending, so neither is listed here.
       </Text>
-    </Screen>
+    </>
   );
 }
 

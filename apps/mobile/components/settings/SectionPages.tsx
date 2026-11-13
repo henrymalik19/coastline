@@ -32,6 +32,12 @@ function useSummaries(): Record<string, string> {
     sharing: sharedBy ? `Shared by ${sharedBy}` : members.length ? `${members.length} ${members.length === 1 ? "person" : "people"}` : "Not shared",
     account: syncConfigured ? (syncEmail ? `Signed in as ${syncEmail}` : "Not signed in") : "Saved on this device",
     profile: `Age ${state.age} · retire at ${state.retireAge}`,
+    retirement: (() => {
+      const items = state.budget.filter((b) => !b.accountId);
+      const after = items.filter((b) => b.inRetirement).reduce((a, b) => a + b.amount, 0);
+      const ess = items.filter((b) => b.essential !== false).reduce((a, b) => a + b.amount, 0);
+      return items.length ? `${money(after)}/mo after retiring · ${money(ess)} essential` : "No categories yet";
+    })(),
     retirementIncome: retire.length ? `${retire.length} · ${money(result.d.retireIncomeAnnual / 12)}/mo` : "None added",
     income: state.incomes.length ? `${state.incomes.length} source${state.incomes.length > 1 ? "s" : ""} · ${money(result.d.leanMonthly)}/mo` : "None yet",
     budget: `${state.budget.length} items · ${money(result.d.budgetTotal)}/mo`,

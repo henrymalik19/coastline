@@ -52,7 +52,7 @@ export function NumberBreakdown() {
         {b.spending.map((x) => <View key={x.key}>{row(x.label, `${x.monthly < 0 ? "−" : ""}${money(Math.abs(x.monthly), { whole: true })}/mo`, { indent: true })}</View>)}
         <Divider />
         {row("Retirement spending", per(b.retireAnnual), { strong: true })}
-        <Pressable role="link" onPress={() => router.push("/money/retirement?from=number")} hitSlop={6} style={{ alignSelf: "flex-start", marginTop: 2 }}>
+        <Pressable role="link" onPress={() => router.push("/money/retirement")} hitSlop={6} style={{ alignSelf: "flex-start", marginTop: 2 }}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Choose which categories you'd still pay →</Text>
         </Pressable>
       </View>

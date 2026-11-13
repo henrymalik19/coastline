@@ -109,7 +109,7 @@ export default function Emergency() {
         <View style={[styles.essentials, { backgroundColor: t.surface2 }]}>
           <Text style={[type.caption, { color: t.text3 }]}>
             Ticked = you'd keep paying it.{" "}
-            <Text role="link" onPress={() => router.push("/money/retirement?from=emergency")} style={{ color: t.accent, fontWeight: "700" }}>See them with retirement</Text>
+            <Text role="link" onPress={() => router.push("/money/retirement")} style={{ color: t.accent, fontWeight: "700" }}>See them with retirement</Text>
           </Text>
           {state.budget.map((b, i) => {
             if (b.accountId) return null; // money moved to an account, not spending

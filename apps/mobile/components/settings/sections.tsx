@@ -17,6 +17,7 @@ import { ContributionsCard } from "../ContributionsCard";
 import { RetirementIncomeEditor } from "../RetirementIncomeEditor";
 import { GoalEditor } from "../GoalEditor";
 import { BudgetEditor } from "../BudgetEditor";
+import { RetirementEssentials } from "../RetirementEssentials";
 import { PlanSteps } from "../PlanSteps";
 import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "../form";
 import { Icon, type IconName } from "../Icon";
@@ -30,7 +31,7 @@ import { hsaEverEligible, HsaEligibilityChanges } from "../HsaEligibility";
 
 /* ---------- registry ---------- */
 
-type SectionKey = "account" | "sharing" | "appearance" | "profile" | "retirementIncome" | "income" | "budget" | "savings" | "accounts" | "debts" | "goals" | "assumptions" | "priorities" | "limits" | "data";
+type SectionKey = "account" | "sharing" | "appearance" | "profile" | "retirementIncome" | "retirement" | "income" | "budget" | "savings" | "accounts" | "debts" | "goals" | "assumptions" | "priorities" | "limits" | "data";
 type SectionMeta = { key: SectionKey; title: string; subtitle: string; icon: IconName; /** Not listed (moved elsewhere; old links still work). */ hidden?: boolean };
 
 export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
@@ -52,6 +53,7 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
       { key: "accounts", title: "Accounts", subtitle: "Balances you've saved and invested", icon: "database" },
       { key: "debts", title: "Debts", subtitle: "Balances, interest rates and minimums", icon: "card" },
       { key: "goals", title: "Savings goals", subtitle: "Each goal becomes a step in your plan", icon: "target" },
+      { key: "retirement", title: "Retirement & essentials", subtitle: "What you'd still pay after retiring, and what's essential", icon: "shield" },
       { key: "retirementIncome", title: "Income in retirement", subtitle: "Social Security, pensions and other income after you stop working", icon: "calendar" },
     ],
   },
@@ -551,6 +553,7 @@ export const SECTION_SCREENS: Record<SectionKey, ComponentType> = {
   appearance: AppearanceSection,
   profile: Profile,
   retirementIncome: () => <RetirementIncomeSection />,
+  retirement: () => <RetirementEssentials />,
   income: IncomeSection,
   // moved to the Budget tab
   budget: () => <Redirect href="/budget" />,
