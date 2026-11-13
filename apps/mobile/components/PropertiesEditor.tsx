@@ -19,7 +19,7 @@ const KINDS: { value: Property["kind"]; label: string }[] = [
   { value: "rental", label: "Rental" },
 ];
 
-export function PropertiesEditor() {
+export function PropertiesEditor({ titled = true }: { /** Off on its own page, which already says "Homes & rentals". */ titled?: boolean } = {}) {
   const t = useTheme();
   const { state } = usePlan();
   const update = useStore((s) => s.update);
@@ -48,7 +48,7 @@ export function PropertiesEditor() {
 
   return (
     <Card style={{ gap: space.sm }}>
-      <Text role="heading" aria-level={2} style={[type.heading, { color: t.text }]}>Homes and rentals</Text>
+      {titled ? <Text role="heading" aria-level={2} style={[type.heading, { color: t.text }]}>Homes and rentals</Text> : null}
       <Text style={[type.caption, { color: t.text3 }]}>
         What they're worth counts in your net worth, not in Coast FI (it isn't money you can invest). A rental's costs come out of its rent, so they stay out of your retirement spending.
       </Text>

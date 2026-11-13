@@ -1,5 +1,5 @@
 import { accountGroup, type Account, type AccountType, type PlanAccount } from "@coastfi/engine";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { confirm } from "../lib/confirm";
@@ -16,6 +16,7 @@ import { contributionKey, MonthlyAmount, PayrollNote, plannedNow } from "./Sched
 import { money } from "../lib/format";
 import { monthKey } from "../lib/store";
 import { ensureSpouseStep, spouseName } from "../lib/spouse";
+import { sticky } from "../lib/sticky";
 
 export const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: "pretax", label: "Pre-tax" },
@@ -58,7 +59,7 @@ const QUICK_ADD: { name: string; type: AccountType; label?: string }[] = [
  * type or remove it. Grouped by kind (checking & savings, retirement, investments, property, and
  * your credit cards from Debts); drag a row's grip to reorder it within its group. Used in setup and in Settings.
  */
-export function AccountsEditor() {
+export function AccountsEditor({ afterRetirement }: { /** Shown under the retirement accounts (or after all of them when there are none): what you've contributed this year. */ afterRetirement?: ReactNode } = {}) {
   const t = useTheme();
   const { state, start } = usePlan();
   const update = useStore((s) => s.update);
@@ -88,10 +89,11 @@ export function AccountsEditor() {
           const inGroup = (x: Account) => groupKeyOf(x) === g.key;
           const list = accounts.filter(inGroup);
           if (!list.length) return null;
+          const after = g.key === "retirement" ? afterRetirement : null;
           const total = list.reduce((sum, x) => sum + (+x.balance || 0), 0);
           return (
             <View key={g.key} style={{ gap: space.xs }}>
-              <View style={[styles.row, styles.groupHead]}>
+              <View style={[styles.row, styles.groupHead, sticky(0, t.bg)]}>
                 <Text style={[type.overline, { color: t.text3, flex: 1 }]}>{g.label}</Text>
                 <Text style={[type.caption, { color: t.text3, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(total)}</Text>
               </View>
@@ -201,6 +203,7 @@ export function AccountsEditor() {
                   }}
                 />
               </Card>
+              {after}
             </View>
           );
         })
@@ -211,7 +214,7 @@ export function AccountsEditor() {
       )}
       {cards.length ? (
         <View style={{ gap: space.xs }}>
-          <View style={[styles.row, styles.groupHead]}>
+          <View style={[styles.row, styles.groupHead, sticky(0, t.bg)]}>
             <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Credit cards</Text>
             <Text style={[type.caption, { color: t.text3, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(cards.reduce((sum, d) => sum + d.balance, 0))} owed</Text>
           </View>
@@ -251,6 +254,7 @@ export function AccountsEditor() {
           </Card>
         </View>
       ) : null}
+      {!accounts.some((a) => groupKeyOf(a) === "retirement") ? afterRetirement : null}
       <View style={{ gap: space.sm }}>
         <Text style={[type.label, { color: t.text2 }]}>Add an account</Text>
         <View style={styles.chips}>
@@ -266,5 +270,5 @@ export function AccountsEditor() {
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: space.sm },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  groupHead: { paddingHorizontal: space.xs, marginTop: space.xs },
+  groupHead: { paddingHorizontal: space.xs, marginTop: space.xs, paddingVertical: space.xs },
 });

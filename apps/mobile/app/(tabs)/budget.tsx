@@ -10,7 +10,7 @@ import { TransactionsList } from "../../components/TransactionsList";
 import { cardMap, liveBudget } from "../../lib/register";
 import { linkableAccounts, suggestedAccount } from "../../lib/budgetDupes";
 import { needsCategory } from "../../lib/categories";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Segmented, Select } from "../../components/form";
 import { ChangesLater, MonthlyAmount } from "../../components/ScheduleEditor";
@@ -82,6 +82,16 @@ export default function Budget() {
   const [colH, setColH] = useState(28);
   // the bar's height (the views and Add), which everything else sticks under
   const [barH, setBarH] = useState(56);
+  // the Unassigned card has scrolled up under the bar (web): then the bar shows Unassigned instead
+  const rtaRef = useRef<unknown>(null);
+  const [rtaHidden, setRtaHidden] = useState(false);
+  useEffect(() => {
+    const el = rtaRef.current as Element | null;
+    if (Platform.OS !== "web" || !el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => setRtaHidden(!!e && !e.isIntersecting && e.boundingClientRect.top < barH + 1), { rootMargin: `-${barH}px 0px 0px 0px` });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [barH, tab, view.started]);
   // transactions that still need a category (any month)
   const needsCount = txns.filter(needsCategory).length;
   // a display choice (Settings → Appearance), on unless turned off
@@ -541,7 +551,7 @@ export default function Budget() {
                 onChange={(v) => { setTab(v); if (v !== "transactions" && (acctParam || viewParam || needsParam)) router.setParams({ account: undefined, view: undefined, needs: undefined }); }}
               />
             </View>
-            {tab === "categories" && !compact ? unassignedChip : null}
+            {tab === "categories" && rtaHidden && !compact ? unassignedChip : null}
             {compact ? (
               <Pressable role="button" accessibilityLabel="Add a transaction" onPress={() => setAdding({})} hitSlop={6} style={({ pressed }) => [styles.addRound, { backgroundColor: t.accent, opacity: pressed ? 0.8 : 1 }]}>
                 <Icon name="plus" size={18} color="#fff" />
@@ -549,7 +559,7 @@ export default function Budget() {
             ) : (
               <Button title="Add a transaction" icon="plus" tone="primary" onPress={() => setAdding({})} style={{ minHeight: 36 }} />
             )}
-            {tab === "categories" && compact ? <View style={{ width: "100%" }}>{unassignedChip}</View> : null}
+            {tab === "categories" && rtaHidden && compact ? <View style={{ width: "100%" }}>{unassignedChip}</View> : null}
       </View>
       ) : null}
       {!view.started || tab !== "accounts" ? monthBar : null}
@@ -559,7 +569,7 @@ export default function Budget() {
         <BudgetAccounts onTransfer={(from) => setAdding({ from })} stickyTop={barH} />
       ) : view.started ? (
         <>
-          {rtaCard}
+          <View ref={rtaRef as never}>{rtaCard}</View>
           {needsCount ? (
             <Pressable role="link" onPress={() => { setTab("transactions"); router.setParams({ view: "transactions", needs: "1" }); }} style={[styles.needsRow, { backgroundColor: t.warnSoft }]}>
               <View style={[styles.realDot, { backgroundColor: t.warn }]} />

@@ -31,7 +31,7 @@ import { hsaEverEligible, HsaEligibilityChanges } from "../HsaEligibility";
 
 /* ---------- registry ---------- */
 
-type SectionKey = "account" | "sharing" | "appearance" | "profile" | "retirementIncome" | "retirement" | "healthcare" | "income" | "budget" | "savings" | "accounts" | "debts" | "goals" | "assumptions" | "priorities" | "limits" | "data";
+type SectionKey = "account" | "sharing" | "appearance" | "profile" | "retirementIncome" | "retirement" | "healthcare" | "income" | "budget" | "savings" | "accounts" | "properties" | "debts" | "goals" | "assumptions" | "priorities" | "limits" | "data";
 type SectionMeta = { key: SectionKey; title: string; subtitle: string; icon: IconName; /** Not listed (moved elsewhere; old links still work). */ hidden?: boolean };
 
 export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
@@ -52,6 +52,7 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
       { key: "savings", title: "Monthly savings", subtitle: "Now on the Budget tab", icon: "target", hidden: true },
       { key: "accounts", title: "Accounts", subtitle: "Balances you've saved and invested", icon: "database" },
       { key: "debts", title: "Debts", subtitle: "Balances, interest rates and minimums", icon: "card" },
+      { key: "properties", title: "Homes & rentals", subtitle: "What each is worth, its mortgage, rent and upkeep", icon: "home" },
       { key: "goals", title: "Savings goals", subtitle: "Each goal becomes a step in your plan", icon: "target" },
     ],
   },
@@ -263,9 +264,7 @@ function AccountsSection() {
       <Text style={[type.body, { color: t.text2 }]}>
         Cash is your emergency fund. Everything else counts as invested. Tap an account to rename it, change its type or remove it; drag its grip to reorder.
       </Text>
-      <AccountsEditor />
-      <PropertiesEditor />
-      <ContributionsCard />
+      <AccountsEditor afterRetirement={<ContributionsCard />} />
     </>
   );
 }
@@ -586,6 +585,7 @@ export const SECTION_SCREENS: Record<SectionKey, ComponentType> = {
   budget: () => <Redirect href="/budget" />,
   savings: () => <Redirect href="/budget" />,
   accounts: AccountsSection,
+  properties: () => <PropertiesEditor titled={false} />,
   debts: DebtsSection,
   goals: GoalsSection,
   priorities: () => <PlanSteps />,

@@ -44,6 +44,7 @@ function useSummaries(): Record<string, string> {
     budget: `${state.budget.length} items · ${money(result.d.budgetTotal)}/mo`,
     savings: (() => { const n = Object.keys({ ...(state.plan.schedule ?? {}), ...(state.plan.scheduleMonths ?? {}) }).length; return n ? `${n} account${n > 1 ? "s" : ""} set · ${money(result.plan.months[0]?.plannedAsk ?? 0)}/mo` : "None set"; })(),
     accounts: `${state.accounts.length} accounts · ${money(result.d.invested + result.d.bal.cash)}`,
+    properties: (() => { const ps = state.properties ?? []; const r = ps.filter((p) => p.kind === "rental").length; return ps.length ? `${ps.length - r ? `${ps.length - r} home${ps.length - r > 1 ? "s" : ""}` : ""}${ps.length - r && r ? " · " : ""}${r ? `${r} rental${r > 1 ? "s" : ""}` : ""} · ${money(result.d.bal.property ?? 0)}` : "None"; })(),
     debts: state.debts.length ? `${state.debts.length} · ${money(result.d.debtTotal)}` : "None",
     goals: state.goals.length ? `${state.goals.length} goal${state.goals.length > 1 ? "s" : ""}` : "None",
     priorities: `${state.plan.steps.length} steps · emergency fund, debts, retirement accounts`,
