@@ -541,9 +541,10 @@ export default function Budget() {
           {needsCount ? (
             <Pressable role="link" onPress={() => { setTab("transactions"); router.setParams({ view: "transactions", needs: "1" }); }} style={[styles.needsRow, { backgroundColor: t.warnSoft }]}>
               <View style={[styles.realDot, { backgroundColor: t.warn }]} />
-              <Text style={[type.body, { color: t.text, flex: 1 }]}>
-                <Text style={{ fontWeight: "700" }}>{needsCount} {needsCount === 1 ? "transaction needs" : "transactions need"} a category</Text>. Until then they don't count in any category or in Ready to assign.
-              </Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[type.body, { color: t.text, fontWeight: "700" }]}>{needsCount} {needsCount === 1 ? "transaction needs" : "transactions need"} a category</Text>
+                <Text style={[type.caption, { color: t.text2 }]}>Until then {needsCount === 1 ? "it doesn't" : "they don't"} count in any category or in Ready to assign.</Text>
+              </View>
               <Text style={[type.label, { color: t.accent, fontWeight: "700" }]}>Categorize</Text>
               <Icon name="chevron" size={14} color={t.accent} />
             </Pressable>
