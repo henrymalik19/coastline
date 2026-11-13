@@ -52,7 +52,8 @@ export function TransactionsList({ month, account, onlyNeedsCategory }: { month:
     return txns
       .filter((x) => !x.deleted)
       .filter((x) => acct === "all" || x.accountId === acct || x.transferAccountId === acct)
-      .filter((x) => allMonths || x.date.slice(0, 7) === month)
+      // the ones that need a category: from every month (the count beside it is all of them)
+      .filter((x) => allMonths || needsCat || x.date.slice(0, 7) === month)
       .filter((x) => !needsCat || uncategorized(x))
       .filter((x) => {
         if (!needle) return true;
@@ -97,8 +98,8 @@ export function TransactionsList({ month, account, onlyNeedsCategory }: { month:
     <>
       <View style={[styles.row, { gap: space.sm }]}>
         {addButton}
-        <Pressable role="checkbox" aria-checked={allMonths} onPress={() => setAllMonths((v) => !v)} hitSlop={6} style={[styles.chip, { borderColor: allMonths ? t.accent : t.border, backgroundColor: allMonths ? t.accentSoft : t.surface }]}>
-          <Text style={[type.caption, { color: allMonths ? t.accent : t.text2, fontWeight: "700" }]}>All months</Text>
+        <Pressable role="checkbox" aria-checked={allMonths || needsCat} disabled={needsCat} onPress={() => setAllMonths((v) => !v)} hitSlop={6} style={[styles.chip, { borderColor: allMonths || needsCat ? t.accent : t.border, backgroundColor: allMonths || needsCat ? t.accentSoft : t.surface }]}>
+          <Text style={[type.caption, { color: allMonths || needsCat ? t.accent : t.text2, fontWeight: "700" }]}>All months</Text>
         </Pressable>
         {missing ? (
           <Pressable role="checkbox" aria-checked={needsCat} onPress={() => setNeedsCat((v) => !v)} hitSlop={6} style={[styles.chip, { borderColor: needsCat ? t.warn : t.border, backgroundColor: needsCat ? t.warnSoft : t.surface }]}>
