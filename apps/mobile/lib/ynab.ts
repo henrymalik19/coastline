@@ -281,6 +281,16 @@ export function suggestChoice(plan: PlanState, a: YnabAccount): AccountChoice {
 }
 
 export type YnabCategory = { group: string; name: string; average: number };
+/** What to do with a YNAB category: add it, put it into one of the plan's (a category id, or "cash" for the Emergency fund), or leave it out. */
+export type CategoryChoice = { action: "new" } | { action: "match"; id: string } | { action: "skip" };
+
+/** The plan's category a YNAB category most likely is: the same name, or the Emergency fund for an emergency fund. */
+export function suggestCategory(plan: PlanState, c: Pick<YnabCategory, "name">): CategoryChoice {
+  const hit = plan.budget.find((b) => !b.accountId && norm(b.name) === norm(c.name));
+  if (hit) return { action: "match", id: hit.id };
+  if (/emergency/i.test(c.name)) return { action: "match", id: "cash" };
+  return { action: "new" };
+}
 
 /** YNAB's own categories (not Ready to Assign or card payments), with what you assigned a month on average lately. */
 export function ynabCategories(d: YnabData, months: string[]): YnabCategory[] {
@@ -314,8 +324,15 @@ export type ImportOptions = {
   accounts: Record<string, AccountChoice>;
   /** Per YNAB category ("group\u0000name"): still paid after you retire, and essential. */
   categories: Record<string, { inRetirement: boolean; essential: boolean }>;
+  /** Per YNAB category: add it, put it into one of the plan's, or leave it out (default: suggestCategory). */
+  categoryMap?: Record<string, CategoryChoice>;
   /** Take out the plan's own categories that are still $0 and YNAB doesn't have. */
   removeEmpty: boolean;
+  /** Transactions already here, and whether the ones YNAB also has (same account and amount, within 3 days) give way to YNAB's. */
+  existing?: Txn[];
+  replaceMatching?: boolean;
+  /** Matches you said aren't the same transaction (your transaction's id): both stay. */
+  keepBoth?: string[];
   newId: () => string;
 };
 export const categoryKey = (group: string, name: string) => norm(group) + "\u0000" + norm(name);
@@ -323,7 +340,11 @@ export const categoryKey = (group: string, name: string) => norm(group) + "\u000
 export type ImportResult = {
   plan: PlanState;
   txns: Txn[];
-  summary: { accountsAdded: number; categoriesAdded: number; categoriesUpdated: number; categoriesRemoved: number; transactions: number; months: number };
+  /** Your own transactions that YNAB's replace (to delete). */
+  replaced: string[];
+  /** Each of your transactions paired with the YNAB one that looks like the same (for you to confirm). */
+  matches: { mine: Txn; ynab: Txn }[];
+  summary: { accountsAdded: number; categoriesAdded: number; categoriesUpdated: number; categoriesRemoved: number; categoriesSkipped: number; transactions: number; transactionsMatched: number; months: number };
 };
 
 /** A stable id for a YNAB transaction, so importing it again replaces it instead of adding it twice. */
@@ -348,7 +369,7 @@ export const recentMonths = (thisMonth: string, n = 3) => Array.from({ length: n
 /** Turn YNAB's data into the plan's categories, assignments, accounts and transactions. */
 export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): ImportResult {
   const plan = structuredClone(input);
-  const summary = { accountsAdded: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, transactions: 0, months: 0 };
+  const summary = { accountsAdded: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, transactions: 0, transactionsMatched: 0, months: 0 };
   const accts = ynabAccounts(d);
 
   // accounts: matched, added, or left out
@@ -379,20 +400,27 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     if (debt) debt.balance = Math.max(0, -a.balance);
   }
 
-  // categories: YNAB's, matched by name to the plan's (same name, any group), else added in YNAB's group
+  // categories: YNAB's, put into the plan's (by your choice, else the same name), added in YNAB's group, or left out
   const months = recentMonths(o.thisMonth);
   const cats = ynabCategories(d, months);
   const itemOf = new Map<string, string>();
+  const matchedAmount = new Map<string, number>();
   for (const c of cats) {
     const k = categoryKey(c.group, c.name);
     const opts = o.categories[k] ?? { inRetirement: true, essential: true };
-    const hit = plan.budget.find((b) => norm(b.name) === norm(c.name) && !b.accountId);
+    const ch = o.categoryMap?.[k] ?? suggestCategory(plan, c);
+    if (ch.action === "skip") { summary.categoriesSkipped++; continue; }
+    const hit = ch.action === "match" ? plan.budget.find((b) => b.id === ch.id) : undefined;
+    if (ch.action === "match" && ch.id === "cash") { itemOf.set(k, "cash"); summary.categoriesUpdated++; continue; }
     if (hit) {
       itemOf.set(k, hit.id);
-      if (c.average > 0) hit.amount = c.average;
+      // two of YNAB's put into one: their amounts add up
+      const amount = (matchedAmount.get(hit.id) ?? 0) + c.average;
+      matchedAmount.set(hit.id, amount);
+      if (amount > 0) hit.amount = amount;
       hit.inRetirement = opts.inRetirement;
       hit.essential = opts.essential;
-      hit.group = c.group || hit.group;
+      if (!matchedAmount.has(hit.id + ":group")) { hit.group = c.group || hit.group; matchedAmount.set(hit.id + ":group", 1); }
       summary.categoriesUpdated++;
       continue;
     }
@@ -427,12 +455,16 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   if (!plan.budgetPlan) plan.budgetPlan = { start: from, startCash: 0, months: {} };
   if (plan.budgetPlan.start > from) plan.budgetPlan.start = from;
   const monthsTouched = new Set<string>();
+  const setHere = new Set<string>();
   for (const a of d.assigned) {
     if (a.month < from || a.month > o.thisMonth || !a.assigned) continue;
     const key = catOf(a.group, a.category);
     if (!key || key === "ready") continue;
     const e = (plan.budgetPlan.months[a.month] ??= {});
-    e.assigned = { ...(e.assigned ?? {}), [key]: Math.round(Math.max(0, a.assigned) * 100) / 100 };
+    // YNAB's amount replaces what was here; two of YNAB's into one category add up
+    const prev = setHere.has(a.month + "|" + key) ? (e.assigned?.[key] ?? 0) : 0;
+    setHere.add(a.month + "|" + key);
+    e.assigned = { ...(e.assigned ?? {}), [key]: Math.round((prev + Math.max(0, a.assigned)) * 100) / 100 };
     monthsTouched.add(a.month);
   }
   summary.months = monthsTouched.size;
@@ -490,6 +522,25 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
       ...(card ? {} : { categoryId: "ready" }), cleared: "reconciled", source: "ynab", updatedAt: now,
     });
   }
+  // your own transactions that YNAB also has give way to YNAB's (same account and amount, within 3 days)
+  const matches: { mine: Txn; ynab: Txn }[] = [];
+  if (o.existing?.length) {
+    const days = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000;
+    const ids = new Set(txns.map((x) => x.id));
+    const pool = o.existing.filter((x) => !x.deleted && x.source !== "ynab" && !ids.has(x.id) && !x.id.startsWith("start:"));
+    const taken = new Set<string>();
+    for (const y of txns) {
+      if (y.id.startsWith("start:")) continue;
+      // the closest date wins when several of yours could be this one
+      const hit = pool
+        .filter((x) => !taken.has(x.id) && x.accountId === y.accountId && Math.abs(x.amount - y.amount) < 0.005 && days(x.date, y.date) <= 3)
+        .sort((a, b) => days(a.date, y.date) - days(b.date, y.date))[0];
+      if (hit) { taken.add(hit.id); matches.push({ mine: hit, ynab: y }); }
+    }
+  }
+  const keep = new Set(o.keepBoth ?? []);
+  const replaced = o.replaceMatching === false ? [] : matches.filter((m) => !keep.has(m.mine.id)).map((m) => m.mine.id);
+  summary.transactionsMatched = replaced.length;
   summary.transactions = txns.length;
-  return { plan, txns, summary };
+  return { plan, txns, replaced, matches, summary };
 }

@@ -158,3 +158,54 @@ describe("importing into the plan", () => {
     expect(c.txns.some((t) => t.accountId !== "chk")).toBe(false);
   });
 });
+
+describe("choosing where categories go, and matching your own transactions", () => {
+  const base = () => {
+    const plan: PlanState = freshPlan();
+    plan.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 1 }];
+    plan.budget = [
+      { id: "food", name: "Food", amount: 0, inRetirement: true, group: "Food" },
+      { id: "home", name: "Home stuff", amount: 0, inRetirement: true, group: "Home" },
+    ];
+    let n = 0;
+    return { plan, d: parseYnab(REG, PLAN), opts: { from: "2026-11", thisMonth: "2026-12", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` } };
+  };
+
+  it("a YNAB category can go into one of yours, the Emergency fund, or be left out", () => {
+    const { plan, d, opts } = base();
+    const r = buildImport(plan, d, {
+      ...opts,
+      categoryMap: {
+        [categoryKey("Everyday", "Groceries")]: { action: "match", id: "food" },
+        [categoryKey("Everyday", "Household")]: { action: "match", id: "home" },
+        [categoryKey("Savings", "Roth IRA")]: { action: "match", id: "cash" },
+      },
+    });
+    expect(r.plan.budget.map((b) => b.id)).toEqual(["food", "home"]); // nothing new
+    expect(r.plan.budgetPlan!.months["2026-11"]!.assigned).toMatchObject({ food: 650, home: 50, cash: 500 });
+    expect(r.txns.find((t) => t.payee === "Target")!.splits!.map((s) => s.categoryId)).toEqual(["food", "home"]);
+    const skip = buildImport(plan, d, { ...opts, categoryMap: { [categoryKey("Everyday", "Household")]: { action: "skip" } } });
+    expect(skip.summary.categoriesSkipped).toBe(1);
+    expect(skip.plan.budget.some((b) => b.name === "Household")).toBe(false);
+    expect(skip.txns.find((t) => t.payee === "Target")!.splits!.map((s) => s.amount)).toEqual([-70]); // its line has nowhere to go
+  });
+
+  it("two of YNAB's categories into one of yours add up", () => {
+    const { plan, d, opts } = base();
+    const r = buildImport(plan, d, { ...opts, categoryMap: { [categoryKey("Everyday", "Groceries")]: { action: "match", id: "food" }, [categoryKey("Everyday", "Household")]: { action: "match", id: "food" } } });
+    expect(r.plan.budgetPlan!.months["2026-11"]!.assigned!.food).toBe(700);
+  });
+
+  it("your own transactions that YNAB also has give way to YNAB's", () => {
+    const { plan, d, opts } = base();
+    const mine = (id: string, date: string, amount: number) => ({ id, accountId: "chk", date, amount, categoryId: "food", cleared: "cleared" as const, source: "manual" as const, updatedAt: 1 });
+    const existing = [mine("m1", "2026-11-03", -100), mine("m2", "2026-11-20", -100), mine("m3", "2026-11-01", 4000)];
+    const r = buildImport(plan, d, { ...opts, existing });
+    expect(r.replaced.sort()).toEqual(["m1", "m3"]); // Target (Nov 5) and the paycheck; Nov 20 is too far off
+    expect(r.summary.transactionsMatched).toBe(2);
+    expect(buildImport(plan, d, { ...opts, existing, replaceMatching: false }).replaced).toEqual([]);
+    // each match is shown to confirm; one you say isn't the same stays alongside YNAB's
+    expect(r.matches.map((m) => [m.mine.id, m.ynab.payee])).toEqual([["m1", "Target"], ["m3", "Employer"]]);
+    expect(buildImport(plan, d, { ...opts, existing, keepBoth: ["m1"] }).replaced).toEqual(["m3"]);
+  });
+});

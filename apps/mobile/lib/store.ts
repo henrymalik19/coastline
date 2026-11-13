@@ -44,7 +44,7 @@ export type AppState = {
   /** Merge transactions from another device: the newer copy of each wins. */
   mergeTxns: (incoming: Txn[]) => void;
   /** Bring in an import (from YNAB): the plan it made, and its transactions (same ids replace older copies). */
-  importBudget: (plan: PlanState, txns: Txn[]) => void;
+  importBudget: (plan: PlanState, txns: Txn[], replaced?: string[]) => void;
   completeOnboarding: () => void;
   /** Restore a backup made by this app. Throws a readable error. */
   importJson: (text: string) => void;
@@ -147,8 +147,9 @@ export const useStore = create<AppState>()(
         applyRegisterBalances(plan, list);
         set({ txns: list, plan });
       },
-      importBudget: (plan, incoming) => {
-        const by = new Map(get().txns.map((x) => [x.id, x]));
+      importBudget: (plan, incoming, replaced = []) => {
+        const stamp = now();
+        const by = new Map(get().txns.map((x) => [x.id, replaced.includes(x.id) ? { ...x, deleted: true, updatedAt: stamp } : x]));
         for (const t of incoming) by.set(t.id, t);
         const list = [...by.values()];
         const next = structuredClone(plan);
