@@ -15,6 +15,7 @@ import { monthKey, newId, useStore } from "../../../lib/store";
 import { space, type, useTheme } from "../../../lib/theme";
 import { buildImport, categoryKey, parseYnab, readYnabZip, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabData } from "../../../lib/ynab";
 import { sticky, stickyBottom } from "../../../lib/sticky";
+import { useLayout } from "../../../lib/layout";
 
 type Range = "3" | "12" | "all";
 
@@ -70,6 +71,8 @@ export default function ImportYnab() {
   const [confirming, setConfirming] = useState(false);
   // the pinned tabs' height, so the categories' column labels stick just under them
   const [tabsH, setTabsH] = useState(44);
+  const { contentWidth } = useLayout();
+  const wide = Platform.OS === "web" && contentWidth >= 960;
 
   const pick = () => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
@@ -199,8 +202,9 @@ export default function ImportYnab() {
       </View>
     );
   };
-  return (
-    <Screen title="Import from YNAB" back={() => router.navigate("/budget")} narrow>
+  // pieces of the page: one column on phones and tablets; on a wide screen the review list on the
+  // left and the rest (months, what comes in, Import) in a panel on the right that stays in view
+  const fileCard = (
       <Card style={{ gap: space.sm }}>
         <Text style={[type.body, { color: t.text2 }]}>
           In YNAB, open your budget's menu and choose Export budget. It downloads a zip; pick it here. You'll choose what comes in before anything changes.
@@ -222,17 +226,9 @@ export default function ImportYnab() {
           </View>
         ) : null}
       </Card>
-
-      {data && preview ? (
-        <>
-          <Card style={{ gap: space.sm }}>
-            <Text style={[type.heading, { color: t.text }]}>Which months</Text>
-            <Segmented label="Months to bring in" options={[{ value: "3", label: "Last 3 months" }, { value: "12", label: "Last 12 months" }, { value: "all", label: "Everything" }]} value={range} onChange={setRange} />
-            <Text style={[type.caption, { color: t.text3 }]}>
-              Each account starts with its balance on the first day{from ? ` (${from})` : ""}; transactions and what you assigned come in from then on.
-            </Text>
-          </Card>
-
+  );
+  const review = data && preview ? (
+    <>
           <View onLayout={(e) => setTabsH(Math.round(e.nativeEvent.layout.height))} style={[styles.pinned, sticky(0, t.bg)]}>
           <Segmented
             label="What to review"
@@ -326,7 +322,18 @@ export default function ImportYnab() {
               })}
             </Card>
           ) : null}
-
+    </>
+  ) : null;
+  const monthsCard = data && preview ? (
+          <Card style={{ gap: space.sm }}>
+            <Text style={[type.heading, { color: t.text }]}>Which months</Text>
+            <Segmented label="Months to bring in" options={[{ value: "3", label: "Last 3 months" }, { value: "12", label: "Last 12 months" }, { value: "all", label: "Everything" }]} value={range} onChange={setRange} />
+            <Text style={[type.caption, { color: t.text3 }]}>
+              Each account starts with its balance on the first day{from ? ` (${from})` : ""}; transactions and what you assigned come in from then on.
+            </Text>
+          </Card>
+  ) : null;
+  const whatCard = data && preview ? (
           <Card style={{ gap: space.md }}>
             <Text style={[type.heading, { color: t.text }]}>What comes in</Text>
             <View style={styles.stats}>
@@ -359,8 +366,9 @@ export default function ImportYnab() {
             ) : null}
             <Text style={[type.caption, { color: t.text3 }]}>Your other transactions stay. Importing again later replaces what came in this time.</Text>
           </Card>
-
-          <View style={[styles.bottomBar, { borderColor: confirming ? t.accent : t.border }, stickyBottom(t.surface)]}>
+  ) : null;
+  const importBar = data && preview ? (
+          <View style={[styles.bottomBar, { borderColor: confirming ? t.accent : t.border }, wide ? { backgroundColor: t.surface } : stickyBottom(t.surface)]}>
             {confirming ? (
               <>
                 <View style={{ flex: 1, minWidth: 180 }}>
@@ -382,8 +390,29 @@ export default function ImportYnab() {
               </>
             )}
           </View>
+  ) : null;
+
+  return (
+    <Screen title="Import from YNAB" back={() => router.navigate("/budget")} narrow={!(wide && data && preview)}>
+      {wide && data && preview ? (
+        <View style={styles.columns}>
+          <View style={{ flex: 1, minWidth: 0, gap: space.lg }}>{review}</View>
+          <View style={[styles.side, sticky(0, t.bg), { maxHeight: "100vh", overflowY: "auto" } as never]}>
+            {monthsCard}
+            {whatCard}
+            {importBar}
+            {fileCard}
+          </View>
+        </View>
+      ) : (
+        <>
+          {fileCard}
+          {monthsCard}
+          {review}
+          {whatCard}
+          {importBar}
         </>
-      ) : null}
+      )}
     </Screen>
   );
 }
@@ -393,6 +422,8 @@ const styles = StyleSheet.create({
   col: { width: 84, alignItems: "center", textAlign: "center" },
   stats: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   catRow: { gap: 2, paddingVertical: space.xs, borderTopWidth: StyleSheet.hairlineWidth },
+  columns: { flexDirection: "row", alignItems: "flex-start", gap: space.lg },
+  side: { width: 380, gap: space.lg },
   pinned: { paddingVertical: space.xs, marginVertical: -space.xs },
   bottomBar: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.sm, borderWidth: 1, borderRadius: 12, paddingHorizontal: space.md, paddingVertical: space.sm },
   stat: { flexGrow: 1, flexBasis: 140, borderRadius: 10, padding: space.md, gap: 2 },
