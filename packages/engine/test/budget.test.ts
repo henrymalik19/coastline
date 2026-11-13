@@ -174,3 +174,26 @@ describe("budgetStartCash", () => {
     expect(budgetStartCash(s)).toBe(1000);
   });
 });
+
+describe("real spending", () => {
+  it("averages what each spending category really spent over the last full months", async () => {
+    const { spendingHistory } = await import("../src");
+    const cs = [
+      { key: "food", moves: false, target: 500, kind: "spending" as const },
+      { key: "roth", moves: false, target: 300, kind: "spending" as const, account: "ira" },
+    ];
+    const b: BudgetState = { start: "2026-08", startCash: 0, months: {} };
+    const tx = (id: string, date: string, amount: number, categoryId: string) => ({ id, accountId: "chk", date, amount, categoryId, cleared: "cleared" as const, source: "manual" as const, updatedAt: 0 });
+    const txns = [
+      tx("a", "2026-09-03", -600, "food"),
+      tx("b", "2026-10-03", -400, "food"),
+      tx("c", "2026-10-09", -300, "roth"),
+      tx("d", "2026-11-02", -900, "food"), // this month: not a full month yet
+    ];
+    const h = spendingHistory(b, cs, "2026-11", { txns, cards: {} });
+    expect(h.months).toEqual(["2026-09", "2026-10"]); // from the first transaction, not the budget start
+    expect(h.avg.food).toBeCloseTo(500, 6);
+    expect(h.avg.roth).toBeUndefined(); // investing isn't spending
+    expect(spendingHistory(b, cs, "2026-09", { txns, cards: {} }).months).toEqual([]);
+  });
+});

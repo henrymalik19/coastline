@@ -184,3 +184,31 @@ export function budgetView(
   }
   return view ?? empty;
 }
+
+/**
+ * What you really spent in each category, on average, over full months that already happened (the
+ * last `max` months before `month`, from when the budget started and you had transactions). Spending
+ * categories only; `months` is how many months the average covers (0 = no history yet).
+ */
+export function spendingHistory(
+  b: BudgetState | undefined,
+  cats: Pick<BudgetCategory, "key" | "moves" | "target" | "kind" | "account">[],
+  month: string,
+  tx: { txns: Txn[]; cards: Record<string, string> },
+  max = 3,
+): { months: string[]; avg: Record<string, number> } {
+  const live = tx.txns.filter((t) => !t.deleted);
+  if (!b || !live.length) return { months: [], avg: {} };
+  const first = live.reduce((m, t) => (t.date.slice(0, 7) < m ? t.date.slice(0, 7) : m), "9999-12");
+  const from = first > b.start ? first : b.start;
+  const months: string[] = [];
+  for (let m = addMonths(month, -1); m >= from && months.length < max; m = addMonths(m, -1)) months.unshift(m);
+  const avg: Record<string, number> = {};
+  if (!months.length) return { months, avg };
+  const spending = cats.filter((c) => c.kind === "spending" && !c.account);
+  for (const m of months) {
+    const v = budgetView(b, cats, m, tx);
+    for (const c of spending) avg[c.key] = (avg[c.key] ?? 0) + Math.max(0, v.lines[c.key]?.spent ?? 0) / months.length;
+  }
+  return { months, avg };
+}

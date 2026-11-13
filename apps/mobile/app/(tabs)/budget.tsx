@@ -3,7 +3,7 @@
  * categories (budget items, bills, debt payments, savings), what you don't spend carries into next
  * month, and what you assign to savings and debts is what the plan counts as done that month.
  */
-import { BUDGET_ITEM, budgetCategories, budgetView, SAVINGS_GROUP, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
+import { BUDGET_ITEM, budgetCategories, budgetView, SAVINGS_GROUP, spendingHistory, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
 import { BudgetAccounts } from "../../components/BudgetAccounts";
 import { TransactionsList } from "../../components/TransactionsList";
@@ -75,6 +75,9 @@ export default function Budget() {
   const txns = useStore((s) => s.txns);
   const cards = useMemo(() => cardMap(state), [state]);
   const view = budgetView(b, cats, month, { txns, cards });
+  // what you really spent in recent full months, against what the plan uses
+  const history = useMemo(() => spendingHistory(b, cats, thisMonth, { txns, cards }), [b, cats, thisMonth, txns, cards]);
+  const [realOpen, setRealOpen] = useState(false);
   const [adding, setAdding] = useState<{ txn?: Txn; categoryId?: string; kind?: "out" | "in"; amount?: number; from?: string } | null>(null);
   const monthTxns = txns.filter((x) => !x.deleted && x.date.startsWith(month));
   const i = between(thisMonth, month);
@@ -583,6 +586,53 @@ export default function Budget() {
               </Card>
             );
           })}
+          {(() => {
+            // your real spending: categories where the recent average is well off the plan amount
+            if (!history.months.length) return null;
+            const rows = cats
+              .filter((c) => c.kind === "spending" && !c.account && history.avg[c.key] !== undefined)
+              .map((c) => ({ c, avg: Math.round(history.avg[c.key]!), plan: c.target }))
+              .filter((r) => Math.abs(r.avg - r.plan) >= Math.max(10, r.plan * 0.1))
+              .sort((x, y) => Math.abs(y.avg - y.plan) - Math.abs(x.avg - x.plan));
+            const span = history.months.length === 1 ? nameOf(history.months[0]!) : `${nameOf(history.months[0]!)} to ${nameOf(history.months.at(-1)!)}`;
+            const net = rows.reduce((a, r) => a + r.avg - r.plan, 0);
+            const shown = realOpen ? rows : rows.slice(0, 4);
+            return (
+              <Card style={{ gap: space.sm }}>
+                <SectionLabel>Your real spending</SectionLabel>
+                <Text style={[type.caption, { color: t.text2 }]}>
+                  {rows.length
+                    ? `What you spent a month on average (${span}, ${history.months.length} full month${history.months.length === 1 ? "" : "s"}) against what your plan uses. In all, ${money(Math.abs(net), { whole: true })}/mo ${net >= 0 ? "more" : "less"} than planned. Your plan and forecast use the plan amounts, so update them to follow real life.`
+                    : `Over ${span}, every category's spending was within 10% of its plan amount. Your plan matches real life.`}
+                </Text>
+                {shown.map((r) => (
+                  <View key={r.c.key} style={[styles.realRow, { borderTopColor: t.border }]}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{label(r.c)}</Text>
+                      <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]}>
+                        Plan {money(r.plan, { whole: true })} · spent {money(r.avg, { whole: true })} ·{" "}
+                        <Text style={{ color: r.avg > r.plan ? t.warn : t.good, fontWeight: "700" }}>{r.avg > r.plan ? "+" : "−"}{money(Math.abs(r.avg - r.plan), { whole: true })}</Text>
+                      </Text>
+                    </View>
+                    <Chip title={`Plan with ${money(r.avg, { whole: true })}`} onPress={() => editItem(r.c.key, { amount: r.avg })} />
+                  </View>
+                ))}
+                {rows.length ? (
+                  <View style={styles.chips}>
+                    {rows.length > 1 ? (
+                      <Chip
+                        title="Plan with all of these"
+                        tone="accent"
+                        icon="check"
+                        onPress={() => update((p) => { for (const r of rows) { const it = p.budget.find((x) => x.id === r.c.key); if (it) it.amount = r.avg; } })}
+                      />
+                    ) : null}
+                    {rows.length > 4 ? <Chip title={realOpen ? "Show fewer" : `Show all ${rows.length}`} onPress={() => setRealOpen((v) => !v)} /> : null}
+                  </View>
+                ) : null}
+              </Card>
+            );
+          })()}
           <Pressable role="link" onPress={() => router.push("/settings")} hitSlop={6} style={styles.link}>
             <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Manage income, accounts, debts and goals</Text>
             <Icon name="chevron" size={12} color={t.accent} />
@@ -619,6 +669,7 @@ export default function Budget() {
 }
 
 const styles = StyleSheet.create({
+  realRow: { flexDirection: "row", alignItems: "center", gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm },
   monthBar: { flexDirection: "row", alignItems: "center", gap: space.md },
   navBtn: { borderWidth: 1, borderRadius: 999, width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   groupHead: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, borderBottomWidth: StyleSheet.hairlineWidth },
