@@ -49,9 +49,6 @@ export default function Budget() {
   const [month, setMonth] = useState(thisMonth);
   const [open, setOpen] = useState<string | null>(null);
   const [groupOpen, setGroupOpen] = useState<string | null>(null);
-  const [moveTo, setMoveTo] = useState<string>("");
-  const [moveAmt, setMoveAmt] = useState(0);
-  const [moveOpen, setMoveOpen] = useState(false);
   const [groupDraft, setGroupDraft] = useState("");
   const router = useRouter();
   // opened from a link (a plan step, a to-do): show this month with that line open
@@ -148,15 +145,6 @@ export default function Budget() {
   const editEf = (patch: { name?: string; group?: string }) =>
     update((p) => {
       if (p.budgetPlan) p.budgetPlan.efLine = { ...p.budgetPlan.efLine, ...patch };
-    });
-  /** Move money between two categories this month. */
-  const moveMoney = (from: string, to: string, amount: number) =>
-    edit((e) => {
-      const a = { ...(e.assigned ?? {}) };
-      const take = Math.max(0, Math.min(amount, a[from] ?? 0));
-      a[from] = (a[from] ?? 0) - take;
-      a[to] = (a[to] ?? 0) + take;
-      e.assigned = a;
     });
   /** Link a category to an account (money moved there: investing, not spending), or unlink it. */
   const linkItem = (itemId: string, accountId: string) =>
@@ -395,7 +383,7 @@ export default function Budget() {
     const dup = dupItem && !dupItem.noSuggest ? suggestedAccount(state, c.name) : undefined;
     return (
       <View key={c.key} nativeID={"cat-" + c.key}>
-        <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); setMoveAmt(0); setMoveTo(""); setMoveOpen(false); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, pressed ? { backgroundColor: t.surface2 } : null]}>
+        <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, pressed ? { backgroundColor: t.surface2 } : null]}>
           <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
             {grip}
             <Text style={[type.body, { color: t.text, flexShrink: 1 }]} numberOfLines={2}>{label(c)}</Text>
@@ -426,10 +414,20 @@ export default function Budget() {
             ) : null}
             <View style={styles.section}>
               <Text style={[type.overline, { color: t.text3 }]}>{nameOf(month)}</Text>
+              {/* this month's money: what you give it, and buttons that change that */}
               <FormList>
                 <FormRow label="Assigned" hint={c.target > 0.5 ? `Plan: ${money(c.target)}` : undefined}>
                   <InlineMoney label={`${label(c)} assigned in ${nameOf(month)}`} value={l.assigned} onChange={(v) => setAssigned(c.key, v)} />
                 </FormRow>
+              </FormList>
+              {(c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5) || l.available < -0.005 ? (
+                <View style={styles.chips}>
+                  {c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5 ? <Chip title={`Assign ${money(c.target, { whole: true })} this month`} tone="accent" onPress={() => setAssigned(c.key, Math.round(c.target * 100) / 100)} /> : null}
+                  {l.available < -0.005 ? <Chip title={`Cover ${money(-l.available)}`} tone="accent" icon="check" onPress={() => setAssigned(c.key, l.assigned - l.available)} /> : null}
+                </View>
+              ) : null}
+              {/* what went out, what you really spend, and buttons that change the plan amount */}
+              <FormList>
                 <FormRow label={c.moves ? "Paid" : "Spent"} hint={c.moves ? "From the payment or transfer you record" : "From transactions"}>
                   <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(l.spent)}</Text>
                 </FormRow>
@@ -438,45 +436,19 @@ export default function Budget() {
                     <Text style={[type.body, { color: t.warn, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(realBy.get(c.key)!.avg, { whole: true })}</Text>
                   </FormRow>
                 ) : null}
+              </FormList>
+              {realBy.has(c.key) ? (
+                <View style={styles.chips}>
+                  <Chip title={`Change plan to ${money(realBy.get(c.key)!.avg, { whole: true })}`} onPress={() => editItem(c.key, { amount: realBy.get(c.key)!.avg, keptAt: undefined })} />
+                  <Chip title={`Keep plan at ${money(realBy.get(c.key)!.plan, { whole: true })}`} onPress={() => editItem(c.key, { keptAt: realBy.get(c.key)!.avg })} />
+                </View>
+              ) : null}
+              <FormList>
                 <FormRow label="Available" hint={l.carried > 0.5 ? `${money(l.carried)} carried over` : (l.funded ?? 0) > 0.5 ? `+${money(l.funded ?? 0)} from card spending` : undefined}>
                   <Text style={[type.body, { color: l.available < -0.005 ? t.bad : l.available > 0.5 ? t.good : t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(l.available)}</Text>
                 </FormRow>
               </FormList>
-              <View style={styles.chips}>
-                {realBy.has(c.key) ? <Chip title={`Plan with ${money(realBy.get(c.key)!.avg, { whole: true })}`} onPress={() => editItem(c.key, { amount: realBy.get(c.key)!.avg, keptAt: undefined })} /> : null}
-                {realBy.has(c.key) ? <Chip title={`Keep ${money(realBy.get(c.key)!.plan, { whole: true })}`} onPress={() => editItem(c.key, { keptAt: realBy.get(c.key)!.avg })} /> : null}
-                {c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5 ? <Chip title={`Use plan ${money(c.target)}`} tone="accent" onPress={() => setAssigned(c.key, Math.round(c.target * 100) / 100)} /> : null}
-                {l.available < -0.005 ? <Chip title={`Cover ${money(-l.available)}`} tone="accent" icon="check" onPress={() => setAssigned(c.key, l.assigned - l.available)} /> : null}
-                <Chip title="Transaction" icon="plus" onPress={() => setAdding({ categoryId: c.key })} />
-                {l.assigned > 0.005 ? <Chip title={moveOpen ? "Cancel move" : "Move money"} onPress={() => setMoveOpen((v) => !v)} /> : null}
-              </View>
             </View>
-            {moveOpen && l.assigned > 0.005 ? (
-              <View style={styles.section}>
-                <FormList>
-                  <FormRow label="Amount" hint={`Up to ${money(l.assigned)}`}>
-                    <InlineMoney label={`Amount to move from ${label(c)}`} value={moveAmt || Math.max(0, Math.min(l.available, l.assigned))} onChange={setMoveAmt} />
-                  </FormRow>
-                  <FormRow label="To">
-                    <Select plain label="Move to" placeholder="Choose" value={moveTo} options={[{ value: "", label: "Choose" }, ...cats.filter((x) => x.key !== c.key).map((x) => ({ value: x.key, label: label(x), hint: x.group }))]} onChange={setMoveTo} />
-                  </FormRow>
-                </FormList>
-                <Button
-                  title="Move"
-                  tone="primary"
-                  disabled={!moveTo}
-                  onPress={() => {
-                    // nothing typed: move what's available
-                    const amt = Math.min(moveAmt > 0 ? moveAmt : Math.max(0, l.available), l.assigned);
-                    moveMoney(c.key, moveTo, amt);
-                    setMoveTo("");
-                    setMoveAmt(0);
-                    setMoveOpen(false);
-                  }}
-                  style={{ minHeight: 40 }}
-                />
-              </View>
-            ) : null}
             {(() => {
               const list = monthTxns.filter((x) => x.categoryId === c.key || x.splits?.some((y) => y.categoryId === c.key) || (c.kind === "debt" && x.accountId === c.key.slice(5) && !!x.transferAccountId));
               if (!list.length) return null;
@@ -564,15 +536,15 @@ export default function Budget() {
                         </Text>
                       </View>
                       <View style={styles.realChips}>
-                        <Chip title={`Plan with ${money(r.avg, { whole: true })}`} onPress={() => editItem(r.c.key, { amount: r.avg, keptAt: undefined })} />
-                        <Chip title={`Keep ${money(r.plan, { whole: true })}`} onPress={() => editItem(r.c.key, { keptAt: r.avg })} />
+                        <Chip title={`Change plan to ${money(r.avg, { whole: true })}`} onPress={() => editItem(r.c.key, { amount: r.avg, keptAt: undefined })} />
+                        <Chip title={`Keep plan at ${money(r.plan, { whole: true })}`} onPress={() => editItem(r.c.key, { keptAt: r.avg })} />
                       </View>
                     </View>
                   ))}
                   <View style={styles.chips}>
                     {realRows.length > 1 ? (
                       <Chip
-                        title="Plan with all of these"
+                        title="Change all to what I spend"
                         tone="accent"
                         icon="check"
                         onPress={() => update((p) => { for (const r of realRows) { const it = p.budget.find((x) => x.id === r.c.key); if (it) { it.amount = r.avg; delete it.keptAt; } } })}
