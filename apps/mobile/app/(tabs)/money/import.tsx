@@ -110,11 +110,14 @@ export default function ImportYnab() {
   );
 
   const options = (a: YnabAccount) => {
-    const pool =
+    // an account here takes one YNAB account: the ones another already took aren't offered
+    const takenByOthers = new Set(Object.entries(choices).flatMap(([n, c]) => (n !== a.name && c.action === "match" ? [c.id] : [])));
+    const pool0 =
       a.kind === "cash" ? state.accounts.filter((x) => x.type === "cash")
       : a.kind === "card" ? state.debts.filter(isCard)
       : a.kind === "loan" ? state.debts.filter((x) => !isCard(x))
       : state.accounts.filter((x) => x.type !== "cash");
+    const pool = pool0.filter((x) => !takenByOthers.has(x.id));
     return [
       ...pool.map((x) => ({ value: "match:" + x.id, label: `Same as ${x.name || "account"}` })),
       { value: "add", label: "Add as a new account" },
@@ -151,11 +154,6 @@ export default function ImportYnab() {
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[type.body, { color: choices[a.name]?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]} numberOfLines={1}>{a.name}</Text>
           <Text style={[type.caption, { color: t.text3 }]}>{KIND_LABEL[a.kind]} · {a.kind === "card" || a.kind === "loan" ? `owe ${money(Math.max(0, -a.balance))}` : money(a.balance)}</Text>
-          {(() => {
-            const ch = choices[a.name];
-            const also = ch?.action === "match" ? Object.entries(choices).filter(([n, c]) => n !== a.name && c.action === "match" && c.id === ch.id).map(([n]) => n) : [];
-            return also.length ? <Text style={[type.caption, { color: t.warn }]}>Also chosen for {also.join(", ")}: their transactions would land in one account</Text> : null;
-          })()}
         </View>
         <Select label={`${a.name}: what it is here`} value={valueOf(choices[a.name])} options={options(a)} onChange={(v) => setChoice(a.name, v)} />
       </View>

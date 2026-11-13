@@ -378,9 +378,11 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   // accounts: matched, added, or left out
   const idOf = new Map<string, string>();
   const kindOf = new Map<string, YnabAccountKind>();
-  const taken = new Set(Object.values(o.accounts).flatMap((c) => (c.action === "match" ? [c.id] : [])));
+  const taken = new Set<string>();
   for (const a of accts) {
-    const ch = o.accounts[a.name] ?? suggestChoice(plan, a, taken);
+    let ch = o.accounts[a.name] ?? suggestChoice(plan, a, new Set([...taken, ...Object.values(o.accounts).flatMap((c) => (c.action === "match" ? [c.id] : []))]));
+    // one YNAB account per account here: a second one pointed at it is added instead of merged
+    if (ch.action === "match" && taken.has(ch.id)) ch = { action: "add" };
     if (ch.action === "match") taken.add(ch.id);
     if (ch.action === "skip") continue;
     kindOf.set(a.name, a.kind);

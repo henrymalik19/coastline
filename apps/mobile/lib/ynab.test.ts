@@ -150,6 +150,13 @@ describe("importing into the plan", () => {
     expect(r.plan.budgetPlan!.months["2026-10"]!.assigned!.food).toBe(600);
   });
 
+  it("two YNAB accounts never land in one account here", () => {
+    const { plan, d, opts } = setup();
+    const r = buildImport(plan, d, { ...opts, accounts: { Checking: { action: "match", id: "chk" }, "Roth IRA": { action: "match", id: "chk" } } });
+    expect(r.plan.accounts.map((a) => a.name)).toEqual(["Checking", "Roth IRA"]); // the IRA was added, not merged
+    expect(r.txns.filter((x) => x.accountId === "chk").every((x) => x.id.startsWith("start:") || x.payee !== "Starting Balance")).toBe(true);
+  });
+
   it("importing again replaces what came in before (same ids), and skipped accounts stay out", () => {
     const { plan, d, opts } = setup();
     const a = buildImport(plan, d, opts);
