@@ -65,6 +65,8 @@ export const AccountSchema = z.object({
   plaidAccountId: z.string().optional(),
   counts: z.enum(["k401", "ira", "hsa", "taxable", "other"]).optional(),
   owner: z.literal("spouse").optional(),
+  homeCosts: money.optional(),
+  upkeep: rate.min(0).optional(),
 });
 export const DebtKindSchema = z.enum(["credit_card", "car", "student", "mortgage", "personal", "medical", "k401_loan", "other"]);
 export const DebtSchema = z.object({
@@ -79,6 +81,9 @@ export const DebtSchema = z.object({
   promoUntil: z.string().regex(MONTH_RE, "Use YYYY-MM").optional(),
   minimumOnly: z.boolean().optional(),
   escrow: money.optional(),
+  term: z.number().int().min(1).max(600).optional(),
+  firstPayment: z.string().regex(MONTH_RE, "Use YYYY-MM").optional(),
+  original: money.optional(),
   payroll: z.boolean().optional(),
   budgetGroup: z.string().optional(),
 });

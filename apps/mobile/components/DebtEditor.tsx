@@ -9,7 +9,8 @@ import { paycheckFor } from "../lib/loans";
 import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { Button, FieldRow, IconButton, MonthField, NumberInput, TextField, ToggleRow } from "./form";
+import { Button, FieldRow, IconButton, MonthField, NumberInput, Select, TextField, ToggleRow } from "./form";
+import { mortgageStatus } from "../lib/homeLoan";
 import { Card, Divider } from "./ui";
 import { ScheduleEditor, scheduleSummary, useSchedule } from "./ScheduleEditor";
 
@@ -75,6 +76,7 @@ export function DebtEditor({
                 {paidFrom ? `${money(paidFrom.perCheck)}/paycheck` : `${money(debt.minPayment)}/mo`}{debt.minimumOnly ? " · minimum only" : ""}
               </Text>
             ) : null}
+            {!open && kind.value === "mortgage" ? <MortgageLine debt={debt} /> : null}
           </View>
         </Pressable>
         <IconButton icon="trash" color={t.bad} label={`Remove ${debtLabel(debt)}`} onPress={onRemove} />
@@ -125,6 +127,8 @@ export function DebtEditor({
           >
             <NumberInput kind="money" label={`${debtLabel(debt)} escrow`} value={debt.escrow ?? 0} max={debt.minPayment} onChange={(v) => onChange({ escrow: v > 0 ? v : undefined })} />
           </FieldRow>
+          <Divider />
+          <MortgageSchedule debt={debt} onChange={onChange} />
         </>
       ) : null}
       {PROMO_KINDS.has(kind.value) ? (
@@ -249,6 +253,50 @@ export function AddDebtButtons({ onAdd, hasAny }: { onAdd: (d: Debt) => void; ha
       </View>
     </View>
   );
+}
+
+const TERMS = [10, 15, 20, 25, 30, 40];
+
+/** A mortgage's original schedule (optional) and what it means: ahead of schedule, paid off when, retirement. */
+function MortgageSchedule({ debt, onChange }: { debt: Debt; onChange: (patch: Partial<Debt>) => void }) {
+  const t = useTheme();
+  const { result, start } = usePlan();
+  const st = mortgageStatus(debt, result, start);
+  const term = debt.term ? String(debt.term) : "";
+  const options = [{ value: "", label: "Not set" }, ...TERMS.map((y) => ({ value: String(y * 12), label: `${y} years` }))];
+  if (term && !options.some((o) => o.value === term)) options.push({ value: term, label: `${debt.term} months` });
+  const lines = [...st.schedule, st.payoff, st.retire].filter(Boolean) as string[];
+  return (
+    <View style={{ gap: space.sm }}>
+      <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Loan schedule (optional)</Text>
+      <Text style={[type.caption, { color: t.text3 }]}>To see which payment you're on and how far ahead of schedule extra payments put you. Payoff always comes from what you owe now.</Text>
+      <FieldRow label="Loan length">
+        <Select label={`${debtLabel(debt)} loan length`} value={term} options={options} onChange={(v) => onChange({ term: v ? Number(v) : undefined })} />
+      </FieldRow>
+      <FieldRow label="First payment" hint="The month of your first payment">
+        <MonthField label={`${debtLabel(debt)} first payment`} value={debt.firstPayment} onChange={(v) => onChange({ firstPayment: v })} />
+      </FieldRow>
+      <FieldRow label="Amount borrowed" hint="Optional: shows what the schedule says you'd owe now">
+        <NumberInput kind="money" label={`${debtLabel(debt)} amount borrowed`} value={debt.original ?? 0} onChange={(v) => onChange({ original: v > 0 ? v : undefined })} />
+      </FieldRow>
+      {lines.length ? (
+        <View style={[styles.note, { backgroundColor: st.intoRetirement ? t.warnSoft : t.surface2, gap: 4 }]}>
+          {lines.map((l, i) => (
+            <Text key={i} style={[type.caption, { color: t.text2 }]}>{l}</Text>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** One line under a collapsed mortgage: ahead of schedule, or that it runs into retirement. */
+function MortgageLine({ debt }: { debt: Debt }) {
+  const t = useTheme();
+  const { result, start } = usePlan();
+  const st = mortgageStatus(debt, result, start);
+  const text = st.intoRetirement ? "Runs into retirement: adds to your number" : st.schedule[1]?.replace(/:.*/, "");
+  return text ? <Text style={[type.caption, { color: st.intoRetirement ? t.warn : t.text3 }]} numberOfLines={1}>{text}</Text> : null;
 }
 
 const styles = StyleSheet.create({

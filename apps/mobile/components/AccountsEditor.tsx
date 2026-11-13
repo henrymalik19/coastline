@@ -7,7 +7,7 @@ import { HELP } from "../lib/help";
 import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
-import { Button, Choice, IconButton, NumberInput, TextField } from "./form";
+import { Button, Choice, FieldRow, IconButton, NumberInput, TextField } from "./form";
 import { Icon } from "./Icon";
 import { Card, Divider } from "./ui";
 import { DragList, reorderAmong } from "./DragList";
@@ -169,6 +169,21 @@ export function AccountsEditor() {
                     <TextField label="Account name" placeholder="e.g. Fidelity 401(k)" value={a.name} onChange={(v) => update((p) => { p.accounts[i]!.name = v; })} />
                     <Choice label="Account type" options={ACCOUNT_TYPES} value={a.type} onChange={(v) => update((p) => { p.accounts[i]!.type = v; })} />
                     <Text style={[type.caption, { color: t.text3 }]}>{HELP[a.type]}</Text>
+                    {a.type === "property" ? (
+                      <>
+                        <Text style={[type.label, { color: t.text, fontWeight: "700", marginTop: space.sm }]}>Costs that keep going in retirement</Text>
+                        <FieldRow
+                          label="Property tax + insurance a year"
+                          hint={state.debts.some((x) => x.kind === "mortgage" && (x.escrow ?? 0) > 0) ? "Your mortgage escrow already counts these. Leave this at $0 unless they're paid separately." : "For a home with no mortgage escrow"}
+                        >
+                          <NumberInput kind="money" label={`${name} property tax and insurance a year`} value={a.homeCosts ?? 0} onChange={(v) => update((p) => { p.accounts[i]!.homeCosts = v > 0 ? v : undefined; })} />
+                        </FieldRow>
+                        <FieldRow label="Upkeep a year" hint={`Repairs and maintenance, as a share of its value. About 1% is common${(a.upkeep ?? 0) > 0 ? ` (${money(a.balance * (a.upkeep ?? 0), { whole: true })} a year)` : ""}.`}>
+                          <NumberInput kind="percent" label={`${name} upkeep a year`} value={a.upkeep ?? 0} max={0.1} onChange={(v) => update((p) => { p.accounts[i]!.upkeep = v > 0 ? v : undefined; })} />
+                        </FieldRow>
+                        <Text style={[type.caption, { color: t.text3 }]}>These add to your retirement spending, so your number covers them. Today's costs belong in your budget.</Text>
+                      </>
+                    ) : null}
                     {a.type !== "cash" && a.type !== "property" ? (
                       <>
                         <Choice

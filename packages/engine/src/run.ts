@@ -2,16 +2,24 @@ import { derive } from "./derive";
 import { monteCarlo } from "./montecarlo";
 import { simulatePlan } from "./plan";
 import { coastCrossing, coastNumberAt, fireNumber, project } from "./project";
-import type { MonteCarloResult, PlanState, RunResult } from "./types";
+import type { Derived, MonteCarloResult, PlanResult, PlanState, RunResult } from "./types";
+import { mortgagesAtRetirement } from "./mortgage";
 
 /** Monte Carlo seed used by `run` (fixed, so results are reproducible). */
 export const MC_SEED = 20261106;
+
+/** The numbers the FIRE number needs, with mortgage payments left in retirement added to the bridge. */
+function withHome(s: PlanState, d: Derived, plan: PlanResult) {
+  const mortgagesAtRetire = mortgagesAtRetirement(s, d, plan);
+  const homeBridge = mortgagesAtRetire.reduce((a, x) => a + x.total, 0);
+  return { mortgagesAtRetire, homeBridge, dFire: homeBridge > 0 ? { ...d, retireBridge: d.retireBridge + homeBridge } : d };
+}
 
 function coastOnly(s: PlanState, startDate: Date, extraMonthly: number): number | null {
   const d = derive(s, startDate);
   const plan = simulatePlan(s, d, { extraMonthly });
   const proj = project(d, plan, d.r);
-  const fire = fireNumber(d, proj.preShareFinal);
+  const fire = fireNumber(withHome(s, d, plan).dFire, proj.preShareFinal);
   return coastCrossing(proj, d, fire, d.r);
 }
 
@@ -20,12 +28,13 @@ export function run(s: PlanState, startDate: Date): RunResult {
   const d = derive(s, startDate);
   const plan = simulatePlan(s, d);
   const proj = project(d, plan, d.r);
-  const fire = fireNumber(d, proj.preShareFinal);
+  const { mortgagesAtRetire, homeBridge, dFire } = withHome(s, d, plan);
+  const fire = fireNumber(dFire, proj.preShareFinal);
   const coastNow = coastNumberAt(fire, d.r, d.years);
   const crossing = coastCrossing(proj, d, fire, d.r);
   const rCons = d.r - 0.015;
   const projC = project(d, plan, rCons);
-  const fireC = fireNumber(d, projC.preShareFinal);
+  const fireC = fireNumber(dFire, projC.preShareFinal);
   const crossingC = coastCrossing(projC, d, fireC, rCons);
   const mc: MonteCarloResult =
     d.years > 0
@@ -61,5 +70,7 @@ export function run(s: PlanState, startDate: Date): RunResult {
     coastSoonerMonths: crossing !== null && plus100 !== null ? Math.round((crossing - plus100) * 12) : null,
     whenBalance,
     whenCoastPct,
+    mortgagesAtRetire,
+    homeBridge,
   };
 }

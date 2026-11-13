@@ -16,4 +16,5 @@ export { SAVINGS_GROUP, budgetCategories, budgetStartCash, budgetView, type Budg
 export { accountForecasts, accountGroup, type AccountForecast, type AccountMonth, type AccountYear, type AccountKey } from "./forecast";
 export { monteCarlo } from "./montecarlo";
 export { run, MC_SEED } from "./run";
+export { amortize, loanPayment, loanSchedule, mortgagesAtRetirement, scheduledPayment, type DebtAtRetirement, type LoanSchedule } from "./mortgage";
 export { addMonths, monthsBetween, mulberry32 } from "./util";

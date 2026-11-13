@@ -1,3 +1,4 @@
+import type { DebtAtRetirement } from "./mortgage";
 /**
  * Plan-state types (PLAN.md §4.1). Percentages are decimals (0.05 = 5%).
  * All money is in today's dollars; returns are real (after inflation).
@@ -92,6 +93,10 @@ export type Account = {
   counts?: PlanAccount;
   /** Whose account this is. Missing = yours. Only an IRA's owner changes the math (each person has their own IRA limit). */
   owner?: "spouse";
+  /** A home with no mortgage escrow: property tax + insurance a year, which keeps going in retirement. */
+  homeCosts?: number;
+  /** Repairs and upkeep a year, as a share of the home's value (0.01 = 1%), counted in retirement. */
+  upkeep?: number;
 };
 /** What kind of debt this is. Display only; payoff math is the same for every kind. */
 export type DebtKind = "credit_card" | "car" | "student" | "mortgage" | "personal" | "medical" | "k401_loan" | "other";
@@ -115,6 +120,13 @@ export type Debt = {
    * pay the balance down, and it keeps being a cost after the loan is paid off and in retirement.
    */
   escrow?: number;
+  /**
+   * The loan's original schedule (a mortgage): length in months, first payment "YYYY-MM", and the
+   * amount borrowed. Display only ("payment 49 of 360", ahead of schedule); payoff comes from the balance.
+   */
+  term?: number;
+  firstPayment?: string;
+  original?: number;
   /**
    * Repaid by a paycheck deduction (a 401(k) loan): the payment is already out of take-home,
    * so it lowers the balance without coming out of the budget.
@@ -427,6 +439,10 @@ export type Derived = {
   hsaEmployerAnnual: number;
   /** Recurring goals' average monthly set-aside (target ÷ months between due dates). */
   setAsideMonthly: number;
+  /** Mortgage escrow (property tax + insurance) a month, which keeps going in retirement. */
+  escrowMonthly: number;
+  /** A home's property tax, insurance and upkeep a month in retirement (homes without escrow). */
+  homeMonthly: number;
 };
 
 export type Alloc = {
@@ -564,4 +580,8 @@ export type RunResult = {
   whenBalance: (target: number) => number | null;
   /** Month index when the path first reaches fraction `f` of the coast number, or null. */
   whenCoastPct: (f: number) => number | null;
+  /** Mortgages still owed when you retire, and what's left to pay on them. */
+  mortgagesAtRetire: DebtAtRetirement[];
+  /** Savings needed for those payments (part of the FIRE number, like the retirement income bridge). */
+  homeBridge: number;
 };

@@ -34,8 +34,10 @@ export function derive(s: PlanState, startDate: Date): Derived {
   // essentials: items not explicitly marked non-essential, plus debt minimums
   const essentialExpenses = sum(budget.filter((b) => b.essential !== false).map((b) => b.amount)) + debtMins + setAsideMonthly;
 
+  // a home you own: property tax + insurance (when no mortgage escrow covers them) and upkeep
+  const homeMonthly = sum((s.accounts ?? []).filter((a) => a.type === "property").map((a) => (Math.max(0, num(a.homeCosts)) + Math.max(0, num(a.balance)) * Math.max(0, num(a.upkeep))) / 12));
   const retireMonthly =
-    (sum(budget.filter((b) => b.inRetirement).map((b) => b.amount)) + num(s.healthcare) + setAsideRetired + escrowMonthly) * (1 + (w.spendDelta || 0));
+    (sum(budget.filter((b) => b.inRetirement).map((b) => b.amount)) + num(s.healthcare) + setAsideRetired + escrowMonthly + homeMonthly) * (1 + (w.spendDelta || 0));
   const years = Math.max(0, Math.round(s.retireAge - s.age));
 
   // income in retirement: the yearly total once everything has started, plus the savings
@@ -82,5 +84,7 @@ export function derive(s: PlanState, startDate: Date): Derived {
     rothShare,
     hsaEmployerAnnual: sum(incomes.map((i) => Math.max(0, num(i.hsaEmployer)))),
     setAsideMonthly,
+    escrowMonthly,
+    homeMonthly,
   };
 }
