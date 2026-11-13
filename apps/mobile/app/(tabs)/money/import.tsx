@@ -296,10 +296,9 @@ export default function ImportYnab() {
                 if (!list.length) return null;
                 return (
                   <View key={k} style={{ gap: 2, marginTop: space.xs }}>
-                    <View style={[styles.row, { justifyContent: "space-between" }]}>
-                      <Text style={[type.overline, { color: t.text2 }]}>{KIND_SECTION[k]}</Text>
-                      <Text style={[type.caption, { color: t.text3 }]}>{list.length}</Text>
-                    </View>
+                    <Text style={[type.overline, { color: t.text2 }]}>
+                      {KIND_SECTION[k]} <Text style={{ color: t.text3 }}>({list.length})</Text>
+                    </Text>
                     {k === "invest" || k === "loan" ? <Text style={[type.caption, { color: t.text3 }]}>Balance only: their transactions don't come in.</Text> : null}
                     {list.map((a, i) => accountRow(a, i))}
                   </View>
