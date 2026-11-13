@@ -175,7 +175,10 @@ export default function Budget() {
           <Text style={[type.body, { color: t.text2 }]}>
             Your first money to assign is the cash in your accounts today: <Text style={{ color: t.text, fontWeight: "700" }}>{money(cashNow)}</Text>. Your categories come from your budget, bills, debts and savings, with amounts from your plan.
           </Text>
-          <Button title={`Start with ${monthLabel(start, 0, true)}`} tone="primary" icon="plus" onPress={startBudget} style={{ alignSelf: "flex-start" }} />
+          <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
+            <Button title={`Start with ${monthLabel(start, 0, true)}`} tone="primary" icon="plus" onPress={startBudget} />
+            <Button title="Import from YNAB" icon="database" onPress={() => router.push("/money/import")} />
+          </View>
         </Card>
       </Screen>
     );
@@ -628,6 +631,7 @@ export default function Budget() {
           <Text style={[type.caption, { color: t.text3 }]}>
             Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement && !x.accountId).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number. Bills come from repeating savings goals and debt payments from Debts; tap one to change it there. Spent and paid come from the transactions you record.
           </Text>
+          <Button title="Import from YNAB" icon="database" tone="ghost" onPress={() => router.push("/money/import")} style={{ alignSelf: "flex-start" }} />
           <Button
             title="Start the budget over"
             tone="ghost"
