@@ -14,6 +14,7 @@ import { isCard } from "../../../lib/register";
 import { monthKey, newId, useStore } from "../../../lib/store";
 import { space, type, useTheme } from "../../../lib/theme";
 import { buildImport, categoryKey, parseYnab, readYnabZip, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabData } from "../../../lib/ynab";
+import { sticky, stickyBottom } from "../../../lib/sticky";
 
 type Range = "3" | "12" | "all";
 
@@ -67,6 +68,8 @@ export default function ImportYnab() {
   const [showUnused, setShowUnused] = useState(false);
   // the confirmation shows on the page (a browser pop-up can be blocked, as in an embedded browser)
   const [confirming, setConfirming] = useState(false);
+  // the pinned tabs' height, so the categories' column labels stick just under them
+  const [tabsH, setTabsH] = useState(44);
 
   const pick = () => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
@@ -230,6 +233,7 @@ export default function ImportYnab() {
             </Text>
           </Card>
 
+          <View onLayout={(e) => setTabsH(Math.round(e.nativeEvent.layout.height))} style={[styles.pinned, sticky(0, t.bg)]}>
           <Segmented
             label="What to review"
             options={[
@@ -240,6 +244,7 @@ export default function ImportYnab() {
             value={tab}
             onChange={setTab}
           />
+          </View>
 
           {tab === "accounts" ? (
             <Card style={{ gap: space.sm }}>
@@ -266,7 +271,7 @@ export default function ImportYnab() {
               <Text style={[type.caption, { color: t.text3 }]}>
                 Each comes in with what you assigned a month lately: as a new category, into one of yours, or not at all. Turn off After retiring for what you won't pay then (daycare, a car payment), and Essential for what you'd cut in a money emergency.
               </Text>
-              <View style={styles.row}>
+              <View style={[styles.row, { paddingVertical: space.xs }, sticky(tabsH, t.surface)]}>
                 <Text style={[type.caption, { color: t.text3, flex: 1 }]} />
                 <Text style={[type.caption, styles.col, { color: t.text3 }]}>After retiring</Text>
                 <Text style={[type.caption, styles.col, { color: t.text3 }]}>Essential</Text>
@@ -353,21 +358,30 @@ export default function ImportYnab() {
               </Text>
             ) : null}
             <Text style={[type.caption, { color: t.text3 }]}>Your other transactions stay. Importing again later replaces what came in this time.</Text>
-            {confirming ? (
-              <View style={[styles.confirm, { backgroundColor: t.surface2, borderColor: t.accent }]}>
-                <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Import these now?</Text>
-                <Text style={[type.caption, { color: t.text2 }]}>
-                  {preview.summary.transactions} transactions{preview.summary.transactionsMatched ? ` (replacing ${preview.summary.transactionsMatched} of yours)` : ""}, {preview.summary.categoriesAdded + preview.summary.categoriesUpdated} categories and {preview.summary.accountsAdded} new accounts come into your plan.
-                </Text>
-                <View style={[styles.row, { flexWrap: "wrap" }]}>
-                  <Button title="Yes, import" tone="primary" onPress={run} style={{ minHeight: 44 }} />
-                  <Button title="Cancel" tone="ghost" onPress={() => setConfirming(false)} style={{ minHeight: 44 }} />
-                </View>
-              </View>
-            ) : (
-              <Button title="Import" tone="primary" onPress={() => setConfirming(true)} style={{ alignSelf: "flex-start", minHeight: 44 }} />
-            )}
           </Card>
+
+          <View style={[styles.bottomBar, { borderColor: confirming ? t.accent : t.border }, stickyBottom(t.surface)]}>
+            {confirming ? (
+              <>
+                <View style={{ flex: 1, minWidth: 180 }}>
+                  <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Import these now?</Text>
+                  <Text style={[type.caption, { color: t.text2 }]}>
+                    {preview.summary.transactions} transactions{preview.summary.transactionsMatched ? ` (replacing ${preview.summary.transactionsMatched} of yours)` : ""}, {preview.summary.categoriesAdded + preview.summary.categoriesUpdated} categories and {preview.summary.accountsAdded} new accounts come into your plan.
+                  </Text>
+                </View>
+                <Button title="Cancel" tone="ghost" onPress={() => setConfirming(false)} style={{ minHeight: 40 }} />
+                <Button title="Yes, import" tone="primary" onPress={run} style={{ minHeight: 40 }} />
+              </>
+            ) : (
+              <>
+                <Text style={[type.caption, { color: t.text2, flex: 1, minWidth: 0 }]} numberOfLines={2}>
+                  {preview.summary.transactions} transactions · {preview.summary.categoriesAdded + preview.summary.categoriesUpdated} categories · {preview.summary.accountsAdded} new account{preview.summary.accountsAdded === 1 ? "" : "s"}
+                  {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut ? <Text style={{ color: t.warn }}> · {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut} need a category</Text> : null}
+                </Text>
+                <Button title="Import" tone="primary" onPress={() => setConfirming(true)} style={{ minHeight: 40 }} />
+              </>
+            )}
+          </View>
         </>
       ) : null}
     </Screen>
@@ -379,6 +393,7 @@ const styles = StyleSheet.create({
   col: { width: 84, alignItems: "center", textAlign: "center" },
   stats: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   catRow: { gap: 2, paddingVertical: space.xs, borderTopWidth: StyleSheet.hairlineWidth },
-  confirm: { borderWidth: 1, borderRadius: 10, padding: space.md, gap: space.sm },
+  pinned: { paddingVertical: space.xs, marginVertical: -space.xs },
+  bottomBar: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.sm, borderWidth: 1, borderRadius: 12, paddingHorizontal: space.md, paddingVertical: space.sm },
   stat: { flexGrow: 1, flexBasis: 140, borderRadius: 10, padding: space.md, gap: 2 },
 });
