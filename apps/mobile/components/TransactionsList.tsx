@@ -30,7 +30,7 @@ const dayHead = (d: string) => {
 };
 
 /** `month` is "YYYY-MM" (the budget's month); `account` starts the list on one account. */
-export function TransactionsList({ month, account, onlyNeedsCategory }: { month: string; account?: string; /** Open showing only the ones that need a category. */ onlyNeedsCategory?: boolean }) {
+export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop = 0 }: { month: string; account?: string; /** Open showing only the ones that need a category. */ onlyNeedsCategory?: boolean; /** Where the filters stop, under the Budget's toolbar. */ stickyTop?: number }) {
   const t = useTheme();
   const router = useRouter();
   const { contentWidth } = useLayout();
@@ -45,6 +45,8 @@ export function TransactionsList({ month, account, onlyNeedsCategory }: { month:
   const [q, setQ] = useState("");
   const [needsCat, setNeedsCat] = useState(!!onlyNeedsCategory);
   const [editing, setEditing] = useState<Txn | "new" | null>(null);
+  // the filters' height, so each day's heading sticks just under them
+  const [filtersH, setFiltersH] = useState(96);
 
   const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? state.accounts.find((a) => a.id === id)?.name ?? state.debts.find((d) => d.id === id)?.name ?? "Account";
   const uncategorized = (x: Txn) => needsCategory(x);
@@ -70,10 +72,6 @@ export function TransactionsList({ month, account, onlyNeedsCategory }: { month:
   const outTotal = list.reduce((a, x) => a + (x.amount < 0 && !x.transferAccountId ? -x.amount : 0), 0);
   const missing = txns.filter((x) => !x.deleted && uncategorized(x)).length;
 
-  const addButton = state.budgetPlan && accounts.length ? (
-    <Button title={compact ? "Add" : "Add a transaction"} icon="plus" tone="primary" onPress={() => setEditing("new")} style={{ minHeight: 36 }} />
-  ) : null;
-
   if (!state.budgetPlan || !accounts.length) {
     return (
         <Card style={{ gap: space.md }}>
@@ -98,8 +96,8 @@ export function TransactionsList({ month, account, onlyNeedsCategory }: { month:
 
   return (
     <>
+      <View onLayout={(e) => setFiltersH(Math.round(e.nativeEvent.layout.height))} style={[{ gap: space.sm, paddingVertical: space.xs, marginVertical: -space.xs }, sticky(stickyTop, t.bg)]}>
       <View style={[styles.row, { gap: space.sm }]}>
-        {addButton}
         <Pressable role="checkbox" aria-checked={allMonths || needsCat} disabled={needsCat} onPress={() => setAllMonths((v) => !v)} hitSlop={6} style={[styles.chip, { borderColor: allMonths || needsCat ? t.accent : t.border, backgroundColor: allMonths || needsCat ? t.accentSoft : t.surface }]}>
           <Text style={[type.caption, { color: allMonths || needsCat ? t.accent : t.text2, fontWeight: "700" }]}>All months</Text>
         </Pressable>
@@ -121,6 +119,7 @@ export function TransactionsList({ month, account, onlyNeedsCategory }: { month:
         <View style={{ flex: 1, minWidth: compact ? "100%" : 200 }}>
           <TextField label="Search transactions" placeholder="Search payee, category, amount" value={q} onChange={setQ} />
         </View>
+      </View>
       </View>
 
       <View style={[styles.summary, { backgroundColor: t.surface2 }]}>
@@ -146,7 +145,7 @@ export function TransactionsList({ month, account, onlyNeedsCategory }: { month:
         <Card padded={false}>
           {days.map((g, gi) => (
             <View key={g.date}>
-              <View style={[styles.dayHead, { backgroundColor: t.surface2, borderTopWidth: gi ? StyleSheet.hairlineWidth : 0, borderTopColor: t.border }, sticky(0, t.surface2), gi === 0 ? { borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg } : null]}>
+              <View style={[styles.dayHead, { backgroundColor: t.surface2, borderTopWidth: gi ? StyleSheet.hairlineWidth : 0, borderTopColor: t.border }, sticky(stickyTop + filtersH, t.surface2), gi === 0 ? { borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg } : null]}>
                 <Text style={[type.overline, { color: t.text3 }]}>{dayHead(g.date)}</Text>
               </View>
               {g.items.map((x, i) => (

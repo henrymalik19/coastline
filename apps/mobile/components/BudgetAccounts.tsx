@@ -21,7 +21,7 @@ import { sticky } from "../lib/sticky";
 const TRACKING_TIP =
   "Not in your budget: their balances only change when you move money. Withdraw records money coming out into checking (it goes to Unassigned); a transfer to one from checking adds to it.";
 
-export function BudgetAccounts({ onAdd, onTransfer }: { onAdd: () => void; onTransfer: (from: string) => void }) {
+export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (from: string) => void; /** Where its headings stop, under the Budget's toolbar. */ stickyTop?: number }) {
   const t = useTheme();
   const router = useRouter();
   const { state } = usePlan();
@@ -38,7 +38,7 @@ export function BudgetAccounts({ onAdd, onTransfer }: { onAdd: () => void; onTra
   const owed = cards.reduce((s, a) => s - a.balance, 0);
 
   const head = (label: string, value: string, extra?: ReactNode) => (
-    <View style={[styles.head, sticky(0, t.bg)]}>
+    <View style={[styles.head, sticky(stickyTop, t.bg)]}>
       <Text style={[type.overline, { color: t.text3, flex: 1 }]}>{label}</Text>
       {extra}
       <Text style={[type.caption, { color: t.text3, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{value}</Text>
@@ -70,10 +70,6 @@ export function BudgetAccounts({ onAdd, onTransfer }: { onAdd: () => void; onTra
 
   return (
     <View style={{ gap: space.md }}>
-      <View style={[styles.head, { justifyContent: "flex-end" }]}>
-        <Button title="Add a transaction" icon="plus" tone="primary" onPress={onAdd} style={{ minHeight: 36 }} />
-      </View>
-
       {cash.length ? (
         <View style={{ gap: space.xs }}>
           {head("Checking & savings", money(cashTotal))}

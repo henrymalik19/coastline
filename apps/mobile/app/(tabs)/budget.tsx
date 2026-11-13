@@ -80,6 +80,8 @@ export default function Budget() {
   const [realOpen, setRealOpen] = useState(false);
   // the column header's height, so each group's header sticks just under it
   const [colH, setColH] = useState(28);
+  // the toolbar's height (month, views, Add), which everything else sticks under
+  const [barH, setBarH] = useState(56);
   // transactions that still need a category (any month)
   const needsCount = txns.filter(needsCategory).length;
   // a display choice (Settings → Appearance), on unless turned off
@@ -218,12 +220,12 @@ export default function Budget() {
   const monthBar = (
     <View style={styles.monthBar}>
       <Pressable role="button" accessibilityLabel="Previous month" disabled={!canGoBack} onPress={() => setMonth(shift(month, -1))} hitSlop={8} style={[styles.navBtn, { borderColor: t.border, opacity: canGoBack ? 1 : 0.35 }]}>
-        <Icon name="back" size={16} color={t.accent} />
+        <Icon name="back" size={14} color={t.accent} />
       </Pressable>
-      <View style={{ alignItems: "center", flex: 1 }}>
-        <Text style={[type.heading, { color: t.text }]}>{nameOf(month)}</Text>
+      <View style={{ alignItems: "center", minWidth: 96 }}>
+        <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{nameOf(month)}</Text>
         {month === thisMonth ? (
-          <Text style={[type.overline, { color: t.accent }]}>This month</Text>
+          <Text style={[type.overline, { color: t.accent, fontSize: 10 }]}>This month</Text>
         ) : (
           <Pressable role="button" onPress={() => setMonth(thisMonth)} hitSlop={6}>
             <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Back to this month</Text>
@@ -231,7 +233,7 @@ export default function Budget() {
         )}
       </View>
       <Pressable role="button" accessibilityLabel="Next month" onPress={() => setMonth(shift(month, 1))} hitSlop={8} style={[styles.navBtn, { borderColor: t.border }]}>
-        <Icon name="chevron" size={16} color={t.accent} />
+        <Icon name="chevron" size={14} color={t.accent} />
       </Pressable>
     </View>
   );
@@ -520,24 +522,39 @@ export default function Budget() {
 
   return (
     <Screen title="Budget" subtitle={compact ? undefined : "Plan where your money goes"}>
-      {monthBar}
-      {view.started ? (
-        <View style={[styles.editRow, { justifyContent: "space-between" }]}>
-          <View style={{ flexGrow: 1, flexShrink: 1, maxWidth: 440 }}>
-            <Segmented
-              label="Budget view"
-              options={[{ value: "categories", label: "Categories" }, { value: "accounts", label: "Accounts" }, { value: "transactions", label: `${compact ? "Activity" : "Transactions"}${needsCount ? ` · ${needsCount}` : ""}` }]}
-              value={tab}
-              onChange={(v) => { setTab(v); if (v !== "transactions" && (acctParam || viewParam || needsParam)) router.setParams({ account: undefined, view: undefined, needs: undefined }); }}
-            />
-          </View>
-          {tab === "categories" ? <Button title={compact ? "Add" : "Add a transaction"} icon="plus" tone="primary" onPress={() => setAdding({})} style={{ minHeight: 36 }} /> : null}
-        </View>
-      ) : null}
+      <View onLayout={(e) => setBarH(Math.round(e.nativeEvent.layout.height))} style={[styles.toolbar, sticky(0, t.bg)]}>
+        {(() => {
+          const tabs = view.started ? (
+            <View style={compact ? { width: "100%" } : { flexGrow: 1, flexShrink: 1, maxWidth: 440 }}>
+              <Segmented
+                label="Budget view"
+                options={[{ value: "categories", label: "Categories" }, { value: "accounts", label: "Accounts" }, { value: "transactions", label: `${compact ? "Activity" : "Transactions"}${needsCount ? ` · ${needsCount}` : ""}` }]}
+                value={tab}
+                onChange={(v) => { setTab(v); if (v !== "transactions" && (acctParam || viewParam || needsParam)) router.setParams({ account: undefined, view: undefined, needs: undefined }); }}
+              />
+            </View>
+          ) : null;
+          const add = view.started ? <Button title={contentWidth < 820 ? "Add" : "Add a transaction"} icon="plus" tone="primary" onPress={() => setAdding({})} style={{ minHeight: 36 }} /> : null;
+          // a phone: month and Add on one line, the views under them
+          return compact ? (
+            <>
+              <View style={[styles.editRow, { justifyContent: "space-between", width: "100%" }]}>{monthBar}{add}</View>
+              {tabs}
+            </>
+          ) : (
+            <>
+              {monthBar}
+              {tabs}
+              <View style={{ flex: 1 }} />
+              {add}
+            </>
+          );
+        })()}
+      </View>
       {view.started && tab === "transactions" ? (
-        <TransactionsList key={(acctParam ?? "all") + (needsParam ?? "")} month={month} account={acctParam} onlyNeedsCategory={needsParam === "1"} />
+        <TransactionsList key={(acctParam ?? "all") + (needsParam ?? "")} month={month} account={acctParam} onlyNeedsCategory={needsParam === "1"} stickyTop={barH} />
       ) : view.started && tab === "accounts" ? (
-        <BudgetAccounts onAdd={() => setAdding({})} onTransfer={(from) => setAdding({ from })} />
+        <BudgetAccounts onTransfer={(from) => setAdding({ from })} stickyTop={barH} />
       ) : view.started ? (
         <>
           {rtaCard}
@@ -604,7 +621,7 @@ export default function Budget() {
               ) : null}
             </Card>
           ) : null}
-          <View onLayout={(e) => setColH(Math.round(e.nativeEvent.layout.height))} style={[styles.colHead, { paddingHorizontal: compact ? space.md : space.lg }, sticky(0, t.bg)]}>
+          <View onLayout={(e) => setColH(Math.round(e.nativeEvent.layout.height))} style={[styles.colHead, { paddingHorizontal: compact ? space.md : space.lg }, sticky(barH, t.bg)]}>
             <Text style={[type.caption, styles.colName, { color: t.text3, flex: 1 }]}>Category</Text>
             {(compact ? ["Assigned", "Available"] : ["Assigned", "Spent", "Available"]).map((h) => (
               <Text key={h} numberOfLines={1} style={[type.caption, styles.colName, { color: t.text3, width: COLW, textAlign: "right", paddingRight: h === "Available" ? PILL_IN : 0 }]}>{h}</Text>
@@ -621,7 +638,7 @@ export default function Budget() {
                   aria-expanded={groupOpen === g.name}
                   accessibilityLabel={`${g.name} group: rename${ownGroup(g) ? ", reorder" : ""} or add a category`}
                   onPress={() => { setGroupOpen(groupOpen === g.name ? null : g.name); setGroupDraft(g.name); }}
-                  style={[styles.groupHead, { borderBottomColor: t.border }, compact ? { paddingHorizontal: space.md } : null, sticky(colH, t.surface), { borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg }]}
+                  style={[styles.groupHead, { borderBottomColor: t.border }, compact ? { paddingHorizontal: space.md } : null, sticky(barH + colH, t.surface), { borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg }]}
                 >
                   <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
                     <Text style={[type.overline, { color: t.text2, flexShrink: 1 }]} numberOfLines={2}>{g.name}</Text>
@@ -717,8 +734,9 @@ const styles = StyleSheet.create({
   realTag: { borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
   realChips: { flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" },
   realRow: { flexDirection: "row", alignItems: "center", gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm },
-  monthBar: { flexDirection: "row", alignItems: "center", gap: space.md },
-  navBtn: { borderWidth: 1, borderRadius: 999, width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  monthBar: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  navBtn: { borderWidth: 1, borderRadius: 999, width: 30, height: 30, alignItems: "center", justifyContent: "center" },
+  toolbar: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.md, paddingVertical: space.sm, marginVertical: -space.sm },
   groupHead: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, borderBottomWidth: StyleSheet.hairlineWidth },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },
   pill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, alignItems: "flex-end", maxWidth: "100%" },
