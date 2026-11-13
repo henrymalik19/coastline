@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { k401Cost, type EmergencyMode } from "@coastfi/engine";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { longMonth } from "../../components/AdjustmentsCard";
@@ -13,6 +14,7 @@ const LENGTHS = [1, 2, 3, 6, 12];
 
 /** Emergency mode: pause the plan, keep cash, optionally cut to essentials / pause 401(k). */
 export default function Emergency() {
+  const router = useRouter();
   const t = useTheme();
   const { state, result: o, start, actual } = usePlan();
   const update = useStore((s) => s.update);
@@ -105,7 +107,10 @@ export default function Emergency() {
           onChange={(v) => set({ essentialsOnly: v })}
         />
         <View style={[styles.essentials, { backgroundColor: t.surface2 }]}>
-          <Text style={[type.caption, { color: t.text3 }]}>Ticked = you'd keep paying it</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>
+            Ticked = you'd keep paying it.{" "}
+            <Text role="link" onPress={() => router.push("/money/retirement?from=emergency")} style={{ color: t.accent, fontWeight: "700" }}>See them with retirement</Text>
+          </Text>
           {state.budget.map((b, i) => {
             if (b.accountId) return null; // money moved to an account, not spending
             const keep = b.essential !== false;

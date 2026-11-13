@@ -52,6 +52,9 @@ export function NumberBreakdown() {
         {b.spending.map((x) => <View key={x.key}>{row(x.label, `${x.monthly < 0 ? "−" : ""}${money(Math.abs(x.monthly), { whole: true })}/mo`, { indent: true })}</View>)}
         <Divider />
         {row("Retirement spending", per(b.retireAnnual), { strong: true })}
+        <Pressable role="link" onPress={() => router.push("/money/retirement?from=number")} hitSlop={6} style={{ alignSelf: "flex-start", marginTop: 2 }}>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Choose which categories you'd still pay →</Text>
+        </Pressable>
       </View>
       <View style={{ gap: 4 }}>
         <Text style={[type.caption, { color: t.text3 }]}>Change it: {d.retireMonthly > 0 ? `${state.whatif.spendDelta >= 0 ? "+" : "−"}${Math.abs(Math.round(state.whatif.spendDelta * 100))}% from your budget` : "add budget items marked “Still paid after you retire”"}</Text>

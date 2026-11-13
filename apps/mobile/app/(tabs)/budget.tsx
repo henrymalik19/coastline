@@ -296,14 +296,15 @@ export default function Budget() {
               <InlineMoney label={`${it.name || "Item"} planned each month`} value={it.amount} onChange={(v) => editItem(it.id, { amount: v })} />
             </FormRow>
             {linkedTo ? null : (
-              <>
-                <FormRow label="Still paid after you retire" hint="Counts toward your retirement number">
-                  <InlineSwitch label="Still paid after you retire" value={it.inRetirement} onChange={(v) => editItem(it.id, { inRetirement: v })} />
-                </FormRow>
-                <FormRow label="Essential" hint="Kept in emergency mode">
-                  <InlineSwitch label="Essential" value={it.essential !== false} onChange={(v) => editItem(it.id, { essential: v })} />
-                </FormRow>
-              </>
+              <FormRow
+                label="Retirement & essentials"
+                hint={`${it.inRetirement ? "Still paid after you retire" : "Not paid after you retire"} · ${it.essential !== false ? "Essential" : "Not essential"}`}
+              >
+                <Pressable role="link" onPress={() => router.push("/money/retirement")} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                  <Text style={[type.body, { color: t.accent, fontWeight: "600" }]}>Change</Text>
+                  <Icon name="chevron" size={14} color={t.accent} />
+                </Pressable>
+              </FormRow>
             )}
             <FormRow label="Group">
               <Select plain label="Group" value={groupOf(it)} options={groupNames.map((g) => ({ value: g, label: g }))} onChange={(g) => update((p) => { p.budget = moveToGroup(p.budget, itemIndex(it.id), g); })} />
@@ -657,7 +658,8 @@ export default function Budget() {
             <Button title={`Add to ${groupOrder(state.budget)[0] ?? UNGROUPED}`} icon="plus" tone="ghost" onPress={() => addItem(groupOrder(state.budget)[0] ?? UNGROUPED)} style={{ minHeight: 36 }} />
           </View>
           <Text style={[type.caption, { color: t.text3 }]}>
-            Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement && !x.accountId).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number. Bills come from repeating savings goals and debt payments from Debts; tap one to change it there. Spent and paid come from the transactions you record.
+            Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement && !x.accountId).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number.{" "}
+            <Text role="link" onPress={() => router.push("/money/retirement")} style={{ color: t.accent, fontWeight: "700" }}>Choose what's included</Text>. Bills come from repeating savings goals and debt payments from Debts; tap one to change it there. Spent and paid come from the transactions you record.
           </Text>
           <Button title="Import from YNAB" icon="database" tone="ghost" onPress={() => router.push("/money/import")} style={{ alignSelf: "flex-start" }} />
           <Button
