@@ -553,9 +553,16 @@ export default function Budget() {
             <Card style={{ gap: space.sm, paddingVertical: space.md }}>
               <View style={[styles.realHead]}>
                 <View style={[styles.realDot, { backgroundColor: t.warn }]} />
-                <Text style={[type.body, { color: t.text, flex: 1 }]}>
-                  <Text style={{ fontWeight: "700" }}>{realRows.length} {realRows.length === 1 ? "category is" : "categories are"} off</Text> from what you really spend ({realNet >= 0 ? "+" : "−"}{money(Math.abs(realNet), { whole: true })}/mo)
-                </Text>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[type.body, { color: t.text, fontWeight: "700" }]}>
+                    {realRows.length} {realRows.length === 1 ? "category doesn't" : "categories don't"} match what you spend
+                  </Text>
+                  <Text style={[type.caption, { color: t.text2 }]}>
+                    {Math.abs(realNet) < 0.5
+                      ? `Some higher, some lower than your plan (${realSpan} average)`
+                      : `You spend about ${money(Math.abs(realNet), { whole: true })}/mo ${realNet > 0 ? "more" : "less"} than your plan (${realSpan} average)`}
+                  </Text>
+                </View>
                 <Chip title={realOpen ? "Hide" : "Review"} tone="accent" onPress={() => setRealOpen((v) => !v)} />
               </View>
               {realOpen ? (
