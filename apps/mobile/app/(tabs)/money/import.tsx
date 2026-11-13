@@ -8,7 +8,6 @@ import { useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, InlineSwitch, Segmented, Select, ToggleRow } from "../../../components/form";
 import { Card, Divider, Screen } from "../../../components/ui";
-import { confirm } from "../../../lib/confirm";
 import { money } from "../../../lib/format";
 import { usePlan } from "../../../lib/plan";
 import { isCard } from "../../../lib/register";
@@ -65,6 +64,8 @@ export default function ImportYnab() {
   const [tab, setTab] = useState<"accounts" | "categories" | "matches">("accounts");
   const [showQuiet, setShowQuiet] = useState(false);
   const [showUnused, setShowUnused] = useState(false);
+  // the confirmation shows on the page (a browser pop-up can be blocked, as in an embedded browser)
+  const [confirming, setConfirming] = useState(false);
 
   const pick = () => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
@@ -127,15 +128,9 @@ export default function ImportYnab() {
   const valueOf = (c: AccountChoice | undefined) => (!c ? "add" : c.action === "match" ? "match:" + c.id : c.action);
   const setChoice = (name: string, v: string) => setChoices((s) => ({ ...s, [name]: v.startsWith("match:") ? { action: "match", id: v.slice(6) } : { action: v as "add" | "skip" } }));
 
-  const run = async () => {
+  const run = () => {
     if (!data) return;
-    const sum = preview!.summary;
-    const ok = await confirm(
-      "Import from YNAB?",
-      `${sum.transactions} transactions${sum.transactionsMatched ? ` (replacing ${sum.transactionsMatched} of yours)` : ""}, ${sum.categoriesAdded} new and ${sum.categoriesUpdated} matched categories, ${sum.accountsAdded} new accounts. Importing again later replaces what came in this time.`,
-      "Import",
-    );
-    if (!ok) return;
+    setConfirming(false);
     const r = buildImport(saved, data, { from, thisMonth, accounts: choices, categories: catOpts, categoryMap: catMap, removeEmpty, existing, keepBoth, newId });
     importBudget(r.plan, r.txns, r.replaced);
     setDone(`Imported ${r.summary.transactions} transactions and ${r.summary.categoriesAdded + r.summary.categoriesUpdated} categories.`);
@@ -343,7 +338,20 @@ export default function ImportYnab() {
               </Text>
             ) : null}
             <Text style={[type.caption, { color: t.text3 }]}>Your other transactions stay. Importing again later replaces what came in this time.</Text>
-            <Button title="Import" tone="primary" onPress={run} style={{ alignSelf: "flex-start", minHeight: 44 }} />
+            {confirming ? (
+              <View style={[styles.confirm, { backgroundColor: t.surface2, borderColor: t.accent }]}>
+                <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Import these now?</Text>
+                <Text style={[type.caption, { color: t.text2 }]}>
+                  {preview.summary.transactions} transactions{preview.summary.transactionsMatched ? ` (replacing ${preview.summary.transactionsMatched} of yours)` : ""}, {preview.summary.categoriesAdded + preview.summary.categoriesUpdated} categories and {preview.summary.accountsAdded} new accounts come into your plan.
+                </Text>
+                <View style={[styles.row, { flexWrap: "wrap" }]}>
+                  <Button title="Yes, import" tone="primary" onPress={run} style={{ minHeight: 44 }} />
+                  <Button title="Cancel" tone="ghost" onPress={() => setConfirming(false)} style={{ minHeight: 44 }} />
+                </View>
+              </View>
+            ) : (
+              <Button title="Import" tone="primary" onPress={() => setConfirming(true)} style={{ alignSelf: "flex-start", minHeight: 44 }} />
+            )}
           </Card>
         </>
       ) : null}
@@ -356,5 +364,6 @@ const styles = StyleSheet.create({
   col: { width: 84, alignItems: "center", textAlign: "center" },
   stats: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   catRow: { gap: 2, paddingVertical: space.xs, borderTopWidth: StyleSheet.hairlineWidth },
+  confirm: { borderWidth: 1, borderRadius: 10, padding: space.md, gap: space.sm },
   stat: { flexGrow: 1, flexBasis: 140, borderRadius: 10, padding: space.md, gap: 2 },
 });
