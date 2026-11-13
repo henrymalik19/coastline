@@ -125,3 +125,50 @@ describe("properties", () => {
     expect(r.d.bal.property).toBe(300_000); // counts in net worth either way
   });
 });
+
+describe("rentals in retirement", () => {
+  // $1,500 a month in rent (after property costs), a mortgage with $300 escrow still owed when you retire
+  const rentInc = { id: "r", name: "Rent", kind: "rental" as const, freq: "monthly" as const, net: 1_500, matchMode: "usd" as const };
+  const loan = mortgage({ id: "rm", name: "Rental loan", balance: 250_000, minPayment: 1_799.1, escrow: 300 });
+  const prop = { id: "p", name: "Rental", kind: "rental" as const, value: 300_000, mortgageId: "rm", incomeId: "r" };
+  const withRental = (p: Partial<typeof prop> & { inRetirement?: boolean; vacancy?: number } = {}) =>
+    blank({ incomes: [...blank().incomes, rentInc], budget: [{ id: "f", name: "Food", amount: 3000, inRetirement: true }], debts: [loan], properties: [{ ...prop, ...p }] });
+
+  it("what's left of the rent counts as income in retirement: rent − 5% cushion − escrow", () => {
+    const o = run(withRental(), START);
+    expect(o.d.rentals).toHaveLength(1);
+    expect(o.d.rentals[0]!.monthly).toBeCloseTo(1_500 - 75 - 300, 6);
+    expect(o.d.rentalIncomeAnnual).toBeCloseTo((1_500 - 75 - 300) * 12, 6);
+    expect(o.d.retireIncomeAnnual).toBeCloseTo((1_500 - 75 - 300) * 12, 6);
+    // its escrow isn't counted twice: it's out of the rent, not in your spending
+    expect(o.d.retireMonthly).toBeCloseTo(3_000, 6);
+  });
+
+  it("the loan still owed when you retire counts in your number, like a home's", () => {
+    const o = run(withRental(), START);
+    expect(o.mortgagesAtRetire.map((x) => x.id)).toEqual(["rm"]);
+    expect(o.homeBridge).toBeGreaterThan(0);
+  });
+
+  it("the rent lowers your number by what it covers, less the loan owed (spending above the rent here)", () => {
+    const kept = run(withRental(), START);
+    const sold = run(withRental({ inRetirement: false }), START);
+    const rentCovers = (1_500 - 75 - 300) * 12 / 0.04;
+    expect(sold.fire - kept.fire).toBeCloseTo(rentCovers - kept.homeBridge, 0);
+  });
+
+  it("sold before you retire: no rent then, and its loan stays out of your number", () => {
+    const o = run(withRental({ inRetirement: false }), START);
+    expect(o.d.rentals).toEqual([]);
+    expect(o.d.retireIncomeAnnual).toBe(0);
+    expect(o.mortgagesAtRetire).toEqual([]);
+  });
+
+  it("the cushion can change, and a rental with no rent isn't counted", () => {
+    expect(run(withRental({ vacancy: 0.1 }), START).d.rentals[0]!.monthly).toBeCloseTo(1_500 - 150 - 300, 6);
+    const noRent = blank({ debts: [loan], properties: [{ ...prop, incomeId: undefined }] });
+    const o = run(noRent, START);
+    expect(o.d.rentals).toEqual([]);
+    expect(o.mortgagesAtRetire).toEqual([]);
+  });
+});

@@ -1,8 +1,8 @@
 import { BASE_CHECKS, PERIODS } from "./constants";
 import { resolveIncome } from "./match";
-import type { Balances, Derived, PlanState, WhatIf } from "./types";
+import type { Balances, Derived, PlanState, RentalInRetirement, WhatIf } from "./types";
 import { num, sum } from "./util";
-import { isRentalDebt, isSpendingItem } from "./schedule";
+import { isRentalDebt, isSpendingItem, keptRental } from "./schedule";
 
 /** Static summary of the inputs. `startDate` is injected; the engine never reads the clock. */
 export function derive(s: PlanState, startDate: Date): Derived {
@@ -50,7 +50,22 @@ export function derive(s: PlanState, startDate: Date): Derived {
   // income in retirement: the yearly total once everything has started, plus the savings
   // needed to cover whatever starts after you retire until it does (today's dollars)
   const retIncome = (s.retirementIncome ?? []).filter((x) => num(x.monthly) > 0);
-  const retireIncomeAnnual = sum(retIncome.map((x) => num(x.monthly) * 12));
+  // a rental you keep: its rent keeps coming after you retire, less a cushion for empty months and its
+  // escrow (property tax + insurance keep going after the loan is paid). The loan itself is paid off
+  // from your number (what's owed then counts, as for a home), so it doesn't come out of the rent.
+  const rentals: RentalInRetirement[] = [];
+  for (const p of s.properties ?? []) {
+    if (!keptRental(p)) continue;
+    const inc = incomes.find((i) => i.id === p.incomeId);
+    if (!inc) continue;
+    const rent = (num(inc.net) * PERIODS[inc.freq]) / 12;
+    const vacancy = rent * Math.min(1, Math.max(0, p.vacancy ?? 0.05));
+    const loan = p.mortgageId ? (s.debts ?? []).find((x) => x.id === p.mortgageId) : undefined;
+    const escrow = loan ? escrowOf(loan) : 0;
+    rentals.push({ id: p.id, name: p.name, rent, vacancy, escrow, monthly: rent - vacancy - escrow });
+  }
+  const rentalIncomeAnnual = sum(rentals.map((x) => x.monthly * 12));
+  const retireIncomeAnnual = sum(retIncome.map((x) => num(x.monthly) * 12)) + rentalIncomeAnnual;
   const retireBridge = sum(retIncome.map((x) => num(x.monthly) * 12 * Math.max(0, num(x.startAge) - s.retireAge))) + healthBridge;
 
   // Roth share of payroll 401(k), weighted by each job's contribution
@@ -87,6 +102,8 @@ export function derive(s: PlanState, startDate: Date): Derived {
     debtTotal: sum((s.debts ?? []).map((d) => d.balance)),
     matchLeftPerYear: sum(incomes.map((i) => i.gapMatch * PERIODS[i.freq])),
     retireIncomeAnnual,
+    rentals,
+    rentalIncomeAnnual,
     retireBridge,
     rothShare,
     hsaEmployerAnnual: sum(incomes.map((i) => Math.max(0, num(i.hsaEmployer)))),

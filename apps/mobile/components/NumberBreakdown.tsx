@@ -66,10 +66,11 @@ export function NumberBreakdown() {
 
       {step(2, "What your savings has to cover")}
       <View style={{ gap: 2 }}>
-        {b.income > 0.5 ? row("Social Security and pensions", `− ${per(b.income)}`, { indent: true }) : null}
+        {b.income - b.rentalIncome > 0.5 ? row("Social Security and pensions", `− ${per(b.income - b.rentalIncome)}`, { indent: true }) : null}
+        {Math.abs(b.rentalIncome) > 0.5 ? row("Rentals you keep", `${b.rentalIncome >= 0 ? "−" : "+"} ${per(Math.abs(b.rentalIncome))}`, { indent: true, sub: "Rent less a cushion and escrow" }) : null}
         {row("From your savings", per(b.need), { strong: true })}
         <Pressable role="link" onPress={() => router.push("/money/retirementIncome")} hitSlop={6} style={{ alignSelf: "flex-start", marginTop: 2 }}>
-          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{b.income > 0.5 ? "Change Social Security and pensions →" : "Add Social Security or a pension →"}</Text>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{b.income - b.rentalIncome > 0.5 ? "Change Social Security and pensions →" : "Add Social Security or a pension →"}</Text>
         </Pressable>
       </View>
 
@@ -79,7 +80,7 @@ export function NumberBreakdown() {
         {b.taxExtra > 0.5 ? row("Plus income tax on pre-tax money", `+ ${money(b.taxExtra, { whole: true })}`, { indent: true, sub: `${percent(d.taxRate)} tax on the ${percent(o.preShareFinal)} that's pre-tax` }) : null}
         {b.bridge > 0.5 ? row("Plus income that starts later", `+ ${money(b.bridge, { whole: true })}`, { indent: true, sub: "Covers you until Social Security or a pension starts" }) : null}
         {b.healthBridge > 0.5 ? row("Plus health insurance until 65", `+ ${money(b.healthBridge, { whole: true })}`, { indent: true, sub: `${money(state.healthcare, { whole: true })}/mo from ${d.retireAge} until Medicare starts` }) : null}
-        {b.homeBridge > 0.5 ? row("Plus mortgage still owed", `+ ${money(b.homeBridge, { whole: true })}`, { indent: true, sub: "What's left on it when you retire" }) : null}
+        {b.homeBridge > 0.5 ? row(o.mortgagesAtRetire.length > 1 ? "Plus mortgages still owed" : "Plus mortgage still owed", `+ ${money(b.homeBridge, { whole: true })}`, { indent: true, sub: `What's left when you retire: ${o.mortgagesAtRetire.map((x) => x.name || "Mortgage").join(", ")}` }) : null}
         <Divider />
         {row("FIRE number", money(b.fire, { whole: true }), { strong: true, sub: `Invested by age ${d.retireAge}` })}
       </View>

@@ -6,7 +6,7 @@
  */
 import type { Debt, Derived, PlanResult, PlanState } from "./types";
 import { addMonths, monthsBetween, num } from "./util";
-import { isRentalDebt } from "./schedule";
+import { isKeptRentalDebt, isRentalDebt } from "./schedule";
 
 /** The longest a loan is followed (50 years); a payment that never pays it off stops here. */
 const CAP = 600;
@@ -101,7 +101,8 @@ export function mortgagesAtRetirement(s: Pick<PlanState, "debts" | "properties">
   const row = M > 0 ? plan.months[M - 1] : undefined;
   const out: DebtAtRetirement[] = [];
   for (const x of s.debts ?? []) {
-    if (x.kind !== "mortgage" || x.payroll || isRentalDebt(s, x)) continue; // a rental's rent pays it
+    // a rental you sell before you retire: its rent pays it until then. One you keep: what's owed counts, like a home's
+    if (x.kind !== "mortgage" || x.payroll || (isRentalDebt(s, x) && !isKeptRentalDebt(s, x))) continue;
     const balance = row ? (row.debts?.find((y) => y.id === x.id)?.balance ?? 0) : num(x.balance);
     if (!(balance > 0.5)) continue;
     const a = amortize(balance, num(x.apr), loanPayment(x));

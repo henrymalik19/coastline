@@ -10,7 +10,7 @@ import { HELP } from "../lib/help";
 import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
-import { Button, Choice, FieldRow, IconButton, NumberInput, Select, TextField } from "./form";
+import { Button, Choice, FieldRow, IconButton, NumberInput, Select, TextField, ToggleRow } from "./form";
 import { Icon } from "./Icon";
 import { Card, Divider } from "./ui";
 
@@ -21,7 +21,7 @@ const KINDS: { value: Property["kind"]; label: string }[] = [
 
 export function PropertiesEditor({ titled = true }: { /** Off on its own page, which already says "Homes & rentals". */ titled?: boolean } = {}) {
   const t = useTheme();
-  const { state } = usePlan();
+  const { state, result } = usePlan();
   const update = useStore((s) => s.update);
   const props = state.properties ?? [];
   const [open, setOpen] = useState<string | null>(null);
@@ -114,9 +114,44 @@ export function PropertiesEditor({ titled = true }: { /** Off on its own page, w
                     <Text style={[type.caption, { color: t.text3 }]}>These count in your retirement spending, so your number covers them. Today's costs belong in your budget.</Text>
                   </>
                 ) : (
-                  <Text style={[type.caption, { color: t.text3 }]}>
-                    A rental: its rent pays its mortgage, tax, insurance and upkeep, so none of them count in your retirement spending. The rent counts as income{rent ? "" : " once you add it"}.
-                  </Text>
+                  <>
+                    <Text style={[type.caption, { color: t.text3 }]}>
+                      A rental: its rent pays its mortgage, tax, insurance and upkeep, so none of them count in your spending. The rent counts as income{rent ? "" : " once you add it"}.
+                    </Text>
+                    {rent ? (
+                      <>
+                        <ToggleRow
+                          label="Keep it after you retire"
+                          hint={x.inRetirement === false ? "Off: you'll sell it first, so its rent stops when you retire" : "Its rent keeps coming, so your savings cover less"}
+                          value={x.inRetirement !== false}
+                          onChange={(v) => change(x.id, { inRetirement: v ? undefined : false })}
+                        />
+                        {x.inRetirement !== false ? (
+                          <>
+                            <FieldRow label="Cushion for empty months" hint="A share of the rent set aside for vacancies and surprises. 5% is a common guess.">
+                              <NumberInput kind="percent" label={`${x.name || "Rental"} cushion for empty months`} value={x.vacancy ?? 0.05} max={0.5} onChange={(v) => change(x.id, { vacancy: Math.abs(v - 0.05) < 1e-9 ? undefined : v })} />
+                            </FieldRow>
+                            {(() => {
+                              const r = result.d.rentals.find((y) => y.id === x.id);
+                              if (!r) return null;
+                              const owed = result.mortgagesAtRetire.find((y) => y.id === x.mortgageId);
+                              return (
+                                <View style={[styles.note, { backgroundColor: r.monthly >= 0 ? t.accentSoft : t.warnSoft }]}>
+                                  <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>
+                                    In retirement: {r.monthly >= 0 ? `about ${money(r.monthly, { whole: true })}/mo` : `costs you about ${money(-r.monthly, { whole: true })}/mo`}
+                                  </Text>
+                                  <Text style={[type.caption, { color: t.text2 }]}>
+                                    {money(r.rent, { whole: true })} rent − {money(r.vacancy, { whole: true })} cushion{r.escrow > 0.5 ? ` − ${money(r.escrow, { whole: true })} escrow (tax + insurance keep going)` : ""}. It counts as income in retirement, so your number is lower.
+                                    {owed ? ` Its mortgage, about ${money(owed.balance, { whole: true })} still owed when you retire, counts in your number instead of coming out of the rent.` : " Its mortgage is paid off by then."}
+                                  </Text>
+                                </View>
+                              );
+                            })()}
+                          </>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </>
                 )}
                 <View style={[styles.row, { justifyContent: "flex-end" }]}>
                   <IconButton icon="trash" color={t.bad} label={`Remove ${x.name || "property"}`} onPress={() => update((p) => { p.properties = (p.properties ?? []).filter((y) => y.id !== x.id); })} />
@@ -136,4 +171,5 @@ export function PropertiesEditor({ titled = true }: { /** Off on its own page, w
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  note: { borderRadius: 10, padding: space.md, gap: 2 },
 });

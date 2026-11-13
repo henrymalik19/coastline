@@ -15,8 +15,10 @@ export type FireBreakdown = {
   spending: SpendingLine[];
   retireMonthly: number;
   retireAnnual: number;
-  /** Social Security and pensions a year, once they've all started. */
+  /** Income in retirement a year, once it's all started: Social Security, pensions and rentals you keep. */
   income: number;
+  /** The rentals' part of `income`, a year. */
+  rentalIncome: number;
   /** What your savings has to cover a year. */
   need: number;
   swr: number;
@@ -85,6 +87,7 @@ export function fireBreakdown(s: PlanState, o: RunResult): FireBreakdown {
     retireMonthly: d.retireMonthly,
     retireAnnual: d.retireAnnual,
     income: d.retireIncomeAnnual,
+    rentalIncome: d.rentalIncomeAnnual,
     need,
     swr: d.swr,
     base,

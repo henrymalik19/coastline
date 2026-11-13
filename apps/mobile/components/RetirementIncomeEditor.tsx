@@ -1,5 +1,6 @@
 import type { RetirementIncome, RetirementIncomeKind } from "@coastfi/engine";
-import { StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
@@ -43,6 +44,8 @@ export function RetirementIncomeEditor() {
       p.retirementIncome = [...(p.retirementIncome ?? []), { id: newId(), name: meta.name, kind: k, monthly: 0, startAge: Math.max(meta.startAge, 0) }];
     });
 
+  const router = useRouter();
+  const rentals = result.d.rentals;
   const covered = result.d.retireIncomeAnnual / 12;
   const spend = result.d.retireMonthly;
   return (
@@ -76,6 +79,27 @@ export function RetirementIncomeEditor() {
               </View>
             );
           })}
+        </Card>
+      ) : null}
+      {rentals.length ? (
+        <Card style={{ paddingVertical: space.xs }}>
+          {rentals.map((r, i) => (
+            <View key={r.id}>
+              {i > 0 ? <Divider /> : null}
+              <View style={[styles.row, { paddingVertical: space.sm, flexWrap: "nowrap" }]}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{r.name || "Rental"}</Text>
+                  <Text style={[type.caption, { color: t.text3 }]}>Rental you keep · from when you retire</Text>
+                </View>
+                <Text style={[type.body, { color: r.monthly >= 0 ? t.text : t.bad, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>
+                  {r.monthly >= 0 ? "" : "−"}{money(Math.abs(r.monthly), { whole: true })}/mo
+                </Text>
+              </View>
+            </View>
+          ))}
+          <Pressable role="link" onPress={() => router.push("/money/properties")} hitSlop={6} style={{ alignSelf: "flex-start", paddingBottom: space.sm }}>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change under Homes & rentals →</Text>
+          </Pressable>
         </Card>
       ) : null}
       <View style={styles.row}>

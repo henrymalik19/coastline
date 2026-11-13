@@ -1,4 +1,4 @@
-import type { Account, Debt, PlanAccount, PlanSettings, PlanState, ScheduleEntry } from "./types";
+import type { Account, Debt, PlanAccount, PlanSettings, PlanState, Property, ScheduleEntry } from "./types";
 import { num } from "./util";
 
 /** This month's scheduled amount for an account ("YYYY-MM"), or undefined when it isn't on a schedule that month. */
@@ -17,6 +17,16 @@ export function scheduleAmount(p: Pick<PlanSettings, "schedule" | "scheduleMonth
  * Which plan account a balance belongs to: what you picked, else a guess from the name (401(k), 403(b),
  * 457, TSP → 401(k); IRA → IRA), else the type (pre-tax → 401(k), Roth → IRA). Property isn't one.
  */
+/** A rental you keep after you retire: it has rent, and you haven't said you'll sell it first. */
+export function keptRental(p: Pick<Property, "kind" | "incomeId" | "inRetirement">): boolean {
+  return p.kind === "rental" && !!p.incomeId && p.inRetirement !== false;
+}
+
+/** A kept rental's mortgage: what's still owed on it when you retire counts in your number, like a home's. */
+export function isKeptRentalDebt(s: Pick<PlanState, "properties">, d: Pick<Debt, "id">): boolean {
+  return (s.properties ?? []).some((p) => keptRental(p) && p.mortgageId === d.id);
+}
+
 /** A rental's mortgage: its property is a rental (or, from before properties, the debt said so). */
 export function isRentalDebt(s: Pick<PlanState, "properties">, d: Pick<Debt, "id" | "rental">): boolean {
   return !!d.rental || (s.properties ?? []).some((p) => p.kind === "rental" && p.mortgageId === d.id);

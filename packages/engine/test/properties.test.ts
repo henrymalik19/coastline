@@ -99,6 +99,11 @@ function expectParity(input: PlanState) {
     expect(od[k]).toBe(0);
     delete od[k];
   }
+  // no properties on these plans, so no rentals in retirement
+  expect(od.rentals).toEqual([]);
+  expect(od.rentalIncomeAnnual).toBe(0);
+  delete od.rentals;
+  delete od.rentalIncomeAnnual;
   // no mortgages on these plans (debts have no kind), so nothing is owed on a home in retirement
   expect(ours.mortgagesAtRetire).toEqual([]);
   expect(ours.homeBridge).toBe(0);

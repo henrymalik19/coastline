@@ -39,7 +39,7 @@ function useSummaries(): Record<string, string> {
       const ess = items.filter((b) => b.essential !== false).reduce((a, b) => a + b.amount, 0);
       return items.length ? `${money(after)}/mo after retiring · ${money(ess)} essential` : "No categories yet";
     })(),
-    retirementIncome: retire.length ? `${retire.length} · ${money(result.d.retireIncomeAnnual / 12)}/mo` : "None added",
+    retirementIncome: retire.length + result.d.rentals.length ? `${retire.length + result.d.rentals.length} · ${money(result.d.retireIncomeAnnual / 12)}/mo` : "None added",
     income: state.incomes.length ? `${state.incomes.length} source${state.incomes.length > 1 ? "s" : ""} · ${money(result.d.leanMonthly)}/mo` : "None yet",
     budget: `${state.budget.length} items · ${money(result.d.budgetTotal)}/mo`,
     savings: (() => { const n = Object.keys({ ...(state.plan.schedule ?? {}), ...(state.plan.scheduleMonths ?? {}) }).length; return n ? `${n} account${n > 1 ? "s" : ""} set · ${money(result.plan.months[0]?.plannedAsk ?? 0)}/mo` : "None set"; })(),

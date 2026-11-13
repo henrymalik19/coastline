@@ -122,6 +122,28 @@ export type Property = {
   taxInsurance?: number;
   /** Repairs and upkeep a year, as a share of its value (0.01 = 1%). */
   upkeep?: number;
+  /**
+   * A rental you keep after you retire (missing = yes): what's left of its rent then counts as
+   * income in retirement, and its mortgage still owed when you retire counts in your number. Off
+   * when you'll sell it first.
+   */
+  inRetirement?: boolean;
+  /** A cushion for empty months and surprises, as a share of the rent (missing = 0.05). */
+  vacancy?: number;
+};
+
+/** A rental's rent in retirement, a month (today's dollars). */
+export type RentalInRetirement = {
+  id: string;
+  name: string;
+  /** Its rent as you entered it (what you keep after property costs, before the mortgage), a month. */
+  rent: number;
+  /** The cushion taken off for empty months. */
+  vacancy: number;
+  /** Property tax + insurance in its mortgage payment, which keeps going after the loan is paid. */
+  escrow: number;
+  /** What's left a month: rent − cushion − escrow (can be below 0). */
+  monthly: number;
 };
 
 /** What kind of debt this is. Display only; payoff math is the same for every kind. */
@@ -459,8 +481,12 @@ export type Derived = {
   runwayEssential: number;
   debtTotal: number;
   matchLeftPerYear: number;
-  /** Retirement income per year once it has all started (Social Security, pensions…). */
+  /** Retirement income per year once it has all started (Social Security, pensions, rentals you keep…). */
   retireIncomeAnnual: number;
+  /** Rentals you keep in retirement and what's left of each one's rent (part of `retireIncomeAnnual`). */
+  rentals: RentalInRetirement[];
+  /** Those rentals a year. */
+  rentalIncomeAnnual: number;
   /** Savings needed to cover retirement income that starts after you retire, until it does. */
   retireBridge: number;
   /** Share of payroll 401(k) going to Roth, weighted across jobs (0–1). */

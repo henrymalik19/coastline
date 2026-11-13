@@ -98,6 +98,8 @@ export const PropertySchema = z.object({
   incomeId: z.string().optional(),
   taxInsurance: nonNeg.optional(),
   upkeep: rate.min(0).optional(),
+  inRetirement: z.boolean().optional(),
+  vacancy: rate.min(0).optional(),
 });
 export const RetirementIncomeSchema = z.object({
   id,
