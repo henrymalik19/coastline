@@ -2,7 +2,7 @@ import { budgetView, registerBalance, type PlanState } from "@coastfi/engine";
 import { describe, expect, it } from "vitest";
 import { freshPlan } from "./presets";
 import { cardMap } from "./register";
-import { buildImport, categoryKey, dateParser, money, monthOf, parseCsv, parseYnab, suggestChoice, ynabAccounts, ynabCategories } from "./ynab";
+import { buildImport, categoryKey, groupKey, dateParser, money, monthOf, parseCsv, parseYnab, suggestChoice, ynabAccounts, ynabCategories } from "./ynab";
 
 // a small YNAB export, in the shape YNAB writes it (newest first, US dates, $ amounts)
 const REGISTER = `﻿"Account","Flag","Date","Payee","Category Group/Category","Category Group","Category","Memo","Outflow","Inflow","Cleared"
@@ -96,6 +96,13 @@ describe("importing into the plan", () => {
     };
     return { plan, d, opts };
   };
+
+  it("puts a YNAB group's categories into the group you pick", () => {
+    const { plan, d, opts } = setup();
+    const r = buildImport(plan, d, { ...opts, groupMap: { [groupKey("Everyday")]: "Living" } });
+    expect(r.plan.budget.filter((b) => b.name === "Groceries" || b.name === "Household").map((b) => b.group)).toEqual(["Living", "Living"]);
+    expect(r.plan.budget.find((b) => b.name === "Roth IRA")?.group).toBe("Savings"); // other groups keep their name
+  });
 
   it("brings in accounts, categories, assignments and transactions for the months you pick", () => {
     const { plan, d, opts } = setup();

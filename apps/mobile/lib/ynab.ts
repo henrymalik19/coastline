@@ -329,6 +329,8 @@ export type ImportOptions = {
   categories: Record<string, { inRetirement: boolean; essential: boolean }>;
   /** Per YNAB category: add it, put it into one of the plan's, or leave it out (default: suggestCategory). */
   categoryMap?: Record<string, CategoryChoice>;
+  /** Per YNAB group (groupKey): the group its categories land in here (default: the same name). */
+  groupMap?: Record<string, string>;
   /** Take out the plan's own categories that are still $0 and YNAB doesn't have. */
   removeEmpty: boolean;
   /** Transactions already here, and whether the ones YNAB also has (same account and amount, within 3 days) give way to YNAB's. */
@@ -339,6 +341,8 @@ export type ImportOptions = {
   newId: () => string;
 };
 export const categoryKey = (group: string, name: string) => norm(group) + "\u0000" + norm(name);
+/** A YNAB group, for `groupMap`. */
+export const groupKey = (group: string) => norm(group);
 
 export type ImportResult = {
   plan: PlanState;
@@ -417,6 +421,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   const cats = ynabCategories(d, months);
   const itemOf = new Map<string, string>();
   const matchedAmount = new Map<string, number>();
+  const groupFor = (g: string) => o.groupMap?.[groupKey(g)] ?? g;
   for (const c of cats) {
     const k = categoryKey(c.group, c.name);
     const opts = o.categories[k] ?? { inRetirement: true, essential: true };
@@ -432,13 +437,13 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
       if (amount > 0) hit.amount = amount;
       hit.inRetirement = opts.inRetirement;
       hit.essential = opts.essential;
-      if (!matchedAmount.has(hit.id + ":group")) { hit.group = c.group || hit.group; matchedAmount.set(hit.id + ":group", 1); }
+      if (!matchedAmount.has(hit.id + ":group")) { hit.group = groupFor(c.group) || hit.group; matchedAmount.set(hit.id + ":group", 1); }
       summary.categoriesUpdated++;
       continue;
     }
     const id = o.newId();
     itemOf.set(k, id);
-    const item: BudgetItem = { id, name: c.name, amount: c.average, inRetirement: opts.inRetirement, group: c.group || undefined, essential: opts.essential };
+    const item: BudgetItem = { id, name: c.name, amount: c.average, inRetirement: opts.inRetirement, group: groupFor(c.group) || undefined, essential: opts.essential };
     plan.budget.push(item);
     summary.categoriesAdded++;
   }
