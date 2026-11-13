@@ -1,5 +1,5 @@
 /** The budget's categories with their on-screen names (shared by the Budget tab, registers and forms). */
-import { budgetCategories, type BudgetCategory } from "@coastfi/engine";
+import { budgetCategories, isStartTxn, type BudgetCategory } from "@coastfi/engine";
 import { useMemo } from "react";
 import { debtLabel } from "./debts";
 import { usePlan } from "./plan";
@@ -22,8 +22,9 @@ export function useCategories(month?: string): NamedCategory[] {
 }
 
 /** "Groceries", "Ready to assign", "Transfer", or "Split (3)" for a transaction's category. */
-export function categoryText(cats: NamedCategory[], t: { categoryId?: string; splits?: unknown[]; transferAccountId?: string; amount: number }, accountName: (id: string) => string): string {
+export function categoryText(cats: NamedCategory[], t: { id?: string; categoryId?: string; splits?: unknown[]; transferAccountId?: string; amount: number }, accountName: (id: string) => string): string {
   if (t.splits?.length) return `Split (${t.splits.length})`;
+  if (t.id && isStartTxn({ id: t.id })) return t.amount < 0 && !t.categoryId ? "Starting balance (owed)" : "Starting balance";
   // a withdrawal from an IRA or brokerage account: money in, ready to assign
   // to or from an IRA or brokerage with no category: out of / into ready to assign (older transfers carry the account's old line)
   if ((t.categoryId === "ready" || t.categoryId?.startsWith("acct:")) && t.transferAccountId)

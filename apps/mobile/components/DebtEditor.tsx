@@ -1,4 +1,4 @@
-import { PERIODS, type Debt, type DebtKind, type PlanState } from "@coastfi/engine";
+import { isRentalDebt, PERIODS, type Debt, type DebtKind, type PlanState } from "@coastfi/engine";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { DEBT_KINDS, debtKind, debtLabel } from "../lib/debts";
@@ -128,12 +128,7 @@ export function DebtEditor({
             <NumberInput kind="money" label={`${debtLabel(debt)} escrow`} value={debt.escrow ?? 0} max={debt.minPayment} onChange={(v) => onChange({ escrow: v > 0 ? v : undefined })} />
           </FieldRow>
           <Divider />
-          <ToggleRow
-            label="A rental property"
-            hint="Its rent pays the mortgage, tax and insurance, so they stay out of your retirement spending and your number. Add the rent as income (Money → Income) so today's budget balances."
-            value={!!debt.rental}
-            onChange={(on) => onChange({ rental: on || undefined })}
-          />
+          <MortgageProperty debt={debt} />
           <Divider />
           <MortgageSchedule debt={debt} onChange={onChange} />
         </>
@@ -265,10 +260,36 @@ export function AddDebtButtons({ onAdd, hasAny }: { onAdd: (d: Debt) => void; ha
 const TERMS = [10, 15, 20, 25, 30, 40];
 
 /** A mortgage's original schedule (optional) and what it means: ahead of schedule, paid off when, retirement. */
+/** Which home or rental a mortgage is for. A rental's rent pays it, so it stays out of your number. */
+function MortgageProperty({ debt }: { debt: Debt }) {
+  const t = useTheme();
+  const { state } = usePlan();
+  const update = useStore((s) => s.update);
+  const props = state.properties ?? [];
+  const mine = props.find((p) => p.mortgageId === debt.id);
+  const link = (id: string) =>
+    update((p) => {
+      for (const x of p.properties ?? []) {
+        if (x.mortgageId === debt.id && x.id !== id) delete x.mortgageId;
+        if (x.id === id) x.mortgageId = debt.id;
+      }
+    });
+  return (
+    <View style={{ gap: 4 }}>
+      <FieldRow label="For" hint={props.length ? "A home or rental (Accounts → Homes and rentals)" : "Add the home or rental under Accounts → Homes and rentals"}>
+        <Select label={`${debtLabel(debt)} property`} value={mine?.id ?? ""} options={[{ value: "", label: "Not set" }, ...props.map((p) => ({ value: p.id, label: `${p.name || "Property"} (${p.kind === "rental" ? "rental" : "home"})` }))]} onChange={link} />
+      </FieldRow>
+      {mine?.kind === "rental" ? (
+        <Text style={[type.caption, { color: t.text3 }]}>A rental: its rent pays this mortgage, tax and insurance, so they stay out of your retirement spending and your number.</Text>
+      ) : null}
+    </View>
+  );
+}
+
 function MortgageSchedule({ debt, onChange }: { debt: Debt; onChange: (patch: Partial<Debt>) => void }) {
   const t = useTheme();
-  const { result, start } = usePlan();
-  const st = mortgageStatus(debt, result, start);
+  const { state, result, start } = usePlan();
+  const st = mortgageStatus(debt, result, start, isRentalDebt(state, debt));
   const term = debt.term ? String(debt.term) : "";
   const options = [{ value: "", label: "Not set" }, ...TERMS.map((y) => ({ value: String(y * 12), label: `${y} years` }))];
   if (term && !options.some((o) => o.value === term)) options.push({ value: term, label: `${debt.term} months` });
@@ -305,8 +326,8 @@ function MortgageSchedule({ debt, onChange }: { debt: Debt; onChange: (patch: Pa
 /** One line under a collapsed mortgage: ahead of schedule, or that it runs into retirement. */
 function MortgageLine({ debt }: { debt: Debt }) {
   const t = useTheme();
-  const { result, start } = usePlan();
-  const st = mortgageStatus(debt, result, start);
+  const { state, result, start } = usePlan();
+  const st = mortgageStatus(debt, result, start, isRentalDebt(state, debt));
   return st.summary ? <Text style={[type.caption, { color: st.intoRetirement ? t.warn : t.good }]} numberOfLines={1}>{st.summary}</Text> : null;
 }
 

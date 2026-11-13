@@ -1,4 +1,4 @@
-import type { Account, PlanAccount, PlanSettings, PlanState, ScheduleEntry } from "./types";
+import type { Account, Debt, PlanAccount, PlanSettings, PlanState, ScheduleEntry } from "./types";
 import { num } from "./util";
 
 /** This month's scheduled amount for an account ("YYYY-MM"), or undefined when it isn't on a schedule that month. */
@@ -17,6 +17,11 @@ export function scheduleAmount(p: Pick<PlanSettings, "schedule" | "scheduleMonth
  * Which plan account a balance belongs to: what you picked, else a guess from the name (401(k), 403(b),
  * 457, TSP → 401(k); IRA → IRA), else the type (pre-tax → 401(k), Roth → IRA). Property isn't one.
  */
+/** A rental's mortgage: its property is a rental (or, from before properties, the debt said so). */
+export function isRentalDebt(s: Pick<PlanState, "properties">, d: Pick<Debt, "id" | "rental">): boolean {
+  return !!d.rental || (s.properties ?? []).some((p) => p.kind === "rental" && p.mortgageId === d.id);
+}
+
 export function accountGroup(a: Pick<Account, "name" | "type" | "counts">): PlanAccount | "cash" | null {
   if (a.type === "property") return null;
   if (a.type === "cash") return "cash";
@@ -223,14 +228,15 @@ export function budgetScheduleMonths(s: Pick<PlanState, "debts" | "goals" | "bud
         // a cash account (the emergency fund): in the budget's first month, what's already in it isn't new
         // saving, only the part above it is. Later months' amounts are new money going in.
         if (a?.type === "cash") {
-          const had = month === b.start ? Math.max(0, num(b.registers?.[a.id]?.opening ?? a.balance)) : 0;
+          const had = month === b.start ? Math.max(0, num(a.balance)) : 0;
           amount = Math.max(0, num(v) - had);
           if (amount <= 0.005) continue;
         } else amount = Math.max(0, num(v));
       }
       // the Emergency fund line (all your cash): same rule, against all your cash accounts
       else if (key === "cash") {
-        const had = month === b.start ? (s.accounts ?? []).filter((a) => a.type === "cash").reduce((t, a) => t + Math.max(0, num(b.registers?.[a.id]?.opening ?? a.balance)), 0) : 0;
+        // the cash you had when the budget started
+        const had = month === b.start ? Math.max(0, num(b.startCash)) : 0;
         amount = Math.max(0, num(v) - had);
         if (amount <= 0.005) continue;
       }

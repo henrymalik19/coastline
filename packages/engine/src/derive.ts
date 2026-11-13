@@ -2,13 +2,14 @@ import { BASE_CHECKS, PERIODS } from "./constants";
 import { resolveIncome } from "./match";
 import type { Balances, Derived, PlanState, WhatIf } from "./types";
 import { num, sum } from "./util";
-import { isSpendingItem } from "./schedule";
+import { isRentalDebt, isSpendingItem } from "./schedule";
 
 /** Static summary of the inputs. `startDate` is injected; the engine never reads the clock. */
 export function derive(s: PlanState, startDate: Date): Derived {
   const w: Partial<WhatIf> = s.whatif ?? {};
   const bal: Balances = { pretax: 0, roth: 0, taxable: 0, hsa: 0, cash: 0, property: 0 };
   for (const a of s.accounts ?? []) bal[a.type] = (bal[a.type] || 0) + num(a.balance);
+  for (const p of s.properties ?? []) bal.property += num(p.value);
   // property (a home or rental) isn't invested money you can draw on, so Coast FI leaves it out
   const invested = bal.pretax + bal.roth + bal.taxable + bal.hsa;
 
@@ -26,7 +27,7 @@ export function derive(s: PlanState, startDate: Date): Derived {
   const escrowOf = (d: { escrow?: number; minPayment: number; payroll?: boolean }) => (d.payroll ? 0 : Math.min(Math.max(0, num(d.escrow)), num(d.minPayment)));
   const debtMins = sum((s.debts ?? []).filter((d) => !d.payroll).map((d) => (num(d.balance) > 0 ? d.minPayment : escrowOf(d))));
   // a rental's escrow is paid from its rent, so it isn't your spending in retirement
-  const escrowMonthly = sum((s.debts ?? []).filter((d) => !d.rental).map(escrowOf));
+  const escrowMonthly = sum((s.debts ?? []).filter((d) => !isRentalDebt(s, d)).map(escrowOf));
   // recurring goals are set aside every month, like a bill
   const recurring = (s.goals ?? []).filter((g) => g.recurring && num(g.target) > 0 && num(g.recurring.every) > 0);
   const setAsideMonthly = sum(recurring.map((g) => num(g.target) / num(g.recurring!.every)));
@@ -36,7 +37,9 @@ export function derive(s: PlanState, startDate: Date): Derived {
   const essentialExpenses = sum(budget.filter((b) => b.essential !== false).map((b) => b.amount)) + debtMins + setAsideMonthly;
 
   // a home you own: property tax + insurance (when no mortgage escrow covers them) and upkeep
-  const homeMonthly = sum((s.accounts ?? []).filter((a) => a.type === "property").map((a) => (Math.max(0, num(a.homeCosts)) + Math.max(0, num(a.balance)) * Math.max(0, num(a.upkeep))) / 12));
+  const homeMonthly =
+    sum((s.accounts ?? []).filter((a) => a.type === "property").map((a) => (Math.max(0, num(a.homeCosts)) + Math.max(0, num(a.balance)) * Math.max(0, num(a.upkeep))) / 12)) +
+    sum((s.properties ?? []).filter((p) => p.kind !== "rental").map((p) => (Math.max(0, num(p.taxInsurance)) + Math.max(0, num(p.value)) * Math.max(0, num(p.upkeep))) / 12));
   // healthcare: your own insurance until Medicare at 65, then Medicare's cost; the difference until 65 is a bridge
   const healthRetired = s.medicare === undefined ? num(s.healthcare) : Math.max(0, num(s.medicare));
   const healthBridge = s.medicare === undefined ? 0 : Math.max(0, num(s.healthcare) - healthRetired) * 12 * Math.max(0, 65 - s.retireAge);

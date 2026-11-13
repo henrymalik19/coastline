@@ -23,6 +23,7 @@ import { AppState, Platform } from "react-native";
 import { create } from "zustand";
 import { deepEqual, merge3 } from "./merge";
 import { freshPlan } from "./presets";
+import { loadLimits } from "./limits";
 import { checkMembership, onMembershipChange, onSharingSignIn, onSharingSignOut, publishViews } from "./sharing";
 import { useStore } from "./store";
 import { supabase } from "./supabase";
@@ -115,6 +116,7 @@ type TxnRow = {
   id: string; account_id: string; date: string; amount: number | string; payee: string | null; memo: string | null;
   category_id: string | null; transfer_account_id: string | null; transfer_id: string | null;
   cleared: Txn["cleared"]; source: Txn["source"]; import_id: string | null; deleted: boolean; client_updated_at: number | string;
+  tracked_amount?: number | string | null;
   transaction_split?: SplitRow[];
 };
 /** A transaction for save_transactions, with its split lines. */
@@ -122,7 +124,7 @@ const txnToRow = (t: Txn) => ({
   id: t.id, account_id: t.accountId, date: t.date, amount: t.amount, payee: t.payee ?? null, memo: t.memo ?? null,
   category_id: t.categoryId ?? null, transfer_account_id: t.transferAccountId ?? null,
   transfer_id: t.transferId ?? null, cleared: t.cleared, source: t.source, import_id: t.importId ?? null,
-  deleted: !!t.deleted, client_updated_at: t.updatedAt,
+  deleted: !!t.deleted, client_updated_at: t.updatedAt, tracked_amount: t.trackedAmount ?? null,
   splits: (t.splits ?? []).map((x) => ({ category_id: x.categoryId, amount: x.amount, memo: x.memo ?? null })),
 });
 const txnFromRow = (r: TxnRow): Txn | null => {
@@ -134,6 +136,7 @@ const txnFromRow = (r: TxnRow): Txn | null => {
       : undefined,
     transferAccountId: r.transfer_account_id ?? undefined, transferId: r.transfer_id ?? undefined,
     cleared: r.cleared, source: r.source, importId: r.import_id ?? undefined, updatedAt: Number(r.client_updated_at),
+    trackedAmount: r.tracked_amount === null || r.tracked_amount === undefined ? undefined : Number(r.tracked_amount),
     deleted: r.deleted || undefined,
   });
   return parsed.success ? parsed.data : null;
@@ -424,6 +427,8 @@ function onSignedOut() {
 export function startSync() {
   if (started || !supabase) return;
   started = true;
+  // the shared contribution limits (anyone can read them)
+  void loadLimits().catch(() => undefined);
   // invited, removed, or given full access while signed in: sync the right plan
   onMembershipChange(() => void syncNow());
   void supabase.auth.getSession().then(({ data }) => data.session && onSignedIn(data.session));

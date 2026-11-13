@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { transferPair, type PlanState, type Txn } from "@coastfi/engine";
-import { CheckinSchema, PlanStateSchema, TxnSchema, type Checkin } from "@coastfi/schema";
-import { applyRegisterBalances, applyTracked, budgetAccounts, ensureRegister, foldSavingsLines } from "./register";
+import { CheckinSchema, PlanStateSchema, TxnSchema, withProperties, type Checkin } from "@coastfi/schema";
+import { applyRegisterBalances, applyTracked, budgetAccounts, foldSavingsLines, startTxnFor } from "./register";
 import { z } from "zod";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -104,11 +104,15 @@ export const useStore = create<AppState>()(
           list = list.map((x) => (x.id === pairId ? { ...x, deleted: true, updatedAt: t.updatedAt } : x));
         }
         const plan = structuredClone(get().plan);
-        ensureRegister(plan, t.accountId, today);
-        if (bothBudget) ensureRegister(plan, t.transferAccountId!, today);
+        // an account's first transaction: its register starts with what's in it now
+        for (const id of bothBudget ? [t.accountId, t.transferAccountId!] : [t.accountId]) {
+          const start = startTxnFor(plan, list, id, today);
+          if (start) list = [start, ...list];
+        }
+        // a transfer to or from an IRA, brokerage account or loan moves its balance too (kept on the transaction)
+        const moved = applyTracked(plan, old, t);
+        list = list.map((x) => (x.id === t.id ? { ...x, trackedAmount: moved } : x));
         applyRegisterBalances(plan, list);
-        // a transfer to or from an IRA, brokerage account or loan moves its balance too
-        applyTracked(plan, t.id, t);
         set({ txns: list, plan, updatedAt: now() });
       },
       deleteTxn: (id) => {
@@ -118,8 +122,8 @@ export const useStore = create<AppState>()(
         const list = get().txns.map((x) => (x.id === id || (t.transferId && x.id === t.transferId) ? { ...x, deleted: true, updatedAt: stamp } : x));
         const plan = structuredClone(get().plan);
         applyRegisterBalances(plan, list);
-        applyTracked(plan, id, null);
-        set({ txns: list, plan, updatedAt: stamp });
+        applyTracked(plan, t, null);
+        set({ txns: list.map((x) => (x.id === id ? { ...x, trackedAmount: undefined } : x)), plan, updatedAt: stamp });
       },
       clearTxns: () => {
         const stamp = now();
@@ -155,7 +159,7 @@ export const useStore = create<AppState>()(
         if (!plan.success) throw new Error("The backup is damaged or from an incompatible version.");
         const checkins = z.array(CheckinSchema).safeParse(r.checkins ?? []);
         const txns = z.array(TxnSchema).safeParse(r.txns ?? []);
-        set({ plan: plan.data, checkins: checkins.success ? checkins.data : [], txns: txns.success ? txns.data : [], onboarded: true, updatedAt: now() });
+        set({ plan: withProperties(plan.data), checkins: checkins.success ? checkins.data : [], txns: txns.success ? txns.data : [], onboarded: true, updatedAt: now() });
       },
       exportJson: () => {
         const { plan, checkins, txns } = get();
@@ -176,7 +180,7 @@ export const useStore = create<AppState>()(
         const wasSample = !p.onboarded && (p.isSampleData === true || (p.isSampleData === undefined && !p.seenWelcome));
         return {
           ...current,
-          plan: ok.success && !wasSample ? ok.data : current.plan,
+          plan: ok.success && !wasSample ? withProperties(ok.data) : current.plan,
           onboarded: !!p.onboarded,
           checkins: Array.isArray(p.checkins) ? p.checkins : [],
           txns: (() => { const r = z.array(TxnSchema).safeParse(p.txns ?? []); return r.success ? r.data : []; })(),

@@ -110,3 +110,18 @@ describe("rentals and healthcare", () => {
     expect(derive({ ...s, medicare: undefined }, START).retireMonthly).toBeCloseTo(3_000, 6);
   });
 });
+
+describe("properties", () => {
+  it("a rental property's mortgage and escrow stay out of your number; a home's costs count", () => {
+    const debt = mortgage({ minPayment: 2_099.1, escrow: 400 });
+    const asRental = blank({ debts: [debt], properties: [{ id: "p", name: "Rental", kind: "rental", value: 300_000, mortgageId: "m", taxInsurance: 5_000, upkeep: 0.01 }] });
+    const asHome = blank({ debts: [debt], properties: [{ id: "p", name: "Home", kind: "home", value: 300_000, mortgageId: "m", upkeep: 0.01 }] });
+    const r = run(asRental, START);
+    const h = run(asHome, START);
+    expect(r.mortgagesAtRetire).toEqual([]);
+    expect(r.d.retireMonthly).toBeCloseTo(1_000, 6); // only food: the rent pays the rest
+    expect(h.mortgagesAtRetire).toHaveLength(1);
+    expect(h.d.retireMonthly).toBeCloseTo(1_000 + 400 + 3_000 / 12, 6); // escrow + upkeep
+    expect(r.d.bal.property).toBe(300_000); // counts in net worth either way
+  });
+});

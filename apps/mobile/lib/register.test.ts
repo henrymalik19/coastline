@@ -1,7 +1,7 @@
 import type { PlanState, Txn } from "@coastfi/engine";
 import { describe, expect, it } from "vitest";
 import { freshPlan } from "./presets";
-import { applyTracked, foldSavingsLines } from "./register";
+import { applyRegisterBalances, applyTracked, foldSavingsLines, liveBudget, startTxnFor } from "./register";
 
 function plan(): PlanState {
   const p = freshPlan();
@@ -18,24 +18,27 @@ const txn = (x: Partial<Txn>): Txn => ({ id: "t1", accountId: "chk", date: "2026
 describe("transfers to accounts you don't budget", () => {
   it("a transfer to the IRA adds to it; changing and deleting it moves it back", () => {
     const p = plan();
-    applyTracked(p, "t1", txn({ transferAccountId: "ira" }));
+    const first = txn({ transferAccountId: "ira" });
+    const moved = applyTracked(p, undefined, first);
+    expect(moved).toBe(500);
     expect(p.accounts[1]!.balance).toBe(10_500);
-    applyTracked(p, "t1", txn({ transferAccountId: "ira", amount: -800 }));
+    // the transaction keeps what it moved, so a change undoes exactly that first
+    const changed = txn({ transferAccountId: "ira", amount: -800 });
+    expect(applyTracked(p, { ...first, trackedAmount: moved }, changed)).toBe(800);
     expect(p.accounts[1]!.balance).toBe(10_800);
-    applyTracked(p, "t1", null);
+    expect(applyTracked(p, { ...changed, trackedAmount: 800 }, null)).toBeUndefined();
     expect(p.accounts[1]!.balance).toBe(10_000);
-    expect(p.budgetPlan!.tracked).toBeUndefined();
   });
 
   it("a withdrawal (money in to checking from the IRA) lowers it", () => {
     const p = plan();
-    applyTracked(p, "t1", txn({ amount: 1_200, transferAccountId: "ira", categoryId: "ready" }));
+    applyTracked(p, undefined, txn({ amount: 1_200, transferAccountId: "ira", categoryId: "ready" }));
     expect(p.accounts[1]!.balance).toBe(8_800);
   });
 
   it("a loan payment lowers what you owe", () => {
     const p = plan();
-    applyTracked(p, "t1", txn({ amount: -300, transferAccountId: "car", categoryId: "debt:car" }));
+    applyTracked(p, undefined, txn({ amount: -300, transferAccountId: "car", categoryId: "debt:car" }));
     expect(p.debts[0]!.balance).toBe(4_700);
   });
 
@@ -53,8 +56,32 @@ describe("transfers to accounts you don't budget", () => {
 
   it("leaves transfers between budget accounts and plain spending alone", () => {
     const p = plan();
-    applyTracked(p, "t1", txn({ categoryId: "item:x" }));
+    expect(applyTracked(p, undefined, txn({ categoryId: "item:x" }))).toBeUndefined();
     expect(p.accounts[1]!.balance).toBe(10_000);
-    expect(p.budgetPlan!.tracked).toBeUndefined();
+  });
+});
+
+describe("starting balances", () => {
+  it("an account's first transaction starts its register; its balance is the sum of its transactions", () => {
+    const p = plan();
+    const spend = txn({ amount: -150, categoryId: "food" });
+    const start = startTxnFor(p, [spend], "chk", "2026-11-05")!;
+    expect(start).toMatchObject({ id: "start:chk", amount: 2_000, categoryId: "ready", payee: "Starting balance" });
+    expect(startTxnFor(p, [start, spend], "chk", "2026-11-05")).toBeNull(); // only once
+    applyRegisterBalances(p, [start, spend]);
+    expect(p.accounts[0]!.balance).toBe(1_850);
+    // its money now reaches ready to assign through the starting balance, not the start cash
+    expect(liveBudget(p, [start, spend])!.startCash).toBe(0);
+    expect(liveBudget(p, [])!.startCash).toBe(1_850);
+  });
+
+  it("a card's starting balance is what you owe, with no category", () => {
+    const p = plan();
+    p.debts.push({ id: "visa", name: "Visa", kind: "credit_card", balance: 300, apr: 0.24, minPayment: 30 });
+    const start = startTxnFor(p, [], "visa", "2026-11-05")!;
+    expect(start.amount).toBe(-300);
+    expect(start.categoryId).toBeUndefined();
+    applyRegisterBalances(p, [start, txn({ id: "c1", accountId: "visa", amount: -50, categoryId: "food" })]);
+    expect(p.debts.find((d) => d.id === "visa")!.balance).toBe(350);
   });
 });

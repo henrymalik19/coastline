@@ -30,11 +30,10 @@ export function fullPlan(): PlanState {
     accounts: [
       { id: "ira", name: "Roth IRA", type: "roth", balance: 12000.12, counts: "ira", owner: "spouse", plaidAccountId: "p1" },
       { id: "chk", name: "Checking", type: "cash", balance: 13962.11 },
-      { id: "home", name: "Home", type: "property", balance: 450000, homeCosts: 6000, upkeep: 0.01 },
     ],
     debts: [
       { id: "m", name: "840 Madison", kind: "mortgage", balance: 366819.87, apr: 0.061, minPayment: 3572.77, minimumOnly: true, escrow: 1235, term: 360, firstPayment: "2023-04", original: 400000, budgetGroup: "Housing" },
-      { id: "r", name: "710 Dillon", kind: "mortgage", balance: 175236.52, apr: 0.033, minPayment: 1147.19, rental: true, plaidAccountId: "p2" },
+      { id: "r", name: "710 Dillon", kind: "mortgage", balance: 175236.52, apr: 0.033, minPayment: 1147.19, plaidAccountId: "p2" },
       { id: "cc", name: "Visa", kind: "credit_card", balance: 3000, apr: 0.24, minPayment: 90, promoApr: 0, promoUntil: "2027-06" },
       { id: "loan", name: "401(k) loan", kind: "k401_loan", balance: 25305.25, apr: 0.078, minPayment: 528, payroll: true },
     ],
@@ -56,6 +55,10 @@ export function fullPlan(): PlanState {
       scheduleMonths: { cash: { "2027-01": 1000, "2027-02": 0 } },
     },
     whatif: { extra: 100, retDelta: -0.01, spendDelta: 0.1 },
+    properties: [
+      { id: "h", name: "840 Madison", kind: "home", value: 520000, mortgageId: "m", upkeep: 0.01 },
+      { id: "rp", name: "710 Dillon", kind: "rental", value: 310000.5, mortgageId: "r", incomeId: "j2", taxInsurance: 4200 },
+    ],
     adjustments: [{ id: "a1", month: "2027-05", kind: "expense", amount: 4000, note: "Roof" }],
     emergency: { active: true, until: "2027-02", essentialsOnly: true, pause401k: false },
     retirementIncome: [{ id: "ss", name: "Social Security", kind: "socialSecurity", monthly: 2400, startAge: 67 }],
@@ -64,12 +67,9 @@ export function fullPlan(): PlanState {
       start: "2026-09",
       startCash: 13000.5,
       months: {
-        "2026-09": { assigned: { food: 900, cash: 500 }, spent: { food: 850.25 }, income: 6000 },
-        "2026-10": { assigned: { food: 900 } },
-        "2026-11": {},
+        "2026-09": { assigned: { food: 900, cash: 500 } },
+        "2026-10": { assigned: { food: 900.5 } },
       },
-      registers: { chk: { opening: 13000.5, since: "2026-09-01" } },
-      tracked: { t1: { to: "ira", amount: 500 } },
       efLine: { name: "Rainy day", group: "Savings" },
     },
   };

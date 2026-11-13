@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetCategories, budgetScheduleMonths, budgetStartCash, budgetView, derive, simulatePlan, type BudgetState, type PlanState } from "../src";
+import { budgetCategories, budgetScheduleMonths, budgetStartCash, budgetView, derive, simulatePlan, startTxnId, type BudgetState, type PlanState } from "../src";
 import { START } from "./fixtures";
 
 const blank = (over: Partial<PlanState> = {}): PlanState => ({
@@ -23,22 +23,29 @@ describe("monthly budget", () => {
       start: "2026-11",
       startCash: 1000,
       months: {
-        "2026-11": { income: 4000, assigned: { food: 500, rent: 2000, "acct:ira": 300 }, spent: { food: 400, rent: 2000 } },
-        "2026-12": { income: 4000, assigned: { food: 500, rent: 2000 }, spent: { food: 700 } },
-        "2027-01": { income: 4000, assigned: { food: 500 } },
+        "2026-11": { assigned: { food: 500, rent: 2000, "acct:ira": 300 } },
+        "2026-12": { assigned: { food: 500, rent: 2000 } },
+        "2027-01": { assigned: { food: 500 } },
       },
     };
-    const nov = budgetView(b, cats, "2026-11");
+    // what came in and went out: transactions
+    const tx = (id: string, date: string, amount: number, categoryId: string) => ({ id, accountId: "chk", date, amount, categoryId, cleared: "cleared" as const, source: "manual" as const, updatedAt: 0 });
+    const txns = [
+      tx("i1", "2026-11-01", 4000, "ready"), tx("i2", "2026-12-01", 4000, "ready"), tx("i3", "2027-01-01", 4000, "ready"),
+      tx("f1", "2026-11-10", -400, "food"), tx("r1", "2026-11-02", -2000, "rent"), tx("f2", "2026-12-10", -700, "food"),
+    ];
+    const view = (m: string) => budgetView(b, cats, m, { txns, cards: {} });
+    const nov = view("2026-11");
     expect(nov.readyToAssign).toBeCloseTo(1000 + 4000 - 2800 - (2500 + 500) /* assigned in later months */, 9);
     expect(nov.lines.food!.available).toBeCloseTo(100, 9);
     // assigned to the IRA but not moved yet (no transfer recorded): it stays available
     expect(nov.lines["acct:ira"]!.spent).toBe(0);
     expect(nov.lines["acct:ira"]!.available).toBeCloseTo(300, 9);
-    const dec = budgetView(b, cats, "2026-12");
+    const dec = view("2026-12");
     expect(dec.lines.food!.carried).toBeCloseTo(100, 9);
     expect(dec.lines.food!.available).toBeCloseTo(-100, 9); // 100 + 500 − 700
     expect(dec.lines.rent!.available).toBeCloseTo(2000, 9); // assigned, not spent yet
-    const jan = budgetView(b, cats, "2027-01");
+    const jan = view("2027-01");
     expect(jan.overspentBefore).toBeCloseTo(100, 9);
     expect(jan.lines.food!.carried).toBe(0); // overspending doesn't carry as a negative
     expect(jan.lines.rent!.carried).toBeCloseTo(2000, 9);
@@ -165,14 +172,13 @@ describe("budgetStartCash", () => {
     };
     expect(budgetStartCash(s)).toBeCloseTo(14962.11, 6);
   });
-  it("an account with transactions counts from where its register started", () => {
-    const s = {
-      accounts: [{ id: "chk", name: "Checking", type: "cash" as const, balance: 1500 }],
-      budgetPlan: { start: "2026-11", startCash: 0, months: {}, registers: { chk: { opening: 1000, since: "2026-11-02" } } },
-    };
-    // the other $500 came from transactions, which reach ready to assign on their own
-    expect(budgetStartCash(s)).toBe(1000);
+  it("an account with transactions starts with a Starting balance transaction instead", () => {
+    const s = { accounts: [{ id: "chk", name: "Checking", type: "cash" as const, balance: 1500 }, { id: "sav", name: "Savings", type: "cash" as const, balance: 200 }] };
+    // checking's money comes in through its transactions (its starting balance among them); savings has none yet
+    expect(budgetStartCash(s, [{ id: startTxnId("chk") }, { id: "x" }])).toBe(200);
+    expect(budgetStartCash(s, [{ id: startTxnId("chk"), deleted: true }])).toBe(1700);
   });
+
 });
 
 describe("real spending", () => {

@@ -85,12 +85,12 @@ describe.skipIf(!env)("plans as rows, and who can see them (local Supabase)", ()
   it("a whole plan saves as rows and comes back the same", async () => {
     const snap = await load(a.client, a.id);
     const back = rowsToPlan(toRows(snap!));
-    expect(canon(back.plan)).toEqual(canon(plan));
+    expect(canon(back.plan)).toEqual(canon({ ...plan, limits: [] })); // limits are shared, not saved per plan
     expect(back.todoDone).toEqual(todo);
     expect((snap!.plan as { client_updated_at: number }).client_updated_at).toBe(100);
     // one row per thing, in its own table
     const accounts = await a.client.from("account").select("id, balance").eq("plan_id", a.id).order("sort");
-    expect(accounts.data?.map((r) => r.id)).toEqual(["ira", "chk", "home"]);
+    expect(accounts.data?.map((r) => r.id)).toEqual(["ira", "chk"]);
   });
 
   it("a later save writes only what changed, and only over the copy it started from", async () => {
@@ -122,7 +122,7 @@ describe.skipIf(!env)("plans as rows, and who can see them (local Supabase)", ()
 
   it("someone else can't read, change or remove your plan", async () => {
     expect(await load(b.client, a.id)).toBeNull();
-    for (const t of ["plan", "account", "debt", "category", "budget_amount", "checkin", "profile"]) {
+    for (const t of ["plan", "account", "debt", "category", "property", "budget_assignment", "checkin", "profile"]) {
       const r = await b.client.from(t).select("*").eq(t === "plan" || t === "profile" ? "id" : "plan_id", a.id);
       expect([t, r.data]).toEqual([t, []]);
     }
@@ -157,10 +157,11 @@ describe.skipIf(!env)("plans as rows, and who can see them (local Supabase)", ()
   });
 
   it("transactions keep their split lines; an older edit from an offline device is ignored", async () => {
-    const t = { id: "t1", account_id: "chk", date: "2026-11-02", amount: -100, payee: "Target", category_id: null, cleared: "cleared", source: "manual", client_updated_at: 10, splits: [{ category_id: "food", amount: -70 }, { category_id: "home", amount: -30 }] };
+    const t = { id: "t1", account_id: "chk", date: "2026-11-02", amount: -100, payee: "Target", category_id: null, cleared: "cleared", source: "manual", client_updated_at: 10, tracked_amount: 12.5, splits: [{ category_id: "food", amount: -70 }, { category_id: "home", amount: -30 }] };
     expect((await a.client.rpc("save_transactions", { p: a.id, p_rows: [t] })).error).toBeNull();
     const read = async () => (await a.client.from("transaction").select("id, amount, transaction_split(sort, category_id, amount)").eq("plan_id", a.id)).data as { transaction_split: { category_id: string; amount: number; sort: number }[] }[];
     expect((await read())[0]!.transaction_split.sort((x, y) => x.sort - y.sort).map((x) => [x.category_id, Number(x.amount)])).toEqual([["food", -70], ["home", -30]]);
+    expect(Number((await a.client.from("transaction").select("tracked_amount").eq("id", "t1").single()).data!.tracked_amount)).toBe(12.5);
     // an older copy can't overwrite it or its splits
     await a.client.rpc("save_transactions", { p: a.id, p_rows: [{ ...t, client_updated_at: 5, splits: [] }] });
     expect((await read())[0]!.transaction_split).toHaveLength(2);
@@ -168,6 +169,25 @@ describe.skipIf(!env)("plans as rows, and who can see them (local Supabase)", ()
     await a.client.rpc("save_transactions", { p: a.id, p_rows: [{ ...t, client_updated_at: 20, splits: [], category_id: "food" }] });
     expect((await read())[0]!.transaction_split).toHaveLength(0);
     expect((await b.client.from("transaction").select("id").eq("plan_id", a.id)).data).toEqual([]);
+  });
+
+  it("contribution limits are one shared table: anyone reads them, nobody changes them from the app", async () => {
+    const anon = createClient(url, anonKey, { auth: { persistSession: false } });
+    const rows = (await anon.from("contribution_limit").select("year, k401, ira").order("year")).data;
+    expect(rows?.map((r) => r.year)).toEqual([2026, 2027]);
+    expect(Number(rows![0]!.k401)).toBe(24500);
+    await a.client.from("contribution_limit").update({ k401: 1 }).eq("year", 2026);
+    const ins = await a.client.from("contribution_limit").insert({ year: 2099, k401: 1, k401_catch: 1, ira: 1, ira_catch: 1, hsa_self: 1, hsa_family: 1, hsa_catch: 1 });
+    expect(ins.error).not.toBeNull();
+    expect(Number((await anon.from("contribution_limit").select("k401").eq("year", 2026).single()).data!.k401)).toBe(24500);
+  });
+
+  it("homes and rentals are their own rows, linked to their mortgage", async () => {
+    const props = (await a.client.from("property").select("id, kind, mortgage_id, income_id").eq("plan_id", a.id).order("sort")).data;
+    expect(props).toEqual([
+      { id: "h", kind: "home", mortgage_id: "m", income_id: null },
+      { id: "rp", kind: "rental", mortgage_id: "r", income_id: "j2" },
+    ]);
   });
 
   it("a profile is made on sign-up; one check-in a month; signed-out visitors see nothing", async () => {
@@ -203,7 +223,7 @@ describe.skipIf(!env)("delete my account (local Supabase)", () => {
     expect((await admin.from("plan").select("id").eq("id", gone.id)).data).toEqual([]);
     expect((await admin.from("account").select("id").eq("plan_id", gone.id)).data).toEqual([]);
     // the other user is untouched
-    expect((await keep.c.from("account").select("id")).data?.length).toBe(3);
+    expect((await keep.c.from("account").select("id")).data?.length).toBe(2);
     // signed-out visitors can't call it
     const anon = createClient(url, env!.ANON_KEY!, { auth: { persistSession: false } });
     expect((await anon.rpc("delete_my_account")).error).not.toBeNull();

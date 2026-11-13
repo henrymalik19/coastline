@@ -1,4 +1,6 @@
-import { derive, k401Cost, run, simulatePlan, type MonthRow, type PlanResult, type PlanState, type RunResult } from "@coastfi/engine";
+import { derive, k401Cost, run, simulatePlan, type LimitsRow, type MonthRow, type PlanResult, type PlanState, type RunResult } from "@coastfi/engine";
+import { withProperties } from "@coastfi/schema";
+import { useLimits } from "./limits";
 import { money } from "./format";
 import { useStore } from "./store";
 import { syncPaycheckLoans } from "./loans";
@@ -20,7 +22,11 @@ export function defaultMedicare(s: Pick<PlanState, "healthcare" | "spouse">): nu
   return Math.min(Math.max(0, s.healthcare), MEDICARE_PER_PERSON * (s.spouse ? 2 : 1));
 }
 
-export function effectivePlan(saved: PlanState): PlanState {
+export function effectivePlan(saved: PlanState, limits?: LimitsRow[]): PlanState {
+  // contribution limits are shared by everyone (lib/limits.ts), not kept in each plan
+  if (limits?.length && saved.limits !== limits) saved = { ...saved, limits };
+  // homes and rentals from before properties (a device that hasn't synced since)
+  saved = withProperties(saved);
   // plans saved before paycheck 401(k) loans came out of take-home: bring them up to date
   const stale = saved.incomes.some((i) => i.deductions?.some((d) => d.kind === "k401_loan" && !saved.debts.find((x) => x.id === d.debtId)?.payroll));
   if (stale) {
@@ -61,18 +67,18 @@ type PlanRun = { state: PlanState; result: RunResult; start: Date; actual: PlanR
  * One engine run per saved plan, shared by every screen piece that calls usePlan. (A useMemo in
  * each caller ran the whole engine once per component on every edit, which made typing lag.)
  */
-let shared: { saved: PlanState; start: Date; value: PlanRun } | null = null;
+let shared: { saved: PlanState; start: Date; limits: LimitsRow[]; value: PlanRun } | null = null;
 
-function computePlan(saved: PlanState, start: Date): PlanRun {
-  if (shared && shared.saved === saved && shared.start === start) return shared.value;
-  const state = effectivePlan(saved);
+function computePlan(saved: PlanState, start: Date, limits: LimitsRow[]): PlanRun {
+  if (shared && shared.saved === saved && shared.start === start && shared.limits === limits) return shared.value;
+  const state = effectivePlan(saved, limits);
   const result = run(state, start);
   const whatIfOn = !!(state.whatif && (state.whatif.extra || state.whatif.retDelta || state.whatif.spendDelta));
   const real = state.whatif?.extra ? { ...state, whatif: { extra: 0, retDelta: 0, spendDelta: 0 } } : state;
   const actual = state.whatif?.extra ? simulatePlan(real, derive(real, start)) : result.plan;
   const forecast = simulatePlan(real, derive(real, start), { autoFill: false });
   const value = { state, result, start, actual, forecast, whatIfOn };
-  shared = { saved, start, value };
+  shared = { saved, start, limits, value };
   return value;
 }
 
@@ -85,8 +91,9 @@ function sharedToday(key: string): Date {
 
 export function usePlan(): PlanRun {
   const saved = useStore((s) => s.plan);
+  const limits = useLimits((s) => s.rows);
   const start = sharedToday(new Date().toDateString());
-  return computePlan(saved, start);
+  return computePlan(saved, start, limits);
 }
 
 /** Plain-English line for a month that comes up short. */

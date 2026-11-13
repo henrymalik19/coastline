@@ -70,9 +70,9 @@ export default function Budget() {
       setTimeout(() => document.getElementById("cat-" + focus)?.scrollIntoView({ behavior: "smooth", block: "center" }), 350);
     router.setParams({ focus: undefined });
   }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
-  const b = liveBudget(state);
-  const cats = useMemo(() => budgetCategories(state, result.d, actual, start, month), [state, result, actual, start, month]);
   const txns = useStore((s) => s.txns);
+  const b = liveBudget(state, txns);
+  const cats = useMemo(() => budgetCategories(state, result.d, actual, start, month), [state, result, actual, start, month]);
   const cards = useMemo(() => cardMap(state), [state]);
   const view = budgetView(b, cats, month, { txns, cards });
   // what you really spent in recent full months, against what the plan uses
@@ -101,14 +101,6 @@ export default function Budget() {
       p.budgetPlan.months = { ...p.budgetPlan.months, [month]: e };
     });
   const setAssigned = (k: string, v: number) => edit((e) => { e.assigned = { ...(e.assigned ?? {}), [k]: Math.max(0, v) }; });
-  const setSpent = (k: string, v: number | undefined) =>
-    edit((e) => {
-      const sp = { ...(e.spent ?? {}) };
-      if (v === undefined) delete sp[k];
-      else sp[k] = v;
-      e.spent = Object.keys(sp).length ? sp : undefined;
-    });
-  const setIncome = (v: number | undefined) => edit((e) => { e.income = v; });
   const itemIndex = (id: string) => state.budget.findIndex((x) => x.id === id);
   const editItem = (id: string, patch: Partial<(typeof state.budget)[number]>) =>
     update((p) => {
@@ -236,12 +228,6 @@ export default function Budget() {
           </Text>
         </View>
       </View>
-      {(entry?.income ?? 0) > 0.005 ? (
-        <Text style={[type.caption, { color: t.text3 }]}>
-          Includes {money(entry!.income!)} of income typed in before you had transactions.{" "}
-          <Text role="button" onPress={() => setIncome(undefined)} style={{ color: t.accent, fontWeight: "700" }}>Remove it</Text>
-        </Text>
-      ) : null}
     </Card>
   );
 
@@ -378,7 +364,6 @@ export default function Budget() {
   const line = (c: BudgetCategory, grip?: ReactNode) => {
     const l = view.lines[c.key]!;
     const isOpen = open === c.key;
-    const explicitSpent = entry?.spent?.[c.key] !== undefined;
     const dupItem = c.kind === "spending" && !c.account ? state.budget.find((x) => x.id === c.key) : undefined;
     const dup = dupItem && !dupItem.noSuggest ? suggestedAccount(state, c.name) : undefined;
     return (
@@ -413,7 +398,7 @@ export default function Budget() {
                 <FormRow label="Assigned" hint={c.target > 0.5 ? `Plan: ${money(c.target)}` : undefined}>
                   <InlineMoney label={`${label(c)} assigned in ${nameOf(month)}`} value={l.assigned} onChange={(v) => setAssigned(c.key, v)} />
                 </FormRow>
-                <FormRow label={c.moves ? "Paid" : "Spent"} hint={explicitSpent ? "Includes an amount from before transactions" : c.moves ? "From the payment or transfer you record" : "From transactions"}>
+                <FormRow label={c.moves ? "Paid" : "Spent"} hint={c.moves ? "From the payment or transfer you record" : "From transactions"}>
                   <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(l.spent)}</Text>
                 </FormRow>
                 <FormRow label="Available" hint={l.carried > 0.5 ? `${money(l.carried)} carried over` : (l.funded ?? 0) > 0.5 ? `+${money(l.funded ?? 0)} from card spending` : undefined}>
@@ -425,7 +410,6 @@ export default function Budget() {
                 {l.available < -0.005 ? <Chip title={`Cover ${money(-l.available)}`} tone="accent" icon="check" onPress={() => setAssigned(c.key, l.assigned - l.available)} /> : null}
                 <Chip title="Transaction" icon="plus" onPress={() => setAdding({ categoryId: c.key })} />
                 {l.assigned > 0.005 ? <Chip title={moveOpen ? "Cancel move" : "Move money"} onPress={() => setMoveOpen((v) => !v)} /> : null}
-                {explicitSpent ? <Chip title="Remove old amount" onPress={() => setSpent(c.key, undefined)} /> : null}
               </View>
             </View>
             {moveOpen && l.assigned > 0.005 ? (

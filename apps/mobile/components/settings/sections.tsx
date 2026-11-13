@@ -11,6 +11,7 @@ import { radius, space, type, useTheme } from "../../lib/theme";
 import { AccountPanel } from "../AccountPanel";
 import { useAppearance } from "../../lib/appearance";
 import { AccountsEditor } from "../AccountsEditor";
+import { PropertiesEditor } from "../PropertiesEditor";
 import { SharingEditor } from "../SharingEditor";
 import { ContributionsCard } from "../ContributionsCard";
 import { RetirementIncomeEditor } from "../RetirementIncomeEditor";
@@ -235,6 +236,7 @@ function AccountsSection() {
         Cash is your emergency fund. Everything else counts as invested. Tap an account to rename it, change its type or remove it; drag its grip to reorder.
       </Text>
       <AccountsEditor />
+      <PropertiesEditor />
       <ContributionsCard />
     </>
   );
@@ -423,7 +425,6 @@ function TaxBracketRow() {
 function LimitsSection() {
   const t = useTheme();
   const { state } = usePlan();
-  const update = useStore((s) => s.update);
   const fields: { k: "k401" | "k401Catch" | "ira" | "iraCatch" | "hsaSelf" | "hsaFamily" | "hsaCatch"; label: string; catchUp?: boolean }[] = [
     { k: "k401", label: "401(k)" },
     { k: "k401Catch", label: "401(k) catch-up (50+)", catchUp: true },
@@ -433,80 +434,23 @@ function LimitsSection() {
     { k: "hsaFamily", label: "HSA, family" },
     { k: "hsaCatch", label: "HSA catch-up (55+)", catchUp: true },
   ];
-  // open the current year (or the closest one) at first; the rest start collapsed
-  const [open, setOpen] = useState<Set<number>>(() => {
-    const now = new Date().getFullYear();
-    const years = state.limits.map((l) => l.year);
-    const pick = years.includes(now) ? now : years.filter((y) => y <= now).sort((a, b) => b - a)[0] ?? Math.min(...years);
-    return new Set(state.limits.flatMap((l, i) => (l.year === pick ? [i] : [])));
-  });
-  const toggle = (i: number) => setOpen((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n; });
   return (
     <>
       <Text style={[type.body, { color: t.text2 }]}>
-        The most the IRS lets you put in each year. Years after the last row reuse it (limits roughly track inflation, so flat is right in today's dollars). Update when new limits are announced.
+        The most the IRS lets you put in each year. Coastline keeps these up to date for everyone when new limits are announced. Years after the last one reuse it (limits roughly track inflation, so flat is right in today's dollars).
       </Text>
-      {[...state.limits].sort((a, b) => a.year - b.year).map((row) => {
-        const i = state.limits.indexOf(row);
-        const isOpen = open.has(i);
-        return (
-          <Card key={`${row.year}-${i}`} style={{ gap: space.xs, paddingVertical: isOpen ? space.lg : space.md }}>
-            {/* the year itself is fixed: Add year makes the next one, so years never collide or jump around while you type */}
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-              <Pressable
-                role="button"
-                aria-expanded={isOpen}
-                accessibilityLabel={`${row.year} limits`}
-                accessibilityState={{ expanded: isOpen }}
-                onPress={() => toggle(i)}
-                style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 36 }}
-              >
-                <View style={{ transform: [{ rotate: isOpen ? "90deg" : "0deg" }] }}>
-                  <Icon name="chevron" size={18} color={t.text3} />
-                </View>
-                <Text style={[type.heading, { color: t.text, fontVariant: ["tabular-nums"] }]}>{row.year}</Text>
-                {!isOpen ? (
-                  <Text numberOfLines={1} style={[type.caption, { color: t.text3, flex: 1, fontVariant: ["tabular-nums"] }]}>
-                    401(k) {money(row.k401)} · IRA {money(row.ira)} · HSA {money(row.hsaSelf)}
-                  </Text>
-                ) : null}
-              </Pressable>
-              {isOpen ? (
-                <IconButton
-                  icon="trash"
-                  color={t.bad}
-                  label={`Remove ${row.year}`}
-                  disabled={state.limits.length <= 1}
-                  onPress={() => { setOpen(new Set()); update((p) => { p.limits.splice(i, 1); }); }}
-                />
-              ) : null}
-            </View>
-            {isOpen ? (
-              <>
-            <Rows>
-              {fields.map((f) => (
-                <FieldRow key={f.k} label={f.label} info={f.catchUp ? HELP.catchUp : undefined}>
-                  <NumberInput kind="money" label={`${row.year} ${f.label}`} value={row[f.k]} step={100} onChange={(v) => update((p) => { p.limits[i]![f.k] = v; })} />
-                </FieldRow>
-              ))}
-            </Rows>
-              </>
-            ) : null}
-          </Card>
-        );
-      })}
-      <Button
-        title="Add year"
-        icon="plus"
-        style={{ alignSelf: "flex-start" }}
-        onPress={() => {
-          setOpen((s) => new Set(s).add(state.limits.length));
-          update((p) => {
-            const last = [...p.limits].sort((a, b) => a.year - b.year).at(-1)!;
-            p.limits.push({ ...last, year: last.year + 1 });
-          });
-        }}
-      />
+      {[...state.limits].sort((x, y) => x.year - y.year).map((row) => (
+        <Card key={row.year} style={{ gap: space.xs }}>
+          <Text style={[type.heading, { color: t.text, fontVariant: ["tabular-nums"] }]}>{row.year}</Text>
+          <Rows>
+            {fields.map((f) => (
+              <FieldRow key={f.k} label={f.label} info={f.catchUp ? HELP.catchUp : undefined}>
+                <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(row[f.k])}</Text>
+              </FieldRow>
+            ))}
+          </Rows>
+        </Card>
+      ))}
     </>
   );
 }

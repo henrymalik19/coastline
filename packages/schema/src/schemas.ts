@@ -88,6 +88,16 @@ export const DebtSchema = z.object({
   payroll: z.boolean().optional(),
   budgetGroup: z.string().optional(),
 });
+export const PropertySchema = z.object({
+  id,
+  name: z.string(),
+  kind: z.enum(["home", "rental"]),
+  value: nonNeg,
+  mortgageId: z.string().optional(),
+  incomeId: z.string().optional(),
+  taxInsurance: nonNeg.optional(),
+  upkeep: rate.min(0).optional(),
+});
 export const RetirementIncomeSchema = z.object({
   id,
   name: z.string(),
@@ -188,6 +198,7 @@ export const PlanStateSchema = z.object({
   retirementIncome: z.array(RetirementIncomeSchema).optional(),
   contributed: z.object({ year: z.number().int(), k401: nonNeg, ira: nonNeg, hsa: nonNeg, iraSpouse: nonNeg.optional() }).optional(),
   spouse: z.object({ name: z.string(), age: z.number().min(0).max(120) }).optional(),
+  properties: z.array(PropertySchema).optional(),
   budgetPlan: z
     .object({
       start: z.string().regex(/^\d{4}-\d{2}$/),
@@ -196,12 +207,8 @@ export const PlanStateSchema = z.object({
         z.string().regex(/^\d{4}-\d{2}$/),
         z.object({
           assigned: z.record(z.string(), z.number().min(0)).optional(),
-          spent: z.record(z.string(), z.number()).optional(),
-          income: z.number().min(0).optional(),
         }),
       ),
-      registers: z.record(z.string(), z.object({ opening: z.number(), since: z.string() })).optional(),
-      tracked: z.record(z.string(), z.object({ to: z.string(), amount: z.number() })).optional(),
       efLine: z.object({ name: z.string().optional(), group: z.string().optional() }).optional(),
     })
     .optional(),
@@ -222,6 +229,7 @@ export const TxnSchema = z.object({
   cleared: z.enum(["uncleared", "cleared", "reconciled"]),
   source: z.enum(["manual", "csv", "ynab", "plaid"]),
   importId: z.string().optional(),
+  trackedAmount: z.number().finite().optional(),
   updatedAt: z.number(),
   deleted: z.boolean().optional(),
 });

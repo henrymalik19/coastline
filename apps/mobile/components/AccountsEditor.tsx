@@ -7,11 +7,11 @@ import { HELP } from "../lib/help";
 import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
-import { Button, Choice, FieldRow, IconButton, NumberInput, TextField } from "./form";
+import { Button, Choice, IconButton, NumberInput, TextField } from "./form";
 import { Icon } from "./Icon";
 import { Card, Divider } from "./ui";
 import { DragList, reorderAmong } from "./DragList";
-import { isCard } from "../lib/register";
+import { hasRegister, isCard } from "../lib/register";
 import { contributionKey, MonthlyAmount, PayrollNote, plannedNow } from "./ScheduleEditor";
 import { money } from "../lib/format";
 import { monthKey } from "../lib/store";
@@ -23,7 +23,6 @@ export const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: "taxable", label: "Brokerage" },
   { value: "hsa", label: "HSA" },
   { value: "cash", label: "Cash" },
-  { value: "property", label: "Property" },
 ];
 const COUNTS: { value: PlanAccount; label: string }[] = [
   { value: "k401", label: "401(k)" },
@@ -39,7 +38,6 @@ export const ACCOUNT_GROUPS: { key: string; label: string; types: AccountType[] 
   { key: "cash", label: "Checking & savings", types: ["cash"] },
   { key: "retirement", label: "Retirement & HSA", types: ["pretax", "roth", "hsa"] },
   { key: "invest", label: "Investments", types: ["taxable"] },
-  { key: "property", label: "Property", types: ["property"] },
 ];
 const groupKeyOf = (a: Account) => ACCOUNT_GROUPS.find((g) => g.types.includes(a.type))?.key ?? "invest";
 
@@ -52,8 +50,6 @@ const QUICK_ADD: { name: string; type: AccountType; label?: string }[] = [
   { name: "HSA", type: "hsa" },
   { name: "Brokerage", type: "taxable" },
   { name: "", type: "cash", label: "Checking / savings" },
-  { name: "Home", type: "property" },
-  { name: "Rental property", type: "property" },
   { name: "Other", type: "taxable" },
 ];
 
@@ -66,6 +62,7 @@ export function AccountsEditor() {
   const t = useTheme();
   const { state, start } = usePlan();
   const update = useStore((s) => s.update);
+  const txns = useStore((s) => s.txns);
   const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
   const thisMonth = monthKey(start);
@@ -137,7 +134,7 @@ export function AccountsEditor() {
                     </View>
                   </Pressable>
                   {(
-                    state.budgetPlan?.registers?.[a.id] ? (
+                    hasRegister(txns, a.id) ? (
                       <Pressable role="link" accessibilityLabel={`${name} register`} onPress={() => router.push(`/money/register?account=${a.id}`)} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                         <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(a.balance)}</Text>
                         <Icon name="chevron" size={14} color={t.accent} />
@@ -152,7 +149,7 @@ export function AccountsEditor() {
                     {a.type === "cash" ? (
                       <Pressable role="link" onPress={() => router.push(`/money/register?account=${a.id}`)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}>
                         <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>
-                          {state.budgetPlan?.registers?.[a.id] ? "Transactions (the balance comes from them)" : "Transactions"}
+                          {hasRegister(txns, a.id) ? "Transactions (the balance comes from them)" : "Transactions"}
                         </Text>
                         <Icon name="chevron" size={12} color={t.accent} />
                       </Pressable>
@@ -169,29 +166,7 @@ export function AccountsEditor() {
                     <TextField label="Account name" placeholder="e.g. Fidelity 401(k)" value={a.name} onChange={(v) => update((p) => { p.accounts[i]!.name = v; })} />
                     <Choice label="Account type" options={ACCOUNT_TYPES} value={a.type} onChange={(v) => update((p) => { p.accounts[i]!.type = v; })} />
                     <Text style={[type.caption, { color: t.text3 }]}>{HELP[a.type]}</Text>
-                    {a.type === "property" ? (
-                      <>
-                        <Text style={[type.label, { color: t.text, fontWeight: "700", marginTop: space.sm }]}>Costs that keep going in retirement</Text>
-                        {(() => {
-                          // escrow on a mortgage already counts property tax + insurance (and keeps counting once it's paid off)
-                          const escrow = state.debts.filter((x) => x.kind === "mortgage" && !x.payroll).reduce((t2, x) => t2 + Math.min(Math.max(0, x.escrow ?? 0), x.minPayment), 0);
-                          return escrow > 0.5 && !a.homeCosts ? (
-                            <Text style={[type.caption, { color: t.text2 }]}>
-                              Property tax + insurance: counted from your mortgage escrow ({money(escrow, { whole: true })}/mo), which keeps going after the loan is paid off.
-                            </Text>
-                          ) : (
-                            <FieldRow label="Property tax + insurance a year" hint={escrow > 0.5 ? "Your mortgage escrow counts these too: set this to $0 so they aren't counted twice" : "Paid on your own (no mortgage escrow)"}>
-                              <NumberInput kind="money" label={`${name} property tax and insurance a year`} value={a.homeCosts ?? 0} onChange={(v) => update((p) => { p.accounts[i]!.homeCosts = v > 0 ? v : undefined; })} />
-                            </FieldRow>
-                          );
-                        })()}
-                        <FieldRow label="Upkeep a year" hint={`Repairs and maintenance, as a share of its value. About 1% is common${(a.upkeep ?? 0) > 0 ? ` (${money(a.balance * (a.upkeep ?? 0), { whole: true })} a year)` : ""}.`}>
-                          <NumberInput kind="percent" label={`${name} upkeep a year`} value={a.upkeep ?? 0} max={0.1} onChange={(v) => update((p) => { p.accounts[i]!.upkeep = v > 0 ? v : undefined; })} />
-                        </FieldRow>
-                        <Text style={[type.caption, { color: t.text3 }]}>These add to your retirement spending, so your number covers them. Today's costs belong in your budget.</Text>
-                      </>
-                    ) : null}
-                    {a.type !== "cash" && a.type !== "property" ? (
+                    {a.type !== "cash" ? (
                       <>
                         <Choice
                           label="Counts as"
@@ -249,7 +224,7 @@ export function AccountsEditor() {
               renderItem={(n, grip) => {
                 const d = cards[n]!;
                 const name = d.name?.trim() || "Credit card";
-                const reg = !!state.budgetPlan?.registers?.[d.id];
+                const reg = hasRegister(txns, d.id);
                 return (
                   <View>
                     {n > 0 ? <Divider /> : null}

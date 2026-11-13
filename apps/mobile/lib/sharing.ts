@@ -116,7 +116,7 @@ export function memberView(accountIds: string[], now = new Date()): MemberView {
   const accounts = budgetAccounts(state).filter((a) => accountIds.includes(a.id)).map((a) => ({ id: a.id, name: a.name, kind: a.kind }));
   if (!state.budgetPlan) return { at: Date.now(), month, accounts, categories: [] };
   const cats = budgetCategories(state, result.d, actual, now, month).filter((c) => c.kind === "spending" || c.kind === "bill");
-  const v = budgetView(liveBudget(state), cats, month, { txns, cards: cardMap(state) });
+  const v = budgetView(liveBudget(state, txns), cats, month, { txns, cards: cardMap(state) });
   const categories = cats.map((c) => ({ key: c.key, name: c.name, group: c.group, available: Math.round((v.lines[c.key]?.available ?? 0) * 100) / 100 }));
   return { at: Date.now(), month, accounts, categories };
 }

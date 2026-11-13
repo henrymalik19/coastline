@@ -5,6 +5,9 @@
  * columns) and a table per list. planToRows / rowsToPlan turn one into the other, and diffRows says
  * which rows a save has to write or remove. Lists keep their order in `sort`. A value the plan
  * doesn't have is null in the database and missing (not undefined) in the plan.
+ *
+ * Contribution limits aren't part of a plan: everyone shares one table of them (the app fills
+ * `limits` in from it).
  */
 import type * as Engine from "@coastfi/engine";
 
@@ -21,14 +24,11 @@ export const PLAN_TABLES = {
   goal: ["id"],
   retirement_income: ["id"],
   adjustment: ["id"],
-  contribution_limit: ["year"],
+  property: ["id"],
   step_split: ["step"],
   schedule_entry: ["key", "sort"],
   month_amount: ["source", "key", "month"],
-  budget_month: ["month"],
-  budget_amount: ["month", "key"],
-  register: ["account_id"],
-  tracked_transfer: ["transaction_id"],
+  budget_assignment: ["month", "key"],
   todo_done: ["month", "item"],
 } as const;
 export type PlanTable = keyof typeof PLAN_TABLES;
@@ -53,8 +53,8 @@ const bySort = (a: Row, b: Row) => Number(a.sort) - Number(b.sort);
 const entries = <T>(rec: Record<string, T> | undefined) => Object.entries(rec ?? {});
 
 /* ---------- each table's columns ---------- */
-const ACCOUNT = auto("id", "name", "type", "balance", "plaidAccountId", "counts", "owner", "homeCosts", "upkeep");
-const DEBT = auto("id", "name", "kind", "balance", "apr", "minPayment", "plaidAccountId", "promoApr", "promoUntil", "minimumOnly", "escrow", "rental", "term", "firstPayment", "original", "payroll", "budgetGroup");
+const ACCOUNT = auto("id", "name", "type", "balance", "plaidAccountId", "counts", "owner");
+const DEBT = auto("id", "name", "kind", "balance", "apr", "minPayment", "plaidAccountId", "promoApr", "promoUntil", "minimumOnly", "escrow", "term", "firstPayment", "original", "payroll", "budgetGroup");
 const INCOME = auto(
   "id", "name", "kind", "freq", "net", "nextPayday", "matchMode", "gross", "contribPct", "matchRate1", "matchUpTo1", "matchRate2", "matchUpTo2",
   "pretax", "match", "fullMatch", "netMode", "rothShare", "hsaEmployer", "hsaEmployerMonth", "hsaPre",
@@ -66,7 +66,7 @@ const GOAL = auto("id", "name", "target", "saved", "budgetGroup");
 const RECURRING: Field[] = [["every", "every_months"], ["due", "due"], ["inRetirement", "in_retirement"], ["paidThrough", "paid_through"]];
 const RETIREMENT_INCOME = auto("id", "name", "kind", "monthly", "startAge");
 const ADJUSTMENT = auto("id", "month", "kind", "amount", "note");
-const LIMIT = auto("year", "k401", "k401Catch", "ira", "iraCatch", "hsaSelf", "hsaFamily", "hsaCatch");
+const PROPERTY = auto("id", "name", "kind", "value", "mortgageId", "incomeId", "taxInsurance", "upkeep");
 
 /* ---------- the plan row's columns ---------- */
 const TOP = auto("version", "age", "retireAge", "healthcare", "medicare", "currentInvestMonthly", "ret", "vol", "fee", "swr", "taxRate", "contribGrowth", "filingStatus");
@@ -85,7 +85,40 @@ const EF_LINE: Field[] = [["name", "ef_name"], ["group", "ef_group"]];
 /** Every column of the plan row the app owns (the rest are the server's: id, owner, timestamps). */
 export const PLAN_COLUMNS = [...TOP, ...SETTINGS, ...WHATIF, ...SPOUSE, ...EMERGENCY, ...CONTRIBUTED, ...BUDGET, ...EF_LINE].map(([, c]) => c).concat(["ef_line", "onboarded"]);
 
-export function planToRows(s: Engine.PlanState, todoDone: Record<string, string[]> = {}, onboarded = true): PlanRows {
+/**
+ * Homes and rentals as properties. Before properties existed, a home was an account of type
+ * "property" (a rental income made one as "prop-<income id>", its mortgage as "mort-<income id>"),
+ * and a rental's mortgage said "rental". Those become properties linked to their mortgage and rent.
+ */
+export function withProperties(s: Engine.PlanState): Engine.PlanState {
+  const old = s.accounts.filter((a) => a.type === "property");
+  if (!old.length && !s.debts.some((d) => d.rental)) return s;
+  let props: Engine.Property[] = [...(s.properties ?? [])];
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  for (const a of old) {
+    if (props.some((p) => p.id === a.id)) continue;
+    const incomeId = s.incomes.find((i) => a.id === "prop-" + i.id)?.id;
+    const mortgage = s.debts.find((d) => !!incomeId && d.id === "mort-" + incomeId) ?? s.debts.find((d) => d.kind === "mortgage" && same(d.name, a.name));
+    props.push({
+      id: a.id, name: a.name, kind: mortgage?.rental ? "rental" : "home", value: a.balance,
+      ...(mortgage ? { mortgageId: mortgage.id } : {}), ...(incomeId ? { incomeId } : {}),
+      ...(a.homeCosts ? { taxInsurance: a.homeCosts } : {}), ...(a.upkeep ? { upkeep: a.upkeep } : {}),
+    });
+  }
+  for (const d of s.debts.filter((x) => x.rental)) {
+    if (props.some((p) => p.mortgageId === d.id)) props = props.map((p) => (p.mortgageId === d.id ? { ...p, kind: "rental" } : p));
+    else props.push({ id: "prop-" + d.id, name: d.name, kind: "rental", value: 0, mortgageId: d.id });
+  }
+  return {
+    ...s,
+    accounts: s.accounts.filter((a) => a.type !== "property"),
+    debts: s.debts.map(({ rental: _r, ...d }) => d),
+    properties: props,
+  };
+}
+
+export function planToRows(input: Engine.PlanState, todoDone: Record<string, string[]> = {}, onboarded = true): PlanRows {
+  const s = withProperties(input);
   const b = s.budgetPlan;
   const p = s.plan;
   const plan: Row = {
@@ -109,19 +142,14 @@ export function planToRows(s: Engine.PlanState, todoDone: Record<string, string[
     goal: s.goals.map((g, i) => ({ ...out(g as unknown as Obj, GOAL), ...out(g.recurring as Obj | undefined, RECURRING), sort: i })),
     retirement_income: (s.retirementIncome ?? []).map((x, i) => ({ ...out(x as unknown as Obj, RETIREMENT_INCOME), sort: i })),
     adjustment: (s.adjustments ?? []).map((x, i) => ({ ...out(x as unknown as Obj, ADJUSTMENT), sort: i })),
-    contribution_limit: s.limits.map((x, i) => ({ ...out(x as unknown as Obj, LIMIT), sort: i })),
+    property: (s.properties ?? []).map((x, i) => ({ ...out(x as unknown as Obj, PROPERTY), sort: i })),
     step_split: [...new Set([...Object.keys(p.shares ?? {}), ...Object.keys(p.amounts ?? {})])].map((step) => ({ step, share: p.shares?.[step] ?? null, amount: p.amounts?.[step] ?? null })),
     schedule_entry: entries(p.schedule).flatMap(([key, list]) => list.map((e, i) => ({ key, sort: i, from_month: e.from, amount: e.amount, pct: e.pct ?? null }))),
     month_amount: [
       ...entries(p.scheduleMonths).flatMap(([key, m]) => entries(m).map(([month, amount]) => ({ source: "schedule", key, month, amount }))),
       ...entries(p.amountsBy).flatMap(([key, m]) => entries(m).map(([month, amount]) => ({ source: "step", key, month, amount }))),
     ],
-    budget_month: entries(b?.months).map(([month, e]) => ({ month, income: e.income ?? null })),
-    budget_amount: entries(b?.months).flatMap(([month, e]) =>
-      [...new Set([...Object.keys(e.assigned ?? {}), ...Object.keys(e.spent ?? {})])].map((key) => ({ month, key, assigned: e.assigned?.[key] ?? null, spent: e.spent?.[key] ?? null })),
-    ),
-    register: entries(b?.registers).map(([account_id, r]) => ({ account_id, opening: r.opening, since: r.since })),
-    tracked_transfer: entries(b?.tracked).map(([transaction_id, r]) => ({ transaction_id, to_account: r.to, amount: r.amount })),
+    budget_assignment: entries(b?.months).flatMap(([month, e]) => entries(e.assigned).map(([key, assigned]) => ({ month, key, assigned }))),
     todo_done: entries(todoDone).flatMap(([month, items]) => items.map((item, i) => ({ month, item, sort: i }))),
   };
   return { plan, tables: t };
@@ -174,31 +202,22 @@ export function rowsToPlan(rows: PlanRows): { plan: Engine.PlanState; todoDone: 
       if (x.every_months !== null && x.every_months !== undefined) g.recurring = back(x, RECURRING);
       return g;
     }),
-    limits: sorted("contribution_limit").map((x) => back(x, LIMIT)),
+    // filled in by the app from the shared contribution limits
+    limits: [],
     plan: settings,
     whatif: back(r, WHATIF),
   };
   set(plan, "adjustments", t.adjustment?.length ? sorted("adjustment").map((x) => back(x, ADJUSTMENT)) : undefined);
+  set(plan, "properties", t.property?.length ? sorted("property").map((x) => back(x, PROPERTY)) : undefined);
   set(plan, "retirementIncome", t.retirement_income?.length ? sorted("retirement_income").map((x) => back(x, RETIREMENT_INCOME)) : undefined);
   if (r.spouse_name !== null && r.spouse_name !== undefined) plan.spouse = back(r, SPOUSE);
   if (r.emergency_active !== null && r.emergency_active !== undefined) plan.emergency = back(r, EMERGENCY);
   if (r.contributed_year !== null && r.contributed_year !== undefined) plan.contributed = back(r, CONTRIBUTED);
   if (r.budget_start !== null && r.budget_start !== undefined) {
     const bp = back(r, BUDGET);
-    const m: Record<string, Obj> = {};
-    for (const x of t.budget_month ?? []) m[x.month as string] = x.income !== null && x.income !== undefined ? { income: x.income } : {};
-    for (const x of t.budget_amount ?? []) {
-      const e = (m[x.month as string] ??= {});
-      if (x.assigned !== null && x.assigned !== undefined) ((e.assigned ??= {}) as Obj)[x.key as string] = x.assigned;
-      if (x.spent !== null && x.spent !== undefined) ((e.spent ??= {}) as Obj)[x.key as string] = x.spent;
-    }
+    const m: Record<string, { assigned: Obj }> = {};
+    for (const x of t.budget_assignment ?? []) (m[x.month as string] ??= { assigned: {} }).assigned[x.key as string] = x.assigned;
     bp.months = m;
-    const regs: Obj = {};
-    for (const x of t.register ?? []) regs[x.account_id as string] = { opening: x.opening, since: x.since };
-    set(bp, "registers", nonEmpty(regs));
-    const tracked: Obj = {};
-    for (const x of t.tracked_transfer ?? []) tracked[x.transaction_id as string] = { to: x.to_account, amount: x.amount };
-    set(bp, "tracked", nonEmpty(tracked));
     if (r.ef_line) bp.efLine = back(r, EF_LINE);
     plan.budgetPlan = bp;
   }

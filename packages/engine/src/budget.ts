@@ -108,14 +108,19 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
   return out;
 }
 
+/** An account's "Starting balance" transaction: the first one in its register. */
+export const START_TXN = "start:";
+export const startTxnId = (accountId: string) => START_TXN + accountId;
+export const isStartTxn = (t: Pick<Txn, "id">) => t.id.startsWith(START_TXN);
+
 /**
- * The money your budget started with: every cash account's starting balance, including accounts
- * added after the budget began (where its register starts, or its balance if it has no
- * transactions yet). Transactions add to it from there, so ready to assign follows your cash.
+ * The money your budget started with: the balance of each cash account that has no transactions
+ * yet. An account with transactions starts with a "Starting balance" transaction, which comes in
+ * as money to assign like any other, so ready to assign follows your cash.
  */
-export function budgetStartCash(s: Pick<PlanState, "accounts" | "budgetPlan">): number {
-  const regs = s.budgetPlan?.registers ?? {};
-  return (s.accounts ?? []).filter((a) => a.type === "cash").reduce((t, a) => t + num(regs[a.id]?.opening ?? a.balance), 0);
+export function budgetStartCash(s: Pick<PlanState, "accounts">, txns: Pick<Txn, "id" | "deleted">[] = []): number {
+  const started = new Set(txns.filter((t) => !t.deleted && isStartTxn(t)).map((t) => t.id));
+  return (s.accounts ?? []).filter((a) => a.type === "cash" && !started.has(startTxnId(a.id))).reduce((t, a) => t + num(a.balance), 0);
 }
 
 /**
@@ -148,11 +153,9 @@ export function budgetView(
     let monthOver = 0;
     for (const c of cats) {
       const a = Math.max(0, num(e.assigned?.[c.key]));
-      // what went out: typed in by hand, else from transactions, else (money that moves by itself) what was assigned
-      const fromTx = act?.spent[c.key];
-      // what went out: from transactions (a payment, a transfer to the account), or an amount typed in
-      // before transactions existed. Assigned money stays available until it actually goes.
-      const sp = e.spent?.[c.key] !== undefined ? num(e.spent[c.key]) : fromTx ?? 0;
+      // what went out: from transactions (a payment, a transfer to the account). Assigned money stays
+      // available until it actually goes.
+      const sp = act?.spent[c.key] ?? 0;
       const funded = act?.cardFunded[c.key] ?? 0;
       const carried = carry[c.key] ?? 0;
       const available = carried + a + funded - sp;
@@ -162,7 +165,7 @@ export function budgetView(
       if (available < 0) monthOver += -available;
       carry[c.key] = Math.max(0, available);
     }
-    income += Math.max(0, num(e.income)) + (act?.income ?? 0);
+    income += act?.income ?? 0;
     assigned += monthAssigned;
     if (m === month) {
       let later = 0;
@@ -170,7 +173,7 @@ export function budgetView(
       view = {
         month,
         started: true,
-        income: Math.max(0, num(e.income)) + (act?.income ?? 0),
+        income: act?.income ?? 0,
         readyToAssign: num(b.startCash) + income - assigned - overspent - later,
         assigned: monthAssigned,
         spent: monthSpent,

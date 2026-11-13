@@ -1,4 +1,4 @@
-import { HSAEMP, k401Cost, PAY401, PAYDED, PAYGROSS, PAYHSA, PAYNET, PERIODS, resolveIncome, type Debt, type Income, type IncomeKind, type PayFreq, type PayTaxes } from "@coastfi/engine";
+import { HSAEMP, k401Cost, PAY401, PAYDED, PAYGROSS, PAYHSA, PAYNET, PERIODS, resolveIncome, type Debt, type Income, type IncomeKind, type PayFreq, type PayTaxes , type Property } from "@coastfi/engine";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money, percent } from "../lib/format";
@@ -138,28 +138,32 @@ export function IncomeEditor({
   );
 }
 
-/** A rental's worth, kept as a Property account (same id every time) so it shows in net worth. */
+/** A rental income's property (its rent), made the first time you give it a value. */
 export const rentalAccountId = (incomeId: string) => `prop-${incomeId}`;
+/** The property this rent belongs to, if any. */
+const propertyFor = (s: { properties?: Property[] }, incomeId: string) => (s.properties ?? []).find((x) => x.incomeId === incomeId);
+/** Change (or make) the property this rent belongs to. */
+function withProperty(p: { properties?: Property[] }, inc: Income, patch: Partial<Property>) {
+  const list = p.properties ?? [];
+  const x = list.find((y) => y.incomeId === inc.id);
+  if (x) Object.assign(x, patch);
+  else list.push({ id: rentalAccountId(inc.id), name: inc.name.trim() || "Rental property", kind: "rental", value: 0, incomeId: inc.id, ...patch });
+  p.properties = list;
+}
 
 function RentalValue({ inc }: { inc: Income }) {
   const t = useTheme();
   const { state } = usePlan();
   const update = useStore((s) => s.update);
-  const id = rentalAccountId(inc.id);
-  const account = state.accounts.find((a) => a.id === id);
-  const setValue = (v: number) =>
-    update((p) => {
-      const a = p.accounts.find((x) => x.id === id);
-      if (a) a.balance = v;
-      else if (v > 0) p.accounts.push({ id, name: inc.name.trim() || "Rental property", type: "property", balance: v });
-    });
+  const account = propertyFor(state, inc.id) ? { balance: propertyFor(state, inc.id)!.value } : undefined;
+  const setValue = (v: number) => update((p) => withProperty(p, inc, { value: v }));
   return (
     <View style={{ gap: 2 }}>
       <FieldRow label="What the property is worth" hint="Roughly what it would sell for. Counts in your net worth" info={HELP.property}>
         <NumberInput kind="money" label="Rental property value" value={account?.balance ?? 0} onChange={setValue} />
       </FieldRow>
       <Text style={[type.caption, { color: t.text3 }]}>
-        It's listed under Accounts as a property.
+        It's listed under Accounts → Homes and rentals.
       </Text>
     </View>
   );
@@ -179,9 +183,17 @@ function RentalMortgage({ inc }: { inc: Income }) {
     update((p) => {
       const d = p.debts.find((x) => x.id === id);
       if (d) Object.assign(d, patch);
-      else p.debts.push({ id, name: `${label} mortgage`, kind: "mortgage", balance: 0, apr: 0.065, minPayment: 0, ...patch });
+      else {
+        p.debts.push({ id, name: `${label} mortgage`, kind: "mortgage", balance: 0, apr: 0.065, minPayment: 0, ...patch });
+        // the property this rent belongs to has this mortgage
+        withProperty(p, inc, { mortgageId: id });
+      }
     });
-  const remove = () => update((p) => { p.debts = p.debts.filter((x) => x.id !== id); });
+  const remove = () =>
+    update((p) => {
+      p.debts = p.debts.filter((x) => x.id !== id);
+      for (const x of p.properties ?? []) if (x.mortgageId === id) delete x.mortgageId;
+    });
   const rent = (inc.net * PERIODS[inc.freq]) / 12;
   const other = state.debts.filter((d) => d.kind === "mortgage" && !d.id.startsWith("mort-"));
   if (!debt)
@@ -668,14 +680,14 @@ export function IncomesEditor() {
   };
   const remove = async () => {
     if (!inc) return;
-    const hasProperty = state.accounts.some((a) => a.id === rentalAccountId(inc.id));
+    const hasProperty = !!propertyFor(state, inc.id);
     const hasMortgage = state.debts.some((d) => d.id === rentalMortgageId(inc.id));
-    const also = [hasProperty ? "its property value in Accounts" : "", hasMortgage ? "its mortgage in Debts" : ""].filter(Boolean).join(" and ");
+    const also = [hasProperty ? "its property under Homes and rentals" : "", hasMortgage ? "its mortgage in Debts" : ""].filter(Boolean).join(" and ");
     const msg = `"${inc.name || "This income"}" will be removed from your plan${also ? `, along with ${also}` : ""}.`;
     if (await confirm("Remove this income?", msg, "Remove"))
       update((p) => {
         p.incomes.splice(idx, 1);
-        p.accounts = p.accounts.filter((a) => a.id !== rentalAccountId(inc.id));
+        p.properties = (p.properties ?? []).filter((x) => x.incomeId !== inc.id);
         p.debts = p.debts.filter((d) => d.id !== rentalMortgageId(inc.id));
       });
   };

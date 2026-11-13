@@ -6,6 +6,7 @@
  */
 import type { Debt, Derived, PlanResult, PlanState } from "./types";
 import { addMonths, monthsBetween, num } from "./util";
+import { isRentalDebt } from "./schedule";
 
 /** The longest a loan is followed (50 years); a payment that never pays it off stops here. */
 const CAP = 600;
@@ -95,12 +96,12 @@ export type DebtAtRetirement = {
  * Mortgages still owed when you retire, as your plan runs them (extra payments included): what's owed
  * then, and what the payments left add up to if you keep paying monthly.
  */
-export function mortgagesAtRetirement(s: Pick<PlanState, "debts">, d: Pick<Derived, "years">, plan: Pick<PlanResult, "months">): DebtAtRetirement[] {
+export function mortgagesAtRetirement(s: Pick<PlanState, "debts" | "properties">, d: Pick<Derived, "years">, plan: Pick<PlanResult, "months">): DebtAtRetirement[] {
   const M = d.years * 12;
   const row = M > 0 ? plan.months[M - 1] : undefined;
   const out: DebtAtRetirement[] = [];
   for (const x of s.debts ?? []) {
-    if (x.kind !== "mortgage" || x.payroll || x.rental) continue; // a rental's rent pays it
+    if (x.kind !== "mortgage" || x.payroll || isRentalDebt(s, x)) continue; // a rental's rent pays it
     const balance = row ? (row.debts?.find((y) => y.id === x.id)?.balance ?? 0) : num(x.balance);
     if (!(balance > 0.5)) continue;
     const a = amortize(balance, num(x.apr), loanPayment(x));

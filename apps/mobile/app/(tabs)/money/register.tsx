@@ -2,7 +2,7 @@
  * An account's register: its transactions, working and cleared balance, and reconcile ("does your
  * bank say $X?"). Cash accounts and credit cards have one once the budget is started.
  */
-import { registerBalance, type Txn } from "@coastfi/engine";
+import { isStartTxn, registerBalance, startTxnId, type Txn } from "@coastfi/engine";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -29,7 +29,8 @@ export default function Register() {
   const cats = useCategories();
   const accounts = budgetAccounts(state);
   const acct = accounts.find((a) => a.id === account);
-  const reg = state.budgetPlan?.registers?.[account ?? ""];
+  // the register starts with the account's "Starting balance" transaction
+  const reg = txns.find((x) => !x.deleted && x.id === startTxnId(account ?? ""));
   const [editing, setEditing] = useState<Txn | "new" | null>(null);
   const [reconciling, setReconciling] = useState(false);
   const [bankSays, setBankSays] = useState(0);
@@ -54,9 +55,8 @@ export default function Register() {
     );
   }
 
-  const opening = reg?.opening ?? acct.balance;
-  const working = reg ? registerBalance(opening, txns, acct.id) : acct.balance;
-  const cleared = reg ? registerBalance(opening, txns, acct.id, true) : acct.balance;
+  const working = reg ? registerBalance(0, txns, acct.id) : acct.balance;
+  const cleared = reg ? registerBalance(0, txns, acct.id, true) : acct.balance;
   const card = acct.kind === "card";
   const show = (v: number) => (card ? `${money(-v)} owed` : money(v));
 
@@ -78,7 +78,7 @@ export default function Register() {
           <View style={{ flex: 1 }}>
             <Text style={[type.label, { color: t.text3 }]}>{card ? "You owe" : "Balance"}</Text>
             <Text style={[type.display, { color: t.text, fontVariant: ["tabular-nums"] }]}>{card ? money(-working) : money(working)}</Text>
-            <Text style={[type.caption, { color: t.text3 }]}>Cleared {show(cleared)} · {reg ? `register since ${dayText(reg.since)}` : "no transactions yet"}</Text>
+            <Text style={[type.caption, { color: t.text3 }]}>Cleared {show(cleared)} · {reg ? `register since ${dayText(reg.date)}` : "no transactions yet"}</Text>
           </View>
         </View>
         <View style={styles.row}>
@@ -121,7 +121,7 @@ export default function Register() {
                 </Pressable>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{x.payee || (x.transferAccountId ? "Transfer" : "No payee")}</Text>
-                  <Text style={[type.caption, { color: x.categoryId || x.transferAccountId || x.splits?.length ? t.text3 : t.warn }]} numberOfLines={1}>
+                  <Text style={[type.caption, { color: x.categoryId || x.transferAccountId || x.splits?.length || isStartTxn(x) ? t.text3 : t.warn }]} numberOfLines={1}>
                     {dayText(x.date)} · {categoryText(cats, x, nameOf)}
                   </Text>
                 </View>
@@ -136,7 +136,7 @@ export default function Register() {
           </View>
         )}
       </Card>
-      {mine.some((x) => !x.categoryId && !x.transferAccountId && !x.splits?.length) ? <Pill tone="warn">Some transactions need a category</Pill> : null}
+      {mine.some((x) => !x.categoryId && !x.transferAccountId && !x.splits?.length && !isStartTxn(x)) ? <Pill tone="warn">Some transactions need a category</Pill> : null}
       {editing ? <TxnForm txn={editing === "new" ? undefined : editing} accountId={acct.id} onClose={() => setEditing(null)} /> : null}
     </Screen>
   );

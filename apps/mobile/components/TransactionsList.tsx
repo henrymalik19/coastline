@@ -3,7 +3,7 @@
  * cards) for the budget's month, with search and an account filter. Tap one to change it. Each
  * account's register (reconcile) is a tap away.
  */
-import type { Txn } from "@coastfi/engine";
+import { isStartTxn, type Txn } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -45,7 +45,7 @@ export function TransactionsList({ month, account }: { month: string; account?: 
   const [editing, setEditing] = useState<Txn | "new" | null>(null);
 
   const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? state.accounts.find((a) => a.id === id)?.name ?? state.debts.find((d) => d.id === id)?.name ?? "Account";
-  const uncategorized = (x: Txn) => !x.categoryId && !x.transferAccountId && !x.splits?.length;
+  const uncategorized = (x: Txn) => !x.categoryId && !x.transferAccountId && !x.splits?.length && !isStartTxn(x);
 
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();

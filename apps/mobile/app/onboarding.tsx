@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AccountsEditor } from "../components/AccountsEditor";
+import { PropertiesEditor } from "../components/PropertiesEditor";
 import { BudgetEditor } from "../components/BudgetEditor";
 import { AddDebtButtons, DebtEditor, paidFromFor } from "../components/DebtEditor";
 import { EmergencyFundNote, looksLikeEmergencyFund } from "../components/EmergencyFundNote";
@@ -182,6 +183,7 @@ function MoneyStep() {
     <>
       <Text style={[type.heading, { color: t.text }]}>Accounts</Text>
       <AccountsEditor />
+      <PropertiesEditor />
       <Text style={[type.caption, { color: t.text3, marginTop: -space.xs }]}>
         Rough is fine. You'll update these at each monthly check-in. Tap an account to rename it, change its type or remove it.
       </Text>

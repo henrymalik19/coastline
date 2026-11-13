@@ -98,6 +98,27 @@ export type Account = {
   /** Repairs and upkeep a year, as a share of the home's value (0.01 = 1%), counted in retirement. */
   upkeep?: number;
 };
+/**
+ * A home or rental you own: what it's worth (net worth), its mortgage (a debt), its rent (an
+ * income), and what it costs to keep that isn't in the mortgage payment.
+ */
+export type Property = {
+  id: string;
+  name: string;
+  /** A rental's costs are paid from its rent, so they stay out of your retirement spending. */
+  kind: "home" | "rental";
+  /** Roughly what it would sell for. */
+  value: number;
+  /** Its mortgage, in debts. */
+  mortgageId?: string;
+  /** Its rent, in incomes (a home can have one too: a room you rent out). */
+  incomeId?: string;
+  /** Property tax + insurance a year, when no mortgage escrow pays them. */
+  taxInsurance?: number;
+  /** Repairs and upkeep a year, as a share of its value (0.01 = 1%). */
+  upkeep?: number;
+};
+
 /** What kind of debt this is. Display only; payoff math is the same for every kind. */
 export type DebtKind = "credit_card" | "car" | "student" | "mortgage" | "personal" | "medical" | "k401_loan" | "other";
 export type Debt = {
@@ -120,7 +141,7 @@ export type Debt = {
    * pay the balance down, and it keeps being a cost after the loan is paid off and in retirement.
    */
   escrow?: number;
-  /** A rental: the rent pays its costs, so its escrow and what's owed in retirement aren't your spending. */
+  /** Old: a rental's mortgage. Now its property says so (Property.kind). */
   rental?: boolean;
   /**
    * The loan's original schedule (a mortgage): length in months, first payment "YYYY-MM", and the
@@ -297,17 +318,16 @@ export type PlanState = {
    */
   contributed?: Contributed;
   spouse?: Spouse;
-  /** The monthly (envelope) budget: what you assigned, spent and received each month. */
+  /** The monthly (envelope) budget: what you assigned each month. */
   budgetPlan?: BudgetState;
+  /** Homes and rentals you own. */
+  properties?: Property[];
 };
 
 /** One month of the envelope budget. Keys are budget item ids, `acct:<id>`, `goal:<id>`, `debt:<id>`. */
 export type BudgetMonthEntry = {
+  /** What you gave each category this month. What came in and went out comes from transactions. */
   assigned?: Record<string, number>;
-  /** Money out per category (until transactions exist). Missing = none, or for money that moves out by itself (investments, debts), what was assigned. */
-  spent?: Record<string, number>;
-  /** Income received this month. */
-  income?: number;
 };
 /**
  * A transaction in a budget account (checking, savings, a credit card). Amount: + money in, − money out.
@@ -332,6 +352,11 @@ export type Txn = {
   source: "manual" | "csv" | "ynab" | "plaid";
   /** The bank's or file's id, so an import never adds the same one twice. */
   importId?: string;
+  /**
+   * A transfer to or from an account you don't budget (an IRA, a loan): how much it moved that
+   * account's balance, so changing or deleting it moves it back by exactly that much.
+   */
+  trackedAmount?: number;
   /** Edit time (ms): the newer copy wins when devices sync. */
   updatedAt: number;
   /** Deleted (kept so the deletion syncs). */
@@ -344,14 +369,6 @@ export type BudgetState = {
   /** Cash in your budget accounts when you started (your first money to assign). */
   startCash: number;
   months: Record<string, BudgetMonthEntry>;
-  /** Where each budget account's register starts: its balance then (a card: − what you owed). */
-  registers?: Record<string, { opening: number; since: string }>;
-  /**
-   * Transfers between a budget account and one you don't budget (an IRA, a brokerage account, a loan)
-   * that moved that account's balance: transaction id → the account and the amount applied, so a
-   * change or delete moves it back by exactly that much.
-   */
-  tracked?: Record<string, { to: string; amount: number }>;
   /** Your name and group for the Emergency fund category (it's a category like any other). */
   efLine?: { name?: string; group?: string };
 };
