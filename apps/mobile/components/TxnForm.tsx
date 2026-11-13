@@ -14,7 +14,7 @@ import { usePlan } from "../lib/plan";
 import { budgetAccounts, trackingAccounts } from "../lib/register";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { Button, IconButton, Segmented, Select } from "./form";
+import { Button, IconButton, NumberInput, Segmented, Select } from "./form";
 
 type Kind = "out" | "in" | "transfer";
 
@@ -58,6 +58,24 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const [cleared, setCleared] = useState(txn ? txn.cleared !== "uncleared" : false);
   const [amountText, setAmountText] = useState(txn ? String(Math.abs(txn.amount)) : initialAmount ? String(initialAmount) : "");
   const [picking, setPicking] = useState(false);
+  // split across categories: each line's category and amount (positive); null = one category
+  const [parts, setParts] = useState<{ cat: string; amount: number }[] | null>(
+    txn?.splits?.length && !txn.transferAccountId ? txn.splits.map((x) => ({ cat: x.categoryId, amount: Math.abs(x.amount) })) : null,
+  );
+  const splitLeft = parts ? Math.round((amount - parts.reduce((a, p) => a + p.amount, 0)) * 100) / 100 : 0;
+  const splitOk = !parts || (parts.length >= 2 && parts.every((p) => !!p.cat && p.amount > 0) && Math.abs(splitLeft) < 0.005);
+  const setPart = (i: number, patch: Partial<{ cat: string; amount: number }>) => setParts((ps) => ps && ps.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  const removePart = (i: number) =>
+    setParts((ps) => {
+      if (!ps) return ps;
+      const rest = ps.filter((_, j) => j !== i);
+      // back to one line: that's just a category
+      if (rest.length <= 1) {
+        if (rest[0]?.cat) setCat(rest[0].cat);
+        return null;
+      }
+      return rest;
+    });
   // a transfer to an IRA or brokerage: the category you picked ("" = the linked one, else ready to assign)
   const [xferPick, setXferPick] = useState(txn?.transferAccountId && txn.amount < 0 && txn.categoryId && !txn.categoryId.startsWith("acct:") ? txn.categoryId : "");
   const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -95,7 +113,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const fromTracking = kind === "transfer" ? withdrawable.find((a) => a.id === acct) : undefined;
   // only a transfer can start from an investment account
   const acctOk = !!acct && (kind === "transfer" || accounts.some((a) => a.id === acct));
-  const valid = amount > 0 && acctOk && (kind === "transfer" ? !!to && to !== acct && !(fromTracking && isTracking(to)) && !(fromTracking && amount > fromTracking.balance + 0.005) : kind === "in" || !!cat);
+  const valid = amount > 0 && acctOk && (kind === "transfer" ? !!to && to !== acct && !(fromTracking && isTracking(to)) && !(fromTracking && amount > fromTracking.balance + 0.005) : parts ? splitOk : kind === "in" || !!cat);
   const save = () => {
     if (!valid) return;
     const base = {
@@ -110,10 +128,13 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
       importId: txn?.importId,
       transferId: txn?.transferId,
     };
-    if (kind === "transfer" && fromTracking) saveTxn({ ...base, accountId: to, amount, transferAccountId: acct, categoryId: "ready" }, isoDay(start));
+    if (kind === "transfer" && fromTracking) saveTxn({ ...base, accountId: to, amount, transferAccountId: acct, categoryId: "ready", splits: undefined }, isoDay(start));
     // to a loan: its payment line; to an IRA or brokerage: the category you picked (else ready to assign)
-    else if (kind === "transfer") saveTxn({ ...base, transferAccountId: to, categoryId: !toTracking ? undefined : toInvest ? xferCat : toLine ? toTracking.key : "ready" }, isoDay(start));
-    else saveTxn({ ...base, transferAccountId: undefined, categoryId: kind === "in" ? cat || "ready" : cat }, isoDay(start));
+    else if (kind === "transfer") saveTxn({ ...base, splits: undefined, transferAccountId: to, categoryId: !toTracking ? undefined : toInvest ? xferCat : toLine ? toTracking.key : "ready" }, isoDay(start));
+    else if (parts) {
+      const sign = kind === "in" ? 1 : -1;
+      saveTxn({ ...base, transferAccountId: undefined, categoryId: undefined, splits: parts.map((p) => ({ categoryId: p.cat, amount: sign * p.amount })) }, isoDay(start));
+    } else saveTxn({ ...base, transferAccountId: undefined, splits: undefined, categoryId: kind === "in" ? cat || "ready" : cat }, isoDay(start));
     onClose();
   };
 
@@ -190,7 +211,42 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                     </View>
                   ) : null}
                   {divider}
-                  {listRow("Category", <Select plain label="Category" placeholder="Choose" value={cat} options={[{ value: "", label: "Choose" }, ...catOptions]} onChange={setCat} />)}
+                  {parts ? (
+                    <View style={{ paddingHorizontal: space.md, paddingVertical: space.sm, gap: space.sm }}>
+                      <View style={{ flexDirection: "row", alignItems: "center" }}>
+                        <Text style={[type.body, { color: t.text2, flex: 1 }]}>Split</Text>
+                        <Text style={[type.caption, { color: Math.abs(splitLeft) < 0.005 ? t.good : t.warn, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>
+                          {Math.abs(splitLeft) < 0.005 ? "Adds up" : splitLeft > 0 ? `${money(splitLeft)} left to split` : `${money(-splitLeft)} over`}
+                        </Text>
+                      </View>
+                      {parts.map((p, i) => (
+                        <View key={i} style={styles.splitRow}>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Select plain label={`Split line ${i + 1} category`} placeholder="Choose" value={p.cat} options={[{ value: "", label: "Choose" }, ...catOptions]} onChange={(v) => setPart(i, { cat: v })} />
+                          </View>
+                          <NumberInput kind="money" stepper={false} width={110} label={`Split line ${i + 1} amount`} value={p.amount} onChange={(v) => setPart(i, { amount: v })} />
+                          <IconButton icon="close" label={`Remove split line ${i + 1}`} onPress={() => removePart(i)} />
+                        </View>
+                      ))}
+                      <View style={{ flexDirection: "row", gap: space.md }}>
+                        <Pressable role="button" onPress={() => setParts([...parts, { cat: "", amount: Math.max(0, splitLeft) }])} hitSlop={6}>
+                          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>+ Add a line</Text>
+                        </Pressable>
+                        {splitLeft > 0.005 ? (
+                          <Pressable role="button" onPress={() => setPart(parts.length - 1, { amount: parts[parts.length - 1]!.amount + splitLeft })} hitSlop={6}>
+                            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Put the rest on the last line</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    </View>
+                  ) : (
+                    <>
+                      {listRow("Category", <Select plain label="Category" placeholder="Choose" value={cat} options={[{ value: "", label: "Choose" }, ...catOptions]} onChange={setCat} />)}
+                      <Pressable role="button" onPress={() => setParts([{ cat, amount }, { cat: "", amount: 0 }])} hitSlop={6} style={{ alignSelf: "flex-end", paddingHorizontal: space.md, paddingBottom: space.sm }}>
+                        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Split across categories</Text>
+                      </Pressable>
+                    </>
+                  )}
                   {divider}
                 </>
               ) : null}
@@ -278,7 +334,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
 
             {!valid ? (
               <Text style={[type.caption, { color: t.text3, textAlign: "center" }]}>
-                {!(amount > 0) ? "Enter an amount" : fromTracking && amount > fromTracking.balance + 0.005 ? `${fromTracking.name} has ${money(fromTracking.balance)}. Enter that or less` : !acct ? "Choose an account" : kind === "transfer" ? (!to ? "Choose where it goes" : "Pick two different accounts") : "Choose a category"} to save.
+                {!(amount > 0) ? "Enter an amount" : fromTracking && amount > fromTracking.balance + 0.005 ? `${fromTracking.name} has ${money(fromTracking.balance)}. Enter that or less` : !acct ? "Choose an account" : kind === "transfer" ? (!to ? "Choose where it goes" : "Pick two different accounts") : parts ? (Math.abs(splitLeft) >= 0.005 ? "Make the split add up to the amount" : "Give each split line a category and an amount") : "Choose a category"} to save.
               </Text>
             ) : null}
             <Button title={txn ? "Save changes" : "Save"} tone="primary" disabled={!valid} onPress={save} style={{ minHeight: 48 }} />
@@ -307,6 +363,7 @@ const styles = StyleSheet.create({
   listRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, minHeight: 50 },
   inline: { flex: 1, textAlign: "right", paddingVertical: 12 },
   selectLike: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44, flex: 1 },
+  splitRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
   suggest: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: space.md, paddingBottom: space.sm, justifyContent: "flex-end" },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
 });
