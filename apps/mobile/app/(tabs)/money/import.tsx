@@ -17,7 +17,7 @@ import { buildImport, categoryKey, exportMonths, groupKey, parseYnab, readYnabZi
 import { sticky, stickyBottom } from "../../../lib/sticky";
 import { useLayout } from "../../../lib/layout";
 import { groupOrder } from "../../../lib/budgetOrder";
-import { canUndoImport, changedSinceImport, UNDO_DAYS } from "../../../lib/importUndo";
+import { ImportUndoCard } from "../../../components/ImportUndo";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const ymText = (ym: string) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
@@ -51,17 +51,16 @@ async function readFiles(files: FileList): Promise<YnabData> {
   return parseYnab(await reg.text(), plan ? await plan.text() : undefined);
 }
 
-export default function ImportYnab() {
+/** `setup`: opened from setup (before there's a budget); it goes back to setup when done. */
+export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const t = useTheme();
   const router = useRouter();
   const { state, start } = usePlan();
   const saved = useStore((s) => s.plan);
   const importBudget = useStore((s) => s.importBudget);
-  const undoImport = useStore((s) => s.undoImport);
-  const lastImport = useStore((s) => s.lastImport);
   const importedAt = useStore((s) => s.importedAt);
-  const [undoAsk, setUndoAsk] = useState(false);
   const [undone, setUndone] = useState(false);
+  const backToSetup = () => router.replace("/onboarding?step=money");
   const existing = useStore((s) => s.txns);
   const thisMonth = monthKey(start);
   const [data, setData] = useState<YnabData | null>(null);
@@ -257,53 +256,30 @@ export default function ImportYnab() {
     <View style={{ gap: space.sm }}>
       <Text role="status" style={[type.label, { color: t.good }]}>{done}</Text>
       <View style={[styles.row, { flexWrap: "wrap" }]}>
-        <Button title="Go to Budget" tone="primary" onPress={() => router.navigate("/budget")} />
-        {doneNeeds ? <Button title={`Categorize ${doneNeeds} transactions`} onPress={() => router.navigate("/budget?view=transactions&needs=1")} /> : null}
+        {setup ? (
+          <Button title="Continue setup" tone="primary" onPress={backToSetup} />
+        ) : (
+          <>
+            <Button title="Go to Budget" tone="primary" onPress={() => router.navigate("/budget")} />
+            {doneNeeds ? <Button title={`Categorize ${doneNeeds} transactions`} onPress={() => router.navigate("/budget?view=transactions&needs=1")} /> : null}
+          </>
+        )}
       </View>
     </View>
   ) : null;
   const errorNote = error ? <Text role="alert" style={[type.label, { color: t.bad }]}>{error}</Text> : null;
   // already imported here: no second import; undo it for a while, then start over to bring it in again
-  const dayText = (ms: number) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const undoable = canUndoImport(lastImport, Date.now());
-  const changedSince = lastImport ? changedSinceImport(existing, lastImport) : 0;
   const importedCard = importedAt && !data ? (
-    <Card style={{ gap: space.sm }}>
-      <Text style={[type.heading, { color: t.text }]}>Imported from YNAB on {dayText(importedAt)}</Text>
+    <ImportUndoCard onUndone={() => { setDone(""); setUndone(true); }}>
       {doneNote}
-      {undoable && lastImport ? (
-        <>
-          <Text style={[type.body, { color: t.text2 }]}>
-            Not what you expected? Undo puts your budget and transactions back to how they were just before, and you can import again. You can undo until {dayText(lastImport.at + UNDO_DAYS * 86_400_000)}.
-          </Text>
-          {undoAsk ? (
-            <View style={[styles.note, { borderColor: t.bad }]}>
-              <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Undo the import?</Text>
-              <Text style={[type.caption, { color: t.text2 }]}>
-                Everything it brought in is removed, on your other devices too.
-                {changedSince ? ` This also throws away the ${changedSince} transaction${changedSince === 1 ? "" : "s"} you added or changed since, and any budget changes.` : " Any budget changes you made since go too."}
-              </Text>
-              <View style={[styles.row, { flexWrap: "wrap" }]}>
-                <Button title="Yes, undo it" tone="danger" onPress={() => { undoImport(); setUndoAsk(false); setDone(""); setUndone(true); }} style={{ minHeight: 40 }} />
-                <Button title="Cancel" tone="ghost" onPress={() => setUndoAsk(false)} style={{ minHeight: 40 }} />
-              </View>
-            </View>
-          ) : (
-            <Button title="Undo import" onPress={() => setUndoAsk(true)} style={{ alignSelf: "flex-start" }} />
-          )}
-        </>
-      ) : (
-        <Text style={[type.caption, { color: t.text3 }]}>
-          To bring it in again, start over under Settings → Backup & restore. That clears your budget and transactions first.
-        </Text>
-      )}
-    </Card>
+      {setup && !done ? <Button title="Continue setup" tone="primary" onPress={backToSetup} style={{ alignSelf: "flex-start" }} /> : null}
+    </ImportUndoCard>
   ) : null;
   const headCard = importedCard ?? (!loaded ? (
     <Card style={{ gap: space.sm }}>
       {undone ? <Text role="status" style={[type.label, { color: t.good }]}>Undone. Your budget and transactions are back to how they were before the import.</Text> : null}
       <Text style={[type.body, { color: t.text2 }]}>
-        In YNAB, open your budget's menu and choose Export budget. It downloads a zip; pick it here. You'll choose what comes in before anything changes.
+        In YNAB, open your budget's menu and choose Export budget. It downloads a zip; pick it here. You'll choose what comes in before anything changes{setup ? ", and check it all in the rest of setup" : ""}.
       </Text>
       {Platform.OS === "web" ? (
         <Button title="Choose YNAB export" tone="primary" icon="plus" onPress={pick} style={{ alignSelf: "flex-start" }} />
@@ -486,7 +462,7 @@ export default function ImportYnab() {
           {preview.summary.categoriesRemoved} empty starter {preview.summary.categoriesRemoved === 1 ? "category" : "categories"} YNAB doesn't have will be removed.
         </Text>
       ) : null}
-      <Text style={[type.caption, { color: t.text3 }]}>Your other transactions stay. You can undo the import for 30 days.</Text>
+      <Text style={[type.caption, { color: t.text3 }]}>{setup ? "You can undo the import for 30 days." : "Your other transactions stay. You can undo the import for 30 days."}</Text>
     </>
   ) : null;
   const confirmBox = preview ? (
@@ -563,7 +539,7 @@ export default function ImportYnab() {
   const trademark = <Text style={[type.caption, { color: t.text3 }]}>Coastline isn't affiliated with YNAB. YNAB is a trademark of its owner.</Text>;
 
   return (
-    <Screen title="Import from YNAB" back={() => router.navigate("/budget")} narrow={!(wide && loaded)}>
+    <Screen title="Import from YNAB" back={setup ? backToSetup : () => router.navigate("/budget")} hideSettings={setup} narrow={!(wide && loaded)}>
       {headCard}
       {wide && loaded ? (
         <View style={styles.columns}>

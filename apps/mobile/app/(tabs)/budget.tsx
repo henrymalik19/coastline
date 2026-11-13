@@ -3,6 +3,7 @@
  * categories (budget items, bills, debt payments, savings), what you don't spend carries into next
  * month, and what you assign to savings and debts is what the plan counts as done that month.
  */
+import { ImportUndoReminder } from "../../components/ImportUndo";
 import { BUDGET_ITEM, budgetCategories, budgetView, SAVINGS_GROUP, spendingHistory, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
 import { BudgetAccounts } from "../../components/BudgetAccounts";
@@ -562,6 +563,7 @@ export default function Budget() {
             {tab === "categories" && rtaHidden && compact ? <View style={{ width: "100%" }}>{unassignedChip}</View> : null}
       </View>
       ) : null}
+      <ImportUndoReminder />
       {!view.started || tab !== "accounts" ? monthBar : null}
       {view.started && tab === "transactions" ? (
         <TransactionsList key={(acctParam ?? "all") + (needsParam ?? "")} month={month} account={acctParam} onlyNeedsCategory={needsParam === "1"} stickyTop={barH} />

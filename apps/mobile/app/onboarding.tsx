@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AccountsEditor } from "../components/AccountsEditor";
@@ -33,7 +33,8 @@ export default function Onboarding() {
   const router = useRouter();
   const fillPage = useFillPage();
   const completeOnboarding = useStore((s) => s.completeOnboarding);
-  const [step, setStep] = useState<Step>("you");
+  const params = useLocalSearchParams<{ step?: string }>();
+  const [step, setStep] = useState<Step>(STEPS.includes(params.step as Step) ? (params.step as Step) : "you");
   const i = STEPS.indexOf(step);
   const syncEmail = useSync((s) => s.email);
   // a second device: once sign-in pulls down a finished plan, go straight to it
@@ -81,10 +82,12 @@ export default function Onboarding() {
           <Text role="link" style={{ color: t.accent, fontWeight: "700" }} onPress={() => router.push("/sign-in")}>Sign in to load your plan</Text>
         </Text>
       ) : null}
+      {step === "you" ? <YnabOffer /> : null}
       {step === "you" ? <YouStep /> : null}
       {step === "you" ? <RetirementIncomeBlock /> : null}
       {step === "income" ? <IncomeStep /> : null}
       {step === "budget" ? <BudgetStep /> : null}
+      {step === "money" ? <YnabOffer /> : null}
       {step === "money" ? <MoneyStep /> : null}
       {step === "goals" ? <GoalsStep /> : null}
       {step === "review" ? <ReviewStep /> : null}
@@ -111,6 +114,26 @@ function Block({ children, hint }: { children: ReactNode; hint?: string }) {
       <Card style={{ paddingVertical: space.xs }}>{children}</Card>
       {hint ? <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.xs }]}>{hint}</Text> : null}
     </View>
+  );
+}
+
+/** Coming from YNAB: bring in accounts, budget and transactions instead of typing them in. */
+function YnabOffer() {
+  const t = useTheme();
+  const router = useRouter();
+  const importedAt = useStore((s) => s.importedAt);
+  return (
+    <Card style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space.md, backgroundColor: t.accentSoft, borderColor: t.accentSoft }}>
+      <View style={{ flex: 1, minWidth: 220, gap: 2 }}>
+        <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{importedAt ? "Imported from YNAB" : "Coming from YNAB?"}</Text>
+        <Text style={[type.caption, { color: t.text2 }]}>
+          {importedAt
+            ? "Your accounts, budget and transactions came in. Check them in the next steps; you can undo the import for 30 days."
+            : "Bring in your accounts, budget and transactions instead of typing them in. You'll check everything before it comes in."}
+        </Text>
+      </View>
+      <Button title={importedAt ? "Review import" : "Import from YNAB"} icon="database" tone={importedAt ? "ghost" : "primary"} onPress={() => router.push("/setup-import")} />
+    </Card>
   );
 }
 

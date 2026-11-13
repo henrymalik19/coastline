@@ -52,6 +52,8 @@ export type AppState = {
   importBudget: (plan: PlanState, txns: Txn[], replaced?: string[]) => void;
   /** Put the plan and transactions back as they were just before the last import. */
   undoImport: () => void;
+  /** Keep the import as it is: no more undo (drops the copy kept for it). */
+  keepImport: () => void;
   completeOnboarding: () => void;
   /** Restore a backup made by this app. Throws a readable error. */
   importJson: (text: string) => void;
@@ -173,6 +175,7 @@ export const useStore = create<AppState>()(
         applyRegisterBalances(plan, list);
         set({ plan, txns: list, lastImport: undefined, importedAt: undefined, updatedAt: stamp });
       },
+      keepImport: () => set({ lastImport: undefined }),
       completeOnboarding: () => set({ onboarded: true, updatedAt: now() }),
       importJson: (text) => {
         let raw: unknown;

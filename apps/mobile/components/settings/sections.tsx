@@ -1,4 +1,5 @@
 import { Redirect, useRouter } from "expo-router";
+import { ImportUndoCard } from "../ImportUndo";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../../lib/confirm";
@@ -497,6 +498,7 @@ function LimitsSection() {
 
 function DataSection() {
   const t = useTheme();
+  const importedAt = useStore((s) => s.importedAt);
   const exportJson = useStore((s) => s.exportJson);
   const importJson = useStore((s) => s.importJson);
   const startFresh = useStore((s) => s.startFresh);
@@ -538,6 +540,11 @@ function DataSection() {
           <Button title={Platform.OS === "web" ? "Download backup" : "Share backup"} tone="primary" icon="database" onPress={doExport} style={{ alignSelf: "flex-start" }} />
         </View>
       </Group>
+      {importedAt ? (
+        <Group title="YNAB import">
+          <ImportUndoCard />
+        </Group>
+      ) : null}
       <Group title="Restore">
         <View style={{ paddingVertical: space.sm, gap: space.md }}>
           <TextInput
