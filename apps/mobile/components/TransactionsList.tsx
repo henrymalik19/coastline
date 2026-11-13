@@ -17,8 +17,9 @@ import { useLayout } from "../lib/layout";
 import { usePlan } from "../lib/plan";
 import { budgetAccounts } from "../lib/register";
 import { useStore } from "../lib/store";
-import { space, type, useTheme } from "../lib/theme";
+import { radius, space, type, useTheme } from "../lib/theme";
 import { ClearedDot } from "./ClearedDot";
+import { sticky } from "../lib/sticky";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -145,7 +146,7 @@ export function TransactionsList({ month, account, onlyNeedsCategory }: { month:
         <Card padded={false}>
           {days.map((g, gi) => (
             <View key={g.date}>
-              <View style={[styles.dayHead, { backgroundColor: t.surface2, borderTopWidth: gi ? StyleSheet.hairlineWidth : 0, borderTopColor: t.border }]}>
+              <View style={[styles.dayHead, { backgroundColor: t.surface2, borderTopWidth: gi ? StyleSheet.hairlineWidth : 0, borderTopColor: t.border }, sticky(0, t.surface2), gi === 0 ? { borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg } : null]}>
                 <Text style={[type.overline, { color: t.text3 }]}>{dayHead(g.date)}</Text>
               </View>
               {g.items.map((x, i) => (

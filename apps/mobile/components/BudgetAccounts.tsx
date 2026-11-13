@@ -16,6 +16,7 @@ import { usePlan } from "../lib/plan";
 import { budgetAccounts, isCard, trackingAccounts } from "../lib/register";
 import { useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
+import { sticky } from "../lib/sticky";
 
 const TRACKING_TIP =
   "Not in your budget: their balances only change when you move money. Withdraw records money coming out into checking (it goes to Unassigned); a transfer to one from checking adds to it.";
@@ -37,7 +38,7 @@ export function BudgetAccounts({ onAdd, onTransfer }: { onAdd: () => void; onTra
   const owed = cards.reduce((s, a) => s - a.balance, 0);
 
   const head = (label: string, value: string, extra?: ReactNode) => (
-    <View style={styles.head}>
+    <View style={[styles.head, sticky(0, t.bg)]}>
       <Text style={[type.overline, { color: t.text3, flex: 1 }]}>{label}</Text>
       {extra}
       <Text style={[type.caption, { color: t.text3, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{value}</Text>
@@ -156,7 +157,7 @@ export function BudgetAccounts({ onAdd, onTransfer }: { onAdd: () => void; onTra
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.xs },
+  head: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.xs, paddingVertical: space.xs },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.sm },
   link: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 40 },
 });

@@ -28,6 +28,7 @@ import { useLayout } from "../../lib/layout";
 import { usePlan } from "../../lib/plan";
 import { monthKey, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
+import { sticky } from "../../lib/sticky";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const nameOf = (ym: string) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
@@ -77,6 +78,8 @@ export default function Budget() {
   // what you really spent in recent full months, against what the plan uses
   const history = useMemo(() => spendingHistory(b, cats, thisMonth, { txns, cards }), [b, cats, thisMonth, txns, cards]);
   const [realOpen, setRealOpen] = useState(false);
+  // the column header's height, so each group's header sticks just under it
+  const [colH, setColH] = useState(28);
   // transactions that still need a category (any month)
   const needsCount = txns.filter(needsCategory).length;
   // a display choice (Settings → Appearance), on unless turned off
@@ -601,7 +604,7 @@ export default function Budget() {
               ) : null}
             </Card>
           ) : null}
-          <View style={[styles.colHead, { paddingHorizontal: compact ? space.md : space.lg }]}>
+          <View onLayout={(e) => setColH(Math.round(e.nativeEvent.layout.height))} style={[styles.colHead, { paddingHorizontal: compact ? space.md : space.lg }, sticky(0, t.bg)]}>
             <Text style={[type.caption, styles.colName, { color: t.text3, flex: 1 }]}>Category</Text>
             {(compact ? ["Assigned", "Available"] : ["Assigned", "Spent", "Available"]).map((h) => (
               <Text key={h} numberOfLines={1} style={[type.caption, styles.colName, { color: t.text3, width: COLW, textAlign: "right", paddingRight: h === "Available" ? PILL_IN : 0 }]}>{h}</Text>
@@ -618,7 +621,7 @@ export default function Budget() {
                   aria-expanded={groupOpen === g.name}
                   accessibilityLabel={`${g.name} group: rename${ownGroup(g) ? ", reorder" : ""} or add a category`}
                   onPress={() => { setGroupOpen(groupOpen === g.name ? null : g.name); setGroupDraft(g.name); }}
-                  style={[styles.groupHead, { borderBottomColor: t.border }, compact ? { paddingHorizontal: space.md } : null]}
+                  style={[styles.groupHead, { borderBottomColor: t.border }, compact ? { paddingHorizontal: space.md } : null, sticky(colH, t.surface), { borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg }]}
                 >
                   <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
                     <Text style={[type.overline, { color: t.text2, flexShrink: 1 }]} numberOfLines={2}>{g.name}</Text>
@@ -719,7 +722,7 @@ const styles = StyleSheet.create({
   groupHead: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, borderBottomWidth: StyleSheet.hairlineWidth },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },
   pill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, alignItems: "flex-end", maxWidth: "100%" },
-  colHead: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, marginBottom: -space.sm },
+  colHead: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, marginBottom: -space.sm, paddingVertical: space.xs },
   colName: { fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.3, fontSize: 11 },
   section: { gap: 6 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
