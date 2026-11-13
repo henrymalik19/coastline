@@ -38,7 +38,7 @@ export type MemberRow = {
   view: MemberView | null;
 };
 
-const COLS = "owner_id, owner_email, email, name, role, member_id, joined_at, accounts, view";
+const COLS = "owner_id:plan_id, owner_email, email, name, role, member_id, joined_at, accounts, view";
 
 const missingTable = (e: unknown) => /PGRST205|PGRST202|42P01|42883|does not exist|Could not find/i.test(String((e as { message?: string })?.message ?? "") + String((e as { code?: string })?.code ?? ""));
 
@@ -66,7 +66,7 @@ export const useSharing = create<{ members: MemberRow[]; available: boolean; err
 /** Load the people you've invited. */
 export async function loadMembers(): Promise<void> {
   if (!supabase || !signedInId) return;
-  const res = await supabase.from("plan_members").select(COLS).eq("owner_id", signedInId);
+  const res = await supabase.from("plan_member").select(COLS).eq("plan_id", signedInId);
   if (res.error) {
     useSharing.setState(missingTable(res.error) ? { available: false, members: [] } : { error: res.error.message });
     return;
@@ -79,7 +79,7 @@ export async function inviteMember(email: string, name: string, accounts: string
   const clean = email.trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean)) throw new Error("That doesn't look like an email address.");
   if (clean === useSyncEmail()) throw new Error("That's your own email.");
-  const res = await supabase.from("plan_members").insert({ email: clean, name: name.trim() || null, accounts: role === "full" ? [] : accounts, role });
+  const res = await supabase.from("plan_member").insert({ email: clean, name: name.trim() || null, accounts: role === "full" ? [] : accounts, role });
   if (res.error) throw new Error(/duplicate|unique/i.test(res.error.message) ? "That email is already invited (here or to another plan)." : res.error.message);
   await loadMembers();
   await publishViews(true);
@@ -87,7 +87,7 @@ export async function inviteMember(email: string, name: string, accounts: string
 
 export async function updateMember(email: string, patch: { name?: string | null; accounts?: string[]; role?: MemberRole }): Promise<void> {
   if (!supabase) return;
-  const res = await supabase.from("plan_members").update(patch).eq("email", email);
+  const res = await supabase.from("plan_member").update(patch).eq("email", email);
   if (res.error) throw new Error(res.error.message);
   await loadMembers();
   await publishViews(true);
@@ -95,7 +95,7 @@ export async function updateMember(email: string, patch: { name?: string | null;
 
 export async function removeMember(email: string): Promise<void> {
   if (!supabase) return;
-  const res = await supabase.from("plan_members").delete().eq("email", email);
+  const res = await supabase.from("plan_member").delete().eq("email", email);
   if (res.error) throw new Error(res.error.message);
   await loadMembers();
 }
@@ -139,7 +139,7 @@ export async function publishViews(now = false): Promise<void> {
       const v = memberView(m.accounts);
       const key = JSON.stringify({ ...v, at: 0 });
       if (published.get(m.email) === key) continue;
-      const res = await supabase.from("plan_members").update({ view: v }).eq("email", m.email);
+      const res = await supabase.from("plan_member").update({ view: v }).eq("email", m.email);
       if (!res.error) published.set(m.email, key);
     } catch {
       // a bad plan shouldn't stop sync
@@ -162,13 +162,13 @@ export const useMembership = create<MemberState>(() => ({ status: "unknown", txn
 
 type TxnRow = {
   id: string; account_id: string; date: string; amount: number | string; payee: string | null; memo: string | null;
-  category_id: string | null; splits: Txn["splits"] | null; cleared: Txn["cleared"]; source: Txn["source"]; deleted: boolean; client_updated_at: number | string;
+  category_id: string | null; transaction_split?: { sort: number; category_id: string; amount: number | string; memo: string | null }[]; cleared: Txn["cleared"]; source: Txn["source"]; deleted: boolean; client_updated_at: number | string;
   created_by?: string | null;
 };
 const fromRow = (r: TxnRow): Txn | null => {
   const p = TxnSchema.safeParse({
     id: r.id, accountId: r.account_id, date: String(r.date).slice(0, 10), amount: Number(r.amount), payee: r.payee ?? undefined, memo: r.memo ?? undefined,
-    categoryId: r.category_id ?? undefined, splits: r.splits ?? undefined, cleared: r.cleared, source: r.source, updatedAt: Number(r.client_updated_at), deleted: r.deleted || undefined,
+    categoryId: r.category_id ?? undefined, splits: r.transaction_split?.length ? [...r.transaction_split].sort((a, b) => a.sort - b.sort).map((x) => ({ categoryId: x.category_id, amount: Number(x.amount), ...(x.memo ? { memo: x.memo } : {}) })) : undefined, cleared: r.cleared, source: r.source, updatedAt: Number(r.client_updated_at), deleted: r.deleted || undefined,
   });
   return p.success ? p.data : null;
 };
@@ -177,7 +177,7 @@ let memberChannel: RealtimeChannel | null = null;
 
 async function loadMemberTxns(owner: string): Promise<void> {
   if (!supabase) return;
-  const res = await supabase.from("transactions").select("*").eq("user_id", owner).order("date", { ascending: false }).limit(500);
+  const res = await supabase.from("transaction").select("*, transaction_split(sort, category_id, amount, memo)").eq("plan_id", owner).order("date", { ascending: false }).limit(500);
   if (res.error) return;
   const me = signedInId;
   const rows = (res.data ?? []) as TxnRow[];
@@ -191,13 +191,13 @@ async function loadMemberTxns(owner: string): Promise<void> {
 export async function saveMemberTxn(t: Txn): Promise<void> {
   const row = useMembership.getState().row;
   if (!supabase || !row) throw new Error("Not signed in to a shared plan.");
-  const res = await supabase.from("transactions").upsert(
+  const res = await supabase.from("transaction").upsert(
     {
-      user_id: row.owner_id, id: t.id, account_id: t.accountId, date: t.date, amount: t.amount, payee: t.payee ?? null, memo: t.memo ?? null,
-      category_id: t.categoryId ?? null, splits: null, transfer_account_id: null, transfer_id: null, cleared: t.cleared, source: "manual",
+      plan_id: row.owner_id, id: t.id, account_id: t.accountId, date: t.date, amount: t.amount, payee: t.payee ?? null, memo: t.memo ?? null,
+      category_id: t.categoryId ?? null, transfer_account_id: null, transfer_id: null, cleared: t.cleared, source: "manual",
       import_id: null, deleted: !!t.deleted, client_updated_at: t.updatedAt,
     },
-    { onConflict: "user_id,id" },
+    { onConflict: "plan_id,id" },
   );
   if (res.error) throw new Error(/row-level security/i.test(res.error.message) ? "You can only change purchases you added." : res.error.message);
   const { txns, mine } = useMembership.getState();
@@ -263,9 +263,9 @@ export async function onSharingSignIn(userId: string, email: string | undefined)
     if (row.role === "cards") await loadMemberTxns(row.owner_id);
     let ch = supabase
       .channel(`member-${userId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "plan_members", filter: `member_id=eq.${userId}` }, () => void checkMembership());
+      .on("postgres_changes", { event: "*", schema: "public", table: "plan_member", filter: `member_id=eq.${userId}` }, () => void checkMembership());
     if (row.role === "cards") {
-      ch = ch.on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `user_id=eq.${row.owner_id}` }, () => void loadMemberTxns(row.owner_id));
+      ch = ch.on("postgres_changes", { event: "*", schema: "public", table: "transaction", filter: `plan_id=eq.${row.owner_id}` }, () => void loadMemberTxns(row.owner_id));
     }
     memberChannel = ch.subscribe();
   }

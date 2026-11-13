@@ -12,5 +12,9 @@
     "@supabase/supabase-js": "^2.119.0",
     "@types/node": "^22.15.0",
     "vitest": "^3.2.0"
+  },
+  "dependencies": {
+    "@coastfi/engine": "workspace:*",
+    "@coastfi/schema": "workspace:*"
   }
 }

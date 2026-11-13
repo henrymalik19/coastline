@@ -98,6 +98,13 @@ importers:
         version: 3.2.7(@types/node@22.20.5)(lightningcss@1.33.0)(terser@5.51.2)
 
   packages/db:
+    dependencies:
+      '@coastfi/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@coastfi/schema':
+        specifier: workspace:*
+        version: link:../schema
     devDependencies:
       '@supabase/supabase-js':
         specifier: ^2.119.0

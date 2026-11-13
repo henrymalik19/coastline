@@ -5,15 +5,19 @@
  * - When signed in, changes are uploaded shortly after they happen.
  * - A plan belongs to its owner. Someone the owner shares it with ("full access") syncs the owner's
  *   plan instead of their own.
+ * - The plan is stored as rows (a `plan` row and a table per list; see @coastfi/schema rows.ts). It's
+ *   read in one snapshot (get_plan) and saved with only the rows that changed (save_plan).
  * - Two people (or two devices) editing at once: the plan merges part by part (lib/merge.ts) against
  *   the last copy this device synced. A save only goes through if nobody saved since that copy;
  *   otherwise this device takes in the other changes, merges, and saves again.
+ * - A plan saved before the rows existed still has its JSON (legacy_state): it's read from there and
+ *   the next save turns it into rows.
  * - Transactions and check-ins sync row by row. Other devices' changes arrive live (realtime) and on
  *   app focus.
  */
 import type { PlanState, Txn } from "@coastfi/engine";
 import type { Checkin } from "@coastfi/schema";
-import { CheckinSchema, PlanStateSchema, TxnSchema } from "@coastfi/schema";
+import { CheckinSchema, diffRows, PLAN_TABLES, planToRows, PlanStateSchema, rowsToPlan, TxnSchema, type PlanRows, type PlanTable } from "@coastfi/schema";
 import type { RealtimeChannel, Session } from "@supabase/supabase-js";
 import { AppState, Platform } from "react-native";
 import { create } from "zustand";
@@ -37,13 +41,35 @@ export const useSync = create<{
   error?: string;
 }>(() => ({ status: supabase ? "signedOut" : "off" }));
 
+/** The plan as the server has it: settings, lists, and (until it's turned into rows) the old JSON. */
 type PlanRow = {
-  user_id: string;
+  /** The plan as rows say it, or from the old JSON. Not validated yet. */
   state: unknown;
   todo_done: Record<string, string[]>;
   onboarded: boolean;
   client_updated_at: number;
+  /** Still the old JSON on the server: the next save writes every row. */
+  legacy: boolean;
 };
+
+/** Read a plan in one snapshot, as the app's objects. Null when there's no plan yet. */
+async function fetchPlan(pid: string): Promise<PlanRow | null> {
+  if (!supabase) return null;
+  const res = await supabase.rpc("get_plan", { p: pid });
+  if (res.error) throw res.error;
+  const snap = res.data as (Record<string, unknown> & { plan: Record<string, unknown> }) | null;
+  if (!snap) return null;
+  const at = Number(snap.plan.client_updated_at ?? 0);
+  if (snap.plan.legacy_state) {
+    return { state: snap.plan.legacy_state, todo_done: (snap.plan.legacy_todo_done as Record<string, string[]>) ?? {}, onboarded: !!snap.plan.onboarded, client_updated_at: at, legacy: true };
+  }
+  const tables = {} as PlanRows["tables"];
+  for (const t of Object.keys(PLAN_TABLES) as PlanTable[]) tables[t] = (snap[t] as Record<string, unknown>[]) ?? [];
+  const back = rowsToPlan({ plan: snap.plan, tables });
+  return { state: back.plan, todo_done: back.todoDone, onboarded: back.onboarded, client_updated_at: at, legacy: false };
+}
+/** The server still has a plan's old JSON: the next save writes it all as rows. */
+let legacyOnServer = false;
 type CheckinRow = {
   month: string;
   checked_on: string | null;
@@ -57,7 +83,7 @@ type CheckinRow = {
 };
 
 const toRow = (c: Checkin, owner: string) => ({
-  user_id: owner,
+  plan_id: owner,
   month: `${c.month}-01`,
   checked_on: c.date ?? null,
   invested: c.invested,
@@ -84,22 +110,29 @@ const fromRow = (r: CheckinRow): Checkin | null => {
 };
 
 /* ---------- transactions: their own table, row by row ---------- */
+type SplitRow = { sort: number; category_id: string; amount: number | string; memo: string | null };
 type TxnRow = {
   id: string; account_id: string; date: string; amount: number | string; payee: string | null; memo: string | null;
-  category_id: string | null; splits: Txn["splits"] | null; transfer_account_id: string | null; transfer_id: string | null;
+  category_id: string | null; transfer_account_id: string | null; transfer_id: string | null;
   cleared: Txn["cleared"]; source: Txn["source"]; import_id: string | null; deleted: boolean; client_updated_at: number | string;
+  transaction_split?: SplitRow[];
 };
-const txnToRow = (t: Txn, owner: string) => ({
-  user_id: owner, id: t.id, account_id: t.accountId, date: t.date, amount: t.amount, payee: t.payee ?? null, memo: t.memo ?? null,
-  category_id: t.categoryId ?? null, splits: t.splits ?? null, transfer_account_id: t.transferAccountId ?? null,
+/** A transaction for save_transactions, with its split lines. */
+const txnToRow = (t: Txn) => ({
+  id: t.id, account_id: t.accountId, date: t.date, amount: t.amount, payee: t.payee ?? null, memo: t.memo ?? null,
+  category_id: t.categoryId ?? null, transfer_account_id: t.transferAccountId ?? null,
   transfer_id: t.transferId ?? null, cleared: t.cleared, source: t.source, import_id: t.importId ?? null,
   deleted: !!t.deleted, client_updated_at: t.updatedAt,
+  splits: (t.splits ?? []).map((x) => ({ category_id: x.categoryId, amount: x.amount, memo: x.memo ?? null })),
 });
 const txnFromRow = (r: TxnRow): Txn | null => {
   const parsed = TxnSchema.safeParse({
     id: r.id, accountId: r.account_id, date: String(r.date).slice(0, 10), amount: Number(r.amount),
     payee: r.payee ?? undefined, memo: r.memo ?? undefined, categoryId: r.category_id ?? undefined,
-    splits: r.splits ?? undefined, transferAccountId: r.transfer_account_id ?? undefined, transferId: r.transfer_id ?? undefined,
+    splits: r.transaction_split?.length
+      ? [...r.transaction_split].sort((a, b) => a.sort - b.sort).map((x) => ({ categoryId: x.category_id, amount: Number(x.amount), ...(x.memo ? { memo: x.memo } : {}) }))
+      : undefined,
+    transferAccountId: r.transfer_account_id ?? undefined, transferId: r.transfer_id ?? undefined,
     cleared: r.cleared, source: r.source, importId: r.import_id ?? undefined, updatedAt: Number(r.client_updated_at),
     deleted: r.deleted || undefined,
   });
@@ -115,7 +148,7 @@ async function pushTxns(owner: string): Promise<void> {
   if (!supabase || !txnTable) return;
   const changed = useStore.getState().txns.filter((t) => t.updatedAt > txnPushedThrough);
   if (!changed.length) return;
-  const res = await supabase.from("transactions").upsert(changed.map((t) => txnToRow(t, owner)), { onConflict: "user_id,id" });
+  const res = await supabase.rpc("save_transactions", { p: owner, p_rows: changed.map(txnToRow) });
   if (res.error) {
     if (missingTable(res.error)) {
       txnTable = false;
@@ -128,7 +161,7 @@ async function pushTxns(owner: string): Promise<void> {
 
 async function fetchTxns(owner: string): Promise<Txn[] | null> {
   if (!supabase || !txnTable) return null;
-  const res = await supabase.from("transactions").select("*").eq("user_id", owner);
+  const res = await supabase.from("transaction").select("*, transaction_split(sort, category_id, amount, memo)").eq("plan_id", owner);
   if (res.error) {
     if (missingTable(res.error)) {
       txnTable = false;
@@ -214,6 +247,7 @@ function mergeCheckins(remote: Checkin[]) {
 async function switchTo(pid: string, remote: PlanRow | null, checkins: Checkin[]) {
   const txns = (await fetchTxns(pid)) ?? [];
   const ok = remote ? PlanStateSchema.safeParse(remote.state) : null;
+  legacyOnServer = !!remote?.legacy;
   applyingRemote = true;
   if (remote && ok?.success) {
     const todoDone = remote.todo_done ?? {};
@@ -241,30 +275,31 @@ async function pushInner(depth = 0): Promise<void> {
   setSync({ status: "syncing" });
   try {
     const base = baseFor(pid);
-    if (!base || !deepEqual(base.plan, s.plan) || !deepEqual(base.todoDone, s.todoDone)) {
-      const row = { user_id: pid, state: s.plan, todo_done: s.todoDone, onboarded: true, schema_version: 2 };
-      let at: number;
-      if (base && base.at > 0) {
-        // save only if nobody saved since the copy these changes were made on
-        at = Math.max(Date.now(), base.at + 1);
-        const res = await supabase.from("plans").update({ ...row, client_updated_at: at }).eq("user_id", pid).eq("client_updated_at", base.at).select("client_updated_at");
-        if (res.error) throw res.error;
-        if (!res.data?.length) {
-          // someone else saved first: take in their changes, then save again
-          if (depth < 3) return await syncInner(depth + 1);
-          throw new Error("Couldn't save: the plan kept changing on another device. Try again in a moment.");
-        }
-      } else {
-        // first save from this device: the newer copy wins (the database ignores an older one)
-        at = s.updatedAt;
-        const res = await supabase.from("plans").upsert({ ...row, client_updated_at: at }, { onConflict: "user_id" });
-        if (res.error) throw res.error;
+    if (!base || legacyOnServer || !deepEqual(base.plan, s.plan) || !deepEqual(base.todoDone, s.todoDone)) {
+      const rows = planToRows(s.plan, s.todoDone, true);
+      // save only the rows that changed, and only if nobody saved since the copy these changes were made on.
+      // The first save from this device (or over the old JSON) writes everything, if it's the newer copy.
+      const whole = !base || base.at <= 0 || legacyOnServer;
+      const at = whole && !legacyOnServer ? s.updatedAt : Math.max(Date.now(), (base?.at ?? 0) + 1);
+      const res = await supabase.rpc("save_plan", {
+        p: pid,
+        p_base: whole ? null : base!.at,
+        p_at: at,
+        p_plan: rows.plan,
+        p_changes: diffRows(whole ? undefined : planToRows(base!.plan, base!.todoDone, true), rows),
+      });
+      if (res.error) throw res.error;
+      if (res.data === null) {
+        // someone else saved first (or the server's copy is newer): take in their changes, then save again
+        if (depth < 3) return await syncInner(depth + 1);
+        throw new Error("Couldn't save: the plan kept changing on another device. Try again in a moment.");
       }
+      legacyOnServer = false;
       useStore.setState({ syncBase: { owner: pid, at, plan: s.plan, todoDone: s.todoDone } });
     }
     const { checkins } = useStore.getState();
     if (checkins.length) {
-      const ci = await supabase.from("checkins").upsert(checkins.map((c) => toRow(c, pid)), { onConflict: "user_id,month" });
+      const ci = await supabase.from("checkin").upsert(checkins.map((c) => toRow(c, pid)), { onConflict: "plan_id,month" });
       if (ci.error) throw ci.error;
     }
     await pushTxns(pid);
@@ -282,13 +317,9 @@ async function syncInner(depth = 0): Promise<void> {
   setSync({ status: "syncing" });
   try {
     const pid = await resolvePlanId(userId);
-    const [planRes, ciRes] = await Promise.all([
-      supabase.from("plans").select("user_id, state, todo_done, onboarded, client_updated_at").eq("user_id", pid).maybeSingle<PlanRow>(),
-      supabase.from("checkins").select("*").eq("user_id", pid),
-    ]);
-    if (planRes.error) throw planRes.error;
+    const [remote, ciRes] = await Promise.all([fetchPlan(pid), supabase.from("checkin").select("*").eq("plan_id", pid)]);
     if (ciRes.error) throw ciRes.error;
-    const remote = planRes.data;
+    legacyOnServer = !!remote?.legacy;
     const remoteCheckins = ((ciRes.data ?? []) as CheckinRow[]).map(fromRow).filter((c): c is Checkin => !!c);
 
     const before = useStore.getState().syncBase;
@@ -361,11 +392,11 @@ function listen(userId: string, pid: string) {
   for (const c of supabase.getChannels()) if (c.topic.startsWith(`realtime:plan-${userId}`)) void supabase.removeChannel(c);
   channel = supabase
     .channel(`plan-${userId}-${pid}`)
-    .on("postgres_changes", { event: "*", schema: "public", table: "plans", filter: `user_id=eq.${pid}` }, (payload) => {
-      const row = payload.new as PlanRow | undefined;
-      if (row && row.client_updated_at !== baseFor(pid)?.at) void syncNow();
+    .on("postgres_changes", { event: "*", schema: "public", table: "plan", filter: `id=eq.${pid}` }, (payload) => {
+      const row = payload.new as { client_updated_at?: number } | undefined;
+      if (row && Number(row.client_updated_at) !== baseFor(pid)?.at) void syncNow();
     })
-    .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `user_id=eq.${pid}` }, () => {
+    .on("postgres_changes", { event: "*", schema: "public", table: "transaction", filter: `plan_id=eq.${pid}` }, () => {
       void pullTxns(pid).catch(() => undefined);
     })
     .subscribe();
