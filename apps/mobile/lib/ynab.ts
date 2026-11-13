@@ -268,15 +268,18 @@ export function ynabAccounts(d: YnabData): YnabAccount[] {
   return [...by.values()].sort((x, y) => x.name.localeCompare(y.name));
 }
 
-/** The plan's account a YNAB account most likely is (same name, same kind), if any. */
-export function suggestChoice(plan: PlanState, a: YnabAccount): AccountChoice {
+/**
+ * The plan's account a YNAB account is: the same name (ignoring capitals and spaces) and the same
+ * kind, and not one another YNAB account already took (`taken`). Otherwise add it.
+ */
+export function suggestChoice(plan: PlanState, a: YnabAccount, taken: Set<string> = new Set()): AccountChoice {
   const n = norm(a.name);
   const pool =
     a.kind === "cash" ? plan.accounts.filter((x) => x.type === "cash").map((x) => ({ id: x.id, name: x.name }))
     : a.kind === "card" ? plan.debts.filter(isCard).map((x) => ({ id: x.id, name: x.name }))
     : a.kind === "loan" ? plan.debts.filter((x) => !isCard(x)).map((x) => ({ id: x.id, name: x.name }))
     : plan.accounts.filter((x) => x.type !== "cash").map((x) => ({ id: x.id, name: x.name }));
-  const hit = pool.find((x) => norm(x.name) === n) ?? pool.find((x) => norm(x.name).includes(n) || n.includes(norm(x.name)));
+  const hit = pool.find((x) => norm(x.name) === n && !taken.has(x.id));
   return hit ? { action: "match", id: hit.id } : { action: "add" };
 }
 
@@ -375,8 +378,10 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   // accounts: matched, added, or left out
   const idOf = new Map<string, string>();
   const kindOf = new Map<string, YnabAccountKind>();
+  const taken = new Set(Object.values(o.accounts).flatMap((c) => (c.action === "match" ? [c.id] : [])));
   for (const a of accts) {
-    const ch = o.accounts[a.name] ?? suggestChoice(plan, a);
+    const ch = o.accounts[a.name] ?? suggestChoice(plan, a, taken);
+    if (ch.action === "match") taken.add(ch.id);
     if (ch.action === "skip") continue;
     kindOf.set(a.name, a.kind);
     if (ch.action === "match") { idOf.set(a.name, ch.id); continue; }

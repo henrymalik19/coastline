@@ -73,6 +73,9 @@ describe("reading YNAB's files", () => {
     plan.accounts = [{ id: "chk", name: "checking", type: "cash", balance: 1 }];
     expect(suggestChoice(plan, accts[0]!)).toEqual({ action: "match", id: "chk" });
     expect(suggestChoice(plan, accts[2]!)).toEqual({ action: "add" });
+    // only the same name: "Old Bank Checking" isn't your Checking, and each account here is matched once
+    expect(suggestChoice(plan, { ...accts[0]!, name: "Old Bank Checking" })).toEqual({ action: "add" });
+    expect(suggestChoice(plan, accts[0]!, new Set(["chk"]))).toEqual({ action: "add" });
     expect(ynabCategories(d, ["2026-10", "2026-11"]).map((c) => [c.name, c.average])).toEqual([["Groceries", 625], ["Roth IRA", 500], ["Household", 25]]);
   });
 });

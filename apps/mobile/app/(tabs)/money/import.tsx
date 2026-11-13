@@ -80,9 +80,13 @@ export default function ImportYnab() {
         if (!d.txns.length) throw new Error("No transactions in that file.");
         setData(d);
         const since = recentMonths(thisMonth, 2)[0]!;
+        // closed or empty accounts start left out; the open ones match an account here with the same name (each only once)
+        const taken = new Set<string>();
         setChoices(Object.fromEntries(ynabAccounts(d).map((a) => {
-          const sug = suggestChoice(state, a);
-          return [a.name, sug.action === "add" && quietAccount(d, a.name, a.balance, since) ? { action: "skip" } : sug];
+          if (quietAccount(d, a.name, a.balance, since)) return [a.name, { action: "skip" }];
+          const sug = suggestChoice(state, a, taken);
+          if (sug.action === "match") taken.add(sug.id);
+          return [a.name, sug];
         })));
         setCatMap(Object.fromEntries(ynabCategories(d, recentMonths(thisMonth)).map((c) => {
           const sug = suggestCategory(state, c);
@@ -147,6 +151,11 @@ export default function ImportYnab() {
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[type.body, { color: choices[a.name]?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]} numberOfLines={1}>{a.name}</Text>
           <Text style={[type.caption, { color: t.text3 }]}>{KIND_LABEL[a.kind]} · {a.kind === "card" || a.kind === "loan" ? `owe ${money(Math.max(0, -a.balance))}` : money(a.balance)}</Text>
+          {(() => {
+            const ch = choices[a.name];
+            const also = ch?.action === "match" ? Object.entries(choices).filter(([n, c]) => n !== a.name && c.action === "match" && c.id === ch.id).map(([n]) => n) : [];
+            return also.length ? <Text style={[type.caption, { color: t.warn }]}>Also chosen for {also.join(", ")}: their transactions would land in one account</Text> : null;
+          })()}
         </View>
         <Select label={`${a.name}: what it is here`} value={valueOf(choices[a.name])} options={options(a)} onChange={(v) => setChoice(a.name, v)} />
       </View>
