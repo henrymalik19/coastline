@@ -31,7 +31,7 @@ import { hsaEverEligible, HsaEligibilityChanges } from "../HsaEligibility";
 
 /* ---------- registry ---------- */
 
-type SectionKey = "account" | "sharing" | "appearance" | "profile" | "retirementIncome" | "retirement" | "income" | "budget" | "savings" | "accounts" | "debts" | "goals" | "assumptions" | "priorities" | "limits" | "data";
+type SectionKey = "account" | "sharing" | "appearance" | "profile" | "retirementIncome" | "retirement" | "healthcare" | "income" | "budget" | "savings" | "accounts" | "debts" | "goals" | "assumptions" | "priorities" | "limits" | "data";
 type SectionMeta = { key: SectionKey; title: string; subtitle: string; icon: IconName; /** Not listed (moved elsewhere; old links still work). */ hidden?: boolean };
 
 export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
@@ -39,13 +39,13 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
     title: "Account",
     items: [
       { key: "account", title: "Account & sync", subtitle: "Sign in to use your plan on every device", icon: "user" },
-      { key: "profile", title: "You", subtitle: "Age, retirement age and health insurance", icon: "user" },
+      { key: "profile", title: "You", subtitle: "Age, retirement age and taxes", icon: "user" },
       { key: "sharing", title: "Sharing", subtitle: "Share your plan with a spouse or partner", icon: "user" },
       { key: "appearance", title: "Appearance", subtitle: "Light or dark, and what the Budget shows", icon: "sparkle" },
     ],
   },
   {
-    title: "Your money",
+    title: "Today",
     items: [
       { key: "income", title: "Income", subtitle: "Jobs, business, rental and other income", icon: "wallet" },
       { key: "budget", title: "Monthly budget", subtitle: "Now on the Budget tab", icon: "card", hidden: true },
@@ -53,8 +53,14 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
       { key: "accounts", title: "Accounts", subtitle: "Balances you've saved and invested", icon: "database" },
       { key: "debts", title: "Debts", subtitle: "Balances, interest rates and minimums", icon: "card" },
       { key: "goals", title: "Savings goals", subtitle: "Each goal becomes a step in your plan", icon: "target" },
-      { key: "retirement", title: "Retirement & essentials", subtitle: "What you'd still pay after retiring, and what's essential", icon: "shield" },
+    ],
+  },
+  {
+    title: "In retirement",
+    items: [
+      { key: "retirement", title: "What you'll spend", subtitle: "Which categories you'd still pay after retiring, and which are essential", icon: "shield" },
       { key: "retirementIncome", title: "Income in retirement", subtitle: "Social Security, pensions and other income after you stop working", icon: "calendar" },
+      { key: "healthcare", title: "Healthcare", subtitle: "Health insurance until Medicare at 65, and after", icon: "plus" },
     ],
   },
   {
@@ -129,10 +135,43 @@ async function removeItem(what: string, name: string, doIt: () => void) {
 
 /* ---------- You ---------- */
 
-function Profile() {
+/** Healthcare in retirement: your own insurance until Medicare at 65, then Medicare's cost. */
+function HealthcareSection() {
+  const t = useTheme();
   const { state } = usePlan();
   const update = useStore((s) => s.update);
   const medicareAge = state.retireAge >= 65;
+  return (
+    <>
+      <Text style={[type.body, { color: t.text2 }]}>
+        At work your employer pays most of your health insurance. Retire before 65 and you buy your own until Medicare starts; after that, Medicare still has premiums. Both count in your retirement number.
+      </Text>
+      <Group>
+        <Rows>
+          {[
+            <View key="hc">
+              <FieldRow
+                label="Health insurance until 65"
+                hint={medicareAge ? "You'll retire at 65+, so Medicare covers you. $0 is fine." : `Per month, from ${state.retireAge} until Medicare starts at 65`}
+                info={HELP.healthcare}
+              >
+                <NumberInput kind="money" label="Health insurance per month until 65" value={state.healthcare} onChange={(v) => update((p) => { p.healthcare = v; })} />
+              </FieldRow>
+              {!medicareAge ? <HealthcareSuggestion retireAge={state.retireAge} value={state.healthcare} onUse={(v) => update((p) => { p.healthcare = v; })} /> : null}
+            </View>,
+            <FieldRow key="med" label="Healthcare from 65" hint="Medicare premiums, a supplement and a drug plan: about $400 a month a person" info={HELP.medicare}>
+              <NumberInput kind="money" label="Healthcare per month from 65" value={state.medicare ?? 0} onChange={(v) => update((p) => { p.medicare = v; })} />
+            </FieldRow>,
+          ]}
+        </Rows>
+      </Group>
+    </>
+  );
+}
+
+function Profile() {
+  const { state } = usePlan();
+  const update = useStore((s) => s.update);
   return (
     <>
       <Group>
@@ -152,19 +191,6 @@ function Profile() {
     onChange={(v) => update((p) => { p.filingStatus = v; })}
   />
 </FieldRow>,
-            <View key="hc">
-<FieldRow
-                            label="Health insurance until 65"
-              hint={medicareAge ? "You'll retire at 65+, so Medicare covers you. $0 is fine." : `Per month, from ${state.retireAge} until Medicare starts at 65`}
-              info={HELP.healthcare}
-            >
-              <NumberInput kind="money" label="Health insurance per month until 65" value={state.healthcare} onChange={(v) => update((p) => { p.healthcare = v; })} />
-            </FieldRow>
-{!medicareAge ? <HealthcareSuggestion retireAge={state.retireAge} value={state.healthcare} onUse={(v) => update((p) => { p.healthcare = v; })} /> : null}
-            <FieldRow label="Healthcare from 65" hint="Medicare premiums, a supplement and a drug plan: about $400 a month a person" info={HELP.medicare}>
-              <NumberInput kind="money" label="Healthcare per month from 65" value={state.medicare ?? 0} onChange={(v) => update((p) => { p.medicare = v; })} />
-            </FieldRow>
-</View>,
             <FieldRow key="cur" label="What you invest today" hint="Per month, from take-home pay" info={HELP.currentInvest}>
               <NumberInput kind="money" label="What you invest today per month" value={state.currentInvestMonthly} onChange={(v) => update((p) => { p.currentInvestMonthly = v; })} />
             </FieldRow>,
@@ -554,6 +580,7 @@ export const SECTION_SCREENS: Record<SectionKey, ComponentType> = {
   profile: Profile,
   retirementIncome: () => <RetirementIncomeSection />,
   retirement: () => <RetirementEssentials />,
+  healthcare: HealthcareSection,
   income: IncomeSection,
   // moved to the Budget tab
   budget: () => <Redirect href="/budget" />,

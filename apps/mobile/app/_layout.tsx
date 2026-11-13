@@ -15,6 +15,12 @@ import { useTheme } from "../lib/theme";
 const WEB_PAGE_CSS = `
 html, body, #root { max-width: 100%; overflow-x: hidden; overscroll-behavior-x: none; }
 body { overscroll-behavior-y: none; }
+/* scrollbars: thin, in the theme's colors (set on <html> below), not the browser's bright default */
+* { scrollbar-width: thin; scrollbar-color: var(--sb-thumb, #8a9aa6) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: transparent; }
+*::-webkit-scrollbar-thumb { background-color: var(--sb-thumb, #8a9aa6); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background-color: var(--sb-thumb-hover, #5f6a72); }
 `;
 
 export default function RootLayout() {
@@ -35,6 +41,14 @@ export default function RootLayout() {
       if (Platform.OS === "web" && typeof window !== "undefined") window.removeEventListener("focus", onFocus);
     };
   }, []);
+  // the scrollbars (and form controls) follow light / dark
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    const root = document.documentElement;
+    root.style.colorScheme = t.scheme;
+    root.style.setProperty("--sb-thumb", t.border);
+    root.style.setProperty("--sb-thumb-hover", t.text3);
+  }, [t.scheme, t.border, t.text3]);
   useEffect(() => {
     if (Platform.OS !== "web" || typeof document === "undefined" || document.getElementById("coastline-page-css")) return;
     const style = document.createElement("style");

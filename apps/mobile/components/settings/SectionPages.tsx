@@ -12,12 +12,12 @@ import { useFillPage } from "../MasterDetail";
 import { Card, Divider, Screen } from "../ui";
 import { findSection, SECTION_SCREENS, SECTIONS } from "./sections";
 
-/** The "Your money" pages live in the Money tab; the rest stay in Settings. */
-export const MONEY_GROUP = "Your money";
+/** These pages live in the Money tab (what you have today, and what retirement looks like); the rest stay in Settings. */
+export const MONEY_GROUPS = ["Today", "In retirement"];
 export type SectionBase = "/money" | "/settings";
-// Money has the "Your money" pages; Settings has the rest (old /settings/income links still open)
+// Money has those pages; Settings has the rest (old /settings/income links still open)
 export const groupsFor = (base: SectionBase) =>
-  base === "/settings" ? SECTIONS.filter((g) => g.title !== MONEY_GROUP) : SECTIONS.filter((g) => g.title === MONEY_GROUP);
+  base === "/settings" ? SECTIONS.filter((g) => !MONEY_GROUPS.includes(g.title)) : SECTIONS.filter((g) => MONEY_GROUPS.includes(g.title));
 
 /** One-line summary under each page's name. */
 function useSummaries(): Record<string, string> {
@@ -32,6 +32,7 @@ function useSummaries(): Record<string, string> {
     sharing: sharedBy ? `Shared by ${sharedBy}` : members.length ? `${members.length} ${members.length === 1 ? "person" : "people"}` : "Not shared",
     account: syncConfigured ? (syncEmail ? `Signed in as ${syncEmail}` : "Not signed in") : "Saved on this device",
     profile: `Age ${state.age} · retire at ${state.retireAge}`,
+    healthcare: state.retireAge >= 65 ? `Medicare ${money(state.medicare ?? 0)}/mo` : `${money(state.healthcare)}/mo until 65 · ${money(state.medicare ?? 0)}/mo after`,
     retirement: (() => {
       const items = state.budget.filter((b) => !b.accountId);
       const after = items.filter((b) => b.inRetirement).reduce((a, b) => a + b.amount, 0);
@@ -71,7 +72,7 @@ export function SectionGroups({ base, heading }: { base: SectionBase; heading?: 
     <>
       {groups.map((group) => (
         <View key={group.title} style={{ gap: space.sm }}>
-          {groups.length > 1 || heading ? <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.xs }]}>{heading ?? group.title}</Text> : null}
+          {groups.length > 1 || heading ? <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.xs }]}>{groups.length > 1 ? group.title : heading ?? group.title}</Text> : null}
           <Card padded={false}>
             {group.items.filter((s) => !s.hidden).map((s, i) => (
               <View key={s.key}>

@@ -55,6 +55,9 @@ export function NumberBreakdown() {
         <Pressable role="link" onPress={() => router.push("/money/retirement")} hitSlop={6} style={{ alignSelf: "flex-start", marginTop: 2 }}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Choose which categories you'd still pay →</Text>
         </Pressable>
+        <Pressable role="link" onPress={() => router.push("/money/healthcare")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change healthcare →</Text>
+        </Pressable>
       </View>
       <View style={{ gap: 4 }}>
         <Text style={[type.caption, { color: t.text3 }]}>Change it: {d.retireMonthly > 0 ? `${state.whatif.spendDelta >= 0 ? "+" : "−"}${Math.abs(Math.round(state.whatif.spendDelta * 100))}% from your budget` : "add budget items marked “Still paid after you retire”"}</Text>
@@ -65,6 +68,9 @@ export function NumberBreakdown() {
       <View style={{ gap: 2 }}>
         {b.income > 0.5 ? row("Social Security and pensions", `− ${per(b.income)}`, { indent: true }) : null}
         {row("From your savings", per(b.need), { strong: true })}
+        <Pressable role="link" onPress={() => router.push("/money/retirementIncome")} hitSlop={6} style={{ alignSelf: "flex-start", marginTop: 2 }}>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{b.income > 0.5 ? "Change Social Security and pensions →" : "Add Social Security or a pension →"}</Text>
+        </Pressable>
       </View>
 
       {step(3, "Your FIRE number")}
