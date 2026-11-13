@@ -541,9 +541,9 @@ export default function Budget() {
             )}
       </View>
       ) : null}
-      {!view.started || tab === "categories" ? monthBar : null}
+      {!view.started || tab !== "accounts" ? monthBar : null}
       {view.started && tab === "transactions" ? (
-        <TransactionsList key={(acctParam ?? "all") + (needsParam ?? "")} month={thisMonth} account={acctParam} onlyNeedsCategory={needsParam === "1"} stickyTop={barH} />
+        <TransactionsList key={(acctParam ?? "all") + (needsParam ?? "")} month={month} account={acctParam} onlyNeedsCategory={needsParam === "1"} stickyTop={barH} />
       ) : view.started && tab === "accounts" ? (
         <BudgetAccounts onTransfer={(from) => setAdding({ from })} stickyTop={barH} />
       ) : view.started ? (

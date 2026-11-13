@@ -41,9 +41,7 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
   const cats = useCategories();
   const accounts = budgetAccounts(state);
   const [acct, setAcct] = useState(account && budgetAccounts(state).some((a) => a.id === account) ? account : "all");
-  // "all", or "YYYY-MM"; starts on this month
-  const [shown, setShown] = useState(month);
-  const allMonths = shown === "all";
+  const [allMonths, setAllMonths] = useState(false);
   const [q, setQ] = useState("");
   const [needsCat, setNeedsCat] = useState(!!onlyNeedsCategory);
   const [editing, setEditing] = useState<Txn | "new" | null>(null);
@@ -59,7 +57,7 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
       .filter((x) => !x.deleted)
       .filter((x) => acct === "all" || x.accountId === acct || x.transferAccountId === acct)
       // the ones that need a category: from every month (the count beside it is all of them)
-      .filter((x) => allMonths || needsCat || x.date.slice(0, 7) === shown)
+      .filter((x) => allMonths || needsCat || x.date.slice(0, 7) === month)
       .filter((x) => !needsCat || uncategorized(x))
       .filter((x) => {
         if (!needle) return true;
@@ -68,9 +66,7 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
       })
       .sort((a, b) => (a.date === b.date ? b.updatedAt - a.updatedAt : b.date.localeCompare(a.date)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [txns, acct, shown, allMonths, q, needsCat, cats]);
-  // the months there's something in, newest first (and this month, even if it's empty so far)
-  const months = useMemo(() => [...new Set([month, ...txns.filter((x) => !x.deleted).map((x) => x.date.slice(0, 7))])].sort().reverse(), [txns, month]);
+  }, [txns, acct, month, allMonths, q, needsCat, cats]);
 
   const inTotal = list.reduce((a, x) => a + (x.amount > 0 && !x.transferAccountId ? x.amount : 0), 0);
   const outTotal = list.reduce((a, x) => a + (x.amount < 0 && !x.transferAccountId ? -x.amount : 0), 0);
@@ -102,6 +98,9 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
     <>
       <View onLayout={(e) => setFiltersH(Math.round(e.nativeEvent.layout.height))} style={[{ gap: space.sm, paddingVertical: space.xs, marginVertical: -space.xs }, sticky(stickyTop, t.bg)]}>
       <View style={[styles.row, { gap: space.sm }]}>
+        <Pressable role="checkbox" aria-checked={allMonths || needsCat} disabled={needsCat} onPress={() => setAllMonths((v) => !v)} hitSlop={6} style={[styles.chip, { borderColor: allMonths || needsCat ? t.accent : t.border, backgroundColor: allMonths || needsCat ? t.accentSoft : t.surface }]}>
+          <Text style={[type.caption, { color: allMonths || needsCat ? t.accent : t.text2, fontWeight: "700" }]}>All months</Text>
+        </Pressable>
         {missing ? (
           <Pressable role="checkbox" aria-checked={needsCat} onPress={() => setNeedsCat((v) => !v)} hitSlop={6} style={[styles.chip, { borderColor: needsCat ? t.warn : t.border, backgroundColor: needsCat ? t.warnSoft : t.surface }]}>
             <Text style={[type.caption, { color: needsCat ? t.text : t.warn, fontWeight: "700" }]}>Needs a category ({missing})</Text>
@@ -109,15 +108,7 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
         ) : null}
       </View>
       <View style={[styles.row, { gap: space.sm }]}>
-        <View style={compact ? { flex: 1, minWidth: 0 } : { width: 180 }}>
-          <Select
-            label="Month"
-            value={needsCat ? "all" : shown}
-            onChange={(v) => { setShown(v); setNeedsCat(false); }}
-            options={[...months.map((m) => ({ value: m, label: ymText(m) })), { value: "all", label: "All months" }]}
-          />
-        </View>
-        <View style={compact ? { flex: 1, minWidth: 0 } : { width: 220 }}>
+        <View style={compact ? { flex: 1, minWidth: 0 } : { width: 240 }}>
           <Select
             label="Account"
             value={acct}
@@ -125,8 +116,8 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
             options={[{ value: "all", label: `All accounts (${accounts.length})` }, ...accounts.map((a) => ({ value: a.id, label: a.name, hint: a.kind === "card" ? "Credit card" : "Cash account" }))]}
           />
         </View>
-        <View style={{ flex: 1, minWidth: compact ? "100%" : 200 }}>
-          <TextField label="Search transactions" placeholder="Search payee, category, amount" value={q} onChange={setQ} />
+        <View style={{ flex: 1, minWidth: compact ? 0 : 200 }}>
+          <TextField label="Search transactions" placeholder={compact ? "Search" : "Search payee, category, amount"} value={q} onChange={setQ} />
         </View>
       </View>
       </View>
@@ -185,7 +176,7 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
       ) : (
         <Card style={{ gap: space.sm }}>
           <Text style={[type.body, { color: t.text2 }]}>
-            {q || needsCat ? "Nothing matches." : allMonths ? "No transactions yet." : `No transactions in ${ymText(shown)}.`}
+            {q || needsCat ? "Nothing matches." : allMonths ? "No transactions yet." : `No transactions in ${ymText(month)}.`}
           </Text>
           <Text style={[type.caption, { color: t.text3 }]}>Add what you spend and earn here. Each one comes out of (or goes into) a budget category.</Text>
         </Card>
