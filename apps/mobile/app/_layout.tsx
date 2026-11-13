@@ -2,6 +2,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { AppState, Platform } from "react-native";
+import { ConfirmHost } from "../components/ConfirmHost";
 import { rollForwardNow } from "../lib/rollForwardNow";
 import { useStore } from "../lib/store";
 import { startSync } from "../lib/sync";
@@ -45,6 +46,7 @@ export default function RootLayout() {
     <>
       <StatusBar style={t.scheme === "dark" ? "light" : "dark"} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.bg } }} />
+      <ConfirmHost />
     </>
   );
 }

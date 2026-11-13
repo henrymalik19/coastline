@@ -195,6 +195,17 @@ export default function Budget() {
   /** A group of only your own categories can be dragged and moved; one with savings, bills or debts keeps its place. */
   const ownGroup = (g: (typeof groups)[number]) => g.cats.every((c) => c.kind === "spending");
   const rta = view.readyToAssign;
+  // your real spending: categories whose recent average is well off the plan amount
+  const realRows = history.months.length
+    ? cats
+        .filter((c) => c.kind === "spending" && !c.account && history.avg[c.key] !== undefined)
+        .map((c) => ({ c, avg: Math.round(history.avg[c.key]!), plan: c.target }))
+        .filter((r) => Math.abs(r.avg - r.plan) >= Math.max(10, r.plan * 0.1))
+        .sort((x, y) => Math.abs(y.avg - y.plan) - Math.abs(x.avg - x.plan))
+    : [];
+  const realBy = new Map(realRows.map((r) => [r.c.key, r]));
+  const realSpan = history.months.length === 0 ? "" : history.months.length === 1 ? nameOf(history.months[0]!) : `${nameOf(history.months[0]!)} to ${nameOf(history.months.at(-1)!)}`;
+  const realNet = realRows.reduce((x, r) => x + r.avg - r.plan, 0);
   const canGoBack = month > b.start;
 
   const monthBar = (
@@ -376,6 +387,11 @@ export default function Budget() {
             {grip}
             <Text style={[type.body, { color: t.text, flexShrink: 1 }]} numberOfLines={2}>{label(c)}</Text>
             {dup ? <Icon name="info" size={14} color={t.warn} /> : null}
+            {realBy.has(c.key) ? (
+              <View style={[styles.realTag, { backgroundColor: t.warnSoft }]} accessibilityLabel={`You really spend about ${money(realBy.get(c.key)!.avg, { whole: true })} a month`}>
+                <Text style={[type.caption, { color: t.warn, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>~{money(realBy.get(c.key)!.avg, { whole: true })}</Text>
+              </View>
+            ) : null}
           </View>
           {num(l.assigned, t.text2)}
           {compact ? null : num(l.spent, t.text2)}
@@ -404,11 +420,17 @@ export default function Budget() {
                 <FormRow label={c.moves ? "Paid" : "Spent"} hint={c.moves ? "From the payment or transfer you record" : "From transactions"}>
                   <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(l.spent)}</Text>
                 </FormRow>
+                {realBy.has(c.key) ? (
+                  <FormRow label="You really spend" hint={`About this a month (${realSpan}). Plan: ${money(realBy.get(c.key)!.plan, { whole: true })}`}>
+                    <Text style={[type.body, { color: t.warn, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(realBy.get(c.key)!.avg, { whole: true })}</Text>
+                  </FormRow>
+                ) : null}
                 <FormRow label="Available" hint={l.carried > 0.5 ? `${money(l.carried)} carried over` : (l.funded ?? 0) > 0.5 ? `+${money(l.funded ?? 0)} from card spending` : undefined}>
                   <Text style={[type.body, { color: l.available < -0.005 ? t.bad : l.available > 0.5 ? t.good : t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(l.available)}</Text>
                 </FormRow>
               </FormList>
               <View style={styles.chips}>
+                {realBy.has(c.key) ? <Chip title={`Plan with ${money(realBy.get(c.key)!.avg, { whole: true })}`} onPress={() => editItem(c.key, { amount: realBy.get(c.key)!.avg })} /> : null}
                 {c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5 ? <Chip title={`Use plan ${money(c.target)}`} tone="accent" onPress={() => setAssigned(c.key, Math.round(c.target * 100) / 100)} /> : null}
                 {l.available < -0.005 ? <Chip title={`Cover ${money(-l.available)}`} tone="accent" icon="check" onPress={() => setAssigned(c.key, l.assigned - l.available)} /> : null}
                 <Chip title="Transaction" icon="plus" onPress={() => setAdding({ categoryId: c.key })} />
@@ -504,6 +526,44 @@ export default function Budget() {
       ) : view.started ? (
         <>
           {rtaCard}
+          {realRows.length ? (
+            <Card style={{ gap: space.sm, paddingVertical: space.md }}>
+              <View style={[styles.realHead]}>
+                <View style={[styles.realDot, { backgroundColor: t.warn }]} />
+                <Text style={[type.body, { color: t.text, flex: 1 }]}>
+                  <Text style={{ fontWeight: "700" }}>{realRows.length} {realRows.length === 1 ? "category is" : "categories are"} off</Text> from what you really spend ({realNet >= 0 ? "+" : "−"}{money(Math.abs(realNet), { whole: true })}/mo)
+                </Text>
+                <Chip title={realOpen ? "Hide" : "Review"} tone="accent" onPress={() => setRealOpen((v) => !v)} />
+              </View>
+              {realOpen ? (
+                <>
+                  <Text style={[type.caption, { color: t.text3 }]}>
+                    What you spent a month on average ({realSpan}, {history.months.length} full month{history.months.length === 1 ? "" : "s"}) against what your plan uses. Your plan, forecast and retirement number use the plan amounts, so update them to follow real life.
+                  </Text>
+                  {realRows.map((r) => (
+                    <View key={r.c.key} style={[styles.realRow, { borderTopColor: t.border }]}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{label(r.c)}</Text>
+                        <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]}>
+                          Plan {money(r.plan, { whole: true })} · spent {money(r.avg, { whole: true })} ·{" "}
+                          <Text style={{ color: r.avg > r.plan ? t.warn : t.good, fontWeight: "700" }}>{r.avg > r.plan ? "+" : "−"}{money(Math.abs(r.avg - r.plan), { whole: true })}</Text>
+                        </Text>
+                      </View>
+                      <Chip title={`Plan with ${money(r.avg, { whole: true })}`} onPress={() => editItem(r.c.key, { amount: r.avg })} />
+                    </View>
+                  ))}
+                  {realRows.length > 1 ? (
+                    <Chip
+                      title="Plan with all of these"
+                      tone="accent"
+                      icon="check"
+                      onPress={() => update((p) => { for (const r of realRows) { const it = p.budget.find((x) => x.id === r.c.key); if (it) it.amount = r.avg; } })}
+                    />
+                  ) : null}
+                </>
+              ) : null}
+            </Card>
+          ) : null}
           <View style={[styles.colHead, { paddingHorizontal: compact ? space.md : space.lg }]}>
             <Text style={[type.caption, styles.colName, { color: t.text3, flex: 1 }]}>Category</Text>
             {(compact ? ["Assigned", "Available"] : ["Assigned", "Spent", "Available"]).map((h) => (
@@ -573,53 +633,6 @@ export default function Budget() {
               </Card>
             );
           })}
-          {(() => {
-            // your real spending: categories where the recent average is well off the plan amount
-            if (!history.months.length) return null;
-            const rows = cats
-              .filter((c) => c.kind === "spending" && !c.account && history.avg[c.key] !== undefined)
-              .map((c) => ({ c, avg: Math.round(history.avg[c.key]!), plan: c.target }))
-              .filter((r) => Math.abs(r.avg - r.plan) >= Math.max(10, r.plan * 0.1))
-              .sort((x, y) => Math.abs(y.avg - y.plan) - Math.abs(x.avg - x.plan));
-            const span = history.months.length === 1 ? nameOf(history.months[0]!) : `${nameOf(history.months[0]!)} to ${nameOf(history.months.at(-1)!)}`;
-            const net = rows.reduce((a, r) => a + r.avg - r.plan, 0);
-            const shown = realOpen ? rows : rows.slice(0, 4);
-            return (
-              <Card style={{ gap: space.sm }}>
-                <SectionLabel>Your real spending</SectionLabel>
-                <Text style={[type.caption, { color: t.text2 }]}>
-                  {rows.length
-                    ? `What you spent a month on average (${span}, ${history.months.length} full month${history.months.length === 1 ? "" : "s"}) against what your plan uses. In all, ${money(Math.abs(net), { whole: true })}/mo ${net >= 0 ? "more" : "less"} than planned. Your plan and forecast use the plan amounts, so update them to follow real life.`
-                    : `Over ${span}, every category's spending was within 10% of its plan amount. Your plan matches real life.`}
-                </Text>
-                {shown.map((r) => (
-                  <View key={r.c.key} style={[styles.realRow, { borderTopColor: t.border }]}>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{label(r.c)}</Text>
-                      <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]}>
-                        Plan {money(r.plan, { whole: true })} · spent {money(r.avg, { whole: true })} ·{" "}
-                        <Text style={{ color: r.avg > r.plan ? t.warn : t.good, fontWeight: "700" }}>{r.avg > r.plan ? "+" : "−"}{money(Math.abs(r.avg - r.plan), { whole: true })}</Text>
-                      </Text>
-                    </View>
-                    <Chip title={`Plan with ${money(r.avg, { whole: true })}`} onPress={() => editItem(r.c.key, { amount: r.avg })} />
-                  </View>
-                ))}
-                {rows.length ? (
-                  <View style={styles.chips}>
-                    {rows.length > 1 ? (
-                      <Chip
-                        title="Plan with all of these"
-                        tone="accent"
-                        icon="check"
-                        onPress={() => update((p) => { for (const r of rows) { const it = p.budget.find((x) => x.id === r.c.key); if (it) it.amount = r.avg; } })}
-                      />
-                    ) : null}
-                    {rows.length > 4 ? <Chip title={realOpen ? "Show fewer" : `Show all ${rows.length}`} onPress={() => setRealOpen((v) => !v)} /> : null}
-                  </View>
-                ) : null}
-              </Card>
-            );
-          })()}
           <Pressable role="link" onPress={() => router.push("/settings")} hitSlop={6} style={styles.link}>
             <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Manage income, accounts, debts and goals</Text>
             <Icon name="chevron" size={12} color={t.accent} />
@@ -657,6 +670,9 @@ export default function Budget() {
 }
 
 const styles = StyleSheet.create({
+  realHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  realDot: { width: 8, height: 8, borderRadius: 4 },
+  realTag: { borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
   realRow: { flexDirection: "row", alignItems: "center", gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm },
   monthBar: { flexDirection: "row", alignItems: "center", gap: space.md },
   navBtn: { borderWidth: 1, borderRadius: 999, width: 36, height: 36, alignItems: "center", justifyContent: "center" },
