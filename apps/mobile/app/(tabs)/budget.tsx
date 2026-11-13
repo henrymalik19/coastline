@@ -9,6 +9,7 @@ import { BudgetAccounts } from "../../components/BudgetAccounts";
 import { TransactionsList } from "../../components/TransactionsList";
 import { cardMap, liveBudget } from "../../lib/register";
 import { linkableAccounts, suggestedAccount } from "../../lib/budgetDupes";
+import { needsCategory } from "../../lib/categories";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Segmented, Select } from "../../components/form";
@@ -52,7 +53,7 @@ export default function Budget() {
   const [groupDraft, setGroupDraft] = useState("");
   const router = useRouter();
   // opened from a link (a plan step, a to-do): show this month with that line open
-  const { focus, view: viewParam, account: acctParam } = useLocalSearchParams<{ focus?: string; view?: string; account?: string }>();
+  const { focus, view: viewParam, account: acctParam, needs: needsParam } = useLocalSearchParams<{ focus?: string; view?: string; account?: string; needs?: string }>();
   // Categories (assign money), Accounts (what's in each), or Transactions (what came in and went out)
   type View3 = "categories" | "accounts" | "transactions";
   const [tab, setTab] = useState<View3>(viewParam === "transactions" || viewParam === "accounts" ? viewParam : "categories");
@@ -76,6 +77,8 @@ export default function Budget() {
   // what you really spent in recent full months, against what the plan uses
   const history = useMemo(() => spendingHistory(b, cats, thisMonth, { txns, cards }), [b, cats, thisMonth, txns, cards]);
   const [realOpen, setRealOpen] = useState(false);
+  // transactions that still need a category (any month)
+  const needsCount = txns.filter(needsCategory).length;
   // a display choice (Settings → Appearance), on unless turned off
   const showReal = useAppearance((s) => s.realSpending);
   const setShowReal = useAppearance((s) => s.setRealSpending);
@@ -520,21 +523,31 @@ export default function Budget() {
           <View style={{ flexGrow: 1, flexShrink: 1, maxWidth: 440 }}>
             <Segmented
               label="Budget view"
-              options={[{ value: "categories", label: "Categories" }, { value: "accounts", label: "Accounts" }, { value: "transactions", label: compact ? "Activity" : "Transactions" }]}
+              options={[{ value: "categories", label: "Categories" }, { value: "accounts", label: "Accounts" }, { value: "transactions", label: `${compact ? "Activity" : "Transactions"}${needsCount ? ` · ${needsCount}` : ""}` }]}
               value={tab}
-              onChange={(v) => { setTab(v); if (v !== "transactions" && (acctParam || viewParam)) router.setParams({ account: undefined, view: undefined }); }}
+              onChange={(v) => { setTab(v); if (v !== "transactions" && (acctParam || viewParam || needsParam)) router.setParams({ account: undefined, view: undefined, needs: undefined }); }}
             />
           </View>
           {tab === "categories" ? <Button title={compact ? "Add" : "Add a transaction"} icon="plus" tone="primary" onPress={() => setAdding({})} style={{ minHeight: 36 }} /> : null}
         </View>
       ) : null}
       {view.started && tab === "transactions" ? (
-        <TransactionsList key={acctParam ?? "all"} month={month} account={acctParam} />
+        <TransactionsList key={(acctParam ?? "all") + (needsParam ?? "")} month={month} account={acctParam} onlyNeedsCategory={needsParam === "1"} />
       ) : view.started && tab === "accounts" ? (
         <BudgetAccounts onAdd={() => setAdding({})} onTransfer={(from) => setAdding({ from })} />
       ) : view.started ? (
         <>
           {rtaCard}
+          {needsCount ? (
+            <Pressable role="link" onPress={() => { setTab("transactions"); router.setParams({ view: "transactions", needs: "1" }); }} style={[styles.needsRow, { backgroundColor: t.warnSoft }]}>
+              <View style={[styles.realDot, { backgroundColor: t.warn }]} />
+              <Text style={[type.body, { color: t.text, flex: 1 }]}>
+                <Text style={{ fontWeight: "700" }}>{needsCount} {needsCount === 1 ? "transaction needs" : "transactions need"} a category</Text>. Until then they don't count in any category or in Ready to assign.
+              </Text>
+              <Text style={[type.label, { color: t.accent, fontWeight: "700" }]}>Categorize</Text>
+              <Icon name="chevron" size={14} color={t.accent} />
+            </Pressable>
+          ) : null}
           {realRows.length ? (
             <Card style={{ gap: space.sm, paddingVertical: space.md }}>
               <View style={[styles.realHead]}>
@@ -687,6 +700,7 @@ export default function Budget() {
 }
 
 const styles = StyleSheet.create({
+  needsRow: { flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm },
   realHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
   realDot: { width: 8, height: 8, borderRadius: 4 },
   realTag: { borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },

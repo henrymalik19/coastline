@@ -1,5 +1,5 @@
 /** The budget's categories with their on-screen names (shared by the Budget tab, registers and forms). */
-import { budgetCategories, isStartTxn, type BudgetCategory } from "@coastfi/engine";
+import { budgetCategories, isStartTxn, type BudgetCategory, type Txn } from "@coastfi/engine";
 import { useMemo } from "react";
 import { debtLabel } from "./debts";
 import { usePlan } from "./plan";
@@ -35,6 +35,16 @@ export function categoryText(cats: NamedCategory[], t: { id?: string; categoryId
   const c = t.categoryId ? cats.find((x) => x.key === t.categoryId)?.label : undefined;
   if (t.transferAccountId) return `Transfer · ${accountName(t.transferAccountId)}${c ? ` (${c})` : ""}`;
   return c ?? "Needs a category";
+}
+
+/**
+ * A transaction that still needs a category: money in or out with none (a transfer between your own
+ * accounts and an account's starting balance don't need one), or a split with a line that has none.
+ */
+export function needsCategory(t: Pick<Txn, "id" | "categoryId" | "transferAccountId" | "splits" | "deleted">): boolean {
+  if (t.deleted || isStartTxn(t)) return false;
+  if (t.splits?.length) return t.splits.some((s) => !s.categoryId);
+  return !t.categoryId && !t.transferAccountId;
 }
 
 /** Today as "YYYY-MM-DD" (local). */

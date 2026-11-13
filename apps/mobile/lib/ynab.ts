@@ -347,7 +347,12 @@ export type ImportResult = {
   replaced: string[];
   /** Each of your transactions paired with the YNAB one that looks like the same (for you to confirm). */
   matches: { mine: Txn; ynab: Txn }[];
-  summary: { accountsAdded: number; categoriesAdded: number; categoriesUpdated: number; categoriesRemoved: number; categoriesSkipped: number; transactions: number; transactionsMatched: number; months: number };
+  summary: {
+    accountsAdded: number; categoriesAdded: number; categoriesUpdated: number; categoriesRemoved: number; categoriesSkipped: number;
+    transactions: number; transactionsMatched: number; months: number;
+    /** Transactions that will need a category: YNAB had none, or you left their category out. */
+    needsCategoryFromYnab: number; needsCategoryLeftOut: number;
+  };
 };
 
 /** A stable id for a YNAB transaction, so importing it again replaces it instead of adding it twice. */
@@ -372,7 +377,7 @@ export const recentMonths = (thisMonth: string, n = 3) => Array.from({ length: n
 /** Turn YNAB's data into the plan's categories, assignments, accounts and transactions. */
 export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): ImportResult {
   const plan = structuredClone(input);
-  const summary = { accountsAdded: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, transactions: 0, transactionsMatched: 0, months: 0 };
+  const summary = { accountsAdded: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0 };
   const accts = ynabAccounts(d);
 
   // accounts: matched, added, or left out
@@ -496,8 +501,16 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
       ...(t.payee ? { payee: t.payee } : {}), ...(t.memo ? { memo: t.memo } : {}),
       cleared: t.cleared, source: "ynab", importId: id, updatedAt: now,
     };
-    if (t.splits?.length) tx.splits = t.splits.flatMap((s) => { const k = catOf(s.group, s.category); return k ? [{ categoryId: k, amount: s.amount, ...(s.memo ? { memo: s.memo } : {}) }] : []; });
+    // a split line whose category has nowhere to go stays (with no category), so the split adds up
+    if (t.splits?.length) tx.splits = t.splits.map((s) => ({ categoryId: catOf(s.group, s.category) ?? "", amount: s.amount, ...(s.memo ? { memo: s.memo } : {}) }));
     else { const k = catOf(t.group, t.category); if (k) tx.categoryId = k; }
+    // needs a category here: YNAB had none, or its category was left out
+    const hadCategory = t.splits?.length ? t.splits.every((s) => !!s.category) : !!t.category;
+    const missing = t.splits?.length ? tx.splits!.some((s) => !s.categoryId) : !tx.categoryId && !(to && toBudget);
+    if (missing) {
+      if (hadCategory) summary.needsCategoryLeftOut++;
+      else summary.needsCategoryFromYnab++;
+    }
     if (to) tx.transferAccountId = to;
     // money into a card from a budget account: the card's payment
     if (to && toBudget && kindOf.get(t.account) === "card" && t.amount > 0) delete tx.categoryId;

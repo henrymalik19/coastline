@@ -11,7 +11,7 @@ import { Button, Select, TextField } from "./form";
 import { Icon } from "./Icon";
 import { TxnForm } from "./TxnForm";
 import { Card, Divider } from "./ui";
-import { categoryText, isoDay, useCategories } from "../lib/categories";
+import { categoryText, isoDay, useCategories, needsCategory } from "../lib/categories";
 import { money } from "../lib/format";
 import { useLayout } from "../lib/layout";
 import { usePlan } from "../lib/plan";
@@ -28,7 +28,7 @@ const dayHead = (d: string) => {
 };
 
 /** `month` is "YYYY-MM" (the budget's month); `account` starts the list on one account. */
-export function TransactionsList({ month, account }: { month: string; account?: string }) {
+export function TransactionsList({ month, account, onlyNeedsCategory }: { month: string; account?: string; /** Open showing only the ones that need a category. */ onlyNeedsCategory?: boolean }) {
   const t = useTheme();
   const router = useRouter();
   const { contentWidth } = useLayout();
@@ -41,11 +41,11 @@ export function TransactionsList({ month, account }: { month: string; account?: 
   const [acct, setAcct] = useState(account && budgetAccounts(state).some((a) => a.id === account) ? account : "all");
   const [allMonths, setAllMonths] = useState(false);
   const [q, setQ] = useState("");
-  const [needsCat, setNeedsCat] = useState(false);
+  const [needsCat, setNeedsCat] = useState(!!onlyNeedsCategory);
   const [editing, setEditing] = useState<Txn | "new" | null>(null);
 
   const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? state.accounts.find((a) => a.id === id)?.name ?? state.debts.find((d) => d.id === id)?.name ?? "Account";
-  const uncategorized = (x: Txn) => !x.categoryId && !x.transferAccountId && !x.splits?.length && !isStartTxn(x);
+  const uncategorized = (x: Txn) => needsCategory(x);
 
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();

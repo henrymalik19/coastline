@@ -55,6 +55,7 @@ export default function ImportYnab() {
   const [data, setData] = useState<YnabData | null>(null);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
+  const [doneNeeds, setDoneNeeds] = useState(0);
   const [range, setRange] = useState<Range>("3");
   const [choices, setChoices] = useState<Record<string, AccountChoice>>({});
   const [catOpts, setCatOpts] = useState<Record<string, { inRetirement: boolean; essential: boolean }>>({});
@@ -134,6 +135,7 @@ export default function ImportYnab() {
     const r = buildImport(saved, data, { from, thisMonth, accounts: choices, categories: catOpts, categoryMap: catMap, removeEmpty, existing, keepBoth, newId });
     importBudget(r.plan, r.txns, r.replaced);
     setDone(`Imported ${r.summary.transactions} transactions and ${r.summary.categoriesAdded + r.summary.categoriesUpdated} categories.`);
+    setDoneNeeds(r.summary.needsCategoryFromYnab + r.summary.needsCategoryLeftOut);
     setData(null);
   };
 
@@ -209,7 +211,10 @@ export default function ImportYnab() {
         {done ? (
           <View style={{ gap: space.sm }}>
             <Text role="status" style={[type.label, { color: t.good }]}>{done}</Text>
-            <Button title="Go to Budget" tone="primary" onPress={() => router.navigate("/budget")} style={{ alignSelf: "flex-start" }} />
+            <View style={[styles.row, { flexWrap: "wrap" }]}>
+              <Button title="Go to Budget" tone="primary" onPress={() => router.navigate("/budget")} />
+              {doneNeeds ? <Button title={`Categorize ${doneNeeds} transactions`} onPress={() => router.navigate("/budget?view=transactions&needs=1")} /> : null}
+            </View>
           </View>
         ) : null}
       </Card>
@@ -332,6 +337,15 @@ export default function ImportYnab() {
                 </View>
               ))}
             </View>
+            {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut ? (
+              <Text style={[type.caption, { color: t.warn }]}>
+                {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut} transactions will need a category
+                {preview.summary.needsCategoryFromYnab && preview.summary.needsCategoryLeftOut
+                  ? ` (${preview.summary.needsCategoryFromYnab} had none in YNAB, ${preview.summary.needsCategoryLeftOut} are in categories you left out)`
+                  : preview.summary.needsCategoryLeftOut ? " (they're in categories you left out)" : " (they had none in YNAB)"}
+                . They won't count anywhere until you give them one; you'll find them under Transactions.
+              </Text>
+            ) : null}
             {preview.summary.categoriesRemoved ? (
               <Text style={[type.caption, { color: t.text2 }]}>
                 {preview.summary.categoriesRemoved} empty starter {preview.summary.categoriesRemoved === 1 ? "category" : "categories"} YNAB doesn't have will be removed.

@@ -1,4 +1,5 @@
 import { budgetView, isHighInterest, paysExtra } from "@coastfi/engine";
+import { needsCategory } from "../../lib/categories";
 import { budgetKeyFor } from "../../lib/budgetLinks";
 import { useCategories } from "../../lib/categories";
 import { cardMap, liveBudget } from "../../lib/register";
@@ -39,6 +40,8 @@ export default function Home() {
   const rta = bview?.readyToAssign ?? 0;
   const assignedNow = state.budgetPlan?.months?.[mk]?.assigned ?? {};
   const done = useStore((s) => s.todoDone[mk]) ?? [];
+  // transactions that still need a category (a to-do until they're done)
+  const needsCount = txns.filter(needsCategory).length;
   const toggleTodo = useStore((s) => s.toggleTodo);
 
   // which plan step a to-do comes from ("Step 3: Pay off high-interest debt")
@@ -194,6 +197,12 @@ export default function Home() {
         <Pressable role="link" onPress={() => router.push("/budget")} style={[styles.rtaRow, { backgroundColor: rta < -0.5 ? t.badSoft : rta > 0.5 ? t.goodSoft : t.surface2 }]}>
           <Text style={[type.label, { color: t.text, flex: 1 }]}>Ready to assign</Text>
           <Text style={[type.label, { color: rta < -0.5 ? t.bad : rta > 0.5 ? t.good : t.text2, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(rta)}</Text>
+          <Icon name="chevron" size={14} color={t.text3} />
+        </Pressable>
+      ) : null}
+      {needsCount ? (
+        <Pressable role="link" onPress={() => router.push("/budget?view=transactions&needs=1")} style={[styles.rtaRow, { backgroundColor: t.warnSoft }]}>
+          <Text style={[type.label, { color: t.text, flex: 1 }]}>Categorize {needsCount} {needsCount === 1 ? "transaction" : "transactions"}</Text>
           <Icon name="chevron" size={14} color={t.text3} />
         </Pressable>
       ) : null}

@@ -197,7 +197,10 @@ describe("choosing where categories go, and matching your own transactions", () 
     const skip = buildImport(plan, d, { ...opts, categoryMap: { [categoryKey("Everyday", "Household")]: { action: "skip" } } });
     expect(skip.summary.categoriesSkipped).toBe(1);
     expect(skip.plan.budget.some((b) => b.name === "Household")).toBe(false);
-    expect(skip.txns.find((t) => t.payee === "Target")!.splits!.map((s) => s.amount)).toEqual([-70]); // its line has nowhere to go
+    // its line has nowhere to go, but stays (needing a category) so the split still adds up
+    expect(skip.txns.find((t) => t.payee === "Target")!.splits!.map((s) => [s.categoryId, s.amount])).toEqual([[expect.stringMatching(/./), -70], ["", -30]]);
+    expect(skip.summary.needsCategoryLeftOut).toBe(1);
+    expect(skip.summary.needsCategoryFromYnab).toBe(0);
   });
 
   it("two of YNAB's categories into one of yours add up", () => {
