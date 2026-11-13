@@ -55,6 +55,7 @@ export default function ImportYnab() {
   const existing = useStore((s) => s.txns);
   const thisMonth = monthKey(start);
   const [data, setData] = useState<YnabData | null>(null);
+  const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
   const [doneNeeds, setDoneNeeds] = useState(0);
@@ -87,6 +88,7 @@ export default function ImportYnab() {
         const d = await readFiles(input.files!);
         if (!d.txns.length) throw new Error("No transactions in that file.");
         setData(d);
+        setFileName([...input.files!].find((x) => /\.zip$/i.test(x.name))?.name ?? input.files![0]?.name ?? "");
         const since = recentMonths(thisMonth, 2)[0]!;
         // closed or empty accounts start left out; the open ones match an account here with the same name (each only once)
         const taken = new Set<string>();
@@ -202,30 +204,53 @@ export default function ImportYnab() {
       </View>
     );
   };
-  // pieces of the page: one column on phones and tablets; on a wide screen the review list on the
-  // left and the rest (months, what comes in, Import) in a panel on the right that stays in view
-  const fileCard = (
-      <Card style={{ gap: space.sm }}>
-        <Text style={[type.body, { color: t.text2 }]}>
-          In YNAB, open your budget's menu and choose Export budget. It downloads a zip; pick it here. You'll choose what comes in before anything changes.
-        </Text>
-        {Platform.OS === "web" ? (
-          <Button title={data ? "Pick a different file" : "Choose YNAB export"} tone={data ? "ghost" : "primary"} icon="plus" onPress={pick} style={{ alignSelf: "flex-start" }} />
-        ) : (
-          <Text style={[type.caption, { color: t.text3 }]}>Importing works in the web app for now.</Text>
-        )}
-        {error ? <Text role="alert" style={[type.label, { color: t.bad }]}>{error}</Text> : null}
-        <Text style={[type.caption, { color: t.text3 }]}>Coastline isn't affiliated with YNAB. YNAB is a trademark of its owner.</Text>
-        {done ? (
-          <View style={{ gap: space.sm }}>
-            <Text role="status" style={[type.label, { color: t.good }]}>{done}</Text>
-            <View style={[styles.row, { flexWrap: "wrap" }]}>
-              <Button title="Go to Budget" tone="primary" onPress={() => router.navigate("/budget")} />
-              {doneNeeds ? <Button title={`Categorize ${doneNeeds} transactions`} onPress={() => router.navigate("/budget?view=transactions&needs=1")} /> : null}
-            </View>
-          </View>
-        ) : null}
-      </Card>
+  // pieces of the page. Phones and tablets: one column, Import in a bar pinned at the bottom. Wide:
+  // the review list on the left, and on the right a summary card with Import that stays in view.
+  const loaded = !!(data && preview);
+  const doneNote = done ? (
+    <View style={{ gap: space.sm }}>
+      <Text role="status" style={[type.label, { color: t.good }]}>{done}</Text>
+      <View style={[styles.row, { flexWrap: "wrap" }]}>
+        <Button title="Go to Budget" tone="primary" onPress={() => router.navigate("/budget")} />
+        {doneNeeds ? <Button title={`Categorize ${doneNeeds} transactions`} onPress={() => router.navigate("/budget?view=transactions&needs=1")} /> : null}
+      </View>
+    </View>
+  ) : null;
+  const errorNote = error ? <Text role="alert" style={[type.label, { color: t.bad }]}>{error}</Text> : null;
+  const headCard = !loaded ? (
+    <Card style={{ gap: space.sm }}>
+      <Text style={[type.body, { color: t.text2 }]}>
+        In YNAB, open your budget's menu and choose Export budget. It downloads a zip; pick it here. You'll choose what comes in before anything changes.
+      </Text>
+      {Platform.OS === "web" ? (
+        <Button title="Choose YNAB export" tone="primary" icon="plus" onPress={pick} style={{ alignSelf: "flex-start" }} />
+      ) : (
+        <Text style={[type.caption, { color: t.text3 }]}>Importing works in the web app for now.</Text>
+      )}
+      {errorNote}
+      {doneNote}
+    </Card>
+  ) : (
+    <Card style={{ gap: space.md }}>
+      <View style={[styles.row, { flexWrap: "wrap", justifyContent: "space-between" }]}>
+        <View style={{ flexShrink: 1, minWidth: 0 }}>
+          <Text style={[type.caption, { color: t.text3 }]}>From</Text>
+          <Text style={[type.label, { color: t.text, fontWeight: "700" }]} numberOfLines={1}>{fileName || "Your YNAB export"}</Text>
+        </View>
+        <Button title="Pick a different file" tone="ghost" icon="plus" onPress={pick} style={{ minHeight: 36 }} />
+      </View>
+      {errorNote}
+      <View style={[styles.row, { flexWrap: "wrap", alignItems: "center", gap: space.md }]}>
+        <Text style={[type.label, { color: t.text2 }]}>Months to bring in</Text>
+        <View style={{ flexGrow: 1, maxWidth: 420 }}>
+          <Segmented label="Months to bring in" options={[{ value: "3", label: "Last 3 months" }, { value: "12", label: "Last 12 months" }, { value: "all", label: "Everything" }]} value={range} onChange={setRange} />
+        </View>
+      </View>
+      <Text style={[type.caption, { color: t.text3 }]}>
+        Each account starts with its balance on the first day{from ? ` (${from})` : ""}; transactions and what you assigned come in from then on.
+      </Text>
+      {doneNote}
+    </Card>
   );
   const review = data && preview ? (
     <>
@@ -324,95 +349,120 @@ export default function ImportYnab() {
           ) : null}
     </>
   ) : null;
-  const monthsCard = data && preview ? (
-          <Card style={{ gap: space.sm }}>
-            <Text style={[type.heading, { color: t.text }]}>Which months</Text>
-            <Segmented label="Months to bring in" options={[{ value: "3", label: "Last 3 months" }, { value: "12", label: "Last 12 months" }, { value: "all", label: "Everything" }]} value={range} onChange={setRange} />
-            <Text style={[type.caption, { color: t.text3 }]}>
-              Each account starts with its balance on the first day{from ? ` (${from})` : ""}; transactions and what you assigned come in from then on.
-            </Text>
-          </Card>
+  const stats = preview ? [
+    { n: preview.summary.transactions, label: "Transactions", sub: preview.summary.transactionsMatched ? `replacing ${preview.summary.transactionsMatched} of yours` : "with starting balances" },
+    { n: preview.summary.categoriesAdded + preview.summary.categoriesUpdated, label: "Categories", sub: `${preview.summary.categoriesAdded} new · ${preview.summary.categoriesUpdated} matched${preview.summary.categoriesSkipped ? ` · ${preview.summary.categoriesSkipped} left out` : ""}` },
+    { n: preview.summary.accountsAdded, label: "New accounts", sub: "the rest matched or left out" },
+    { n: preview.summary.months, label: preview.summary.months === 1 ? "Month assigned" : "Months assigned", sub: "what you gave each category" },
+  ] : [];
+  const notes = preview ? (
+    <>
+      {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut ? (
+        <Text style={[type.caption, { color: t.warn }]}>
+          {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut} transactions will need a category
+          {preview.summary.needsCategoryFromYnab && preview.summary.needsCategoryLeftOut
+            ? ` (${preview.summary.needsCategoryFromYnab} had none in YNAB, ${preview.summary.needsCategoryLeftOut} are in categories you left out)`
+            : preview.summary.needsCategoryLeftOut ? " (they're in categories you left out)" : " (they had none in YNAB)"}
+          . You'll find them under Transactions.
+        </Text>
+      ) : null}
+      {preview.summary.categoriesRemoved ? (
+        <Text style={[type.caption, { color: t.text2 }]}>
+          {preview.summary.categoriesRemoved} empty starter {preview.summary.categoriesRemoved === 1 ? "category" : "categories"} YNAB doesn't have will be removed.
+        </Text>
+      ) : null}
+      <Text style={[type.caption, { color: t.text3 }]}>Your other transactions stay. Importing again later replaces what came in this time.</Text>
+    </>
   ) : null;
-  const whatCard = data && preview ? (
-          <Card style={{ gap: space.md }}>
-            <Text style={[type.heading, { color: t.text }]}>What comes in</Text>
-            <View style={styles.stats}>
-              {[
-                { n: preview.summary.transactions, label: "Transactions", sub: preview.summary.transactionsMatched ? `replacing ${preview.summary.transactionsMatched} of yours` : "with starting balances" },
-                { n: preview.summary.categoriesAdded + preview.summary.categoriesUpdated, label: "Categories", sub: `${preview.summary.categoriesAdded} new · ${preview.summary.categoriesUpdated} matched${preview.summary.categoriesSkipped ? ` · ${preview.summary.categoriesSkipped} left out` : ""}` },
-                { n: preview.summary.accountsAdded, label: "New accounts", sub: "the rest are matched or left out" },
-                { n: preview.summary.months, label: preview.summary.months === 1 ? "Month assigned" : "Months assigned", sub: "what you gave each category" },
-              ].map((s) => (
-                <View key={s.label} style={[styles.stat, { backgroundColor: t.surface2 }]}>
-                  <Text style={[type.title, { color: t.text, fontVariant: ["tabular-nums"] }]}>{s.n}</Text>
-                  <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{s.label}</Text>
-                  <Text style={[type.caption, { color: t.text3 }]}>{s.sub}</Text>
-                </View>
-              ))}
-            </View>
-            {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut ? (
-              <Text style={[type.caption, { color: t.warn }]}>
-                {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut} transactions will need a category
-                {preview.summary.needsCategoryFromYnab && preview.summary.needsCategoryLeftOut
-                  ? ` (${preview.summary.needsCategoryFromYnab} had none in YNAB, ${preview.summary.needsCategoryLeftOut} are in categories you left out)`
-                  : preview.summary.needsCategoryLeftOut ? " (they're in categories you left out)" : " (they had none in YNAB)"}
-                . They won't count anywhere until you give them one; you'll find them under Transactions.
-              </Text>
-            ) : null}
-            {preview.summary.categoriesRemoved ? (
-              <Text style={[type.caption, { color: t.text2 }]}>
-                {preview.summary.categoriesRemoved} empty starter {preview.summary.categoriesRemoved === 1 ? "category" : "categories"} YNAB doesn't have will be removed.
-              </Text>
-            ) : null}
-            <Text style={[type.caption, { color: t.text3 }]}>Your other transactions stay. Importing again later replaces what came in this time.</Text>
-          </Card>
+  const confirmBox = preview ? (
+    <View style={{ gap: space.sm, flex: 1, minWidth: 180 }}>
+      <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Import these now?</Text>
+      <Text style={[type.caption, { color: t.text2 }]}>
+        {preview.summary.transactions} transactions{preview.summary.transactionsMatched ? ` (replacing ${preview.summary.transactionsMatched} of yours)` : ""}, {preview.summary.categoriesAdded + preview.summary.categoriesUpdated} categories and {preview.summary.accountsAdded} new accounts come into your plan.
+      </Text>
+    </View>
   ) : null;
-  const importBar = data && preview ? (
-          <View style={[styles.bottomBar, { borderColor: confirming ? t.accent : t.border }, wide ? { backgroundColor: t.surface } : stickyBottom(t.surface)]}>
-            {confirming ? (
-              <>
-                <View style={{ flex: 1, minWidth: 180 }}>
-                  <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Import these now?</Text>
-                  <Text style={[type.caption, { color: t.text2 }]}>
-                    {preview.summary.transactions} transactions{preview.summary.transactionsMatched ? ` (replacing ${preview.summary.transactionsMatched} of yours)` : ""}, {preview.summary.categoriesAdded + preview.summary.categoriesUpdated} categories and {preview.summary.accountsAdded} new accounts come into your plan.
-                  </Text>
-                </View>
-                <Button title="Cancel" tone="ghost" onPress={() => setConfirming(false)} style={{ minHeight: 40 }} />
-                <Button title="Yes, import" tone="primary" onPress={run} style={{ minHeight: 40 }} />
-              </>
-            ) : (
-              <>
-                <Text style={[type.caption, { color: t.text2, flex: 1, minWidth: 0 }]} numberOfLines={2}>
-                  {preview.summary.transactions} transactions · {preview.summary.categoriesAdded + preview.summary.categoriesUpdated} categories · {preview.summary.accountsAdded} new account{preview.summary.accountsAdded === 1 ? "" : "s"}
-                  {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut ? <Text style={{ color: t.warn }}> · {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut} need a category</Text> : null}
-                </Text>
-                <Button title="Import" tone="primary" onPress={() => setConfirming(true)} style={{ minHeight: 40 }} />
-              </>
-            )}
+  const actions = confirming ? (
+    <View style={[styles.row, { flexWrap: "wrap" }]}>
+      <Button title="Yes, import" tone="primary" onPress={run} style={{ minHeight: 40 }} />
+      <Button title="Cancel" tone="ghost" onPress={() => setConfirming(false)} style={{ minHeight: 40 }} />
+    </View>
+  ) : (
+    <Button title="Import" tone="primary" onPress={() => setConfirming(true)} style={{ minHeight: 40 }} />
+  );
+
+  // wide: everything about the result in one card on the right, Import at its foot
+  const sideCard = preview ? (
+    <Card style={{ gap: space.md, ...(confirming ? { borderColor: t.accent } : null) }}>
+      <Text style={[type.heading, { color: t.text }]}>What comes in</Text>
+      <View style={styles.stats}>
+        {stats.map((x) => (
+          <View key={x.label} style={[styles.statSmall, { backgroundColor: t.surface2 }]}>
+            <Text style={[type.heading, { color: t.text, fontVariant: ["tabular-nums"] }]}>{x.n}</Text>
+            <Text style={[type.caption, { color: t.text, fontWeight: "700" }]}>{x.label}</Text>
+            <Text style={[type.caption, { color: t.text3 }]} numberOfLines={2}>{x.sub}</Text>
           </View>
+        ))}
+      </View>
+      {notes}
+      <Divider />
+      {confirming ? confirmBox : null}
+      {actions}
+    </Card>
   ) : null;
 
-  return (
-    <Screen title="Import from YNAB" back={() => router.navigate("/budget")} narrow={!(wide && data && preview)}>
-      {wide && data && preview ? (
-        <View style={styles.columns}>
-          <View style={{ flex: 1, minWidth: 0, gap: space.lg }}>{review}</View>
-          <View style={[styles.side, sticky(0, t.bg), { maxHeight: "100vh", overflowY: "auto" } as never]}>
-            {monthsCard}
-            {whatCard}
-            {importBar}
-            {fileCard}
+  // one column: the summary, then a bar pinned at the bottom with Import
+  const whatCard = preview ? (
+    <Card style={{ gap: space.md }}>
+      <Text style={[type.heading, { color: t.text }]}>What comes in</Text>
+      <View style={styles.stats}>
+        {stats.map((x) => (
+          <View key={x.label} style={[styles.stat, { backgroundColor: t.surface2 }]}>
+            <Text style={[type.title, { color: t.text, fontVariant: ["tabular-nums"] }]}>{x.n}</Text>
+            <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{x.label}</Text>
+            <Text style={[type.caption, { color: t.text3 }]}>{x.sub}</Text>
           </View>
-        </View>
+        ))}
+      </View>
+      {notes}
+    </Card>
+  ) : null;
+  const importBar = preview ? (
+    <View style={[styles.bottomBar, { borderColor: confirming ? t.accent : t.border }, stickyBottom(t.surface)]}>
+      {confirming ? (
+        <>
+          {confirmBox}
+          {actions}
+        </>
       ) : (
         <>
-          {fileCard}
-          {monthsCard}
+          <Text style={[type.caption, { color: t.text2, flex: 1, minWidth: 0 }]} numberOfLines={2}>
+            {preview.summary.transactions} transactions · {preview.summary.categoriesAdded + preview.summary.categoriesUpdated} categories · {preview.summary.accountsAdded} new account{preview.summary.accountsAdded === 1 ? "" : "s"}
+            {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut ? <Text style={{ color: t.warn }}> · {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut} need a category</Text> : null}
+          </Text>
+          {actions}
+        </>
+      )}
+    </View>
+  ) : null;
+  const trademark = <Text style={[type.caption, { color: t.text3 }]}>Coastline isn't affiliated with YNAB. YNAB is a trademark of its owner.</Text>;
+
+  return (
+    <Screen title="Import from YNAB" back={() => router.navigate("/budget")} narrow={!(wide && loaded)}>
+      {headCard}
+      {wide && loaded ? (
+        <View style={styles.columns}>
+          <View style={{ flex: 1, minWidth: 0, gap: space.lg }}>{review}</View>
+          <View style={[styles.side, sticky(0, t.bg)]}>{sideCard}</View>
+        </View>
+      ) : loaded ? (
+        <>
           {review}
           {whatCard}
           {importBar}
         </>
-      )}
+      ) : null}
+      {trademark}
     </Screen>
   );
 }
@@ -423,8 +473,9 @@ const styles = StyleSheet.create({
   stats: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   catRow: { gap: 2, paddingVertical: space.xs, borderTopWidth: StyleSheet.hairlineWidth },
   columns: { flexDirection: "row", alignItems: "flex-start", gap: space.lg },
-  side: { width: 380, gap: space.lg },
+  side: { width: 360, gap: space.lg },
   pinned: { paddingVertical: space.xs, marginVertical: -space.xs },
   bottomBar: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.sm, borderWidth: 1, borderRadius: 12, paddingHorizontal: space.md, paddingVertical: space.sm },
   stat: { flexGrow: 1, flexBasis: 140, borderRadius: 10, padding: space.md, gap: 2 },
+  statSmall: { flexGrow: 1, flexBasis: 130, borderRadius: 10, paddingHorizontal: space.md, paddingVertical: space.sm, gap: 1 },
 });
