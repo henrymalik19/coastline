@@ -80,7 +80,7 @@ export default function Budget() {
   const [realOpen, setRealOpen] = useState(false);
   // the column header's height, so each group's header sticks just under it
   const [colH, setColH] = useState(28);
-  // the toolbar's height (month, views, Add), which everything else sticks under
+  // the bar's height (the views and Add), which everything else sticks under
   const [barH, setBarH] = useState(56);
   // transactions that still need a category (any month)
   const needsCount = txns.filter(needsCategory).length;
@@ -220,12 +220,12 @@ export default function Budget() {
   const monthBar = (
     <View style={styles.monthBar}>
       <Pressable role="button" accessibilityLabel="Previous month" disabled={!canGoBack} onPress={() => setMonth(shift(month, -1))} hitSlop={8} style={[styles.navBtn, { borderColor: t.border, opacity: canGoBack ? 1 : 0.35 }]}>
-        <Icon name="back" size={14} color={t.accent} />
+        <Icon name="back" size={16} color={t.accent} />
       </Pressable>
-      <View style={{ alignItems: "center", minWidth: 96 }}>
-        <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{nameOf(month)}</Text>
+      <View style={{ alignItems: "center", flex: 1 }}>
+        <Text style={[type.heading, { color: t.text }]}>{nameOf(month)}</Text>
         {month === thisMonth ? (
-          <Text style={[type.overline, { color: t.accent, fontSize: 10 }]}>This month</Text>
+          <Text style={[type.overline, { color: t.accent }]}>This month</Text>
         ) : (
           <Pressable role="button" onPress={() => setMonth(thisMonth)} hitSlop={6}>
             <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Back to this month</Text>
@@ -233,7 +233,7 @@ export default function Budget() {
         )}
       </View>
       <Pressable role="button" accessibilityLabel="Next month" onPress={() => setMonth(shift(month, 1))} hitSlop={8} style={[styles.navBtn, { borderColor: t.border }]}>
-        <Icon name="chevron" size={14} color={t.accent} />
+        <Icon name="chevron" size={16} color={t.accent} />
       </Pressable>
     </View>
   );
@@ -522,10 +522,10 @@ export default function Budget() {
 
   return (
     <Screen title="Budget" subtitle={compact ? undefined : "Plan where your money goes"}>
+      {!view.started || tab === "categories" ? monthBar : null}
+      {view.started ? (
       <View onLayout={(e) => setBarH(Math.round(e.nativeEvent.layout.height))} style={[styles.toolbar, sticky(0, t.bg)]}>
-        {(() => {
-          const tabs = view.started ? (
-            <View style={compact ? { width: "100%" } : { flexGrow: 1, flexShrink: 1, maxWidth: 440 }}>
+            <View style={{ flexGrow: 1, flexShrink: 1, maxWidth: 440 }}>
               <Segmented
                 label="Budget view"
                 options={[{ value: "categories", label: "Categories" }, { value: "accounts", label: "Accounts" }, { value: "transactions", label: `${compact ? "Activity" : "Transactions"}${needsCount ? ` · ${needsCount}` : ""}` }]}
@@ -533,26 +533,17 @@ export default function Budget() {
                 onChange={(v) => { setTab(v); if (v !== "transactions" && (acctParam || viewParam || needsParam)) router.setParams({ account: undefined, view: undefined, needs: undefined }); }}
               />
             </View>
-          ) : null;
-          const add = view.started ? <Button title={contentWidth < 820 ? "Add" : "Add a transaction"} icon="plus" tone="primary" onPress={() => setAdding({})} style={{ minHeight: 36 }} /> : null;
-          // a phone: month and Add on one line, the views under them
-          return compact ? (
-            <>
-              <View style={[styles.editRow, { justifyContent: "space-between", width: "100%" }]}>{monthBar}{add}</View>
-              {tabs}
-            </>
-          ) : (
-            <>
-              {monthBar}
-              {tabs}
-              <View style={{ flex: 1 }} />
-              {add}
-            </>
-          );
-        })()}
+            {compact ? (
+              <Pressable role="button" accessibilityLabel="Add a transaction" onPress={() => setAdding({})} hitSlop={6} style={({ pressed }) => [styles.addRound, { backgroundColor: t.accent, opacity: pressed ? 0.8 : 1 }]}>
+                <Icon name="plus" size={18} color="#fff" />
+              </Pressable>
+            ) : (
+              <Button title="Add a transaction" icon="plus" tone="primary" onPress={() => setAdding({})} style={{ minHeight: 36 }} />
+            )}
       </View>
+      ) : null}
       {view.started && tab === "transactions" ? (
-        <TransactionsList key={(acctParam ?? "all") + (needsParam ?? "")} month={month} account={acctParam} onlyNeedsCategory={needsParam === "1"} stickyTop={barH} />
+        <TransactionsList key={(acctParam ?? "all") + (needsParam ?? "")} month={thisMonth} account={acctParam} onlyNeedsCategory={needsParam === "1"} stickyTop={barH} />
       ) : view.started && tab === "accounts" ? (
         <BudgetAccounts onTransfer={(from) => setAdding({ from })} stickyTop={barH} />
       ) : view.started ? (
@@ -734,9 +725,10 @@ const styles = StyleSheet.create({
   realTag: { borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
   realChips: { flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" },
   realRow: { flexDirection: "row", alignItems: "center", gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm },
-  monthBar: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  navBtn: { borderWidth: 1, borderRadius: 999, width: 30, height: 30, alignItems: "center", justifyContent: "center" },
-  toolbar: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.md, paddingVertical: space.sm, marginVertical: -space.sm },
+  monthBar: { flexDirection: "row", alignItems: "center", gap: space.md },
+  navBtn: { borderWidth: 1, borderRadius: 999, width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  addRound: { width: 40, height: 40, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  toolbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm, paddingVertical: space.sm, marginVertical: -space.sm },
   groupHead: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md, borderBottomWidth: StyleSheet.hairlineWidth },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },
   pill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, alignItems: "flex-end", maxWidth: "100%" },
