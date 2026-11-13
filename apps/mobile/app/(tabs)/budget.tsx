@@ -527,7 +527,7 @@ export default function Budget() {
             <View style={{ flexGrow: 1, flexShrink: 1, maxWidth: 440 }}>
               <Segmented
                 label="Budget view"
-                options={[{ value: "categories", label: "Categories" }, { value: "accounts", label: "Accounts" }, { value: "transactions", label: `${compact ? "Activity" : "Transactions"}${needsCount ? ` · ${needsCount}` : ""}` }]}
+                options={[{ value: "categories", label: "Categories" }, { value: "transactions", label: `${compact ? "Activity" : "Transactions"}${needsCount ? ` · ${needsCount}` : ""}` }, { value: "accounts", label: "Accounts" }]}
                 value={tab}
                 onChange={(v) => { setTab(v); if (v !== "transactions" && (acctParam || viewParam || needsParam)) router.setParams({ account: undefined, view: undefined, needs: undefined }); }}
               />
