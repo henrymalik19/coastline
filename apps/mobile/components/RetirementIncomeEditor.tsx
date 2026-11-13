@@ -89,7 +89,7 @@ export function RetirementIncomeEditor() {
               <View style={[styles.row, { paddingVertical: space.sm, flexWrap: "nowrap" }]}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{r.name || "Rental"}</Text>
-                  <Text style={[type.caption, { color: t.text3 }]}>Rental you keep · from when you retire</Text>
+                  <Text style={[type.caption, { color: t.text3 }]}>{r.kind === "home" ? "Rent from your home" : "Rental you keep"} · from when you retire</Text>
                 </View>
                 <Text style={[type.body, { color: r.monthly >= 0 ? t.text : t.bad, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>
                   {r.monthly >= 0 ? "" : "−"}{money(Math.abs(r.monthly), { whole: true })}/mo

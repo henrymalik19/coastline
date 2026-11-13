@@ -172,3 +172,27 @@ describe("rentals in retirement", () => {
     expect(o.mortgagesAtRetire).toEqual([]);
   });
 });
+
+describe("rent from your home in retirement (a basement)", () => {
+  const rentInc = { id: "r", name: "Basement", kind: "rental" as const, freq: "monthly" as const, net: 1_200, matchMode: "usd" as const };
+  const loan = mortgage({ id: "hm", name: "Home loan", balance: 300_000, minPayment: 2_500, escrow: 600 });
+  const home = (inRetirement?: boolean) =>
+    blank({ incomes: [...blank().incomes, rentInc], budget: [{ id: "f", name: "Food", amount: 3000, inRetirement: true }], debts: [loan], properties: [{ id: "h", name: "Home", kind: "home", value: 500_000, mortgageId: "hm", incomeId: "r", ...(inRetirement === undefined ? {} : { inRetirement }) }] });
+
+  it("doesn't count after you retire unless you say so", () => {
+    expect(run(home(), START).d.rentals).toEqual([]);
+    expect(run(home(), START).d.retireIncomeAnnual).toBe(0);
+  });
+
+  it("when you'll keep renting it: rent less the cushion (the home's escrow is your spending already)", () => {
+    const kept = run(home(true), START);
+    const not = run(home(), START);
+    expect(kept.d.rentals).toHaveLength(1);
+    expect(kept.d.rentals[0]!.kind).toBe("home");
+    expect(kept.d.rentals[0]!.escrow).toBe(0);
+    expect(kept.d.rentals[0]!.monthly).toBeCloseTo(1_200 * 0.95, 6);
+    expect(kept.d.retireMonthly).toBeCloseTo(not.d.retireMonthly, 6); // escrow still in spending
+    expect(kept.homeBridge).toBeCloseTo(not.homeBridge, 6); // the home's loan counts either way
+    expect(not.fire - kept.fire).toBeCloseTo((1_200 * 0.95 * 12) / 0.04, 0);
+  });
+});

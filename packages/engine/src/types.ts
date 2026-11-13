@@ -123,9 +123,10 @@ export type Property = {
   /** Repairs and upkeep a year, as a share of its value (0.01 = 1%). */
   upkeep?: number;
   /**
-   * A rental you keep after you retire (missing = yes): what's left of its rent then counts as
-   * income in retirement, and its mortgage still owed when you retire counts in your number. Off
-   * when you'll sell it first.
+   * Its rent keeps coming after you retire. A rental (missing = yes): what's left of its rent counts
+   * as income in retirement, and its mortgage still owed when you retire counts in your number; off
+   * when you'll sell it first. A home with rent, like a basement you rent out (missing = no): on
+   * when you'll keep renting it out.
    */
   inRetirement?: boolean;
   /** A cushion for empty months and surprises, as a share of the rent (missing = 0.05). */
@@ -136,11 +137,13 @@ export type Property = {
 export type RentalInRetirement = {
   id: string;
   name: string;
+  /** A rental, or rent from part of your home. */
+  kind: "home" | "rental";
   /** Its rent as you entered it (what you keep after property costs, before the mortgage), a month. */
   rent: number;
   /** The cushion taken off for empty months. */
   vacancy: number;
-  /** Property tax + insurance in its mortgage payment, which keeps going after the loan is paid. */
+  /** A rental's property tax + insurance in its mortgage payment, which keeps going after the loan is paid (a home's is already in your spending). */
   escrow: number;
   /** What's left a month: rent − cushion − escrow (can be below 0). */
   monthly: number;

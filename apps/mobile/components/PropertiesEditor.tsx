@@ -40,6 +40,30 @@ export function PropertiesEditor({ titled = true }: { /** Off on its own page, w
       if (patch.incomeId) list.forEach((x, j) => { if (j !== i && x.incomeId === patch.incomeId) delete x.incomeId; });
       p.properties = list;
     });
+  const rentCushion = (x: Property) => {
+    const r = result.d.rentals.find((y) => y.id === x.id);
+    const owed = x.kind === "rental" ? result.mortgagesAtRetire.find((y) => y.id === x.mortgageId) : undefined;
+    return (
+      <>
+        <FieldRow label="Cushion for empty months" hint="A share of the rent set aside for vacancies and surprises. 5% is a common guess.">
+          <NumberInput kind="percent" label={`${x.name || "Property"} cushion for empty months`} value={x.vacancy ?? 0.05} max={0.5} onChange={(v) => change(x.id, { vacancy: Math.abs(v - 0.05) < 1e-9 ? undefined : v })} />
+        </FieldRow>
+        {r ? (
+          <View style={[styles.note, { backgroundColor: r.monthly >= 0 ? t.accentSoft : t.warnSoft }]}>
+            <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>
+              In retirement: {r.monthly >= 0 ? `about ${money(r.monthly, { whole: true })}/mo` : `costs you about ${money(-r.monthly, { whole: true })}/mo`}
+            </Text>
+            <Text style={[type.caption, { color: t.text2 }]}>
+              {money(r.rent, { whole: true })} rent − {money(r.vacancy, { whole: true })} cushion{r.escrow > 0.5 ? ` − ${money(r.escrow, { whole: true })} escrow (tax + insurance keep going)` : ""}. It counts as income in retirement, so your number is lower.
+              {x.kind === "rental"
+                ? owed ? ` Its mortgage, about ${money(owed.balance, { whole: true })} still owed when you retire, counts in your number instead of coming out of the rent.` : " Its mortgage is paid off by then."
+                : " Your home's own costs are already in your retirement spending."}
+            </Text>
+          </View>
+        ) : null}
+      </>
+    );
+  };
   const add = (kind: Property["kind"]) => {
     const id = newId();
     update((p) => { p.properties = [...(p.properties ?? []), { id, name: kind === "home" ? "Home" : "Rental", kind, value: 0 }]; });
@@ -112,6 +136,17 @@ export function PropertiesEditor({ titled = true }: { /** Off on its own page, w
                       <NumberInput kind="percent" label={`${x.name || "Property"} upkeep a year`} value={x.upkeep ?? 0} max={0.1} onChange={(v) => change(x.id, { upkeep: v > 0 ? v : undefined })} />
                     </FieldRow>
                     <Text style={[type.caption, { color: t.text3 }]}>These count in your retirement spending, so your number covers them. Today's costs belong in your budget.</Text>
+                    {rent ? (
+                      <>
+                        <ToggleRow
+                          label="Keep renting it out after you retire"
+                          hint={x.inRetirement ? "Its rent keeps coming, so your savings cover less" : "Off: the rent stops when you retire"}
+                          value={!!x.inRetirement}
+                          onChange={(v) => change(x.id, { inRetirement: v ? true : undefined })}
+                        />
+                        {x.inRetirement ? rentCushion(x) : null}
+                      </>
+                    ) : null}
                   </>
                 ) : (
                   <>
@@ -126,29 +161,7 @@ export function PropertiesEditor({ titled = true }: { /** Off on its own page, w
                           value={x.inRetirement !== false}
                           onChange={(v) => change(x.id, { inRetirement: v ? undefined : false })}
                         />
-                        {x.inRetirement !== false ? (
-                          <>
-                            <FieldRow label="Cushion for empty months" hint="A share of the rent set aside for vacancies and surprises. 5% is a common guess.">
-                              <NumberInput kind="percent" label={`${x.name || "Rental"} cushion for empty months`} value={x.vacancy ?? 0.05} max={0.5} onChange={(v) => change(x.id, { vacancy: Math.abs(v - 0.05) < 1e-9 ? undefined : v })} />
-                            </FieldRow>
-                            {(() => {
-                              const r = result.d.rentals.find((y) => y.id === x.id);
-                              if (!r) return null;
-                              const owed = result.mortgagesAtRetire.find((y) => y.id === x.mortgageId);
-                              return (
-                                <View style={[styles.note, { backgroundColor: r.monthly >= 0 ? t.accentSoft : t.warnSoft }]}>
-                                  <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>
-                                    In retirement: {r.monthly >= 0 ? `about ${money(r.monthly, { whole: true })}/mo` : `costs you about ${money(-r.monthly, { whole: true })}/mo`}
-                                  </Text>
-                                  <Text style={[type.caption, { color: t.text2 }]}>
-                                    {money(r.rent, { whole: true })} rent − {money(r.vacancy, { whole: true })} cushion{r.escrow > 0.5 ? ` − ${money(r.escrow, { whole: true })} escrow (tax + insurance keep going)` : ""}. It counts as income in retirement, so your number is lower.
-                                    {owed ? ` Its mortgage, about ${money(owed.balance, { whole: true })} still owed when you retire, counts in your number instead of coming out of the rent.` : " Its mortgage is paid off by then."}
-                                  </Text>
-                                </View>
-                              );
-                            })()}
-                          </>
-                        ) : null}
+                        {x.inRetirement !== false ? rentCushion(x) : null}
                       </>
                     ) : null}
                   </>

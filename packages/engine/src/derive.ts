@@ -2,7 +2,7 @@ import { BASE_CHECKS, PERIODS } from "./constants";
 import { resolveIncome } from "./match";
 import type { Balances, Derived, PlanState, RentalInRetirement, WhatIf } from "./types";
 import { num, sum } from "./util";
-import { isRentalDebt, isSpendingItem, keptRental } from "./schedule";
+import { isRentalDebt, isSpendingItem, rentInRetirement } from "./schedule";
 
 /** Static summary of the inputs. `startDate` is injected; the engine never reads the clock. */
 export function derive(s: PlanState, startDate: Date): Derived {
@@ -53,16 +53,17 @@ export function derive(s: PlanState, startDate: Date): Derived {
   // a rental you keep: its rent keeps coming after you retire, less a cushion for empty months and its
   // escrow (property tax + insurance keep going after the loan is paid). The loan itself is paid off
   // from your number (what's owed then counts, as for a home), so it doesn't come out of the rent.
+  // Rent from your home (a basement): only the cushion comes off; the home's costs are your spending already.
   const rentals: RentalInRetirement[] = [];
   for (const p of s.properties ?? []) {
-    if (!keptRental(p)) continue;
+    if (!rentInRetirement(p)) continue;
     const inc = incomes.find((i) => i.id === p.incomeId);
     if (!inc) continue;
     const rent = (num(inc.net) * PERIODS[inc.freq]) / 12;
     const vacancy = rent * Math.min(1, Math.max(0, p.vacancy ?? 0.05));
     const loan = p.mortgageId ? (s.debts ?? []).find((x) => x.id === p.mortgageId) : undefined;
-    const escrow = loan ? escrowOf(loan) : 0;
-    rentals.push({ id: p.id, name: p.name, rent, vacancy, escrow, monthly: rent - vacancy - escrow });
+    const escrow = loan && p.kind === "rental" ? escrowOf(loan) : 0;
+    rentals.push({ id: p.id, name: p.name, kind: p.kind, rent, vacancy, escrow, monthly: rent - vacancy - escrow });
   }
   const rentalIncomeAnnual = sum(rentals.map((x) => x.monthly * 12));
   const retireIncomeAnnual = sum(retIncome.map((x) => num(x.monthly) * 12)) + rentalIncomeAnnual;

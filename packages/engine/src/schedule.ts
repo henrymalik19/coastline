@@ -22,6 +22,11 @@ export function keptRental(p: Pick<Property, "kind" | "incomeId" | "inRetirement
   return p.kind === "rental" && !!p.incomeId && p.inRetirement !== false;
 }
 
+/** Rent that keeps coming after you retire: a rental you keep, or a home you'll keep renting part of. */
+export function rentInRetirement(p: Pick<Property, "kind" | "incomeId" | "inRetirement">): boolean {
+  return !!p.incomeId && (p.kind === "rental" ? p.inRetirement !== false : p.inRetirement === true);
+}
+
 /** A kept rental's mortgage: what's still owed on it when you retire counts in your number, like a home's. */
 export function isKeptRentalDebt(s: Pick<PlanState, "properties">, d: Pick<Debt, "id">): boolean {
   return (s.properties ?? []).some((p) => keptRental(p) && p.mortgageId === d.id);

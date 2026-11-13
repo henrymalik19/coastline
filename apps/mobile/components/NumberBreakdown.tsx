@@ -67,7 +67,7 @@ export function NumberBreakdown() {
       {step(2, "What your savings has to cover")}
       <View style={{ gap: 2 }}>
         {b.income - b.rentalIncome > 0.5 ? row("Social Security and pensions", `− ${per(b.income - b.rentalIncome)}`, { indent: true }) : null}
-        {Math.abs(b.rentalIncome) > 0.5 ? row("Rentals you keep", `${b.rentalIncome >= 0 ? "−" : "+"} ${per(Math.abs(b.rentalIncome))}`, { indent: true, sub: "Rent less a cushion and escrow" }) : null}
+        {Math.abs(b.rentalIncome) > 0.5 ? row("Rent you keep getting", `${b.rentalIncome >= 0 ? "−" : "+"} ${per(Math.abs(b.rentalIncome))}`, { indent: true, sub: "Rentals and rooms you'll keep renting, less a cushion" }) : null}
         {row("From your savings", per(b.need), { strong: true })}
         <Pressable role="link" onPress={() => router.push("/money/retirementIncome")} hitSlop={6} style={{ alignSelf: "flex-start", marginTop: 2 }}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{b.income - b.rentalIncome > 0.5 ? "Change Social Security and pensions →" : "Add Social Security or a pension →"}</Text>
