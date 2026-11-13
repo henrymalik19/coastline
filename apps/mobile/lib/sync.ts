@@ -40,6 +40,8 @@ export const useSync = create<{
   sharedBy?: string;
   lastSyncedAt?: number;
   error?: string;
+  /** Why this device was signed out, when it wasn't the person's choice (the account was deleted elsewhere). */
+  notice?: string;
 }>(() => ({ status: supabase ? "signedOut" : "off" }));
 
 /** The plan as the server has it: settings, lists, and (until it's turned into rows) the old JSON. */
@@ -194,7 +196,36 @@ let planId: string | undefined;
 
 const setSync = (patch: Partial<ReturnType<typeof useSync.getState>>) => useSync.setState(patch);
 const isNetworkError = (e: unknown) => /fetch|network|Failed to fetch|timeout/i.test(String((e as Error)?.message ?? e));
-const fail = (e: unknown) => setSync(isNetworkError(e) ? { status: "offline" } : { status: "error", error: String((e as Error)?.message ?? e) });
+const failNow = (e: unknown) => setSync(isNetworkError(e) ? { status: "offline" } : { status: "error", error: String((e as Error)?.message ?? e) });
+
+/** The signed-in account no longer exists (deleted on another device): the server says so. */
+async function accountGone(): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.auth.getUser();
+  if (!error || isNetworkError(error)) return false;
+  const code = (error as { code?: string }).code;
+  return code === "user_not_found" || /sub claim in JWT does not exist|user not found/i.test(error.message);
+}
+let goneNotice: string | undefined;
+/** The person chose to sign out (so there's nothing to explain). */
+let signingOut = false;
+
+/**
+ * A sync step failed. Usually that's the network or a passing error; but if the account was deleted
+ * on another device, every save would keep failing, so sign this device out instead (its plan stays).
+ */
+const fail = (e: unknown) => {
+  failNow(e);
+  if (isNetworkError(e)) return;
+  void accountGone().then((gone) => gone && signOutGone()).catch(() => undefined);
+};
+
+/** Sign this device out because its account no longer exists, and say why (its plan stays on it). */
+function signOutGone() {
+  if (!supabase) return;
+  goneNotice = "This account no longer exists (it was deleted on another device), so this device was signed out. Your plan is still here.";
+  void supabase.auth.signOut({ scope: "local" });
+}
 
 /** One sync step at a time (a save and a check never interleave). */
 let queue: Promise<void> = Promise.resolve();
@@ -335,6 +366,12 @@ async function syncInner(depth = 0): Promise<void> {
     await pullTxns(pid);
     mergeCheckins(remoteCheckins);
     if (!remote) {
+      // a plan this device synced before is gone from the server: the account was deleted elsewhere
+      // (sign this device out, keeping its copy), or only the plan was (upload all of it again)
+      if (baseFor(pid)) {
+        if (await accountGone()) return signOutGone();
+        useStore.setState({ syncBase: undefined });
+      }
       if (useStore.getState().onboarded) await pushInner(depth);
       else setSync({ status: "synced", lastSyncedAt: Date.now(), error: undefined });
       return;
@@ -378,7 +415,16 @@ async function syncInner(depth = 0): Promise<void> {
 
 /** Compare with the server and bring both copies up to date. */
 export function syncNow(): Promise<void> {
+  lastSyncStart = Date.now();
   return serial(() => syncInner());
+}
+
+/** When a sync last started; coming back to the app within this long doesn't sync again. */
+let lastSyncStart = 0;
+export const RESYNC_AFTER = 30_000;
+function syncIfStale() {
+  if (Date.now() - lastSyncStart < RESYNC_AFTER) return;
+  void syncNow();
 }
 
 function schedulePush() {
@@ -409,18 +455,23 @@ async function onSignedIn(session: Session) {
   if (!supabase) return;
   if (useSync.getState().userId === session.user.id) return;
   planId = undefined;
-  setSync({ userId: session.user.id, email: session.user.email ?? undefined });
+  setSync({ userId: session.user.id, email: session.user.email ?? undefined, notice: undefined });
   // link any invite first, so a shared plan loads instead of this account's own
   await onSharingSignIn(session.user.id, session.user.email).catch(() => undefined);
   await syncNow();
 }
 
 function onSignedOut() {
+  // signed out without choosing to: the sign-in ended (expired, or the account is gone)
+  const wasIn = !!useSync.getState().userId;
+  if (wasIn && !signingOut && !goneNotice) goneNotice = "You were signed out: this device's sign-in ended, or the account no longer exists. Your plan is still here; sign in again to keep syncing.";
+  signingOut = false;
   onSharingSignOut();
   channel?.unsubscribe();
   channel = null;
   planId = undefined;
-  setSync({ status: supabase ? "signedOut" : "off", userId: undefined, email: undefined, planId: undefined, sharedBy: undefined, lastSyncedAt: undefined, error: undefined });
+  setSync({ status: supabase ? "signedOut" : "off", userId: undefined, email: undefined, planId: undefined, sharedBy: undefined, lastSyncedAt: undefined, error: undefined, notice: goneNotice });
+  goneNotice = undefined;
 }
 
 /** Call once at app start. Safe to call when sync isn't configured. */
@@ -446,9 +497,10 @@ export function startSync() {
     if (s.updatedAt !== prev.updatedAt || s.todoDone !== prev.todoDone || s.checkins !== prev.checkins || s.txns !== prev.txns) schedulePush();
   });
   // catch up when the app comes back to the foreground or the network returns
-  AppState.addEventListener("change", (st) => st === "active" && void syncNow());
+  // coming back to the app: catch up, unless it synced moments ago (live updates cover the rest)
+  AppState.addEventListener("change", (st) => st === "active" && syncIfStale());
   if (Platform.OS === "web" && typeof window !== "undefined") {
-    window.addEventListener("focus", () => void syncNow());
+    window.addEventListener("focus", syncIfStale);
     window.addEventListener("online", () => void syncNow());
   }
 }
@@ -470,6 +522,7 @@ export async function verifyCode(email: string, token: string) {
 /** Sign out. The plan stays on this device unless `forget` is true. */
 export async function signOut(forget = false) {
   if (!supabase) return;
+  signingOut = true;
   await supabase.auth.signOut();
   if (forget) useStore.getState().startFresh();
 }

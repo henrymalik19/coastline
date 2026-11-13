@@ -33,7 +33,7 @@ export function SyncStatusLine() {
 /** Sign in with an emailed code, see sync status, sign out, delete account. */
 export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
   const t = useTheme();
-  const { status, email: signedInEmail } = useSync();
+  const { status, email: signedInEmail, notice } = useSync();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
@@ -105,6 +105,7 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
 
   return (
     <Card style={{ gap: space.md }}>
+      {notice ? <Text role="status" style={[type.label, { color: t.warn }]}>{notice}</Text> : null}
       <Text style={[type.body, { color: t.text2 }]}>
         Sign in to back up your plan and use it on all your devices. We'll email you a 6-digit code; no password needed.
       </Text>
