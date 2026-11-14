@@ -356,7 +356,7 @@ export type ImportResult = {
   /** Each of your transactions paired with the YNAB one that looks like the same (for you to confirm). */
   matches: { mine: Txn; ynab: Txn }[];
   summary: {
-    accountsAdded: number; categoriesAdded: number; categoriesUpdated: number; categoriesRemoved: number; categoriesSkipped: number;
+    accountsAdded: number; accountsRemoved: number; categoriesAdded: number; categoriesUpdated: number; categoriesRemoved: number; categoriesSkipped: number;
     transactions: number; transactionsMatched: number; months: number;
     /** Transactions that will need a category: YNAB had none, or you left their category out. */
     needsCategoryFromYnab: number; needsCategoryLeftOut: number;
@@ -394,7 +394,7 @@ export const recentMonths = (thisMonth: string, n = 3) => Array.from({ length: n
 /** Turn YNAB's data into the plan's categories, assignments, accounts and transactions. */
 export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): ImportResult {
   const plan = structuredClone(input);
-  const summary = { accountsAdded: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0 };
+  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0 };
   const accts = ynabAccounts(d);
 
   // accounts: matched, added, or left out
@@ -427,6 +427,18 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     if (acct) acct.balance = a.balance;
     const debt = plan.debts.find((x) => x.id === id);
     if (debt) debt.balance = Math.max(0, -a.balance);
+  }
+  // setup's empty "Savings / checking": once YNAB brings in your checking and savings, a $0 cash account
+  // nothing uses is just clutter (one with money, transactions, a link or a bank connection stays)
+  if (accts.some((a) => a.kind === "cash" && idOf.has(a.name))) {
+    const used = new Set<string>([
+      ...idOf.values(),
+      ...plan.budget.flatMap((b) => (b.accountId ? [b.accountId] : [])),
+      ...(o.existing ?? []).filter((t) => !t.deleted).flatMap((t) => [t.accountId, ...(t.transferAccountId ? [t.transferAccountId] : [])]),
+    ]);
+    const before = plan.accounts.length;
+    plan.accounts = plan.accounts.filter((x) => !(x.type === "cash" && Math.abs(x.balance) < 0.005 && !used.has(x.id) && !x.plaidAccountId));
+    summary.accountsRemoved = before - plan.accounts.length;
   }
 
   // categories: YNAB's, put into the plan's (by your choice, else the same name), added in YNAB's group, or left out

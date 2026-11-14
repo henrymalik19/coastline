@@ -6,7 +6,7 @@
 import { useRouter } from "expo-router";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { Button, InlineMoney, InlineSwitch, MonthField, Segmented, Select, ToggleRow } from "../../../components/form";
+import { Button, InfoText, InfoTip, InlineMoney, InlineSwitch, MonthField, Segmented, Select, ToggleRow } from "../../../components/form";
 import { Card, Divider, Screen } from "../../../components/ui";
 import { money } from "../../../lib/format";
 import { usePlan } from "../../../lib/plan";
@@ -36,7 +36,11 @@ const unusedCategory = (d: YnabData, c: { group: string; name: string; average: 
     !d.txns.some((t) => recent(t.date.slice(0, 7)) && (same(t.group, t.category) || (t.splits ?? []).some((x) => same(x.group, x.category))));
 };
 const KIND_LABEL = { cash: "Checking or savings", card: "Credit card", invest: "Investment (tracking)", loan: "Loan (tracking)" } as const;
-const KIND_ORDER = ["cash", "card", "invest", "loan"] as const;
+const ACCT_INFO =
+  "Same as one you already have (its balance and transactions join it), a new account, or left out. Closed and empty accounts start left out.";
+const CAT_INFO =
+  "Becomes: what it turns into here: a new category, one of yours (their money and transactions join), or nothing. Groups: pick which of your groups each YNAB group lands in, or move just one category to another group (its group link, or drag it). Turn off After retiring for what you won't pay then, and Essential for what you'd cut in an emergency.";
+const KIND_ORDER =["cash", "card", "invest", "loan"] as const;
 const KIND_SECTION = { cash: "Checking & savings", card: "Credit cards", invest: "Investments", loan: "Loans" } as const;
 
 /** Read the picked file: YNAB's zip, or its Register CSV (with its Plan CSV if picked too). */
@@ -95,6 +99,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const [tab, setTab] = useState<"accounts" | "categories" | "matches">("accounts");
   const [showQuiet, setShowQuiet] = useState(false);
   const [showUnused, setShowUnused] = useState(false);
+  const [catTip, setCatTip] = useState(false);
+  const [acctTip, setAcctTip] = useState(false);
   // the confirmation shows on the page (a browser pop-up can be blocked, as in an embedded browser)
   const [confirming, setConfirming] = useState(false);
   // the pinned tabs' height, so the categories' column labels stick just under them
@@ -149,6 +155,15 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const startMonth = from ?? oldest ?? thisMonth;
   const monthCount = months.indexOf(startMonth) + 1;
   const opts = (k: string) => catOpts[k] ?? { inRetirement: true, essential: true };
+  // left out, or into the Emergency fund: it isn't spending, so the switches don't apply
+  const isSpending = (k: string) => { const ch = catMap[k]; return !ch || ch.action === "new" || (ch.action === "match" && ch.id !== "cash"); };
+  /** Set a switch for every spending category in a list (a group's "all" switch). */
+  const setAll = (list: YnabCategory[], key: "inRetirement" | "essential", v: boolean) =>
+    setCatOpts((s2) => {
+      const next = { ...s2 };
+      for (const c of list) { const k = categoryKey(c.group, c.name); if (isSpending(k)) next[k] = { ...opts(k), [key]: v }; }
+      return next;
+    });
   const preview = useMemo(
     () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, newId: () => "preview" }) : null),
     [data, saved, from, thisMonth, choices, catOpts, catMap, groupMap, catGroup, amounts, removeEmpty, existing, keepBoth],
@@ -187,13 +202,17 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const activeAccounts = accounts.filter((a) => !quietAccounts.includes(a));
   const unusedCats = data ? categories.filter((c) => unusedCategory(data, c, since)) : [];
   const activeCats = categories.filter((c) => !unusedCats.includes(c));
-  const accountRow = (a: YnabAccount, i: number) => (
+  const accountRow = (a: YnabAccount, i: number, showKind = false) => (
     <View key={a.name} style={{ gap: 4 }}>
-      {i > 0 ? <Divider /> : null}
-      <View style={styles.row}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[type.body, { color: choices[a.name]?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]} numberOfLines={1}>{a.name}</Text>
-          <Text style={[type.caption, { color: t.text3 }]}>{KIND_LABEL[a.kind]} · {a.kind === "card" || a.kind === "loan" ? `owe ${money(Math.max(0, -a.balance))}` : money(a.balance)}</Text>
+      {i > 0 && wide ? <Divider /> : null}
+      {/* phones: the name and balance on one line, the dropdown full width below it */}
+      <View style={wide ? styles.row : [styles.phoneRow, { backgroundColor: t.surface2, borderColor: t.border }]}>
+        <View style={wide ? { flex: 1, minWidth: 0 } : [styles.row, { alignItems: "baseline" }]}>
+          <Text style={[type.body, { color: choices[a.name]?.action === "skip" ? t.text3 : t.text, fontWeight: "600", ...(wide ? null : { flex: 1, minWidth: 0 }) }]} numberOfLines={1}>{a.name}</Text>
+          {/* under a section heading the kind goes without saying */}
+          <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
+            {showKind ? `${KIND_LABEL[a.kind]} · ` : ""}{a.kind === "card" || a.kind === "loan" ? `Owe ${money(Math.max(0, -a.balance))}` : money(a.balance)}
+          </Text>
         </View>
         <Select label={`${a.name}: what it is here`} value={valueOf(choices[a.name])} options={options(a)} onChange={(v) => setChoice(a.name, v)} />
       </View>
@@ -204,10 +223,10 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const day = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`;
   const mine = saved.budget.filter((b) => !b.accountId);
   const catOptions = [
-    { value: "new", label: "Add as a new category" },
-    ...mine.map((b) => ({ value: "match:" + b.id, label: `Into ${b.name || "category"}`, hint: b.group })),
-    { value: "match:cash", label: "Into Emergency fund" },
-    { value: "skip", label: "Leave it out" },
+    { value: "new", label: "A new category" },
+    ...mine.map((b) => ({ value: "match:" + b.id, label: `Your ${b.name || "category"}`, hint: b.group })),
+    { value: "match:cash", label: "Your Emergency fund" },
+    { value: "skip", label: "Nothing (left out)" },
   ];
   const yourGroups = groupOrder(saved.budget).filter((g) => !!g);
   const sameGroup = (g: string) => yourGroups.find((x) => x.trim().toLowerCase() === g.trim().toLowerCase());
@@ -235,7 +254,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     const spending = !ch || ch.action === "new" || (ch.action === "match" && ch.id !== "cash");
     const perMonth = ch?.action !== "skip" ? (
       <View style={[styles.row, { gap: 4 }, wide ? { width: 190 } : null, wide ? { justifyContent: "flex-end" } : null]}>
-        <InlineMoney label={`${c.name}: a month`} value={amounts[k] ?? c.average} onChange={(v) => setAmounts((m) => ({ ...m, [k]: v }))} />
+        <InlineMoney compact={!wide} label={`${c.name}: a month`} value={amounts[k] ?? c.average} onChange={(v) => setAmounts((m) => ({ ...m, [k]: v }))} />
         <Text style={[type.caption, { color: t.text3 }]}>/mo</Text>
       </View>
     ) : null;
@@ -246,41 +265,80 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         <Select plain label={`${c.name}: group`} value={rowGroup(k, c.group)} options={allGroups()} onChange={(v) => setRowGroup(k, c.group, v)} />
       </View>
     ) : null;
+    const reset = amounts[k] !== undefined && Math.abs(amounts[k]! - c.average) > 0.5 ? (
+      <Pressable onPress={() => setAmounts(({ [k]: _, ...m }) => m)} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+        <Text style={[type.caption, { color: t.accent }]}>Reset to YNAB's {money(c.average, { whole: true })}</Text>
+      </Pressable>
+    ) : null;
+    const setOpt = (patch: Partial<typeof o>) => setCatOpts((s2) => ({ ...s2, [k]: { ...o, ...patch } }));
+    // phones: the name and amount on top, then each choice on its own labelled line, so nothing floats
+    // away from the category it belongs to
+    if (!wide) {
+      const groupLine = ch?.action !== "skip" && (ch?.action !== "match" || ch.id !== "cash");
+      return (
+        <View key={k} style={[styles.phoneRow, { backgroundColor: t.surface, borderColor: t.border }]}>
+          <View style={[styles.row, { alignItems: "flex-start" }]}>
+            {grip}
+            <Text style={[type.body, { flex: 1, minWidth: 0, color: ch?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]}>{c.name}</Text>
+            {perMonth}
+          </View>
+          {reset}
+          <View style={styles.field}>
+            <Text style={[type.caption, { color: t.text3 }]}>Becomes</Text>
+            <Select plain label={`${c.name}: becomes`} value={catValue(ch)} options={catOptions} onChange={(v) => setCat(k, v)} />
+          </View>
+          {/* the card already says its group: a line only once it's moved elsewhere */}
+          {groupLine && catGroup[k] ? (
+            <View style={styles.field}>
+              <Text style={[type.caption, { color: t.accent }]}>Moved to group</Text>
+              <Select plain label={`${c.name}: group`} value={rowGroup(k, c.group)} options={allGroups()} onChange={(v) => setRowGroup(k, c.group, v)} />
+            </View>
+          ) : null}
+          {spending ? (
+            <View style={[styles.row, { gap: space.xl, flexWrap: "wrap" }]}>
+              <View style={styles.row}>
+                <InlineSwitch label={`${c.name}: still paid after retiring`} value={o.inRetirement} onChange={(v) => setOpt({ inRetirement: v })} />
+                <Text style={[type.caption, { color: t.text2 }]}>After retiring</Text>
+              </View>
+              <View style={styles.row}>
+                <InlineSwitch label={`${c.name}: essential`} value={o.essential} onChange={(v) => setOpt({ essential: v })} />
+                <Text style={[type.caption, { color: t.text2 }]}>Essential</Text>
+              </View>
+            </View>
+          ) : (
+            <Text style={[type.caption, { color: t.text3 }]}>{ch?.action === "skip" ? "Not brought in" : "Savings, not spending"}</Text>
+          )}
+          {/* move just this one to another group, without dragging */}
+          {groupLine && !catGroup[k] ? (
+            <View style={{ alignSelf: "flex-start" }}>
+              <Select plain label={`${c.name}: move to group`} value="" placeholder="Move to another group" options={allGroups().filter((x) => x.value !== rowGroup(k, c.group))} onChange={(v) => setRowGroup(k, c.group, v)} />
+            </View>
+          ) : null}
+        </View>
+      );
+    }
     return (
       <View key={k} style={[styles.catRow, { borderTopColor: t.border }]}>
         <View style={styles.row}>
           {grip}
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[type.body, { color: ch?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]} numberOfLines={1}>{c.name}</Text>
-            {wide ? inGroup : null}
-            {amounts[k] !== undefined && Math.abs(amounts[k]! - c.average) > 0.5 ? (
-              <Pressable onPress={() => setAmounts(({ [k]: _, ...m }) => m)} hitSlop={6} style={{ alignSelf: "flex-start" }}>
-                <Text style={[type.caption, { color: t.accent }]}>Reset to YNAB's {money(c.average, { whole: true })}</Text>
-              </Pressable>
-            ) : null}
+            {inGroup}
+            {reset}
           </View>
-          {wide ? perMonth : null}
-          {wide ? (
-            <View style={{ width: 220 }}>
-              <Select plain label={`${c.name}: where it goes`} value={catValue(ch)} options={catOptions} onChange={(v) => setCat(k, v)} />
-            </View>
-          ) : null}
+          {perMonth}
+          <View style={{ width: 220 }}>
+            <Select plain label={`${c.name}: becomes`} value={catValue(ch)} options={catOptions} onChange={(v) => setCat(k, v)} />
+          </View>
           {spending ? (
             <>
-              <View style={styles.col}><InlineSwitch label={`${c.name}: still paid after retiring`} value={o.inRetirement} onChange={(v) => setCatOpts((s2) => ({ ...s2, [k]: { ...o, inRetirement: v } }))} /></View>
-              <View style={styles.col}><InlineSwitch label={`${c.name}: essential`} value={o.essential} onChange={(v) => setCatOpts((s2) => ({ ...s2, [k]: { ...o, essential: v } }))} /></View>
+              <View style={styles.col}><InlineSwitch label={`${c.name}: still paid after retiring`} value={o.inRetirement} onChange={(v) => setOpt({ inRetirement: v })} /></View>
+              <View style={styles.col}><InlineSwitch label={`${c.name}: essential`} value={o.essential} onChange={(v) => setOpt({ essential: v })} /></View>
             </>
           ) : (
             <Text style={[type.caption, { color: t.text3, width: 84 * 2 + space.sm, textAlign: "center" }]}>{ch?.action === "skip" ? "Not brought in" : "Savings, not spending"}</Text>
           )}
         </View>
-        {!wide ? (
-          <View style={{ gap: 4, alignItems: "flex-start" }}>
-            {inGroup}
-            {perMonth}
-            <Select plain label={`${c.name}: where it goes`} value={catValue(ch)} options={catOptions} onChange={(v) => setCat(k, v)} />
-          </View>
-        ) : null}
       </View>
     );
   };
@@ -353,23 +411,26 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const review = data && preview ? (
     <>
           <View onLayout={(e) => setTabsH(Math.round(e.nativeEvent.layout.height))} style={[styles.pinned, sticky(0, t.bg)]}>
-          <Segmented
-            label="What to review"
-            options={[
-              { value: "accounts", label: `Accounts (${activeAccounts.length})` },
-              { value: "categories", label: `Categories (${activeCats.length})` },
+          {(() => {
+            const tabs = [
+              { value: "accounts" as const, label: `Accounts (${activeAccounts.length})` },
+              { value: "categories" as const, label: `Categories (${activeCats.length})` },
               ...(preview.matches.length ? [{ value: "matches" as const, label: `Matches (${preview.matches.length})` }] : []),
-            ]}
-            value={tab}
-            onChange={setTab}
-          />
+            ];
+            // three don't fit a phone's width: a dropdown there
+            return tabs.length > 2 && contentWidth < 600
+              ? <Select label="What to review" options={tabs} value={tab} onChange={setTab} />
+              : <Segmented label="What to review" options={tabs} value={tab} onChange={setTab} />;
+          })()}
           </View>
 
           {tab === "accounts" ? (
             <Card style={{ gap: space.sm }}>
-              <Text style={[type.caption, { color: t.text3 }]}>
-                What each of your YNAB accounts is here: the same as one you have, a new one, or left out.
-              </Text>
+              <View style={[styles.row, { alignItems: "flex-start" }]}>
+                <Text style={[type.caption, { color: t.text3, flex: 1 }]}>Pick what each YNAB account is here.</Text>
+                <InfoTip text={ACCT_INFO} label="accounts" open={acctTip} onToggle={setAcctTip} />
+              </View>
+              {acctTip ? <InfoText text={ACCT_INFO} /> : null}
               {KIND_ORDER.map((k) => {
                 const list = activeAccounts.filter((a) => a.kind === k);
                 if (!list.length) return null;
@@ -391,7 +452,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
                       {showQuiet ? "Hide" : "Show"} {quietAccounts.length} closed or empty {quietAccounts.length === 1 ? "account" : "accounts"} (left out)
                     </Text>
                   </Pressable>
-                  {showQuiet ? quietAccounts.map((a, i) => accountRow(a, i)) : null}
+                  {showQuiet ? quietAccounts.map((a, i) => accountRow(a, i, true)) : null}
                 </>
               ) : null}
             </Card>
@@ -399,19 +460,24 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
 
           {tab === "categories" ? (
             <Card style={{ gap: space.sm }}>
-              <Text style={[type.caption, { color: t.text3 }]}>
-                Each comes in with what you assigned a month lately. Pick where each one goes, and which of your groups each YNAB group lands in. Drag a category onto another group to move it there{wide ? "" : " (tap Reorder first)"}. Turn off After retiring for what you won't pay then, and Essential for what you'd cut in an emergency.
-              </Text>
-              <View style={[styles.row, { paddingVertical: space.xs }, sticky(tabsH, t.surface)]}>
-                <View style={[styles.row, { flex: 1 }]}>
-                  <Text style={[type.caption, { color: t.text3 }]}>Category</Text>
-                  {wide ? null : <ReorderToggle on={reorder} onChange={setReorder} />}
-                </View>
-                {wide ? <Text style={[type.caption, { color: t.text3, width: 190, textAlign: "right", paddingRight: 28 }]}>A month</Text> : null}
-                {wide ? <Text style={[type.caption, { color: t.text3, width: 220, textAlign: "right", paddingRight: 18 }]}>Goes to</Text> : null}
-                <Text style={[type.caption, styles.col, { color: t.text3 }]}>After retiring</Text>
-                <Text style={[type.caption, styles.col, { color: t.text3 }]}>Essential</Text>
+              <View style={[styles.row, { alignItems: "flex-start" }]}>
+                <Text style={[type.caption, { color: t.text3, flex: 1 }]}>
+                  Each comes in with what you assigned a month lately. Pick what each one becomes in your budget.
+                </Text>
+                <InfoTip text={CAT_INFO} label="categories" open={catTip} onToggle={setCatTip} />
               </View>
+              {catTip ? <InfoText text={CAT_INFO + (wide ? "" : " On a phone, tap Reorder first to drag.")} /> : null}
+              {wide ? (
+                <View style={[styles.row, { paddingVertical: space.xs }, sticky(tabsH, t.surface)]}>
+                  <Text style={[type.caption, { color: t.text3, flex: 1 }]}>Category</Text>
+                  <Text style={[type.caption, { color: t.text3, width: 190, textAlign: "right", paddingRight: 28 }]}>A month</Text>
+                  <Text style={[type.caption, { color: t.text3, width: 220, textAlign: "right", paddingRight: 18 }]}>Becomes</Text>
+                  <Text style={[type.caption, styles.col, { color: t.text3 }]}>After retiring</Text>
+                  <Text style={[type.caption, styles.col, { color: t.text3 }]}>Essential</Text>
+                </View>
+              ) : (
+                <View style={{ alignSelf: "flex-end" }}><ReorderToggle on={reorder} onChange={setReorder} /></View>
+              )}
               {(() => {
                 const cards = [...new Set(activeCats.map((c) => c.group))];
                 cardTargetRef.current = groupTarget;
@@ -433,13 +499,42 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
                         <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]}>{cardRowsRef.current[g]?.length ?? 0}</Text>
                       </View>
                     </View>
-                    {g ? (
+                    {/* same name as the card: just say so, with a way to change it; a dropdown only once it goes elsewhere */}
+                    {g && groupTarget(g).trim().toLowerCase() === g.trim().toLowerCase() ? (
+                      <View style={[styles.row, { flexShrink: 1, gap: space.xs }]}>
+                        <Text style={[type.caption, { color: t.text3 }]}>{sameGroup(g) ? "Your group" : "New group"} ·</Text>
+                        <View style={{ minWidth: 64 }}>
+                          <Select plain label={`${g}: lands in group`} value="" placeholder="Change" options={groupOptions(g).filter((o) => o.value.trim().toLowerCase() !== g.trim().toLowerCase())} onChange={(v) => setGroupMap((m) => ({ ...m, [groupKey(g)]: v }))} />
+                        </View>
+                      </View>
+                    ) : g ? (
                       <View style={[styles.row, { flexShrink: 1 }]}>
-                        <Text style={[type.caption, { color: t.text3 }]}>Into your group</Text>
+                        <Text style={[type.caption, { color: t.accent }]}>Into your group</Text>
                         <Select label={`${g}: lands in group`} value={groupTarget(g)} options={groupOptions(g)} onChange={(v) => setGroupMap((m) => ({ ...m, [groupKey(g)]: v }))} />
                       </View>
                     ) : null}
                   </View>
+                  {(() => {
+                    // the whole group at once: on when every spending category in it is on
+                    const list = (cardRowsRef.current[g] ?? []).filter((c) => isSpending(categoryKey(c.group, c.name)));
+                    if (list.length < 2) return null;
+                    const all = (key: "inRetirement" | "essential") => list.every((c) => opts(categoryKey(c.group, c.name))[key]);
+                    const sw = (key: "inRetirement" | "essential", name: string) => (
+                      <InlineSwitch label={`${g || "No group"}: all ${name.toLowerCase()}`} value={all(key)} onChange={(v) => setAll(list, key, v)} />
+                    );
+                    return wide ? (
+                      <View style={[styles.row, { paddingBottom: space.sm }]}>
+                        <Text style={[type.caption, { color: t.text3, flex: 1, textAlign: "right" }]}>Whole group</Text>
+                        <View style={styles.col}>{sw("inRetirement", "After retiring")}</View>
+                        <View style={styles.col}>{sw("essential", "Essential")}</View>
+                      </View>
+                    ) : (
+                      <View style={[styles.row, { gap: space.xl, flexWrap: "wrap", paddingBottom: space.sm }]}>
+                        <View style={styles.row}>{sw("inRetirement", "After retiring")}<Text style={[type.caption, { color: t.text2 }]}>All after retiring</Text></View>
+                        <View style={styles.row}>{sw("essential", "Essential")}<Text style={[type.caption, { color: t.text2 }]}>All essential</Text></View>
+                      </View>
+                    );
+                  })()}
                   <DragList
                     zone={{ set: zone, id: g }}
                     grips={wide || reorder}
@@ -519,6 +614,11 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
           {preview.summary.categoriesRemoved} empty starter {preview.summary.categoriesRemoved === 1 ? "category" : "categories"} YNAB doesn't have will be removed.
         </Text>
       ) : null}
+      {preview.summary.accountsRemoved ? (
+        <Text style={[type.caption, { color: t.text2 }]}>
+          {preview.summary.accountsRemoved === 1 ? "Your empty checking/savings account is" : `${preview.summary.accountsRemoved} empty checking/savings accounts are`} replaced by YNAB's.
+        </Text>
+      ) : null}
       <Text style={[type.caption, { color: t.text3 }]}>{setup ? "You can undo the import for 30 days." : "Your other transactions stay. You can undo the import for 30 days."}</Text>
     </>
   ) : null;
@@ -563,12 +663,15 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const whatCard = preview ? (
     <Card style={{ gap: space.md }}>
       <Text style={[type.heading, { color: t.text }]}>What comes in</Text>
-      <View style={styles.stats}>
-        {stats.map((x) => (
-          <View key={x.label} style={[styles.stat, { backgroundColor: t.surface2 }]}>
-            <Text style={[type.title, { color: t.text, fontVariant: ["tabular-nums"] }]}>{x.n}</Text>
-            <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{x.label}</Text>
-            <Text style={[type.caption, { color: t.text3 }]}>{x.sub}</Text>
+      {/* one short line each: the bar below already has the totals */}
+      <View>
+        {stats.map((x, i) => (
+          <View key={x.label} style={[styles.statLine, i > 0 ? { borderTopColor: t.border, borderTopWidth: StyleSheet.hairlineWidth } : null]}>
+            <Text style={[type.label, { color: t.text, fontWeight: "700", width: 44, fontVariant: ["tabular-nums"] }]}>{x.n}</Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[type.label, { color: t.text }]}>{x.label}</Text>
+              <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{x.sub}</Text>
+            </View>
           </View>
         ))}
       </View>
@@ -620,6 +723,9 @@ const styles = StyleSheet.create({
   col: { width: 84, alignItems: "center", textAlign: "center" },
   stats: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   catRow: { gap: 2, paddingVertical: space.xs, borderTopWidth: StyleSheet.hairlineWidth },
+  // phones: each category its own small panel, with space between them
+  phoneRow: { gap: 6, paddingHorizontal: space.md, paddingVertical: space.sm, marginBottom: space.sm, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth },
+  field: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
   groupDot: { width: 8, height: 8, borderRadius: 4 },
   pill: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1 },
   note: { borderWidth: 1, borderRadius: 10, padding: space.md, gap: space.sm },
@@ -628,6 +734,6 @@ const styles = StyleSheet.create({
   side: { width: 360, gap: space.lg },
   pinned: { paddingVertical: space.xs, marginVertical: -space.xs },
   bottomBar: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.sm, borderWidth: 1, borderRadius: 12, paddingHorizontal: space.md, paddingVertical: space.sm },
-  stat: { flexGrow: 1, flexBasis: 140, borderRadius: 10, padding: space.md, gap: 2 },
+  statLine: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: 6 },
   statSmall: { flexGrow: 1, flexBasis: 130, borderRadius: 10, paddingHorizontal: space.md, paddingVertical: space.sm, gap: 1 },
 });

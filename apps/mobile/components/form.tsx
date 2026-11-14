@@ -513,7 +513,8 @@ export function InlineText({ value, onChange, label, placeholder, commitOnBlur }
 }
 
 /** A dollar amount typed straight into a row (right-aligned, saved when you finish). */
-export function InlineMoney({ value, onChange, label }: { value: number; onChange: (v: number) => void; label: string }) {
+/** `compact`: a narrower box, for phone rows. */
+export function InlineMoney({ value, onChange, label, compact }: { value: number; onChange: (v: number) => void; label: string; compact?: boolean }) {
   const t = useTheme();
   const show = (v: number) => (Number.isFinite(v) ? v.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "");
   const [text, setText] = useState(show(value));
@@ -541,7 +542,7 @@ export function InlineMoney({ value, onChange, label }: { value: number; onChang
         placeholder="0"
         placeholderTextColor={t.text3}
         selectTextOnFocus
-        style={[type.body, { color: t.text, textAlign: "right", minWidth: 64, maxWidth: 120, paddingVertical: 6, fontVariant: ["tabular-nums"] }, Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null]}
+        style={[type.body, { color: t.text, textAlign: "right", minWidth: compact ? 48 : 64, maxWidth: compact ? 72 : 120, width: compact ? 72 : undefined, paddingVertical: 6, fontVariant: ["tabular-nums"] }, Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null]}
       />
     </View>
   );

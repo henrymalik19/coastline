@@ -103,6 +103,21 @@ describe("importing into the plan", () => {
     expect(r.plan.budget.find((b) => b.name === "Groceries")?.amount).toBe(725);
   });
 
+  it("drops setup's empty Savings / checking once YNAB brings in a checking account, keeping ones in use", () => {
+    const { d, opts } = setup();
+    const plan = freshPlan();
+    const empty = plan.accounts.find((a) => a.type === "cash")!;
+    plan.accounts.push({ id: "used", name: "Cash jar", type: "cash", balance: 0 });
+    const r = buildImport(plan, d, { ...opts, existing: [{ id: "t1", accountId: "used", date: "2026-11-02", amount: -5 } as never] });
+    expect(r.plan.accounts.some((a) => a.id === empty.id)).toBe(false);
+    expect(r.plan.accounts.some((a) => a.id === "used")).toBe(true);
+    expect(r.plan.accounts.some((a) => a.name === "401(k)")).toBe(true);
+    expect(r.summary.accountsRemoved).toBe(1);
+    // nothing of YNAB's checking comes in: it stays
+    const kept = buildImport(plan, d, { ...opts, accounts: Object.fromEntries(ynabAccounts(d).map((a) => [a.name, { action: "skip" as const }])) });
+    expect(kept.plan.accounts.some((a) => a.id === empty.id)).toBe(true);
+  });
+
   it("lists the export's months, newest first", () => {
     const { d } = setup();
     const m = exportMonths(d, "2026-11");
