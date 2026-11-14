@@ -296,6 +296,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
   const t = useTheme();
   const compact = useLayout().contentWidth < 600;
   const [netTip, setNetTip] = useState(false);
+  const [outTip, setOutTip] = useState(false);
   const [custom, setCustom] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const toggle = (k: string) => setOpen((o) => (o === k ? null : k));
@@ -361,26 +362,40 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
               <Text style={[type.label, { color: t.text2 }]}>Take-home per paycheck</Text>
               <InfoTip text={netInfo} label="Take-home per paycheck" open={netTip} onToggle={setNetTip} />
             </View>
-            {auto && hasGross ? (
-              <Text style={[type.caption, { color: t.text3 }]}>
-                {money(inc.net * CHECKS_IN_NORMAL_MONTH[inc.freq])} in a normal month{CHECKS_IN_NORMAL_MONTH[inc.freq] > 1 ? ` (${CHECKS_IN_NORMAL_MONTH[inc.freq]} paychecks)` : ""}
-              </Text>
-            ) : null}
-            {netTip ? <InfoText text={netInfo} /> : null}
           </View>
           {auto ? (
-            <Text style={[type.stat, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(inc.net)}</Text>
+            <Text style={[type.stat, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(inc.net, { whole: true })}</Text>
           ) : (
             <NumberInput kind="money" label="Take-home per paycheck" value={inc.net} onChange={(v) => change({ net: v })} />
           )}
         </View>
+        {netTip ? <InfoText text={netInfo} /> : null}
         {!auto ? <ChangesLater k={PAYNET + inc.id} label="Take-home" base={inc.net} unit="/check" prompt="Take-home changing later?" /> : null}
+        {/* how it adds up, like a pay stub: gross, what comes out, and a normal month */}
         {auto && pay.gross > 0 ? (
-          <Text style={[type.caption, { color: t.text3 }]}>
-            {money(pay.gross)} − {money(pay.k401)} 401(k){pay.hsa > 0 ? ` − ${money(pay.hsa)} HSA` : ""} − {money(pay.taxes)} taxes
-            {pay.deductions > 0 ? ` − ${money(pay.deductions)} other` : ""}
-            {pay.loanRepayment > 0 ? ` − ${money(pay.loanRepayment)} 401(k) loan` : ""}
-          </Text>
+          <View style={[styles.stub, { borderTopColor: t.border }]}>
+            {([
+              ["Gross pay", pay.gross, false],
+              ["401(k)", pay.k401, true],
+              ["HSA", pay.hsa, true],
+              ["Taxes", pay.taxes, true],
+              ["Other deductions", pay.deductions, true],
+              ["401(k) loan", pay.loanRepayment, true],
+            ] as [string, number, boolean][])
+              .filter(([, v, out]) => !out || v > 0)
+              .map(([label, v, out]) => (
+                <View key={label} style={styles.between}>
+                  <Text style={[type.caption, { color: t.text2 }]}>{label}</Text>
+                  <Text style={[type.caption, { color: t.text2, fontVariant: ["tabular-nums"] }]}>{out ? "−" : ""}{money(v, { whole: true })}</Text>
+                </View>
+              ))}
+            <View style={[styles.between, styles.stubTotal, { borderTopColor: t.border }]}>
+              <Text style={[type.caption, { color: t.text, fontWeight: "700" }]}>
+                A normal month{CHECKS_IN_NORMAL_MONTH[inc.freq] > 1 ? ` (${CHECKS_IN_NORMAL_MONTH[inc.freq]} paychecks)` : ""}
+              </Text>
+              <Text style={[type.caption, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(inc.net * CHECKS_IN_NORMAL_MONTH[inc.freq], { whole: true })}</Text>
+            </View>
+          </View>
         ) : null}
         <ToggleRow
           label="Enter take-home myself"
@@ -390,8 +405,11 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
         />
       </View>
 
-      <Text style={[type.overline, { color: t.text3, marginTop: space.md }]}>What comes out of each paycheck</Text>
-      <Text style={[type.caption, { color: t.text3 }]}>Tap one to fill it in. Rough numbers are fine; a pay stub has the exact ones.</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: space.md }}>
+        <Text style={[type.overline, { color: t.text3 }]}>What comes out of each paycheck</Text>
+        <InfoTip text={OUT_INFO} label="What comes out of each paycheck" open={outTip} onToggle={setOutTip} />
+      </View>
+      {outTip ? <InfoText text={OUT_INFO} /> : null}
 
       <PaySection title="401(k)" summary={k401Summary} attention={k401Attention} open={open === "k401"} onToggle={() => toggle("k401")}>
         <Segmented
@@ -670,12 +688,15 @@ const styles = StyleSheet.create({
   dedRow: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 52 },
   result: { borderRadius: radius.md, padding: space.md, gap: space.xs, marginTop: space.sm },
   summary: { borderRadius: radius.md, padding: space.md, gap: space.xs, marginTop: space.xs },
+  stub: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm, marginTop: space.xs, gap: 4 },
+  stubTotal: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 6, marginTop: 2 },
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.sm },
   chip: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 8, minHeight: 36, justifyContent: "center" },
   pair: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.sm },
 });
 
 /** Monthly average of an income, for the list and totals. */
+const OUT_INFO = "Tap one to fill it in. Rough numbers are fine; a pay stub has the exact ones.";
 const TAKE_HOME_INFO = "What lands in your account after taxes and everything taken out of your pay. A normal month has 2 paychecks if you're paid every 2 weeks (4 if weekly); the year also counts the months with an extra one.";
 const KIND_LABEL: Record<IncomeKind, string> = { job: "Job", business: "Business", rental: "Rental", other: "Other income" };
 
