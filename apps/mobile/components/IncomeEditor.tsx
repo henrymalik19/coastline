@@ -743,13 +743,13 @@ export function IncomesEditor() {
       <View style={{ flexDirection: "row", alignItems: "flex-end", gap: space.lg }}>
         <View style={{ flex: 1 }}>
           <Text style={[type.stat, { color: t.text, fontVariant: ["tabular-nums"] }]}>
-            {money(result.d.leanMonthly, { whole: true })}
+            {money(result.d.leanMonthly)}
             <Text style={[type.label, { color: t.text3, fontWeight: "600" }]}> /mo</Text>
           </Text>
           <Text style={[type.caption, { color: t.text3 }]}>In a normal month</Text>
         </View>
         <View style={[styles.yearBox, { borderLeftColor: t.border }]}>
-          <Text style={[type.heading, { color: t.text2, fontVariant: ["tabular-nums"] }]}>{money(result.d.annualNet, { whole: true })}</Text>
+          <Text style={[type.heading, { color: t.text2, fontVariant: ["tabular-nums"] }]}>{money(result.d.annualNet)}</Text>
           <Text style={[type.caption, { color: t.text3 }]}>Annually</Text>
         </View>
       </View>
@@ -772,7 +772,7 @@ export function IncomesEditor() {
       label="Income sources"
       header={header}
       listTitle="Income sources"
-      items={state.incomes.map((i) => ({ key: i.id, title: i.name, subtitle: KIND_LABEL[i.kind ?? "job"], value: `${money(i.net * CHECKS_IN_NORMAL_MONTH[i.freq], { whole: true })}/mo` }))}
+      items={state.incomes.map((i) => ({ key: i.id, title: i.name, subtitle: KIND_LABEL[i.kind ?? "job"], value: `${money(i.net * CHECKS_IN_NORMAL_MONTH[i.freq])}/mo` }))}
       selected={inc?.id}
       onSelect={setSelected}
       listFooter={addButtons}
