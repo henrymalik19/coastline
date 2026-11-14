@@ -244,7 +244,8 @@ export function TextField({
  * Date field: type a date the way you normally would (11/20/2026, Nov 20, 2026-11-20…)
  * or pick it from a calendar. Shows "Nov 20, 2026" when not editing; stores ISO.
  */
-export function DateField({ value, onChange, label, width = 190 }: { value?: string; onChange: (v: string | undefined) => void; label: string; width?: number }) {
+export function DateField({ value, onChange, label, width: w }: { value?: string; onChange: (v: string | undefined) => void; label: string; width?: number }) {
+  const width = w ?? (useLayout().contentWidth < 600 ? 160 : 190);
   const t = useTheme();
   const [text, setText] = useState(formatDate(value));
   const [focused, setFocused] = useState(false);
@@ -323,9 +324,13 @@ export function MonthField({ value, onChange, label, width = 160, min, max }: { 
 /* ---------- rows ---------- */
 
 /** A settings row: label (with optional ⓘ explanation) and hint on the left, control on the right. */
-export function FieldRow({ label, hint, info, children, stacked }: { label: string; hint?: string; info?: string; children: ReactNode; stacked?: boolean }) {
+export function FieldRow({ label, hint, info: help, children, stacked }: { label: string; hint?: string; info?: string; children: ReactNode; stacked?: boolean }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
+  // phones: the small text under the label goes into the (i), so labels keep to one line
+  const compact = useLayout().contentWidth < 600;
+  const info = compact && hint ? (help ? `${hint.replace(/\.?$/, ".")} ${help}` : hint.replace(/\.?$/, ".")) : help;
+  if (compact) hint = undefined;
   return (
     <View style={{ paddingVertical: space.md, gap: space.sm }}>
       <View style={[styles.rowInner, stacked ? { flexDirection: "column", alignItems: "stretch" } : null]}>

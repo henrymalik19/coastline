@@ -1,4 +1,5 @@
 import { HSAEMP, k401Cost, PAY401, PAYDED, PAYGROSS, PAYHSA, PAYNET, PERIODS, resolveIncome, type Debt, type Income, type IncomeKind, type PayFreq, type PayTaxes , type Property } from "@coastfi/engine";
+import { useLayout } from "../lib/layout";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money, percent } from "../lib/format";
@@ -96,6 +97,10 @@ export function IncomeEditor({
     onChange(withAutoNet(inc, follow ? { ...patch, taxes: estimate(next) } : patch));
   };
   const amountHelp = kind === "business" ? HELP.businessAmount : kind === "rental" ? HELP.rentalAmount : HELP.otherAmount;
+  // phones: type and how often as dropdowns (the button rows wrap onto two lines)
+  const compact = useLayout().contentWidth < 600;
+  const kinds = INCOME_KINDS.map((k) => ({ value: k.value, label: k.label }));
+  const setKind = (v: (typeof kinds)[number]["value"]) => change(v === "job" ? { kind: v, matchMode: "pct", netMode: "auto" } : { kind: v, ...NON_JOB });
 
   return (
     <Wrap bare={bare}>
@@ -105,19 +110,26 @@ export function IncomeEditor({
         </View>
         {onRemove ? <IconButton icon="trash" color={t.bad} label={`Remove ${inc.name || "this income"}`} onPress={onRemove} /> : null}
       </View>
-      <Segmented
-        label="Type of income"
-        options={INCOME_KINDS.map((k) => ({ value: k.value, label: k.label }))}
-        value={kind}
-        onChange={(v) => change(v === "job" ? { kind: v, matchMode: "pct", netMode: "auto" } : { kind: v, ...NON_JOB })}
-      />
-
-      <View style={{ gap: space.xs, marginTop: space.xs }}>
-        <Text style={[type.label, { color: t.text2 }]}>{isJob ? "How often are you paid?" : "How often does it come in?"}</Text>
-        <Segmented label="Frequency" options={FREQS} value={inc.freq} onChange={(v) => change({ freq: v })} />
-      </View>
+      {compact ? (
+        <>
+          <FieldRow label="Type">
+            <Select label="Type of income" options={kinds} value={kind} onChange={setKind} />
+          </FieldRow>
+          <FieldRow label={isJob ? "Paid" : "Comes in"}>
+            <Select label={isJob ? "How often you're paid" : "How often it comes in"} options={FREQS} value={inc.freq} onChange={(v) => change({ freq: v })} />
+          </FieldRow>
+        </>
+      ) : (
+        <>
+          <Segmented label="Type of income" options={kinds} value={kind} onChange={setKind} />
+          <View style={{ gap: space.xs, marginTop: space.xs }}>
+            <Text style={[type.label, { color: t.text2 }]}>{isJob ? "How often are you paid?" : "How often does it come in?"}</Text>
+            <Segmented label="Frequency" options={FREQS} value={inc.freq} onChange={(v) => change({ freq: v })} />
+          </View>
+        </>
+      )}
       {inc.freq === "weekly" || inc.freq === "biweekly" ? (
-        <FieldRow label={isJob ? "Next payday" : "Next payment date"} hint="Finds your 3-paycheck months" info={HELP.nextPayday}>
+        <FieldRow label={isJob ? "Next payday" : "Next payment"} hint="Finds your 3-paycheck months" info={HELP.nextPayday}>
           <DateField label="Next payday" value={inc.nextPayday} onChange={(v) => change({ nextPayday: v })} />
         </FieldRow>
       ) : null}
@@ -126,7 +138,7 @@ export function IncomeEditor({
         <JobPay inc={inc} auto={auto} change={change} marginalTax={marginalTax} />
       ) : (
         <>
-          <FieldRow label={`Amount you keep ${inc.freq === "monthly" ? "per month" : "each time"}`} hint="After taxes and costs" info={amountHelp}>
+          <FieldRow label={compact ? "You keep" : `Amount you keep ${inc.freq === "monthly" ? "per month" : "each time"}`} hint="After taxes and costs" info={amountHelp}>
             <NumberInput kind="money" label="Amount you keep" value={inc.net} onChange={(v) => change({ net: v })} />
           </FieldRow>
           <ChangesLater k={PAYNET + inc.id} label={inc.name || "This income"} base={inc.net} unit={inc.freq === "monthly" ? "/mo" : " each time"} prompt="Going up, down or ending later?" />
@@ -282,6 +294,7 @@ function PaySection({
 /** Gross pay and take-home first; then each thing that comes out of the check, one section at a time. */
 function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean; change: (p: Partial<Income>) => void; marginalTax: number }) {
   const t = useTheme();
+  const compact = useLayout().contentWidth < 600;
   const [custom, setCustom] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const toggle = (k: string) => setOpen((o) => (o === k ? null : k));
@@ -326,7 +339,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
 
   return (
     <View style={{ gap: space.xs }}>
-      <FieldRow label="Gross pay per paycheck" hint="Before anything is taken out" info={HELP.gross}>
+      <FieldRow label={compact ? "Gross pay" : "Gross pay per paycheck"} hint="Before anything is taken out" info={HELP.gross}>
         <NumberInput kind="money" label="Gross pay per paycheck" value={inc.gross ?? 0} onChange={(v) => change({ gross: v })} />
       </FieldRow>
       <ChangesLater
@@ -366,8 +379,8 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
           </Text>
         ) : null}
         <ToggleRow
-          label="Type take-home from my pay stub instead"
-          hint="Skip taxes and other deductions"
+          label="Enter take-home myself"
+          hint="From your pay stub, instead of working it out from taxes and deductions"
           value={!auto}
           onChange={(manual) => change(manual ? { netMode: "manual" } : { netMode: "auto" })}
         />
