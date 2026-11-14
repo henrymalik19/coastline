@@ -11,7 +11,7 @@ import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
 import { monthKey, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { Button, IconButton, MonthField, NumberInput } from "./form";
+import { Button, IconButton, InfoText, InfoTip, MonthField, NumberInput } from "./form";
 import { Icon } from "./Icon";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -181,11 +181,14 @@ export function plannedNow(s: PlanState, k: string, month: string): number | und
  * The short version: "Contributing [$500] a month". Changes over time (and single months) open the full
  * editor. No amount = the account gets whatever your priority order gives it.
  */
+const NOT_SET_INFO = "Not set: it gets whatever your priority order gives it each month. Set an amount to save a fixed sum instead.";
+
 export function MonthlyAmount({ k, label, unit = "a month", note, shared }: { k: string; label: string; unit?: string; note?: string; shared?: string }) {
   const t = useTheme();
   const { start } = usePlan();
   const { list, set, oneOffs } = useSchedule(k);
   const [more, setMore] = useState(false);
+  const [tip, setTip] = useState(false);
   const now = monthKey(start);
   const singles = Object.keys(oneOffs).length;
   const simple = list.length === 1 && !singles;
@@ -194,7 +197,10 @@ export function MonthlyAmount({ k, label, unit = "a month", note, shared }: { k:
     <View style={{ gap: 6 }}>
       {!list.length && !singles ? (
         <View style={[styles.row, { justifyContent: "space-between" }]}>
-          <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 160 }]}>Monthly contribution: not set, so it gets whatever your priority order gives it.</Text>
+          <View style={[styles.row, { flex: 1, gap: 6 }]}>
+            <Text style={[type.body, { color: t.text }]}>Each month</Text>
+            <InfoTip text={NOT_SET_INFO} label="Each month" open={tip} onToggle={setTip} />
+          </View>
           <Button title="Set an amount" icon="plus" onPress={() => set([{ from: now, amount: 0 }])} style={{ minHeight: 36 }} />
         </View>
       ) : simple && first ? (
@@ -210,6 +216,7 @@ export function MonthlyAmount({ k, label, unit = "a month", note, shared }: { k:
           {singles ? ` · ${singles} one-month change${singles === 1 ? "" : "s"}` : ""}
         </Text>
       )}
+      {tip && !list.length && !singles ? <InfoText text={NOT_SET_INFO} /> : null}
       {shared ? <Text style={[type.caption, { color: t.text3 }]}>{shared}</Text> : null}
       {list.length || singles ? (
         <Pressable role="button" aria-expanded={more} onPress={() => setMore((v) => !v)} hitSlop={6} style={styles.link}>

@@ -6,7 +6,7 @@ import { HELP } from "../lib/help";
 import { usePlan } from "../lib/plan";
 import { useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { FieldRow, NumberInput, Segmented } from "./form";
+import { FieldRow, InfoText, InfoTip, NumberInput, Segmented } from "./form";
 import { Icon } from "./Icon";
 import { MonthlyAmount } from "./ScheduleEditor";
 import { Card, Divider, Pill } from "./ui";
@@ -19,19 +19,17 @@ export function EmergencyFundNote({ linkToSettings = true }: { linkToSettings?: 
   const { state, result } = usePlan();
   const full = result.plan.fullTarget;
   const cash = result.d.bal.cash;
+  const [tip, setTip] = useState(false);
+  const info = `No need to add it as a goal. The plan builds a starter cushion of ${money(result.plan.starterTarget, { whole: true })} first, then grows it to ${state.plan.efMonths} months of expenses (${money(full, { whole: true })}), kept in your cash accounts.${linkToSettings ? "" : " You can change its size later under Money → Savings goals."}`;
   return (
     <View style={[styles.box, { backgroundColor: t.accentSoft }]}>
-      <View style={{ flexDirection: "row", gap: space.sm, alignItems: "flex-start" }}>
-        <Icon name="shield" size={20} color={t.accent} />
-        <View style={{ flex: 1, gap: 4 }}>
-          <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Your emergency fund is already part of your plan</Text>
-          <Text style={[type.caption, { color: t.text2 }]}>
-            No need to add it as a goal. The plan builds a starter cushion of <Text style={{ fontWeight: "700", color: t.text }}>{money(result.plan.starterTarget)}</Text> first,
-            then grows it to <Text style={{ fontWeight: "700", color: t.text }}>{state.plan.efMonths} months of expenses ({money(full)})</Text>, kept in your cash accounts.
-          </Text>
-        </View>
+      <View style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
+        <Icon name="shield" size={18} color={t.accent} />
+        <Text style={[type.label, { color: t.text, fontWeight: "700", flexShrink: 1 }]}>Emergency fund: already in your plan</Text>
+        <InfoTip text={info} label="Emergency fund" open={tip} onToggle={setTip} />
       </View>
-      {full > 0 ? (
+      {tip ? <InfoText text={info} /> : null}
+      {full > 0 && cash > 0 ? (
         <View style={{ gap: 4 }}>
           <ProgressBar progress={cash / full} color={t.good} />
           <Text style={[type.caption, { color: t.text3 }]}>{money(cash)} of {money(full)} in cash today</Text>
@@ -41,9 +39,7 @@ export function EmergencyFundNote({ linkToSettings = true }: { linkToSettings?: 
         <Pressable role="link" onPress={() => router.push("/money/goals")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change emergency fund size →</Text>
         </Pressable>
-      ) : (
-        <Text style={[type.caption, { color: t.text3 }]}>You can change its size later under Money → Savings goals.</Text>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -54,7 +50,7 @@ export function looksLikeEmergencyFund(name: string) {
 }
 
 const styles = StyleSheet.create({
-  box: { borderRadius: radius.lg, padding: space.lg, gap: space.md },
+  box: { borderRadius: radius.lg, paddingHorizontal: space.lg, paddingVertical: space.md, gap: space.sm },
   list: { borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, gap: 4 },
 });
 

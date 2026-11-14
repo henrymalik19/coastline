@@ -11,6 +11,7 @@ import { useLayout } from "../lib/layout";
 import { Icon } from "../components/Icon";
 import { RetirementIncomeEditor } from "../components/RetirementIncomeEditor";
 import { GoalEditor } from "../components/GoalEditor";
+import { monthsFromNow } from "../components/RecurringGoalFields";
 import { useFillPage } from "../components/MasterDetail";
 import { useMembership } from "../lib/sharing";
 import { ProgressBar, ProgressRing } from "../components/ProgressRing";
@@ -334,10 +335,13 @@ function GoalsStep() {
   const t = useTheme();
   const { state } = usePlan();
   const update = useStore((s) => s.update);
+  const target = state.goals.reduce((a, g) => a + (+g.target || 0), 0);
+  const add = (recurring: boolean) =>
+    update((p) => { p.goals.push({ id: newId(), name: "", target: recurring ? 1000 : 5000, saved: 0, ...(recurring ? { recurring: { every: 12, due: monthsFromNow(11) } } : {}) }); });
   return (
     <>
-      <Text style={[type.body, { color: t.text2 }]}>A house deposit, a car, a wedding… Each goal becomes a step in your plan, just before investing in a brokerage. Things that come around again (holidays, a yearly bill) can repeat. Totally optional.</Text>
       <EmergencyFundNote linkToSettings={false} />
+      <SectionHead title="Your goals" total={money(target, { whole: true })} info="A house deposit, a car, a wedding… Each goal becomes a step in your plan, just before investing in a brokerage. Things that come around again (holidays, a yearly bill) can repeat. Totally optional: skip this step if you have none." />
       {state.goals.map((g, i) => (
         <GoalEditor
           key={g.id}
@@ -346,7 +350,13 @@ function GoalsStep() {
           onRemove={() => update((p) => { p.goals.splice(i, 1); })}
         />
       ))}
-      <Button title="Add a goal" icon="plus" onPress={() => update((p) => { p.goals.push({ id: newId(), name: "", target: 5000, saved: 0 }); })} style={{ alignSelf: "flex-start" }} />
+      <View style={{ gap: 6 }}>
+        <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.xs }]}>{state.goals.length ? "Add another goal" : "Add a goal"}</Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+          <Button title="Savings goal" icon="plus" onPress={() => add(false)} style={{ minHeight: 36, paddingHorizontal: space.md }} />
+          <Button title="Repeating bill" icon="plus" onPress={() => add(true)} style={{ minHeight: 36, paddingHorizontal: space.md }} />
+        </View>
+      </View>
     </>
   );
 }

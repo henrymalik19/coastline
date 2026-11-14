@@ -13,7 +13,7 @@ const EVERY = [
 ] as const;
 
 /** "YYYY-MM" n months from now (a UI default only; the engine never reads the clock). */
-function monthsFromNow(n: number): string {
+export function monthsFromNow(n: number): string {
   const d = new Date();
   d.setMonth(d.getMonth() + n, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -56,12 +56,6 @@ export function RecurringGoalFields({ goal, onChange }: { goal: Goal; onChange: 
             value={r.inRetirement !== false}
             onChange={(on) => onChange({ recurring: { ...r, inRetirement: on ? undefined : false } })}
           />
-          {goal.target > 0 ? (
-            <Text style={[type.caption, { color: t.text3 }]}>
-              Usually {money(goal.target / r.every)}/mo set aside ({money(goal.target)} {everyLabel(r.every)}). If you're behind, the plan catches up
-              before {dueLabel(r.due)}; if you saved extra, later months ask for less. Update "saved so far" at your monthly check-in.
-            </Text>
-          ) : null}
         </View>
       ) : null}
     </View>
