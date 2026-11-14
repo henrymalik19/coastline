@@ -6,7 +6,8 @@ import { HELP } from "../lib/help";
 import { usePlan } from "../lib/plan";
 import { useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { FieldRow, InfoText, InfoTip, NumberInput, Segmented } from "./form";
+import { FieldRow, InfoText, InfoTip, NumberInput, Segmented, Select } from "./form";
+import { useLayout } from "../lib/layout";
 import { Icon } from "./Icon";
 import { MonthlyAmount } from "./ScheduleEditor";
 import { Card, Divider, Pill } from "./ui";
@@ -29,6 +30,11 @@ export function EmergencyFundNote({ linkToSettings = true }: { linkToSettings?: 
         <InfoTip text={info} label="Emergency fund" open={tip} onToggle={setTip} />
       </View>
       {tip ? <InfoText text={info} /> : null}
+      {!linkToSettings ? (
+        <View style={[styles.fields, { backgroundColor: t.surface }]}>
+          <EmergencyFundSize />
+        </View>
+      ) : null}
       {full > 0 && cash > 0 ? (
         <View style={{ gap: 4 }}>
           <ProgressBar progress={cash / full} color={t.good} />
@@ -44,6 +50,60 @@ export function EmergencyFundNote({ linkToSettings = true }: { linkToSettings?: 
   );
 }
 
+/** How big the emergency fund is: the starter cushion (built first) and the full fund, in months of expenses. */
+export function EmergencyFundSize() {
+  const t = useTheme();
+  const { state, result, actual } = usePlan();
+  const update = useStore((s) => s.update);
+  const byMonths = state.plan.starterEFMonths != null;
+  const full = actual.fullTarget;
+  const monthly = result.d.monthlyExpenses;
+  // phones: the label on its own line, then a small Months/Amount dropdown beside the number
+  const compact = useLayout().contentWidth < 600;
+  const setKind = (v: "months" | "amount") => update((p) => {
+    if (v === "months") p.plan.starterEFMonths = 1;
+    else {
+      // switching to a set amount starts from what the months came to
+      if (p.plan.starterEFMonths != null) p.plan.starterEF = Math.round(actual.starterTarget);
+      delete p.plan.starterEFMonths;
+    }
+  });
+  const kinds = [{ value: "months" as const, label: "Months" }, { value: "amount" as const, label: "Amount" }];
+  return (
+    <>
+      <FieldRow
+        stacked={compact}
+        label="Starter cushion"
+        hint={byMonths ? `${state.plan.starterEFMonths} month${state.plan.starterEFMonths === 1 ? "" : "s"} of expenses = ${money(actual.starterTarget)}. Built first, before paying down high-interest debt` : "Built first, before paying down high-interest debt"}
+        info={HELP.starterEF}
+      >
+        <View style={compact ? { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm } : { gap: space.xs, alignItems: "flex-end" }}>
+          {compact ? (
+            <Select label="Starter cushion size" value={byMonths ? "months" : "amount"} options={kinds} onChange={setKind} />
+          ) : (
+            <Segmented label="Starter cushion size" value={byMonths ? "months" : "amount"} options={kinds} onChange={setKind} />
+          )}
+          {byMonths ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <NumberInput kind="decimal" label="Starter emergency fund in months" value={state.plan.starterEFMonths ?? 1} max={12} step={0.5} width={compact ? 110 : 140} onChange={(v) => update((p) => { p.plan.starterEFMonths = v; })} />
+              <Text style={[type.caption, { color: t.text3 }]}>mo</Text>
+            </View>
+          ) : (
+            <NumberInput kind="money" label="Starter emergency fund" value={state.plan.starterEF} width={compact ? 135 : 140} onChange={(v) => update((p) => { p.plan.starterEF = v; })} />
+          )}
+        </View>
+      </FieldRow>
+    <Divider />
+      <FieldRow label="Full fund" hint={`${state.plan.efMonths} months of expenses (${money(monthly)}/mo) = ${money(full)}. 0 for none.`} info={HELP.efMonths}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <NumberInput kind="decimal" label="Full emergency fund in months" value={state.plan.efMonths} max={24} step={1} width={compact ? 110 : 140} onChange={(v) => update((p) => { p.plan.efMonths = v; })} />
+          <Text style={[type.caption, { color: t.text3 }]}>mo</Text>
+        </View>
+      </FieldRow>
+    </>
+  );
+}
+
 /** Inline nudge when a goal's name looks like an emergency fund. */
 export function looksLikeEmergencyFund(name: string) {
   return /emergenc|rainy.?day|safety net/i.test(name);
@@ -51,6 +111,7 @@ export function looksLikeEmergencyFund(name: string) {
 
 const styles = StyleSheet.create({
   box: { borderRadius: radius.lg, paddingHorizontal: space.lg, paddingVertical: space.md, gap: space.sm },
+  fields: { borderRadius: radius.md, paddingHorizontal: space.md },
   list: { borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, gap: 4 },
 });
 
@@ -63,10 +124,8 @@ export function EmergencyFundGoal() {
   const t = useTheme();
   const router = useRouter();
   const { state, result, actual, start } = usePlan();
-  const update = useStore((s) => s.update);
   const [planOpen, setPlanOpen] = useState(false);
   const [showAccounts, setShowAccounts] = useState(false);
-  const byMonths = state.plan.starterEFMonths != null;
   const hasSchedule = (k: string) => (state.plan.schedule?.[k]?.length ?? 0) > 0 || Object.keys(state.plan.scheduleMonths?.[k] ?? {}).length > 0;
   const full = actual.fullTarget;
   const cash = result.d.bal.cash;
@@ -83,36 +142,7 @@ export function EmergencyFundGoal() {
       <Text style={[type.caption, { color: t.text3 }]}>
         Kept in your cash accounts. Your plan builds the starter cushion first, then the full fund. Its size follows your spending.
       </Text>
-      <FieldRow label="Full fund" hint={`${state.plan.efMonths} months of expenses (${money(monthly)}/mo) = ${money(full)}. 0 for none.`} info={HELP.efMonths}>
-        <NumberInput kind="decimal" label="Full emergency fund in months" value={state.plan.efMonths} max={24} step={1} onChange={(v) => update((p) => { p.plan.efMonths = v; })} />
-      </FieldRow>
-      <Divider />
-      <FieldRow
-        label="Starter cushion"
-        hint={byMonths ? `${state.plan.starterEFMonths} month${state.plan.starterEFMonths === 1 ? "" : "s"} of expenses = ${money(actual.starterTarget)}. Built first, before paying down high-interest debt` : "Built first, before paying down high-interest debt"}
-        info={HELP.starterEF}
-      >
-        <View style={{ gap: space.xs, alignItems: "flex-end" }}>
-          <Segmented
-            label="Starter cushion size"
-            value={byMonths ? "months" : "amount"}
-            options={[{ value: "months", label: "Months" }, { value: "amount", label: "Amount" }]}
-            onChange={(v) => update((p) => {
-              if (v === "months") p.plan.starterEFMonths = 1;
-              else {
-                // switching to a set amount starts from what the months came to
-                if (p.plan.starterEFMonths != null) p.plan.starterEF = Math.round(actual.starterTarget);
-                delete p.plan.starterEFMonths;
-              }
-            })}
-          />
-          {byMonths ? (
-            <NumberInput kind="decimal" label="Starter emergency fund in months" value={state.plan.starterEFMonths ?? 1} max={12} step={0.5} onChange={(v) => update((p) => { p.plan.starterEFMonths = v; })} />
-          ) : (
-            <NumberInput kind="money" label="Starter emergency fund" value={state.plan.starterEF} onChange={(v) => update((p) => { p.plan.starterEF = v; })} />
-          )}
-        </View>
-      </FieldRow>
+      <EmergencyFundSize />
       <Divider />
       <View style={{ gap: 4 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
