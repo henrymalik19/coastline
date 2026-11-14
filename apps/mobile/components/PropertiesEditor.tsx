@@ -11,16 +11,12 @@ import { HELP } from "../lib/help";
 import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
-import { Button, Choice, FieldRow, IconButton, InfoText, InfoTip, NumberInput, Select, TextField, ToggleRow } from "./form";
+import { Button, FieldRow, IconButton, InfoText, InfoTip, NumberInput, Select, TextField, ToggleRow } from "./form";
 import { Icon } from "./Icon";
 import { Card, Divider } from "./ui";
 
 const WORTH_INFO = "What they're worth counts in your net worth, not in Coast FI (it isn't money you can invest). A rental's costs come out of its rent, so they stay out of your retirement spending.";
 
-const KINDS: { value: Property["kind"]; label: string }[] = [
-  { value: "home", label: "My home" },
-  { value: "rental", label: "Rental" },
-];
 
 export function PropertiesEditor({ titled = true }: { /** Off on its own page, which already says "Homes & rentals". */ titled?: boolean } = {}) {
   const t = useTheme();
@@ -71,7 +67,9 @@ export function PropertiesEditor({ titled = true }: { /** Off on its own page, w
   };
   const add = (kind: Property["kind"]) => {
     const id = newId();
-    update((p) => { p.properties = [...(p.properties ?? []), { id, name: kind === "home" ? "Home" : "Rental", kind, value: 0 }]; });
+    // the first is usually your home; another, more often a rental (the toggle changes it)
+    const k = kind === "home" && (state.properties ?? []).some((y) => y.kind === "home") ? "rental" : kind;
+    update((p) => { p.properties = [...(p.properties ?? []), { id, name: k === "home" ? "Home" : "Rental", kind: k, value: 0 }]; });
     setOpen(id);
   };
 
@@ -111,7 +109,7 @@ export function PropertiesEditor({ titled = true }: { /** Off on its own page, w
             {isOpen ? (
               <View style={{ gap: space.sm, paddingBottom: space.md, paddingLeft: compact ? 0 : 26 }}>
                 <TextField label="Name" placeholder="e.g. 710 Dillon Way" value={x.name} onChange={(v) => change(x.id, { name: v })} />
-                <Choice label="It's" options={KINDS} value={x.kind} onChange={(v) => change(x.id, { kind: v })} />
+                <ToggleRow label="It's a rental" value={x.kind === "rental"} onChange={(v) => change(x.id, { kind: v ? "rental" : "home", ...(x.name === "Home" || x.name === "Rental" ? { name: v ? "Rental" : "Home" } : {}) })} />
                 <FieldRow label="What it's worth" hint="Roughly what it would sell for" info={HELP.property}>
                   <NumberInput kind="money" label={`${x.name || "Property"} value`} value={x.value} onChange={(v) => change(x.id, { value: v })} />
                 </FieldRow>
@@ -175,8 +173,7 @@ export function PropertiesEditor({ titled = true }: { /** Off on its own page, w
         );
       })}
       <View style={[styles.row, { flexWrap: "wrap" }]}>
-        <Button title="Add a home" icon="plus" onPress={() => add("home")} style={{ minHeight: 36 }} />
-        <Button title="Add a rental" icon="plus" tone="ghost" onPress={() => add("rental")} style={{ minHeight: 36 }} />
+        <Button title={props.length ? "Add another property" : "Add a property"} icon="plus" onPress={() => add("home")} style={{ minHeight: 36 }} />
       </View>
     </Card>
   );
