@@ -17,7 +17,7 @@ import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, IconButton, InfoTip, NumberInput, TextField, Toggle } from "./form";
 import { Icon } from "./Icon";
-import { AddChip, MasterDetail, useFillPage, useTwoPane } from "./MasterDetail";
+import { MasterDetail, useFillPage, useTwoPane } from "./MasterDetail";
 import { SavingsPlan } from "./SavingsPlan";
 import { ChangesLater, monthName, useSchedule } from "./ScheduleEditor";
 import { Card, Pill } from "./ui";
@@ -285,7 +285,6 @@ export function BudgetEditor() {
       selected={onDebts ? DEBT_KEY : onSet ? SET_KEY : current?.name}
       onSelect={setSelected}
       listFooter={<Button title="Add group" icon="plus" tone="ghost" onPress={addGroup} style={{ alignSelf: "flex-start" }} />}
-      chipAdd={<AddChip label="Group" onPress={addGroup} />}
       empty={
         <>
           <Text style={[type.body, { color: t.text3 }]}>No budget yet.</Text>
@@ -533,7 +532,7 @@ function SetAsideRow({
         style={[styles.row, { borderBottomWidth: 0 }]}
       >
         <View style={{ flex: 1, minWidth: 0, paddingVertical: 4 }}>
-          <Text numberOfLines={2} style={[type.body, { color: t.text }]}>{g.name || "Goal"}</Text>
+          <Text numberOfLines={1} style={[type.body, { color: t.text }]}>{g.name || "Goal"}</Text>
           <Text style={[type.caption, { color: t.text3 }]}>
             {money(g.target)} {everyLabel(r.every)} · due {dueLabel(due)}
             {paidNow ? " · already set aside this month" : ""}
@@ -597,7 +596,7 @@ function DebtPaymentRow({
         style={[styles.row, { borderBottomWidth: 0 }]}
       >
         <View style={{ flex: 1, minWidth: 0, paddingVertical: 4 }}>
-          <Text numberOfLines={2} style={[type.body, { color: t.text }]}>{name}</Text>
+          <Text numberOfLines={1} style={[type.body, { color: t.text }]}>{name}</Text>
           <Text style={[type.caption, { color: t.text3 }]}>{from}</Text>
         </View>
         <Text style={[type.body, { width: cols.amount, textAlign: "right", color: t.text, fontVariant: ["tabular-nums"] }]}>{money(x.minPayment)}</Text>
@@ -851,7 +850,7 @@ function BudgetRow({
           {compact ? (
             // phones: the retirement status goes under the name so the name gets the room
             <View style={{ flex: 1, minWidth: 0, paddingVertical: 4 }}>
-              <Text numberOfLines={2} style={[type.body, { color: item.name ? t.text : t.text3 }]}>{name}</Text>
+              <Text numberOfLines={1} style={[type.body, { color: item.name ? t.text : t.text3 }]}>{name}</Text>
               <Text style={[type.caption, { color: item.inRetirement ? t.good : t.text3 }]}>{item.inRetirement ? "Still pay after I retire" : "Stops when I retire"}</Text>
               {laterText ? <Text numberOfLines={1} style={[type.caption, { color: t.accent }]}>{laterText}</Text> : null}
             </View>

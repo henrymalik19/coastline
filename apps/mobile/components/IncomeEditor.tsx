@@ -14,7 +14,7 @@ import { Button, DateField, FieldRow, IconButton, InfoText, InfoTip, NumberInput
 import { Icon } from "./Icon";
 
 const HSA_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-import { MasterDetail, useTwoPane } from "./MasterDetail";
+import { MasterDetail } from "./MasterDetail";
 import { Card, Divider } from "./ui";
 import { ChangesLater, monthName } from "./ScheduleEditor";
 import { hsaEverEligible } from "./HsaEligibility";
@@ -664,7 +664,7 @@ export function AddIncomeButtons({ onAdd, hasAny }: { onAdd: (inc: Income) => vo
 }
 
 const styles = StyleSheet.create({
-  incHead: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, paddingVertical: space.md },
+  yearBox: { borderLeftWidth: StyleSheet.hairlineWidth, paddingLeft: space.lg, alignItems: "flex-end" },
   group: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: space.md, gap: 2, marginTop: space.xs },
   loan: { borderRadius: radius.sm, padding: space.md, gap: space.xs },
   dedRow: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 52 },
@@ -676,7 +676,7 @@ const styles = StyleSheet.create({
 });
 
 /** Monthly average of an income, for the list and totals. */
-const monthly = (inc: Income) => (inc.net * PERIODS[inc.freq]) / 12;
+const TAKE_HOME_INFO = "What lands in your account after taxes and everything taken out of your pay. A normal month has 2 paychecks if you're paid every 2 weeks (4 if weekly); the year also counts the months with an extra one.";
 const KIND_LABEL: Record<IncomeKind, string> = { job: "Job", business: "Business", rental: "Rental", other: "Other income" };
 
 /** All income sources: list on the right (pick one), its details on the left. Fills its container. */
@@ -684,16 +684,12 @@ export function IncomesEditor() {
   const t = useTheme();
   const { state, result } = usePlan();
   const update = useStore((s) => s.update);
-  const twoPane = useTwoPane();
   const [selected, setSelected] = useState<string | undefined>(state.incomes[0]?.id);
+  const [yearTip, setYearTip] = useState(false);
   const ids = state.incomes.map((i) => i.id).join("|");
   useEffect(() => {
-    if (selected && !state.incomes.some((i) => i.id === selected)) setSelected(state.incomes[0]?.id);
+    if (!selected || !state.incomes.some((i) => i.id === selected)) setSelected(state.incomes[0]?.id);
   }, [ids]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    // two panes always show one
-    if (twoPane && !selected) setSelected(state.incomes[0]?.id);
-  }, [twoPane]); // eslint-disable-line react-hooks/exhaustive-deps
   const idx = Math.max(0, state.incomes.findIndex((i) => i.id === selected));
   const inc = state.incomes[idx];
   const add = (kind: IncomeKind) => {
@@ -716,16 +712,27 @@ export function IncomesEditor() {
       });
   };
 
+  // what comes in: a month (the big one) and a year, side by side
   const header = (
-    <Card style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: space.sm }}>
-      <View>
-        <Text style={[type.caption, { color: t.text3 }]}>Take-home in a normal month</Text>
-        <Text style={[type.stat, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(result.d.leanMonthly)}</Text>
+    <Card style={{ gap: space.sm }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <Text style={[type.overline, { color: t.text3 }]}>Take-home</Text>
+        <InfoTip text={TAKE_HOME_INFO} label="Take-home" open={yearTip} onToggle={setYearTip} />
       </View>
-      <View style={{ alignItems: "flex-end" }}>
-        <Text style={[type.caption, { color: t.text3 }]}>Per year, with extra paychecks</Text>
-        <Text style={[type.label, { color: t.text2, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(result.d.annualNet)}</Text>
+      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: space.lg }}>
+        <View style={{ flex: 1 }}>
+          <Text style={[type.stat, { color: t.text, fontVariant: ["tabular-nums"] }]}>
+            {money(result.d.leanMonthly, { whole: true })}
+            <Text style={[type.label, { color: t.text3, fontWeight: "600" }]}> /mo</Text>
+          </Text>
+          <Text style={[type.caption, { color: t.text3 }]}>In a normal month</Text>
+        </View>
+        <View style={[styles.yearBox, { borderLeftColor: t.border }]}>
+          <Text style={[type.heading, { color: t.text2, fontVariant: ["tabular-nums"] }]}>{money(result.d.annualNet, { whole: true })}</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>Annually</Text>
+        </View>
       </View>
+      {yearTip ? <InfoText text={TAKE_HOME_INFO} /> : null}
     </Card>
   );
 
@@ -739,48 +746,12 @@ export function IncomesEditor() {
       </View>
     </View>
   );
-  if (!twoPane) {
-    return (
-      <View style={{ gap: space.md }}>
-        {header}
-        {state.incomes.map((i, n) => {
-          const isOpen = selected === i.id;
-          return (
-            <Card key={i.id} padded={false}>
-              <Pressable
-                role="button"
-                aria-expanded={isOpen}
-                accessibilityLabel={`${i.name || "Income"}: ${money(monthly(i))} a month`}
-                onPress={() => setSelected(isOpen ? undefined : i.id)}
-                style={[styles.incHead, isOpen ? { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border } : null]}
-              >
-                <View style={{ transform: [{ rotate: isOpen ? "90deg" : "0deg" }] }}>
-                  <Icon name="chevron" size={16} color={t.text3} />
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={[type.body, { color: t.text, fontWeight: "600" }]} numberOfLines={1}>{i.name || KIND_LABEL[i.kind ?? "job"]}</Text>
-                  <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{KIND_LABEL[i.kind ?? "job"]}</Text>
-                </View>
-                <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(monthly(i))}/mo</Text>
-              </Pressable>
-              {isOpen ? (
-                <View style={{ padding: space.md }}>
-                  <IncomeEditor key={i.id} bare inc={i} marginalTax={state.plan.marginalTax} onChange={(patch) => update((p) => { p.incomes[n] = { ...p.incomes[n]!, ...patch }; })} onRemove={() => remove(i)} />
-                </View>
-              ) : null}
-            </Card>
-          );
-        })}
-        {addButtons}
-      </View>
-    );
-  }
   return (
     <MasterDetail
       label="Income sources"
       header={header}
       listTitle="Income sources"
-      items={state.incomes.map((i) => ({ key: i.id, title: i.name, subtitle: KIND_LABEL[i.kind ?? "job"], value: `${money(monthly(i))}/mo` }))}
+      items={state.incomes.map((i) => ({ key: i.id, title: i.name, subtitle: KIND_LABEL[i.kind ?? "job"], value: `${money(i.net * CHECKS_IN_NORMAL_MONTH[i.freq], { whole: true })}/mo` }))}
       selected={inc?.id}
       onSelect={setSelected}
       listFooter={addButtons}
