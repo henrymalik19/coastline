@@ -1,6 +1,6 @@
 import { Redirect } from "expo-router";
 
-/** The month-by-month charts moved to the Plan tab (Charts). */
+/** The old Monthly tab: this month's to-dos are on Home now. */
 export default function Monthly() {
-  return <Redirect href="/plan?view=month" />;
+  return <Redirect href="/home" />;
 }

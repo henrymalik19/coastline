@@ -29,7 +29,7 @@ export function RewardsCard({ style }: { style?: ViewStyle }) {
       <View style={styles.between}>
         <View style={{ gap: 2, flex: 1, minWidth: 0 }}>
           <View style={styles.row}>
-            <SectionLabel>{budget ? "Within budget" : "Streak"}</SectionLabel>
+            <SectionLabel flush>{budget ? "Within budget" : "Streak"}</SectionLabel>
             <InfoTip text={info} label="Streak" open={tip} onToggle={setTip} />
           </View>
           <Text style={[type.heading, { color: t.text }]}>

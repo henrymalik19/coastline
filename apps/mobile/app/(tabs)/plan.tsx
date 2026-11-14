@@ -8,7 +8,6 @@ import { longMonth } from "../../components/AdjustmentsCard";
 import { BalanceChart } from "../../components/BalanceChart";
 import { InfoText, InfoTip, Segmented, Select } from "../../components/form";
 import { Icon } from "../../components/Icon";
-import { ThisMonth } from "../../components/ThisMonth";
 import { WhatIf } from "../../components/WhatIf";
 import { ProgressBar } from "../../components/ProgressRing";
 import { Card, Screen, SectionLabel } from "../../components/ui";
@@ -19,10 +18,9 @@ import { useLayout } from "../../lib/layout";
 import { usePlan } from "../../lib/plan";
 import { radius, space, type, useTheme } from "../../lib/theme";
 
-type ViewKey = "overview" | "month" | "table" | "whatif";
+type ViewKey = "overview" | "table" | "whatif";
 const VIEWS: { value: ViewKey; label: string }[] = [
   { value: "overview", label: "Overview" },
-  { value: "month", label: "This month" },
   { value: "table", label: "Table" },
   { value: "whatif", label: "What if" },
 ];
@@ -31,8 +29,8 @@ const keyLabel = (k: string) => `${MON[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
 
 /**
  * Forecast: where you're headed. Overview (the finish line, ahead of or behind the plan, your invested
- * balance over time, each account filling up), this month's split and to-dos, the month-by-month
- * table, and what-ifs. Your priority order lives in Settings.
+ * balance over time, each account filling up), the month-by-month table, and what-ifs. This month's
+ * to-dos are on Home. Your priority order lives in Settings.
  */
 export default function Forecast() {
   const t = useTheme();
@@ -42,7 +40,7 @@ export default function Forecast() {
   const { state, result: o, start, forecast } = usePlan();
   const real = { ...o, plan: forecast };
   const { view } = useLocalSearchParams<{ view?: string }>();
-  const [tab, setTab] = useState<ViewKey>(view === "charts" || view === "month" ? "month" : view === "forecast" || view === "table" ? "table" : view === "whatif" ? "whatif" : "overview");
+  const [tab, setTab] = useState<ViewKey>(view === "forecast" || view === "table" ? "table" : view === "whatif" ? "whatif" : "overview");
   const router = useRouter();
   const checkins = useStore((s) => s.checkins);
   const vs = vsPlan(checkins, start);
@@ -195,9 +193,9 @@ export default function Forecast() {
       ) : null}
       {tab === "table" ? (
         <AccountsForecast key={pick ?? "all"} state={state} o={real} start={start} fill initialPick={pick} />
-      ) : tab === "month" || tab === "whatif" ? (
+      ) : tab === "whatif" ? (
         <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
-          {tab === "month" ? <ThisMonth /> : <WhatIf />}
+          <WhatIf />
         </ScrollView>
       ) : (
         <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>

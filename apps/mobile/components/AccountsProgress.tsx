@@ -26,12 +26,12 @@ type Row = {
   progress?: number;
   /** 0–1: where the plan has it by December (drawn lighter behind `progress`). */
   later?: number;
-  /** When / how it gets there. */
+  /** When / how it gets there: one short line. */
   status: string;
-  /** A to-do for it (e.g. what to set per paycheck). */
-  tip?: string;
-  /** Something to fill in for an exact answer. */
-  tip2?: string;
+  /** The detail, in the row's ⓘ. */
+  info?: string;
+  /** Something to fill in for an exact answer: a short nudge (the why is in the ⓘ). */
+  needs?: string;
   color: string;
   done?: boolean;
 };
@@ -78,7 +78,8 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       value: `${money(cash, { whole: true })} of ${money(pl.fullTarget, { whole: true })}`,
       progress: Math.min(1, cash / pl.fullTarget),
       later: dec ? Math.min(1, dec.cash / pl.fullTarget) : undefined,
-      status: `${state.plan.efMonths} months of expenses (${money(pl.fullTarget / Math.max(1, state.plan.efMonths), { whole: true })}/mo) · ${full ? "Full" : ev("fullEF") !== undefined ? `full by ${when(ev("fullEF"))}` : "not full in the plan yet"} · ${selLabel}: ${money(dec.cash, { whole: true })}`,
+      status: full ? "Full" : ev("fullEF") !== undefined ? `Full by ${when(ev("fullEF"))}` : "Not full in the plan yet",
+      info: `${state.plan.efMonths} months of expenses (${money(pl.fullTarget / Math.max(1, state.plan.efMonths), { whole: true })} a month), kept in cash. By ${selLabel}: ${money(dec.cash, { whole: true })}.`,
       color: t.good,
       done: full,
     });
@@ -122,17 +123,17 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       value: thisYear ? `${money(soFar, { whole: true })} of ${money(limitSel, { whole: true })}` : `${selY}: ${money(limitSel, { whole: true })} limit`,
       progress: thisYear ? Math.min(1, soFar / limitSel) : 0,
       later: Math.min(1, byThen / limitSel),
-      status:
-        (thisYear ? "In so far · " : `${selY} starts fresh · `) +
-        (fullThen
-          ? `maxed by ${selLabel}`
-          : `about ${money(byThen, { whole: true })} by ${selLabel}`),
-      tip2: notEntered && thisYear
-        ? k === "ira" || k === "iraSpouse"
-          ? `Add what's already in for ${y0} (Money → Accounts) so the plan knows your real room.`
-          : `Not entered yet, so the plan assumes about ${money(before, { whole: true })} from this year's earlier paychecks. Enter the real amount (Money → Accounts).`
-        : undefined,
-      tip: k === "k401" || (k === "hsa" && state.plan.hsaPayroll !== false) ? tipFor(k) : undefined,
+      status: fullThen ? `Maxed by ${selLabel}` : `About ${money(byThen, { whole: true })} by ${selLabel}`,
+      info: [
+        thisYear ? `The bar is what's in so far this year, against the ${y0} limit.` : `${selY} starts fresh with a new limit.`,
+        k === "k401" || (k === "hsa" && state.plan.hsaPayroll !== false) ? tipFor(k) : undefined,
+        notEntered && thisYear
+          ? k === "ira" || k === "iraSpouse"
+            ? `Add what's already in for ${y0} (Money → Accounts) so the plan knows your real room.`
+            : `Not entered yet, so the plan assumes about ${money(before, { whole: true })} from this year's earlier paychecks. Enter the real amount on Money → Accounts.`
+          : undefined,
+      ].filter(Boolean).join(" "),
+      needs: notEntered && thisYear ? `Add what's in so far for ${y0} (Money → Accounts)` : undefined,
       color: t.series[k === "iraSpouse" ? "ira" : k],
       done: thisYear && maxed,
     });
@@ -148,7 +149,8 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       key: k,
       name: k === "taxable" ? "Brokerage" : "Other investments",
       value: money(a.start, { whole: true }),
-      status: `Today · ${selLabel}: about ${money(then, { whole: true })}${later !== undefined ? ` · Coast FI (${monthLabel(start, coastM!)}): about ${money(later, { whole: true })}` : ""}`,
+      status: `About ${money(then, { whole: true })} by ${selLabel}`,
+      info: later !== undefined ? `About ${money(later, { whole: true })} by your Coast FI date (${monthLabel(start, coastM!)}).` : undefined,
       color: k === "taxable" ? t.series.taxable : t.text3,
     });
   }
@@ -178,7 +180,8 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       status:
         m !== undefined && m <= atI
           ? `Paid off ${when(m)}`
-          : `${selLabel}: ${money(owedThen, { whole: true })} owed${m !== undefined ? ` · paid off ${when(m)}` : x.payroll ? " · from your paycheck" : " · minimum payments"}`,
+          : m !== undefined ? `Paid off ${when(m)}` : x.payroll ? "From your paycheck" : "Minimum payments",
+      info: m !== undefined && m <= atI ? undefined : `By ${selLabel}: ${money(owedThen, { whole: true })} owed.`,
       progress: x.balance > 0 ? 0 : undefined,
       later: x.balance > 0 ? Math.min(1, Math.max(0, 1 - owedThen / x.balance)) : undefined,
       color: t.series.debt,
@@ -190,13 +193,13 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       <View style={{ padding: space.lg, paddingBottom: space.sm, gap: 2 }}>
         <View style={styles.pickRow}>
           <View style={[styles.pickRow, { gap: 4, flex: 1, minWidth: 0 }]}>
-            <SectionLabel>Accounts filling up</SectionLabel>
+            <SectionLabel flush>Accounts filling up</SectionLabel>
             <InfoTip text={INFO} label="Accounts filling up" open={tip} onToggle={setTip} />
           </View>
-          <View style={{ width: 132 }}>
+          <View style={{ width: 136 }}>
             <Select
               label="Look ahead to"
-              options={[0, 12, 24].map((n) => defaultAt + n).filter((to) => to <= last).map((to) => ({ value: String(to), label: `By ${monthLabel(start, to)}` }))}
+              options={[0, 12, 24].map((n) => defaultAt + n).filter((to) => to <= last).map((to) => ({ value: String(to), label: monthLabel(start, to) }))}
               value={String(atI)}
               onChange={(v) => setAt(+v)}
             />
@@ -211,29 +214,47 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       {rows.map((r, i) => (
         <View key={r.key}>
           {i > 0 ? <View style={{ marginLeft: space.lg }}><Divider /></View> : null}
-          <Pressable
-            role="button"
-            accessibilityLabel={`${r.name}: ${r.value}. ${r.status}. Open its forecast`}
-            onPress={() => onOpen(r.key)}
-            style={({ pressed }) => [styles.row, pressed ? { backgroundColor: t.surface2 } : null]}
-          >
-            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-              <View style={styles.line}>
-                <View style={[styles.dot, { backgroundColor: r.color }]} />
-                <Text style={[type.body, { color: t.text, fontWeight: "600", flex: 1 }]} numberOfLines={1}>{r.name}</Text>
-                <Text style={[type.label, { color: t.text, fontVariant: ["tabular-nums"] }]}>{r.value}</Text>
+          <View style={styles.rowWrap}>
+            <Pressable
+              role="button"
+              accessibilityLabel={`${r.name}: ${r.value}. ${r.status}. Open its forecast`}
+              onPress={() => onOpen(r.key)}
+              style={({ pressed }) => [styles.row, pressed ? { backgroundColor: t.surface2 } : null]}
+            >
+              <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                <View style={styles.line}>
+                  <View style={[styles.dot, { backgroundColor: r.color }]} />
+                  <Text style={[type.body, { color: t.text, fontWeight: "600", flex: 1 }]} numberOfLines={1}>{r.name}</Text>
+                  <Text style={[type.label, { color: t.text, fontVariant: ["tabular-nums"] }]}>{r.value}</Text>
+                </View>
+                {r.progress !== undefined ? <TwoBar now={r.progress} later={r.later} color={r.color} /> : null}
               </View>
-              {r.progress !== undefined ? <TwoBar now={r.progress} later={r.later} color={r.color} /> : null}
-              <Text style={[type.caption, { color: r.done ? t.good : t.text3, fontWeight: r.done ? "700" : "400" }]}>{r.status}</Text>
-              {r.tip ? <Text style={[type.caption, { color: t.accent }]}>{r.tip}</Text> : null}
-              {r.tip2 ? <Text style={[type.caption, { color: t.warn }]}>{r.tip2}</Text> : null}
+              <Icon name="chevron" size={14} color={t.text3} />
+            </Pressable>
+            <View style={styles.statusWrap}>
+              <RowStatus r={r} />
             </View>
-            <Icon name="chevron" size={14} color={t.text3} />
-          </Pressable>
+          </View>
         </View>
       ))}
       {!rows.length ? <Text style={[type.caption, { color: t.text3, padding: space.lg }]}>Add your accounts and debts on the Money tab.</Text> : null}
     </Card>
+  );
+}
+
+/** One line under the bar: how it's going, a nudge when something's missing, and an ⓘ with the rest. */
+function RowStatus({ r }: { r: Row }) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <View style={[styles.line, { gap: 4 }]}>
+        <Text style={[type.caption, { color: r.done ? t.good : t.text3, fontWeight: r.done ? "700" : "400", flexShrink: 1 }]} numberOfLines={1}>{r.status}</Text>
+        {r.info ? <InfoTip text={r.info} label={r.name} open={open} onToggle={setOpen} /> : null}
+      </View>
+      {r.needs ? <Text style={[type.caption, { color: t.warn }]} numberOfLines={1}>{r.needs}</Text> : null}
+      {open && r.info ? <InfoText text={r.info} /> : null}
+    </>
   );
 }
 
@@ -256,7 +277,9 @@ const styles = StyleSheet.create({
   pickRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
   keyItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   keySw: { width: 10, height: 10, borderRadius: 2 },
-  row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },
+  rowWrap: { paddingBottom: space.md },
+  row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: 6 },
+  statusWrap: { paddingLeft: space.lg, paddingRight: space.lg + 22, gap: 2 },
   line: { flexDirection: "row", alignItems: "center", gap: space.sm },
   dot: { width: 8, height: 8, borderRadius: 4 },
 });

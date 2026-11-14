@@ -112,9 +112,9 @@ export function Card({ children, style, padded = true }: { children: ReactNode; 
   );
 }
 
-export function SectionLabel({ children }: { children: ReactNode }) {
+export function SectionLabel({ children, flush }: { children: ReactNode; /** In a row (e.g. with an ⓘ): no bottom margin, so they line up. */ flush?: boolean }) {
   const t = useTheme();
-  return <Text style={[type.overline, { color: t.text3, marginBottom: space.sm }]}>{children}</Text>;
+  return <Text style={[type.overline, { color: t.text3, marginBottom: flush ? 0 : space.sm }]}>{children}</Text>;
 }
 
 export type Tone = "neutral" | "accent" | "good" | "warn" | "bad";

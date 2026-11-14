@@ -62,7 +62,7 @@ export function AdjustmentsCard({ start }: { start: Date }) {
     <Card style={{ gap: space.md }}>
       <View style={styles.between}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1 }}>
-          <SectionLabel>One-off months</SectionLabel>
+          <SectionLabel flush>One-off months</SectionLabel>
           <InfoTip text={INFO} label="One-off months" open={tip} onToggle={setTip} />
         </View>
         {!open ? <Button title="Add one" icon="plus" onPress={() => setOpen(true)} style={{ minHeight: 36, paddingHorizontal: space.md }} /> : null}

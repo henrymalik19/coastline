@@ -29,7 +29,7 @@ export function WhatIf() {
     <Card style={{ gap: space.md }}>
       <View style={styles.between}>
         <View style={[styles.row, { flexShrink: 1 }]}>
-          <SectionLabel>What if…</SectionLabel>
+          <SectionLabel flush>What if…</SectionLabel>
           <InfoTip text={SLIDERS_INFO} label="What if" open={tip} onToggle={setTip} />
         </View>
         {whatIfOn ? <Pill tone="warn">What-ifs are on</Pill> : null}
@@ -81,7 +81,7 @@ function Odds() {
       <View style={styles.between}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <View style={styles.row}>
-            <SectionLabel>Range of outcomes</SectionLabel>
+            <SectionLabel flush>Range of outcomes</SectionLabel>
             <InfoTip text={info} label="Range of outcomes" open={tip} onToggle={setTip} />
           </View>
           <Text style={[type.heading, { color: t.text, marginTop: -4 }]}>{percent(o.mc.probFire)} odds of FIRE by {d.retireAge}</Text>
