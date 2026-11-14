@@ -14,7 +14,7 @@ import { Button, DateField, FieldRow, IconButton, InfoText, InfoTip, NumberInput
 import { Icon } from "./Icon";
 
 const HSA_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-import { AddChip, MasterDetail } from "./MasterDetail";
+import { MasterDetail, useTwoPane } from "./MasterDetail";
 import { Card, Divider } from "./ui";
 import { ChangesLater, monthName } from "./ScheduleEditor";
 import { hsaEverEligible } from "./HsaEligibility";
@@ -141,7 +141,7 @@ export function IncomeEditor({
           <FieldRow label={compact ? "You keep" : `Amount you keep ${inc.freq === "monthly" ? "per month" : "each time"}`} hint="After taxes and costs" info={amountHelp}>
             <NumberInput kind="money" label="Amount you keep" value={inc.net} onChange={(v) => change({ net: v })} />
           </FieldRow>
-          <ChangesLater k={PAYNET + inc.id} label={inc.name || "This income"} base={inc.net} unit={inc.freq === "monthly" ? "/mo" : " each time"} prompt="Going up, down or ending later?" />
+          <ChangesLater k={PAYNET + inc.id} label={inc.name || "This income"} base={inc.net} unit={inc.freq === "monthly" ? "/mo" : " each time"} prompt="Changing later?" />
         </>
       )}
       {kind === "rental" ? <RentalValue inc={inc} /> : null}
@@ -664,6 +664,7 @@ export function AddIncomeButtons({ onAdd, hasAny }: { onAdd: (inc: Income) => vo
 }
 
 const styles = StyleSheet.create({
+  incHead: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, paddingVertical: space.md },
   group: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: space.md, gap: 2, marginTop: space.xs },
   loan: { borderRadius: radius.sm, padding: space.md, gap: space.xs },
   dedRow: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 52 },
@@ -683,11 +684,16 @@ export function IncomesEditor() {
   const t = useTheme();
   const { state, result } = usePlan();
   const update = useStore((s) => s.update);
+  const twoPane = useTwoPane();
   const [selected, setSelected] = useState<string | undefined>(state.incomes[0]?.id);
   const ids = state.incomes.map((i) => i.id).join("|");
   useEffect(() => {
-    if (!selected || !state.incomes.some((i) => i.id === selected)) setSelected(state.incomes[0]?.id);
+    if (selected && !state.incomes.some((i) => i.id === selected)) setSelected(state.incomes[0]?.id);
   }, [ids]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    // two panes always show one
+    if (twoPane && !selected) setSelected(state.incomes[0]?.id);
+  }, [twoPane]); // eslint-disable-line react-hooks/exhaustive-deps
   const idx = Math.max(0, state.incomes.findIndex((i) => i.id === selected));
   const inc = state.incomes[idx];
   const add = (kind: IncomeKind) => {
@@ -695,15 +701,16 @@ export function IncomesEditor() {
     update((p) => { p.incomes.push(n); });
     setSelected(n.id);
   };
-  const remove = async () => {
+  const remove = async (inc: Income | undefined = state.incomes[idx]) => {
     if (!inc) return;
+    const at = state.incomes.findIndex((i) => i.id === inc.id);
     const hasProperty = !!propertyFor(state, inc.id);
     const hasMortgage = state.debts.some((d) => d.id === rentalMortgageId(inc.id));
     const also = [hasProperty ? "its property under Homes & rentals" : "", hasMortgage ? "its mortgage in Debts" : ""].filter(Boolean).join(" and ");
     const msg = `"${inc.name || "This income"}" will be removed from your plan${also ? `, along with ${also}` : ""}.`;
     if (await confirm("Remove this income?", msg, "Remove"))
       update((p) => {
-        p.incomes.splice(idx, 1);
+        p.incomes.splice(at, 1);
         p.properties = (p.properties ?? []).filter((x) => x.incomeId !== inc.id);
         p.debts = p.debts.filter((d) => d.id !== rentalMortgageId(inc.id));
       });
@@ -722,6 +729,52 @@ export function IncomesEditor() {
     </Card>
   );
 
+  const addButtons = (
+    <View style={{ gap: 6 }}>
+      <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.xs }]}>{state.incomes.length ? "Add another income" : "Add an income"}</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+        {INCOME_KINDS.map((k) => (
+          <Button key={k.value} title={k.label} icon="plus" onPress={() => add(k.value)} style={{ minHeight: 36, paddingHorizontal: space.md }} />
+        ))}
+      </View>
+    </View>
+  );
+  if (!twoPane) {
+    return (
+      <View style={{ gap: space.md }}>
+        {header}
+        {state.incomes.map((i, n) => {
+          const isOpen = selected === i.id;
+          return (
+            <Card key={i.id} padded={false}>
+              <Pressable
+                role="button"
+                aria-expanded={isOpen}
+                accessibilityLabel={`${i.name || "Income"}: ${money(monthly(i))} a month`}
+                onPress={() => setSelected(isOpen ? undefined : i.id)}
+                style={[styles.incHead, isOpen ? { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border } : null]}
+              >
+                <View style={{ transform: [{ rotate: isOpen ? "90deg" : "0deg" }] }}>
+                  <Icon name="chevron" size={16} color={t.text3} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[type.body, { color: t.text, fontWeight: "600" }]} numberOfLines={1}>{i.name || KIND_LABEL[i.kind ?? "job"]}</Text>
+                  <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{KIND_LABEL[i.kind ?? "job"]}</Text>
+                </View>
+                <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(monthly(i))}/mo</Text>
+              </Pressable>
+              {isOpen ? (
+                <View style={{ padding: space.md }}>
+                  <IncomeEditor key={i.id} bare inc={i} marginalTax={state.plan.marginalTax} onChange={(patch) => update((p) => { p.incomes[n] = { ...p.incomes[n]!, ...patch }; })} onRemove={() => remove(i)} />
+                </View>
+              ) : null}
+            </Card>
+          );
+        })}
+        {addButtons}
+      </View>
+    );
+  }
   return (
     <MasterDetail
       label="Income sources"
@@ -730,21 +783,7 @@ export function IncomesEditor() {
       items={state.incomes.map((i) => ({ key: i.id, title: i.name, subtitle: KIND_LABEL[i.kind ?? "job"], value: `${money(monthly(i))}/mo` }))}
       selected={inc?.id}
       onSelect={setSelected}
-      listFooter={
-        <View style={{ gap: 6 }}>
-          <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.xs }]}>Add income</Text>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-            {INCOME_KINDS.map((k) => (
-              <Button key={k.value} title={k.label} icon="plus" onPress={() => add(k.value)} style={{ minHeight: 36, paddingHorizontal: space.md }} />
-            ))}
-          </View>
-        </View>
-      }
-      chipAdd={
-        <>
-          {INCOME_KINDS.map((k) => <AddChip key={k.value} label={k.label} onPress={() => add(k.value)} />)}
-        </>
-      }
+      listFooter={addButtons}
       empty={
         <>
           <Text style={[type.body, { color: t.text3 }]}>No income yet. What kind is it?</Text>
@@ -753,7 +792,7 @@ export function IncomesEditor() {
           </View>
         </>
       }
-      detail={inc ? <IncomeEditor key={inc.id} bare inc={inc} marginalTax={state.plan.marginalTax} onChange={(patch) => update((p) => { p.incomes[idx] = { ...p.incomes[idx]!, ...patch }; })} onRemove={remove} /> : null}
+      detail={inc ? <IncomeEditor key={inc.id} bare inc={inc} marginalTax={state.plan.marginalTax} onChange={(patch) => update((p) => { p.incomes[idx] = { ...p.incomes[idx]!, ...patch }; })} onRemove={() => remove()} /> : null}
     />
   );
 }
