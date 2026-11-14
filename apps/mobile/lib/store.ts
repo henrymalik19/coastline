@@ -212,8 +212,9 @@ export const useStore = create<AppState>()(
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState> & { isSampleData?: boolean; seenWelcome?: boolean };
         const ok = PlanStateSchema.safeParse(p.plan);
-        // saves from before the sample plan was removed: an untouched sample becomes a blank plan
-        const wasSample = !p.onboarded && (p.isSampleData === true || (p.isSampleData === undefined && !p.seenWelcome));
+        // saves from before the sample plan was removed: an untouched sample becomes a blank plan.
+        // Only a save marked as the sample: today's saves carry neither flag, and setup in progress must survive a reload
+        const wasSample = !p.onboarded && p.isSampleData === true;
         return {
           ...current,
           plan: ok.success && !wasSample ? withProperties(ok.data) : current.plan,

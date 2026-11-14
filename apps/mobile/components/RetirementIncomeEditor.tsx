@@ -65,16 +65,15 @@ export function RetirementIncomeEditor() {
                     </View>
                     <IconButton icon="trash" color={t.bad} label={`Remove ${x.name || meta.label}`} onPress={() => update((p) => { p.retirementIncome!.splice(i, 1); })} />
                   </View>
-                  <FieldRow label="Per month" hint="In today's dollars">
+                  <FieldRow label="Per month" info={`In today's dollars. ${meta.hint}`}>
                     <NumberInput kind="money" label={`${x.name || meta.label} per month`} value={x.monthly} onChange={(v) => set(i, { monthly: v })} />
                   </FieldRow>
                   <FieldRow
                     label="Starts at age"
-                    hint={gap > 0 ? `${gap} year${gap === 1 ? "" : "s"} after you retire; your savings cover those years` : "Starts by the time you retire"}
+                    info={gap > 0 ? `${gap} year${gap === 1 ? "" : "s"} after you retire; your savings cover those years.` : "It starts by the time you retire."}
                   >
                     <NumberInput kind="int" label={`${x.name || meta.label} start age`} value={x.startAge} min={40} max={80} onChange={(v) => set(i, { startAge: v })} />
                   </FieldRow>
-                  <Text style={[type.caption, { color: t.text3 }]}>{meta.hint}</Text>
                 </View>
               </View>
             );

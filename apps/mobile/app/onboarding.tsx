@@ -6,7 +6,8 @@ import { PropertiesEditor } from "../components/PropertiesEditor";
 import { BudgetEditor } from "../components/BudgetEditor";
 import { AddDebtButtons, DebtEditor, paidFromFor } from "../components/DebtEditor";
 import { EmergencyFundNote, looksLikeEmergencyFund } from "../components/EmergencyFundNote";
-import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField } from "../components/form";
+import { Button, FieldRow, IconButton, InfoText, InfoTip, NumberInput, Segmented, Select, TextField } from "../components/form";
+import { useLayout } from "../lib/layout";
 import { Icon } from "../components/Icon";
 import { RetirementIncomeEditor } from "../components/RetirementIncomeEditor";
 import { GoalEditor } from "../components/GoalEditor";
@@ -189,35 +190,33 @@ function YouStep() {
   const { state } = usePlan();
   const update = useStore((s) => s.update);
   const medicareAge = state.retireAge >= 65;
+  // phones: the filing status as a dropdown (three wide buttons wrap onto two lines)
+  const compact = useLayout().contentWidth < 600;
+  const filing = [{ value: "single" as const, label: "Single" }, { value: "mfj" as const, label: "Married, filing jointly" }, { value: "hoh" as const, label: "Head of household" }];
   return (
     <Block>
       <FieldRow label="Your age" info={HELP.age}>
         <NumberInput kind="int" label="Your age" value={state.age} max={100} onChange={(v) => update((p) => { p.age = v; })} />
       </FieldRow>
       <Divider />
-      <FieldRow label="Age you'd like to retire" hint="When work becomes optional" info={HELP.retireAge}>
+      <FieldRow label="Retirement age" info={HELP.retireAge}>
         <NumberInput kind="int" label="Retirement age" value={state.retireAge} max={100} onChange={(v) => update((p) => { p.retireAge = v; })} />
       </FieldRow>
       <Divider />
-      <FieldRow label="How you file taxes" info={HELP.filingStatus} stacked>
-  <Segmented
-    label="Tax filing status"
-    options={[{ value: "single", label: "Single" }, { value: "mfj", label: "Married, filing jointly" }, { value: "hoh", label: "Head of household" }]}
-    value={state.filingStatus ?? "single"}
-    onChange={(v) => update((p) => { p.filingStatus = v; })}
-  />
-</FieldRow>
+      <FieldRow label={compact ? "Filing status" : "How you file taxes"} info={HELP.filingStatus} stacked={!compact}>
+        {compact ? (
+          <Select label="Tax filing status" options={filing} value={state.filingStatus ?? "single"} onChange={(v) => update((p) => { p.filingStatus = v; })} />
+        ) : (
+          <Segmented label="Tax filing status" options={filing} value={state.filingStatus ?? "single"} onChange={(v) => update((p) => { p.filingStatus = v; })} />
+        )}
+      </FieldRow>
       <Divider />
       <View>
-<FieldRow
-        label="Health insurance until 65"
-        hint={medicareAge ? "You'll retire at 65+, so Medicare covers you. $0 is fine." : `Per month, from ${state.retireAge} until Medicare starts at 65`}
-        info={HELP.healthcare}
-      >
+<FieldRow label="Healthcare to 65" info={HELP.healthcare}>
         <NumberInput kind="money" label="Health insurance per month until 65" value={state.healthcare} onChange={(v) => update((p) => { p.healthcare = v; })} />
       </FieldRow>
 {!medicareAge ? <HealthcareSuggestion retireAge={state.retireAge} value={state.healthcare} onUse={(v) => update((p) => { p.healthcare = v; })} /> : null}
-      <FieldRow label="Healthcare from 65" hint="Medicare premiums, a supplement and a drug plan: about $400 a month a person" info={HELP.medicare}>
+      <FieldRow label="Healthcare from 65" info={HELP.medicare}>
         <NumberInput kind="money" label="Healthcare per month from 65" value={state.medicare ?? 0} onChange={(v) => update((p) => { p.medicare = v; })} />
       </FieldRow>
 </View>
@@ -225,14 +224,18 @@ function YouStep() {
   );
 }
 
+const RETIREMENT_INCOME_INFO = "Optional. Social Security or a pension means your savings need to cover less. Skip it if you'd rather plan without it.";
+
 function RetirementIncomeBlock() {
   const t = useTheme();
+  const [info, setInfo] = useState(false);
   return (
     <View style={{ gap: space.sm }}>
-      <Text style={[type.heading, { color: t.text }]}>Income in retirement</Text>
-      <Text style={[type.caption, { color: t.text3, marginTop: -space.xs }]}>
-        Optional. Social Security or a pension means your savings need to cover less. Skip it if you'd rather plan without it.
-      </Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <Text style={[type.heading, { color: t.text }]}>Income in retirement</Text>
+        <InfoTip text={RETIREMENT_INCOME_INFO} label="Income in retirement" open={info} onToggle={setInfo} />
+      </View>
+      {info ? <InfoText text={RETIREMENT_INCOME_INFO} /> : null}
       <RetirementIncomeEditor />
     </View>
   );
