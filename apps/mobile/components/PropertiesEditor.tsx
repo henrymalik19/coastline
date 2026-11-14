@@ -69,7 +69,7 @@ export function PropertiesEditor({ titled = true }: { /** Off on its own page, w
     const id = newId();
     // the first is usually your home; another, more often a rental (the toggle changes it)
     const k = kind === "home" && (state.properties ?? []).some((y) => y.kind === "home") ? "rental" : kind;
-    update((p) => { p.properties = [...(p.properties ?? []), { id, name: k === "home" ? "Home" : "Rental", kind: k, value: 0 }]; });
+    update((p) => { p.properties = [...(p.properties ?? []), { id, name: "Property", kind: k, value: 0 }]; });
     setOpen(id);
   };
 
@@ -97,19 +97,19 @@ export function PropertiesEditor({ titled = true }: { /** Off on its own page, w
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[type.body, { color: t.text, fontWeight: "600" }]} numberOfLines={1}>{x.name || "Property"}</Text>
-                  <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>
-                    {x.kind === "rental" ? "Rental" : "Home"}
-                    {mortgage ? ` · owe ${money(mortgage.balance, { whole: true })}` : ""}
-                    {rent ? ` · rent from ${rent.name || "income"}` : ""}
-                  </Text>
+                  {mortgage || rent || x.kind === "rental" ? (
+                    <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>
+                      {[x.kind === "rental" ? "Rental" : "", mortgage ? `owe ${money(mortgage.balance, { whole: true })}` : "", rent ? `rent from ${rent.name || "income"}` : ""].filter(Boolean).join(" · ")}
+                    </Text>
+                  ) : null}
                 </View>
               </Pressable>
               <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(x.value, { whole: true })}</Text>
             </View>
             {isOpen ? (
-              <View style={{ gap: space.sm, paddingBottom: space.md, paddingLeft: compact ? 0 : 26 }}>
+              <View style={{ gap: space.sm, paddingTop: space.sm, paddingBottom: space.md, paddingLeft: compact ? 0 : 26 }}>
                 <TextField label="Name" placeholder="e.g. 710 Dillon Way" value={x.name} onChange={(v) => change(x.id, { name: v })} />
-                <ToggleRow label="It's a rental" value={x.kind === "rental"} onChange={(v) => change(x.id, { kind: v ? "rental" : "home", ...(x.name === "Home" || x.name === "Rental" ? { name: v ? "Rental" : "Home" } : {}) })} />
+                <ToggleRow label="It's a rental" value={x.kind === "rental"} onChange={(v) => change(x.id, { kind: v ? "rental" : "home" })} />
                 <FieldRow label="What it's worth" hint="Roughly what it would sell for" info={HELP.property}>
                   <NumberInput kind="money" label={`${x.name || "Property"} value`} value={x.value} onChange={(v) => change(x.id, { value: v })} />
                 </FieldRow>

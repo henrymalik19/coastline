@@ -27,7 +27,7 @@ import { radius, space, type, useTheme } from "../lib/theme";
 
 // money (accounts + debts) comes before the budget, so debt payments are known and not typed in twice
 // start: how you begin (from scratch, or bring it in from YNAB); not counted as a step
-const STEPS = ["start", "you", "income", "money", "budget", "goals", "review"] as const;
+const STEPS = ["start", "you", "income", "money", "debts", "budget", "goals", "review"] as const;
 type Step = (typeof STEPS)[number];
 
 export default function Onboarding() {
@@ -61,7 +61,8 @@ export default function Onboarding() {
     you: ["About you", "Your age, when you'd like to retire, and how you file taxes"],
     income: ["Your income", "Every source of money that comes in"],
     budget: ["Your monthly budget", "What life costs now, and what you'll still pay after you retire"],
-    money: ["What you have and owe", "Account balances and debts"],
+    money: ["What you have", "Accounts and property"],
+    debts: ["What you owe", "Cards, loans and mortgages"],
     goals: ["Savings goals", "Optional: things you're saving up for"],
     review: ["Your Coast FI picture", "Here's where you stand"],
   };
@@ -95,6 +96,7 @@ export default function Onboarding() {
       {step === "budget" ? <BudgetStep /> : null}
       {step === "money" && importedAt ? <YnabOffer /> : null}
       {step === "money" ? <MoneyStep /> : null}
+      {step === "debts" ? <DebtsStep /> : null}
       {step === "goals" ? <GoalsStep /> : null}
       {step === "review" ? <ReviewStep /> : null}
 
@@ -257,18 +259,30 @@ function MoneyStep() {
   const props = state.properties ?? [];
   const cash = state.accounts.filter((a) => a.type !== "property").reduce((a, x) => a + (+x.balance || 0), 0);
   const worth = props.reduce((a, x) => a + (+x.value || 0), 0);
-  const owed = state.debts.reduce((a, x) => a + (+x.balance || 0), 0);
-  const homeOf = (id: string) => props.find((x) => x.mortgageId === id);
   return (
     <>
       <SectionHead title="Accounts" total={money(cash, { whole: true })} info="Rough is fine. You'll update these at each monthly check-in. Tap an account to rename it, change its type or remove it." />
       <AccountsEditor />
       <SectionHead title="Home & property" total={money(worth, { whole: true })} info="What they're worth counts in your net worth, not in Coast FI (it isn't money you can invest). Add each one's mortgage right on it. A rental's costs come out of its rent, so they stay out of your retirement spending." />
       <PropertiesEditor titled={false} />
+    </>
+  );
+}
+
+/** What you owe: cards, loans, and the mortgages (those on a property were added with it, last step). */
+function DebtsStep() {
+  const t = useTheme();
+  const { state } = usePlan();
+  const update = useStore((s) => s.update);
+  const props = state.properties ?? [];
+  const owed = state.debts.reduce((a, x) => a + (+x.balance || 0), 0);
+  const homeOf = (id: string) => props.find((x) => x.mortgageId === id);
+  return (
+    <>
       <SectionHead title="Debts" total={owed ? `−${money(owed, { whole: true })}` : money(0)} info="Cards, car and student loans, and your mortgages. Their payments come into your budget in the next step." />
       {state.debts.map((dt, i) => (
         <View key={dt.id} style={{ gap: 4 }}>
-          {homeOf(dt.id) ? <Text style={[type.caption, { color: t.text3 }]}>The mortgage on {homeOf(dt.id)!.name || "your home"} (above)</Text> : null}
+          {homeOf(dt.id) ? <Text style={[type.caption, { color: t.text3 }]}>The mortgage on {homeOf(dt.id)!.name || "your property"}</Text> : null}
           <DebtEditor
             debt={dt}
             paidFrom={paidFromFor(state, dt.id)}
