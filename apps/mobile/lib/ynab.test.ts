@@ -110,6 +110,13 @@ describe("importing into the plan", () => {
     expect([...m].sort().reverse()).toEqual(m);
   });
 
+  it("puts one category into its own group, apart from the rest of its YNAB group", () => {
+    const { plan, d, opts } = setup();
+    const r = buildImport(plan, d, { ...opts, groupMap: { [groupKey("Everyday")]: "Living" }, categoryGroup: { [categoryKey("Everyday", "Household")]: "Home" } });
+    expect(r.plan.budget.find((b) => b.name === "Groceries")?.group).toBe("Living");
+    expect(r.plan.budget.find((b) => b.name === "Household")?.group).toBe("Home");
+  });
+
   it("puts a YNAB group's categories into the group you pick", () => {
     const { plan, d, opts } = setup();
     const r = buildImport(plan, d, { ...opts, groupMap: { [groupKey("Everyday")]: "Living" } });

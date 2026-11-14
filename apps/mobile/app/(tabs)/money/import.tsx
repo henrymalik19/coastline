@@ -78,6 +78,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const [keepBoth, setKeepBoth] = useState<string[]>([]);
   // which of your groups each YNAB group's categories land in
   const [groupMap, setGroupMap] = useState<Record<string, string>>({});
+  // one category into a different group than the rest of its YNAB group
+  const [catGroup, setCatGroup] = useState<Record<string, string>>({});
   const [tab, setTab] = useState<"accounts" | "categories" | "matches">("accounts");
   const [showQuiet, setShowQuiet] = useState(false);
   const [showUnused, setShowUnused] = useState(false);
@@ -134,8 +136,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const monthCount = months.indexOf(startMonth) + 1;
   const opts = (k: string) => catOpts[k] ?? { inRetirement: true, essential: true };
   const preview = useMemo(
-    () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, categories: catOpts, categoryMap: catMap, groupMap, amounts, removeEmpty, existing, keepBoth, newId: () => "preview" }) : null),
-    [data, saved, from, thisMonth, choices, catOpts, catMap, groupMap, amounts, removeEmpty, existing, keepBoth],
+    () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, newId: () => "preview" }) : null),
+    [data, saved, from, thisMonth, choices, catOpts, catMap, groupMap, catGroup, amounts, removeEmpty, existing, keepBoth],
   );
 
   const options = (a: YnabAccount) => {
@@ -159,7 +161,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const run = () => {
     if (!data) return;
     setConfirming(false);
-    const r = buildImport(saved, data, { from, thisMonth, accounts: choices, categories: catOpts, categoryMap: catMap, groupMap, amounts, removeEmpty, existing, keepBoth, newId });
+    const r = buildImport(saved, data, { from, thisMonth, accounts: choices, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, newId });
     importBudget(r.plan, r.txns, r.replaced);
     setDone(`Imported ${r.summary.transactions} transactions and ${r.summary.categoriesAdded + r.summary.categoriesUpdated} categories.`);
     setDoneNeeds(r.summary.needsCategoryFromYnab + r.summary.needsCategoryLeftOut);
@@ -200,6 +202,15 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     ...(sameGroup(g) ? [] : [{ value: g, label: `${g} (new group)` }]),
     ...yourGroups.map((x) => ({ value: x, label: x })),
   ];
+  const rowGroup = (k: string, g: string) => catGroup[k] ?? groupTarget(g);
+  const allGroups = () => {
+    const out: string[] = [...yourGroups];
+    for (const c of categories) if (c.group) { const x = groupTarget(c.group); if (!out.some((y) => y.toLowerCase() === x.toLowerCase())) out.push(x); }
+    for (const x of Object.values(catGroup)) if (!out.includes(x)) out.push(x);
+    return out.map((x) => ({ value: x, label: x, ...(yourGroups.includes(x) ? {} : { hint: "New group" }) }));
+  };
+  const setRowGroup = (k: string, g: string, v: string) =>
+    setCatGroup(({ [k]: _, ...m }) => (v === groupTarget(g) ? m : { ...m, [k]: v }));
   const catValue = (c: CategoryChoice | undefined) => (!c ? "new" : c.action === "match" ? "match:" + c.id : c.action);
   const setCat = (k: string, v: string) => setCatMap((m) => ({ ...m, [k]: v.startsWith("match:") ? { action: "match", id: v.slice(6) } : { action: v as "new" | "skip" } }));
   const categoryRow = (c: (typeof categories)[number]) => {
@@ -219,6 +230,12 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         <View style={styles.row}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[type.body, { color: ch?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]} numberOfLines={1}>{c.name}</Text>
+            {ch?.action !== "skip" && (ch?.action !== "match" || ch.id !== "cash") ? (
+              <View style={[styles.row, { gap: 4, alignSelf: "flex-start", maxWidth: "100%", overflow: "hidden" }]}>
+                <Text style={[type.caption, { color: catGroup[k] ? t.accent : t.text3 }]}>{catGroup[k] ? "Moved to" : "In"}</Text>
+                <Select plain label={`${c.name}: group`} value={rowGroup(k, c.group)} options={allGroups()} onChange={(v) => setRowGroup(k, c.group, v)} />
+              </View>
+            ) : null}
             {amounts[k] !== undefined && Math.abs(amounts[k]! - c.average) > 0.5 ? (
               <Pressable onPress={() => setAmounts(({ [k]: _, ...m }) => m)} hitSlop={6} style={{ alignSelf: "flex-start" }}>
                 <Text style={[type.caption, { color: t.accent }]}>Reset to YNAB's {money(c.average, { whole: true })}</Text>

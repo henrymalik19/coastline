@@ -331,6 +331,8 @@ export type ImportOptions = {
   categoryMap?: Record<string, CategoryChoice>;
   /** Per YNAB group (groupKey): the group its categories land in here (default: the same name). */
   groupMap?: Record<string, string>;
+  /** Per YNAB category (categoryKey): the group it lands in, in place of its YNAB group's (groupMap). */
+  categoryGroup?: Record<string, string>;
   /** Per YNAB category (categoryKey): what it gets a month here, in place of YNAB's recent average. */
   amounts?: Record<string, number>;
   /** Take out the plan's own categories that are still $0 and YNAB doesn't have. */
@@ -449,13 +451,13 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
       if (amount > 0 || mine !== undefined) hit.amount = amount;
       hit.inRetirement = opts.inRetirement;
       hit.essential = opts.essential;
-      if (!matchedAmount.has(hit.id + ":group")) { hit.group = groupFor(c.group) || hit.group; matchedAmount.set(hit.id + ":group", 1); }
+      if (!matchedAmount.has(hit.id + ":group")) { hit.group = o.categoryGroup?.[k] ?? (groupFor(c.group) || hit.group); matchedAmount.set(hit.id + ":group", 1); }
       summary.categoriesUpdated++;
       continue;
     }
     const id = o.newId();
     itemOf.set(k, id);
-    const item: BudgetItem = { id, name: c.name, amount: o.amounts?.[k] ?? c.average, inRetirement: opts.inRetirement, group: groupFor(c.group) || undefined, essential: opts.essential };
+    const item: BudgetItem = { id, name: c.name, amount: o.amounts?.[k] ?? c.average, inRetirement: opts.inRetirement, group: (o.categoryGroup?.[k] ?? groupFor(c.group)) || undefined, essential: opts.essential };
     plan.budget.push(item);
     summary.categoriesAdded++;
   }
