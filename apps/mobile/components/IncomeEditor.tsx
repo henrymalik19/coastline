@@ -364,7 +364,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
             </View>
           </View>
           {auto ? (
-            <Text style={[type.stat, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(inc.net, { whole: true })}</Text>
+            <Text style={[type.stat, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(inc.net)}</Text>
           ) : (
             <NumberInput kind="money" label="Take-home per paycheck" value={inc.net} onChange={(v) => change({ net: v })} />
           )}
@@ -386,14 +386,14 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
               .map(([label, v, out]) => (
                 <View key={label} style={styles.between}>
                   <Text style={[type.caption, { color: t.text2 }]}>{label}</Text>
-                  <Text style={[type.caption, { color: t.text2, fontVariant: ["tabular-nums"] }]}>{out ? "−" : ""}{money(v, { whole: true })}</Text>
+                  <Text style={[type.caption, { color: t.text2, fontVariant: ["tabular-nums"] }]}>{out ? "−" : ""}{money(v)}</Text>
                 </View>
               ))}
             <View style={[styles.between, styles.stubTotal, { borderTopColor: t.border }]}>
               <Text style={[type.caption, { color: t.text, fontWeight: "700" }]}>
                 A normal month{CHECKS_IN_NORMAL_MONTH[inc.freq] > 1 ? ` (${CHECKS_IN_NORMAL_MONTH[inc.freq]} paychecks)` : ""}
               </Text>
-              <Text style={[type.caption, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(inc.net * CHECKS_IN_NORMAL_MONTH[inc.freq], { whole: true })}</Text>
+              <Text style={[type.caption, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(inc.net * CHECKS_IN_NORMAL_MONTH[inc.freq])}</Text>
             </View>
           </View>
         ) : null}
