@@ -201,18 +201,19 @@ function PropertyMortgage({ x, mortgage, free, link }: { x: Property; mortgage?:
       if (mortgage?.id.startsWith("mort-")) p.debts = p.debts.filter((d) => d.id !== mortgage.id);
     });
   if (!mortgage) {
-    return (
-      <View style={{ gap: space.xs }}>
-        <View style={[styles.row, { flexWrap: "wrap" }]}>
-          <Button title="Add its mortgage" icon="plus" onPress={add} style={{ minHeight: 36 }} />
-          {free.length ? (
-            <View style={[styles.row, { gap: 4 }]}>
-              <Text style={[type.caption, { color: t.text3 }]}>or use</Text>
-              <Select plain label={`${label}: mortgage from Debts`} value="" placeholder="one from Debts" options={free.map((d) => ({ value: d.id, label: d.name || "Mortgage" }))} onChange={(v) => link(v || undefined)} />
-            </View>
-          ) : null}
-        </View>
-      </View>
+    // mortgages already listed under Debts: pick one, or add a new one
+    return free.length ? (
+      <FieldRow label="Its mortgage">
+        <Select
+          label={`${label} mortgage`}
+          value=""
+          placeholder="None"
+          options={[...free.map((d) => ({ value: d.id, label: d.name || "Mortgage" })), { value: "new", label: "A new mortgage" }]}
+          onChange={(v) => (v === "new" ? add() : link(v || undefined))}
+        />
+      </FieldRow>
+    ) : (
+      <Button title="Add its mortgage" icon="plus" onPress={add} style={{ minHeight: 36, alignSelf: "flex-start" }} />
     );
   }
   return (
