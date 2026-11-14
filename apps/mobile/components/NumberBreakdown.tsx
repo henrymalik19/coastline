@@ -1,4 +1,4 @@
-/** Progress → Your number: how the FIRE and Coast numbers are worked out, and the FI levels. */
+/** Your number: how the FIRE and Coast numbers are worked out, and the FI levels. */
 import { baristaFi, FAT_FACTOR, fireBreakdown, fiLevels } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";

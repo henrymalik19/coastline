@@ -1,23 +1,38 @@
 import { coastNumberAt, type AccountKey } from "@coastfi/engine";
 import { useState } from "react";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { AccountsForecast } from "../../components/AccountsForecast";
 import { AccountsProgress } from "../../components/AccountsProgress";
 import { longMonth } from "../../components/AdjustmentsCard";
-import { Segmented } from "../../components/form";
+import { BalanceChart } from "../../components/BalanceChart";
+import { InfoText, InfoTip, Segmented, Select } from "../../components/form";
 import { Icon } from "../../components/Icon";
-import { MonthlyCharts } from "../../components/MonthlyCharts";
+import { ThisMonth } from "../../components/ThisMonth";
+import { WhatIf } from "../../components/WhatIf";
 import { ProgressBar } from "../../components/ProgressRing";
 import { Card, Screen, SectionLabel } from "../../components/ui";
 import { money, monthLabel } from "../../lib/format";
+import { investedHistory, vsPlan } from "../../lib/history";
+import { useStore } from "../../lib/store";
 import { useLayout } from "../../lib/layout";
 import { usePlan } from "../../lib/plan";
 import { radius, space, type, useTheme } from "../../lib/theme";
 
+type ViewKey = "overview" | "month" | "table" | "whatif";
+const VIEWS: { value: ViewKey; label: string }[] = [
+  { value: "overview", label: "Overview" },
+  { value: "month", label: "This month" },
+  { value: "table", label: "Table" },
+  { value: "whatif", label: "What if" },
+];
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const keyLabel = (k: string) => `${MON[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
+
 /**
- * Forecast: where you're headed. Overview (the finish line, each account filling up, and what the plan
- * is worth), the month-by-month table, and charts. Your priority order lives in Settings.
+ * Forecast: where you're headed. Overview (the finish line, ahead of or behind the plan, your invested
+ * balance over time, each account filling up), this month's split and to-dos, the month-by-month
+ * table, and what-ifs. Your priority order lives in Settings.
  */
 export default function Forecast() {
   const t = useTheme();
@@ -27,7 +42,14 @@ export default function Forecast() {
   const { state, result: o, start, forecast } = usePlan();
   const real = { ...o, plan: forecast };
   const { view } = useLocalSearchParams<{ view?: string }>();
-  const [tab, setTab] = useState<"overview" | "table" | "charts">(view === "charts" ? "charts" : view === "forecast" || view === "table" ? "table" : "overview");
+  const [tab, setTab] = useState<ViewKey>(view === "charts" || view === "month" ? "month" : view === "forecast" || view === "table" ? "table" : view === "whatif" ? "whatif" : "overview");
+  const router = useRouter();
+  const checkins = useStore((s) => s.checkins);
+  const vs = vsPlan(checkins, start);
+  const [vsTip, setVsTip] = useState(false);
+  const vsInfo = vs
+    ? `Each month's end balance (your investments) compared with what the plan expected from the month before, added up since ${keyLabel(vs.since)}. Last month (${keyLabel(vs.lastMonth)}): ${money(Math.abs(vs.last), { whole: true })} ${vs.last >= 0 ? "ahead" : "behind"}. Markets swing, so a month behind is normal: the plan starts again from your real balances each month.`
+    : "";
   // tapping an account in the overview opens its forecast in the table
   const [pick, setPick] = useState<string | undefined>(undefined);
   const openAccount = (key: AccountKey) => {
@@ -105,6 +127,25 @@ export default function Forecast() {
         </View>
         <ProgressBar progress={o.progress} color={coastM === 0 ? t.good : t.accent} />
         <Text style={[type.caption, { color: t.text3 }]}>{Math.round(Math.min(1, o.progress) * 100)}% of the way. The number is what you'd need invested today; it rises a little each year.</Text>
+        {vs ? (
+          <>
+            <View style={[styles.vsRow, { borderTopColor: t.border }]}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flex: 1, minWidth: 0 }}>
+                <Text style={[type.label, { color: t.text2 }]} numberOfLines={1}>vs. plan since {keyLabel(vs.since)}</Text>
+                <InfoTip text={vsInfo} label="vs. plan" open={vsTip} onToggle={setVsTip} />
+              </View>
+              <Text style={[type.label, { color: vs.total >= 0 ? t.good : t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>
+                {money(Math.abs(vs.total), { whole: true })} {vs.total >= 0 ? "ahead" : "behind"}
+              </Text>
+            </View>
+            {vsTip ? <InfoText text={vsInfo} /> : null}
+          </>
+        ) : (
+          <Text style={[type.caption, { color: t.text3, paddingTop: space.xs }]}>Ahead of or behind plan shows here after your first full month.</Text>
+        )}
+        <Pressable role="link" onPress={() => router.push("/number")} hitSlop={6} style={{ alignSelf: "flex-start", paddingTop: space.xs }}>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>How is my number worked out? →</Text>
+        </Pressable>
       </View> : null}
     </Card>
   );
@@ -140,22 +181,23 @@ export default function Forecast() {
 
   return (
     <Screen title="Forecast" subtitle={compact ? undefined : "Where you're headed"} fill>
-      <View style={{ maxWidth: 360 }}>
-        <Segmented
-          label="Forecast view"
-          options={[{ value: "overview", label: "Overview" }, { value: "table", label: "Table" }, { value: "charts", label: "Charts" }]}
-          value={tab}
-          onChange={(v) => { setTab(v); if (v !== "table") setPick(undefined); }}
-        />
+      <View style={{ maxWidth: compact ? undefined : 480 }}>
+        {compact ? (
+          <Select label="Forecast view" options={VIEWS} value={tab} onChange={(v) => { setTab(v); if (v !== "table") setPick(undefined); }} />
+        ) : (
+          <Segmented label="Forecast view" options={VIEWS} value={tab} onChange={(v) => { setTab(v); if (v !== "table") setPick(undefined); }} />
+        )}
       </View>
-      <Text style={[type.caption, { color: t.text3 }]}>
-        Only what you've set: your paychecks, your employer's match, debt payments, and what you assign in Budget. Money you haven't assigned isn't added anywhere.
-      </Text>
+      {tab === "table" ? (
+        <Text style={[type.caption, { color: t.text3 }]}>
+          Only what you've set: your paychecks, your employer's match, debt payments, and what you assign in Budget. Money you haven't assigned isn't added anywhere.
+        </Text>
+      ) : null}
       {tab === "table" ? (
         <AccountsForecast key={pick ?? "all"} state={state} o={real} start={start} fill initialPick={pick} />
-      ) : tab === "charts" ? (
-        <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
-          <MonthlyCharts />
+      ) : tab === "month" || tab === "whatif" ? (
+        <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
+          {tab === "month" ? <ThisMonth /> : <WhatIf />}
         </ScrollView>
       ) : (
         <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
@@ -166,6 +208,7 @@ export default function Forecast() {
             </Card>
           ) : null}
           {finish}
+          <BalanceChart o={o} history={investedHistory(checkins, o.d.invested, start)} start={start} height={twoColumn ? 300 : 240} />
           {twoColumn ? (
             <View style={{ flexDirection: "row", gap: space.lg, alignItems: "flex-start" }}>
               <View style={{ flex: 3 }}><AccountsProgress onOpen={openAccount} /></View>
@@ -196,6 +239,7 @@ const styles = StyleSheet.create({
   moveBtn: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   dateLabel: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: 6 },
   cmp: { flexDirection: "row", gap: space.lg },
+  vsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm, marginTop: space.sm, paddingTop: space.sm, borderTopWidth: StyleSheet.hairlineWidth },
   cmpBox: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, overflow: "hidden" },
   cmpRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.md },
   cmpDiff: { flexDirection: "row", alignItems: "center", gap: space.md, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm },

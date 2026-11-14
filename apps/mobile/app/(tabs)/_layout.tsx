@@ -4,6 +4,7 @@ import { useStore } from "../../lib/store";
 import { Platform, StyleSheet } from "react-native";
 import { Icon, type IconName } from "../../components/Icon";
 import { Sidebar } from "../../components/Sidebar";
+import { useMonthRecord } from "../../lib/history";
 import { useIsWide } from "../../lib/layout";
 import { useTheme } from "../../lib/theme";
 
@@ -12,7 +13,6 @@ const TABS: { name: string; title: string; icon: IconName }[] = [
   { name: "plan", title: "Forecast", icon: "plan" },
   { name: "budget", title: "Budget", icon: "card" },
   { name: "money", title: "Money", icon: "wallet" },
-  { name: "progress", title: "Progress", icon: "trend" },
 ];
 const ICONS = { ...Object.fromEntries(TABS.map((t) => [t.name, t.icon])), settings: "gear" } as Record<string, IconName>;
 
@@ -22,6 +22,8 @@ export default function TabsLayout() {
   const hydrated = useStore((s) => s.hydrated);
   const onboarded = useStore((s) => s.onboarded);
   const member = useMembership((s) => s.status);
+  // this month's balances record (the history on Forecast), kept up to date as balances change
+  useMonthRecord();
   // the app has nothing to show until setup is done (e.g. a bookmarked link on a fresh device);
   // someone who adds purchases on another plan's cards goes to their shared budget
   if (hydrated && !onboarded) return <Redirect href={member === "member" ? "/shared" : "/onboarding"} />;
@@ -35,7 +37,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: t.accent,
         tabBarInactiveTintColor: t.text3,
         tabBarLabelStyle: { fontSize: 11, lineHeight: 14, fontWeight: "600" },
-        // five tabs share the width; a long label (or big phone text) must never widen the bar
+        // the tabs share the width; a long label (or big phone text) must never widen the bar
         tabBarItemStyle: { minWidth: 0, overflow: "hidden" },
         tabBarStyle: {
           backgroundColor: t.surface,
@@ -64,6 +66,10 @@ export default function TabsLayout() {
       <Tabs.Screen name="monthly" options={{ title: "Monthly", tabBarButton: () => null, tabBarItemStyle: { display: "none" } }} />
       <Tabs.Screen name="emergency" options={{ title: "Emergency mode", tabBarButton: () => null, tabBarItemStyle: { display: "none" } }} />
       <Tabs.Screen name="settings" options={{ title: "Settings", tabBarButton: () => null, tabBarItemStyle: { display: "none" } }} />
+      {/* Progress moved into Forecast and Home; these are its pages, and old links redirect */}
+      <Tabs.Screen name="progress" options={{ title: "Progress", tabBarButton: () => null, tabBarItemStyle: { display: "none" } }} />
+      <Tabs.Screen name="number" options={{ title: "Your number", tabBarButton: () => null, tabBarItemStyle: { display: "none" } }} />
+      <Tabs.Screen name="badges" options={{ title: "Badges", tabBarButton: () => null, tabBarItemStyle: { display: "none" } }} />
     </Tabs>
   );
 }

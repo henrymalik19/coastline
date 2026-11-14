@@ -56,8 +56,9 @@ export function effectivePlan(saved: PlanState, limits?: LimitsRow[]): PlanState
 
 /**
  * Runs the engine on the saved plan. Re-runs only when the plan changes.
- * `result` includes any what-ifs (projections, dates, odds). `actual` is the month-by-month plan
- * without them: what to really do this month (to-dos, Monthly) never includes hypothetical money.
+ * `result` includes any what-ifs (the sliders and one-off changes: projections, dates, odds). `actual` is
+ * the month-by-month plan without them: what to really do this month (to-dos) never includes hypothetical money.
+ * (Real one-off spending is a transaction in Budget; a one-off change is a "what if".)
  * `forecast` is the Forecast tab's view: only the amounts you set (paychecks, match, minimums, your
  * schedules and budget), with nothing added from what's left over.
  */
@@ -73,13 +74,20 @@ function computePlan(saved: PlanState, start: Date, limits: LimitsRow[]): PlanRu
   if (shared && shared.saved === saved && shared.start === start && shared.limits === limits) return shared.value;
   const state = effectivePlan(saved, limits);
   const result = run(state, start);
-  const whatIfOn = !!(state.whatif && (state.whatif.extra || state.whatif.retDelta || state.whatif.spendDelta));
-  const real = state.whatif?.extra ? { ...state, whatif: { extra: 0, retDelta: 0, spendDelta: 0 } } : state;
-  const actual = state.whatif?.extra ? simulatePlan(real, derive(real, start)) : result.plan;
+  const oneOffs = hasOneOffs(state, start);
+  const whatIfOn = !!(state.whatif && (state.whatif.extra || state.whatif.retDelta || state.whatif.spendDelta)) || oneOffs;
+  const real = state.whatif?.extra || state.adjustments?.length ? { ...state, whatif: { extra: 0, retDelta: 0, spendDelta: 0 }, adjustments: [] } : state;
+  const actual = real !== state ? simulatePlan(real, derive(real, start)) : result.plan;
   const forecast = simulatePlan(real, derive(real, start), { autoFill: false });
   const value = { state, result, start, actual, forecast, whatIfOn };
   shared = { saved, start, limits, value };
   return value;
+}
+
+/** One-off changes this month or later (they're what-ifs: the real plan leaves them out). */
+export function hasOneOffs(s: PlanState, start: Date): boolean {
+  const now = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`;
+  return (s.adjustments ?? []).some((a) => a.month >= now);
 }
 
 /** Today as one shared Date that changes at most once a day (the engine never reads the clock), so every caller hits the same cached run. */

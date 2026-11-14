@@ -1,30 +1,7 @@
-/** Streaks, badges and levels for the Progress tab (port of the prototype's gamification). */
+/** Badges and levels (Home's rewards card and the Badges page). The streak comes from lib/history.ts. */
 import type { PlanState, RunResult } from "@coastfi/engine";
-import type { Checkin } from "@coastfi/schema";
 import { money } from "./format";
-import { monthKey } from "./store";
-
-export function prevMonthKey(k: string): string {
-  let [y, m] = k.split("-").map(Number) as [number, number];
-  m -= 1;
-  if (!m) { m = 12; y -= 1; }
-  return `${y}-${String(m).padStart(2, "0")}`;
-}
-
-export type Streak = { n: number; thisMonth: boolean; keys: Set<string>; last12: { key: string; done: boolean }[] };
-
-/** Consecutive months with a check-in, counting back from this month (or last month if this one isn't logged yet). */
-export function streakInfo(checkins: Checkin[], today: Date): Streak {
-  const keys = new Set(checkins.map((c) => c.month));
-  const cur = monthKey(today);
-  let k = keys.has(cur) ? cur : prevMonthKey(cur);
-  let n = 0;
-  while (keys.has(k)) { n++; k = prevMonthKey(k); }
-  const last12: Streak["last12"] = [];
-  let j = cur;
-  for (let i = 0; i < 12; i++) { last12.unshift({ key: j, done: keys.has(j) }); j = prevMonthKey(j); }
-  return { n, thisMonth: keys.has(cur), keys, last12 };
-}
+import type { Streak } from "./history";
 
 export type Badge = { key: string; title: string; icon: string; desc: string; got: boolean; eta: number | null };
 
@@ -60,6 +37,6 @@ export function badgeList(s: PlanState, o: RunResult, streak: Streak): Badge[] {
   }
   const mxI = pl.maxedYears.ira[0];
   B.push({ key: "ira", title: "Maxed IRA", icon: "📈", desc: "Hit the IRA limit for a year", got: false, eta: mxI ? (mxI - d.start.getFullYear()) * 12 + 11 - d.start.getMonth() : null });
-  for (const n of [3, 6, 12]) B.push({ key: `streak${n}`, title: `${n}-month streak`, icon: n === 12 ? "🔥" : "📅", desc: `Check in ${n} months in a row`, got: streak.n >= n, eta: null });
+  for (const n of [3, 6, 12]) B.push({ key: `streak${n}`, title: `${n}-month streak`, icon: n === 12 ? "🔥" : "📅", desc: streak.kind === "budget" ? `${n} months in a row within budget` : `${n} months in a row kept up to date`, got: streak.n >= n, eta: null });
   return B;
 }

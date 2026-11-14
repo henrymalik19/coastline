@@ -1,6 +1,6 @@
 /**
  * Cards that used to live on the Money tab: what you own and owe (on Home), and savings goals
- * (on Progress). Editing happens on the Money tab.
+ * (not shown anywhere since Progress went away; goals show on Money and Forecast). Editing happens on the Money tab.
  */
 import { nextDue, type AccountType } from "@coastfi/engine";
 import { useRouter } from "expo-router";

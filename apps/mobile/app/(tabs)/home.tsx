@@ -16,6 +16,7 @@ import { useLayout } from "../../lib/layout";
 import { spouseIraLabel } from "../../lib/spouse";
 import { monthTodos, shortfallText, usePlan, type Todo } from "../../lib/plan";
 import { NetWorthCard } from "../../components/MoneyCards";
+import { RewardsCard } from "../../components/RewardsCard";
 import { monthKey, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
 
@@ -114,10 +115,10 @@ export default function Home() {
             </Text>
           </Pressable>
         ) : null}
-        <Pressable role="link" onPress={() => router.push("/progress?view=number")} hitSlop={6} style={{ alignSelf: "flex-end" }}>
+        <Pressable role="link" onPress={() => router.push("/number")} hitSlop={6} style={{ alignSelf: "flex-end" }}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>How is my number worked out? →</Text>
         </Pressable>
-        <Pressable role="link" onPress={() => router.push("/progress")} hitSlop={6} style={{ alignSelf: "flex-end" }}>
+        <Pressable role="link" onPress={() => router.push("/plan?view=whatif")} hitSlop={6} style={{ alignSelf: "flex-end" }}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>What if I save more, or returns change? Try it →</Text>
         </Pressable>
         {!state.emergency?.active ? (
@@ -188,7 +189,7 @@ export default function Home() {
             </Text>
           ) : null}
           {whatIfOn ? (
-            <Text style={[type.caption, { color: t.text3 }]}>Your what-ifs (on Progress) change the dates and odds above, not these to-dos.</Text>
+            <Text style={[type.caption, { color: t.text3 }]}>Your what-ifs (Forecast → What if) change the dates and odds above, not these to-dos.</Text>
           ) : null}
         </View>
       ) : null}
@@ -263,7 +264,10 @@ export default function Home() {
             {hero}
             {thisMonth}
           </View>
-          <NetWorthCard />
+          <View style={styles.wideRow}>
+            <View style={{ flex: 3 }}><NetWorthCard /></View>
+            <RewardsCard style={{ flex: 2 }} />
+          </View>
         </>
       ) : (
         <>
@@ -271,6 +275,7 @@ export default function Home() {
           {stats}
           <NetWorthCard />
           {thisMonth}
+          <RewardsCard />
         </>
       )}
       {footer}

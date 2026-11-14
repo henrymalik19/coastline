@@ -5,7 +5,8 @@ import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
 import { monthKey, newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { Button, IconButton, NumberInput, Segmented, TextField } from "./form";
+import { useLayout } from "../lib/layout";
+import { Button, IconButton, InfoText, InfoTip, NumberInput, Segmented, Select, TextField } from "./form";
 import { Card, SectionLabel } from "./ui";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -23,7 +24,11 @@ export const longMonth = (key: string) => {
   return `${MONTHS_LONG[m - 1]} ${y}`;
 };
 
-/** One-off changes to a single month (unexpected bills, lost pay, bonuses). The plan replans around them. */
+/**
+ * One-off changes to a single month (a bonus, a big bill, unpaid time off): a what-if. They move the
+ * what-if dates and odds; the real plan and your to-dos leave them out (real spending goes in Budget).
+ */
+const INFO = "What if one month is different: a bonus, a big bill, unpaid time off? Add it to see how it moves your dates and odds. It's a what-if: your to-dos and the Table stay on your real plan. Real spending goes in Budget.";
 export function AdjustmentsCard({ start }: { start: Date }) {
   const t = useTheme();
   const { state } = usePlan();
@@ -34,6 +39,8 @@ export function AdjustmentsCard({ start }: { start: Date }) {
     return { key: monthKey(d), short: i === 0 ? "This month" : `${MON[d.getMonth()]}${d.getMonth() === 0 || i === 1 ? ` '${String(d.getFullYear()).slice(2)}` : ""}` };
   });
 
+  const compact = useLayout().contentWidth < 600;
+  const [tip, setTip] = useState(false);
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<AdjustmentKind>("expense");
   const [month, setMonth] = useState(thisMonth);
@@ -54,24 +61,30 @@ export function AdjustmentsCard({ start }: { start: Date }) {
   return (
     <Card style={{ gap: space.md }}>
       <View style={styles.between}>
-        <View style={{ flex: 1, minWidth: 220 }}>
-          <SectionLabel>One-off changes</SectionLabel>
-          <Text style={[type.body, { color: t.text2, marginTop: -4 }]}>
-            Something different this month or coming up? Add it and the plan works around it for that month only.
-          </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1 }}>
+          <SectionLabel>One-off months</SectionLabel>
+          <InfoTip text={INFO} label="One-off months" open={tip} onToggle={setTip} />
         </View>
-        {!open ? <Button title="Add a change" icon="plus" onPress={() => setOpen(true)} /> : null}
+        {!open ? <Button title="Add one" icon="plus" onPress={() => setOpen(true)} style={{ minHeight: 36, paddingHorizontal: space.md }} /> : null}
       </View>
+      {tip ? <InfoText text={INFO} /> : null}
 
       {open ? (
         <View style={[styles.form, { backgroundColor: t.surface2 }]}>
-          <Segmented
-            label="Type of change"
-            options={(Object.keys(KIND_TEXT) as AdjustmentKind[]).map((k) => ({ value: k, label: KIND_TEXT[k].label }))}
-            value={kind}
-            onChange={setKind}
-          />
-          <View style={{ gap: 6 }}>
+          {compact ? (
+            <>
+              <Select label="Type of change" options={(Object.keys(KIND_TEXT) as AdjustmentKind[]).map((k) => ({ value: k, label: KIND_TEXT[k].label }))} value={kind} onChange={setKind} />
+              <Select label="Which month?" options={upcoming.map((u) => ({ value: u.key, label: longMonth(u.key) }))} value={month} onChange={setMonth} />
+            </>
+          ) : (
+            <Segmented
+              label="Type of change"
+              options={(Object.keys(KIND_TEXT) as AdjustmentKind[]).map((k) => ({ value: k, label: KIND_TEXT[k].label }))}
+              value={kind}
+              onChange={setKind}
+            />
+          )}
+          {compact ? null : <View style={{ gap: 6 }}>
             <Text style={[type.caption, { color: t.text3 }]}>Which month?</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View role="radiogroup" aria-label="Month" style={{ flexDirection: "row", gap: 6 }}>
@@ -92,13 +105,13 @@ export function AdjustmentsCard({ start }: { start: Date }) {
                 })}
               </View>
             </ScrollView>
-          </View>
+          </View>}
           <View style={styles.row}>
-            <View style={{ gap: 4 }}>
+            <View style={{ gap: 4, ...(compact ? { flex: 1, minWidth: 0 } : null) }}>
               <Text style={[type.caption, { color: t.text3 }]}>Amount</Text>
-              <NumberInput kind="money" width={160} label="Amount" value={amount} onChange={setAmount} />
+              <NumberInput kind="money" width={compact ? "100%" : 160} label="Amount" value={amount} onChange={setAmount} />
             </View>
-            <View style={{ gap: 4, flex: 1, minWidth: 180 }}>
+            <View style={{ gap: 4, flex: 1, minWidth: compact ? "100%" : 180 }}>
               <Text style={[type.caption, { color: t.text3 }]}>What is it? (optional)</Text>
               <TextField label="Note" placeholder={KIND_TEXT[kind].placeholder} value={note} onChange={setNote} />
             </View>
@@ -134,7 +147,7 @@ export function AdjustmentsCard({ start }: { start: Date }) {
           })}
         </View>
       ) : !open ? (
-        <Text style={[type.caption, { color: t.text3 }]}>No one-off changes. Your plan assumes a normal month.</Text>
+        <Text style={[type.caption, { color: t.text3 }]}>None. Every month is a normal one.</Text>
       ) : null}
     </Card>
   );

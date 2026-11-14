@@ -13,6 +13,7 @@ import { money, monthLabel } from "../lib/format";
 import { usePlan } from "../lib/plan";
 import { stepInfo } from "../lib/steps";
 import { space, type, useTheme } from "../lib/theme";
+import { InfoText, InfoTip, Select } from "./form";
 import { Icon } from "./Icon";
 import { Card, Divider, SectionLabel } from "./ui";
 
@@ -34,6 +35,8 @@ type Row = {
   color: string;
   done?: boolean;
 };
+
+const INFO = "Where each account stands now (solid) and where your plan gets it by the date you pick (lighter), at the amounts you've set. Tap one for its month-by-month forecast.";
 
 export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void }) {
   const t = useTheme();
@@ -58,6 +61,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
   // the month to look ahead to (default: December this year)
   const defaultAt = 11 - start.getMonth();
   const [at, setAt] = useState(defaultAt);
+  const [tip, setTip] = useState(false);
   const last = pl.months.length - 1;
   const atI = Math.max(0, Math.min(at, last));
   const dec = pl.months[atI]!;
@@ -185,28 +189,20 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
     <Card padded={false}>
       <View style={{ padding: space.lg, paddingBottom: space.sm, gap: 2 }}>
         <View style={styles.pickRow}>
-          <SectionLabel>Accounts filling up</SectionLabel>
-          <View style={{ flex: 1 }} />
-          <Pressable role="button" accessibilityLabel="Earlier month" disabled={atI <= 0} onPress={() => setAt(Math.max(0, atI - 1))} hitSlop={6} style={[styles.navBtn, { borderColor: t.border, opacity: atI <= 0 ? 0.35 : 1 }]}>
-            <Icon name="back" size={14} color={t.accent} />
-          </Pressable>
-          <Text style={[type.label, { color: t.text, fontWeight: "700", minWidth: 76, textAlign: "center" }]}>{selLabel}</Text>
-          <Pressable role="button" accessibilityLabel="Later month" disabled={atI >= last} onPress={() => setAt(Math.min(last, atI + 1))} hitSlop={6} style={[styles.navBtn, { borderColor: t.border, opacity: atI >= last ? 0.35 : 1 }]}>
-            <Icon name="chevron" size={14} color={t.accent} />
-          </Pressable>
+          <View style={[styles.pickRow, { gap: 4, flex: 1, minWidth: 0 }]}>
+            <SectionLabel>Accounts filling up</SectionLabel>
+            <InfoTip text={INFO} label="Accounts filling up" open={tip} onToggle={setTip} />
+          </View>
+          <View style={{ width: 132 }}>
+            <Select
+              label="Look ahead to"
+              options={[0, 12, 24].map((n) => defaultAt + n).filter((to) => to <= last).map((to) => ({ value: String(to), label: `By ${monthLabel(start, to)}` }))}
+              value={String(atI)}
+              onChange={(v) => setAt(+v)}
+            />
+          </View>
         </View>
-        <View style={[styles.pickRow, { gap: 6, flexWrap: "wrap", marginBottom: 2 }]}>
-          {[
-            { label: `Dec ${y0}`, to: defaultAt },
-            { label: `Dec ${y0 + 1}`, to: defaultAt + 12 },
-            { label: `Dec ${y0 + 2}`, to: defaultAt + 24 },
-          ].filter((x) => x.to <= last).map((x) => (
-            <Pressable key={x.label} role="radio" aria-checked={atI === x.to} onPress={() => setAt(x.to)} hitSlop={4} style={[styles.yearChip, { borderColor: atI === x.to ? t.accent : t.border, backgroundColor: atI === x.to ? t.accentSoft : "transparent" }]}>
-              <Text style={[type.caption, { color: atI === x.to ? t.accent : t.text2, fontWeight: "700" }]}>{x.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <Text style={[type.caption, { color: t.text3, marginTop: -space.xs }]}>Where each one stands and when it gets there. Tap one for its forecast.</Text>
+        {tip ? <InfoText text={INFO} /> : null}
         <View style={styles.key}>
           <View style={styles.keyItem}><View style={[styles.keySw, { backgroundColor: t.accent }]} /><Text style={[type.caption, { color: t.text3 }]}>In now</Text></View>
           <View style={styles.keyItem}><View style={[styles.keySw, { backgroundColor: t.accent, opacity: 0.35 }]} /><Text style={[type.caption, { color: t.text3 }]}>By {selLabel}, at your amounts</Text></View>
@@ -258,8 +254,6 @@ const styles = StyleSheet.create({
   fill: { position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: 4 },
   key: { flexDirection: "row", gap: space.md, marginTop: 4, flexWrap: "wrap" },
   pickRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  navBtn: { borderWidth: 1, borderRadius: 999, width: 30, height: 30, alignItems: "center", justifyContent: "center" },
-  yearChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   keyItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   keySw: { width: 10, height: 10, borderRadius: 2 },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },

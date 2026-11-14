@@ -40,7 +40,8 @@ export type AppState = {
   update: (fn: (draft: PlanState) => void) => void;
   setPlan: (plan: PlanState) => void;
   toggleTodo: (month: string, key: string) => void;
-  logCheckin: (c: Checkin) => void;
+  /** Save this month's balances record (lib/history.ts). Not a plan change, so the plan isn't re-saved for it. */
+  recordMonth: (c: Checkin) => void;
   /** Add or change a transaction (and the other side of a transfer). Balances follow. */
   saveTxn: (t: Omit<Txn, "updatedAt">, today: string) => void;
   deleteTxn: (id: string) => void;
@@ -92,9 +93,11 @@ export const useStore = create<AppState>()(
         const next = cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
         set({ todoDone: { ...get().todoDone, [month]: next } });
       },
-      logCheckin: (c) => {
+      recordMonth: (c) => {
+        const old = get().checkins.find((x) => x.month === c.month);
         const rest = get().checkins.filter((x) => x.month !== c.month);
-        set({ checkins: [...rest, c].sort((a, b) => a.month.localeCompare(b.month)), updatedAt: now() });
+        // an old check-in's spending answer is kept
+        set({ checkins: [...rest, { ...old, ...c }].sort((a, b) => a.month.localeCompare(b.month)) });
       },
       saveTxn: (input, today) => {
         const t: Txn = { ...input, updatedAt: now() };
