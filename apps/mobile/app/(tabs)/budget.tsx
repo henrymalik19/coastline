@@ -3,6 +3,7 @@
  * categories (budget items, bills, debt payments, savings), what you don't spend carries into next
  * month, and what you assign to savings and debts is what the plan counts as done that month.
  */
+import { ReorderToggle } from "../../components/ReorderToggle";
 import { ImportUndoReminder } from "../../components/ImportUndo";
 import { BUDGET_ITEM, budgetCategories, budgetView, SAVINGS_GROUP, spendingHistory, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
@@ -45,6 +46,9 @@ export default function Budget() {
   const t = useTheme();
   const { contentWidth } = useLayout();
   const compact = contentWidth < 600;
+  // phones: grips only while reordering
+  const [reorder, setReorder] = useState(false);
+  const grips = !compact || reorder;
   const { state, result, actual, start } = usePlan();
   const update = useStore((s) => s.update);
   // drag a category from one of your groups into another
@@ -354,7 +358,7 @@ export default function Budget() {
             note="Each month's budget and the forecast use the amount for that month."
           />
           <View style={[styles.chips, { justifyContent: "space-between" }]}>
-            <Text style={[type.caption, { color: t.text3, flex: 1 }]}>Drag a category's grip to reorder it.</Text>
+            <Text style={[type.caption, { color: t.text3, flex: 1 }]}>{compact ? "Tap Reorder above the categories, then drag a grip to move one." : "Drag a category's grip to reorder it or move it to another group."}</Text>
             <Chip
               title="Delete"
               icon="trash"
@@ -644,7 +648,10 @@ export default function Budget() {
             </Card>
           ) : null}
           <View onLayout={(e) => setColH(Math.round(e.nativeEvent.layout.height))} style={[styles.colHead, { paddingHorizontal: compact ? space.md : space.lg }, sticky(barH, t.bg)]}>
-            <Text style={[type.caption, styles.colName, { color: t.text3, flex: 1 }]}>Category</Text>
+            <View style={{ flex: 1, flexDirection: "row", alignItems: "flex-end", gap: space.md }}>
+              <Text style={[type.caption, styles.colName, { color: t.text3 }]}>Category</Text>
+              {compact ? <ReorderToggle on={reorder} onChange={setReorder} /> : null}
+            </View>
             {(compact ? ["Assigned", "Available"] : ["Assigned", "Spent", "Available"]).map((h) => (
               <Text key={h} numberOfLines={1} style={[type.caption, styles.colName, { color: t.text3, width: COLW, textAlign: "right", paddingRight: h === "Available" ? PILL_IN : 0 }]}>{h}</Text>
             ))}
@@ -691,6 +698,7 @@ export default function Budget() {
                 {ownGroup(g) ? (
                   <DragList
                     zone={{ set: zone, id: g.name }}
+                    grips={grips}
                     count={g.cats.length}
                     keyOf={(n) => g.cats[n]!.key}
                     nameOf={(n) => g.cats[n]!.name}

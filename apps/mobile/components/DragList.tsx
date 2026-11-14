@@ -61,7 +61,7 @@ const rectOf = (l: { node: unknown; rect?: Rect }): Rect | undefined => {
 };
 
 export function DragList({
-  count, keyOf, nameOf, onMove, renderItem, style, zone,
+  count, keyOf, nameOf, onMove, renderItem, style, zone, grips = true,
 }: {
   count: number;
   keyOf: (i: number) => string;
@@ -74,6 +74,8 @@ export function DragList({
   style?: ViewStyle;
   /** Share a zone (useDragZone) with other lists so rows can be dragged between them; `id` names this one. */
   zone?: { set: DragZone; id: string };
+  /** Show the grips (false: rows render without one, e.g. on a phone until you tap Reorder). */
+  grips?: boolean;
 }) {
   const t = useTheme();
   const layouts = useRef<{ y: number; h: number }[]>([]);
@@ -183,7 +185,7 @@ export function DragList({
                   : null,
             ]}
           >
-            {renderItem(i, <Grip index={i} count={count} name={nameOf?.(i)} onMove={onMove} onDrag={setDrag} finish={finish} />)}
+            {renderItem(i, !grips ? null : <Grip index={i} count={count} name={nameOf?.(i)} onMove={onMove} onDrag={setDrag} finish={finish} />)}
           </View>
         );
       })}
@@ -260,6 +262,12 @@ function Grip({
     if (Platform.OS === "web" && typeof document !== "undefined") document.body.style.userSelect = "";
     if (g.moveY) s.y = clientY(g.moveY);
     s.dy = g.dy || s.y - s.y0;
+    // web: a drag that moved isn't also a tap on the row it ends over
+    if (Platform.OS === "web" && typeof window !== "undefined" && Math.abs(s.y - s.y0) > 4) {
+      const eat = (e: Event) => { e.stopPropagation(); e.preventDefault(); };
+      window.addEventListener("click", eat, { capture: true, once: true });
+      setTimeout(() => window.removeEventListener("click", eat, { capture: true }), 50);
+    }
     const d = current();
     s.scroller = null;
     live.current.finish(d);

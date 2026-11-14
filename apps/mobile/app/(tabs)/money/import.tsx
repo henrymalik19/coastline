@@ -19,6 +19,7 @@ import { useLayout } from "../../../lib/layout";
 import { groupOrder } from "../../../lib/budgetOrder";
 import { ImportUndoCard } from "../../../components/ImportUndo";
 import { DragList, useDragZone } from "../../../components/DragList";
+import { ReorderToggle } from "../../../components/ReorderToggle";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const ymText = (ym: string) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
@@ -100,6 +101,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const [tabsH, setTabsH] = useState(44);
   const { contentWidth } = useLayout();
   const wide = Platform.OS === "web" && contentWidth >= 960;
+  // phones: grips only while reordering
+  const [reorder, setReorder] = useState(false);
 
   const pick = () => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
@@ -394,10 +397,13 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
           {tab === "categories" ? (
             <Card style={{ gap: space.sm }}>
               <Text style={[type.caption, { color: t.text3 }]}>
-                Each comes in with what you assigned a month lately. Pick where each one goes, and which of your groups each YNAB group lands in. Drag a category onto another group to move it there. Turn off After retiring for what you won't pay then, and Essential for what you'd cut in an emergency.
+                Each comes in with what you assigned a month lately. Pick where each one goes, and which of your groups each YNAB group lands in. Drag a category onto another group to move it there{wide ? "" : " (tap Reorder first)"}. Turn off After retiring for what you won't pay then, and Essential for what you'd cut in an emergency.
               </Text>
               <View style={[styles.row, { paddingVertical: space.xs }, sticky(tabsH, t.surface)]}>
-                <Text style={[type.caption, { color: t.text3, flex: 1 }]}>Category</Text>
+                <View style={[styles.row, { flex: 1 }]}>
+                  <Text style={[type.caption, { color: t.text3 }]}>Category</Text>
+                  {wide ? null : <ReorderToggle on={reorder} onChange={setReorder} />}
+                </View>
                 {wide ? <Text style={[type.caption, { color: t.text3, width: 190, textAlign: "right", paddingRight: 28 }]}>A month</Text> : null}
                 {wide ? <Text style={[type.caption, { color: t.text3, width: 220, textAlign: "right", paddingRight: 18 }]}>Goes to</Text> : null}
                 <Text style={[type.caption, styles.col, { color: t.text3 }]}>After retiring</Text>
@@ -433,6 +439,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
                   </View>
                   <DragList
                     zone={{ set: zone, id: g }}
+                    grips={wide || reorder}
                     count={cardRowsRef.current[g]?.length ?? 0}
                     keyOf={(n) => categoryKey(cardRowsRef.current[g]![n]!.group, cardRowsRef.current[g]![n]!.name)}
                     nameOf={(n) => cardRowsRef.current[g]![n]!.name}
