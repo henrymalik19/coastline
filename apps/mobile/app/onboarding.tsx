@@ -25,7 +25,8 @@ import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 
 // money (accounts + debts) comes before the budget, so debt payments are known and not typed in twice
-const STEPS = ["you", "income", "money", "budget", "goals", "review"] as const;
+// start: how you begin (from scratch, or bring it in from YNAB); not counted as a step
+const STEPS = ["start", "you", "income", "money", "budget", "goals", "review"] as const;
 type Step = (typeof STEPS)[number];
 
 export default function Onboarding() {
@@ -34,9 +35,10 @@ export default function Onboarding() {
   const fillPage = useFillPage();
   const completeOnboarding = useStore((s) => s.completeOnboarding);
   const params = useLocalSearchParams<{ step?: string }>();
-  const [step, setStep] = useState<Step>(STEPS.includes(params.step as Step) ? (params.step as Step) : "you");
+  const [step, setStep] = useState<Step>(STEPS.includes(params.step as Step) ? (params.step as Step) : "start");
   const i = STEPS.indexOf(step);
   const syncEmail = useSync((s) => s.email);
+  const importedAt = useStore((s) => s.importedAt);
   // a second device: once sign-in pulls down a finished plan, go straight to it
   const onboarded = useStore((s) => s.onboarded);
   // someone who adds purchases on another plan's cards: their shared budget
@@ -54,7 +56,8 @@ export default function Onboarding() {
   };
 
   const titles: Record<Step, [string, string]> = {
-    you: ["Welcome to Coastline", "Let's start with you. Setup takes about 5 minutes."],
+    start: ["Welcome to Coastline", "Setup takes about 5 minutes."],
+    you: ["About you", "Your age, when you'd like to retire, and how you file taxes"],
     income: ["Your income", "Every source of money that comes in"],
     budget: ["Your monthly budget", "What life costs now, and what you'll still pay after you retire"],
     money: ["What you have and owe", "Account balances and debts"],
@@ -65,33 +68,36 @@ export default function Onboarding() {
 
   return (
     <Screen title={title} subtitle={subtitle} hideSettings maxWidth={1120} fill={fillPage && (step === "income" || step === "budget")}>
-      <View style={{ gap: 6 }}>
-        <Text style={[type.caption, { color: t.text3 }]}>Step {i + 1} of {STEPS.length}</Text>
-        <ProgressBar progress={(i + 1) / STEPS.length} />
-      </View>
+      {step !== "start" ? (
+        <View style={{ gap: 6 }}>
+          <Text style={[type.caption, { color: t.text3 }]}>Step {i} of {STEPS.length - 1}</Text>
+          <ProgressBar progress={i / (STEPS.length - 1)} />
+        </View>
+      ) : null}
 
-      {step === "you" ? (
+      {step === "start" ? (
         <Text style={[type.body, { color: t.text2 }]}>
           Coast FI is the point where what you've already invested can grow into your full retirement number on its own, so you'd only need to cover today's bills.
           Everything is in today's dollars{syncConfigured ? "." : ", and your data stays on this device."}
         </Text>
       ) : null}
-      {step === "you" && syncConfigured && !syncEmail ? (
+      {step === "start" && syncConfigured && !syncEmail ? (
         <Text style={[type.caption, { color: t.text2 }]}>
           Already have an account?{" "}
           <Text role="link" style={{ color: t.accent, fontWeight: "700" }} onPress={() => router.push("/sign-in")}>Sign in to load your plan</Text>
         </Text>
       ) : null}
-      {step === "you" ? <YnabOffer /> : null}
+      {step === "start" ? <StartStep onFresh={next} /> : null}
       {step === "you" ? <YouStep /> : null}
       {step === "you" ? <RetirementIncomeBlock /> : null}
       {step === "income" ? <IncomeStep /> : null}
       {step === "budget" ? <BudgetStep /> : null}
-      {step === "money" ? <YnabOffer /> : null}
+      {step === "money" && importedAt ? <YnabOffer /> : null}
       {step === "money" ? <MoneyStep /> : null}
       {step === "goals" ? <GoalsStep /> : null}
       {step === "review" ? <ReviewStep /> : null}
 
+      {step === "start" ? null : (
       <View style={[styles.between, { marginTop: space.sm }]}>
         <Button title="Back" icon="back" tone="ghost" onPress={i > 0 ? back : () => (router.canGoBack() ? router.back() : router.replace("/"))} />
         {step === "review" ? (
@@ -100,7 +106,8 @@ export default function Onboarding() {
           <Button title="Continue" tone="primary" onPress={next} />
         )}
       </View>
-      <Text style={[type.caption, { color: t.text3, textAlign: "center" }]}>You can change any of this later in the Money tab.</Text>
+      )}
+      {step === "start" ? null : <Text style={[type.caption, { color: t.text3, textAlign: "center" }]}>You can change any of this later in the Money tab.</Text>}
     </Screen>
   );
 }
@@ -134,6 +141,47 @@ function YnabOffer() {
       </View>
       <Button title={importedAt ? "Review import" : "Import from YNAB"} icon="database" tone={importedAt ? "ghost" : "primary"} onPress={() => router.push("/setup-import")} />
     </Card>
+  );
+}
+
+/** The first screen: start from scratch, or bring your budget in from YNAB. */
+function StartStep({ onFresh }: { onFresh: () => void }) {
+  const t = useTheme();
+  const router = useRouter();
+  const importedAt = useStore((s) => s.importedAt);
+  const choice = (icon: "plus" | "database", title: string, body: string, onPress: () => void, primary?: boolean) => (
+    <Pressable
+      role="button"
+      accessibilityLabel={title}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.choice,
+        { borderColor: primary ? t.accent : t.border, backgroundColor: primary ? t.accentSoft : t.surface },
+        pressed ? { opacity: 0.8 } : null,
+      ]}
+    >
+      <View style={[styles.choiceIcon, { backgroundColor: primary ? t.accent : t.surface2 }]}>
+        <Icon name={icon} size={18} color={primary ? "#fff" : t.text2} />
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={[type.heading, { color: t.text }]}>{title}</Text>
+        <Text style={[type.caption, { color: t.text2 }]}>{body}</Text>
+      </View>
+      <Icon name="chevron" size={16} color={t.text3} />
+    </Pressable>
+  );
+  return (
+    <View style={{ gap: space.md }}>
+      <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>How would you like to start?</Text>
+      <View style={styles.choices}>
+        {importedAt
+          ? choice("database", "Continue with your YNAB import", "Your accounts, budget and transactions came in. Check them as you go; you can undo the import for 30 days.", onFresh, true)
+          : choice("plus", "Start fresh", "Answer a few questions and build your plan step by step.", onFresh, true)}
+        {importedAt
+          ? choice("database", "Review the import", "See what came in, or undo it.", () => router.push("/setup-import"))
+          : choice("database", "Import from YNAB", "Bring in your accounts, budget and transactions instead of typing them in. You'll check everything before it comes in.", () => router.push("/setup-import"))}
+      </View>
+    </View>
   );
 }
 
@@ -304,6 +352,9 @@ function ReviewStep() {
 }
 
 const styles = StyleSheet.create({
+  choices: { flexDirection: "row", flexWrap: "wrap", gap: space.md },
+  choice: { flexGrow: 1, flexBasis: 300, flexDirection: "row", alignItems: "center", gap: space.md, borderWidth: 1, borderRadius: radius.lg, padding: space.lg },
+  choiceIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.sm },
   chip: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.md, paddingVertical: 8, minHeight: 36, justifyContent: "center" },
   budgetRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.md },

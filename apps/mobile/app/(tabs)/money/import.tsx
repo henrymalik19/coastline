@@ -62,7 +62,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const importBudget = useStore((s) => s.importBudget);
   const importedAt = useStore((s) => s.importedAt);
   const [undone, setUndone] = useState(false);
-  const backToSetup = () => router.replace("/onboarding?step=money");
+  const backToSetup = () => router.replace(`/onboarding?step=${useStore.getState().importedAt ? "you" : "start"}`);
   const existing = useStore((s) => s.txns);
   const thisMonth = monthKey(start);
   const [data, setData] = useState<YnabData | null>(null);

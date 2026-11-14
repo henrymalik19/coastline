@@ -286,7 +286,7 @@ export default function Budget() {
     </Card>
   );
 
-  const COLW = compact ? 88 : 108;
+  const COLW = compact ? 80 : 108;
   /** PILL_IN: the Available pill's inner padding, so header and group totals line up with its text. */
   const PILL_IN = 8;
   const num = (v: number, color: string, bold = false, inset = 0) => (
@@ -430,7 +430,7 @@ export default function Budget() {
         <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, pressed ? { backgroundColor: t.surface2 } : null]}>
           <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
             {grip}
-            <Text style={[type.body, { color: t.text, flexShrink: 1 }]} numberOfLines={2}>{label(c)}</Text>
+            <Text style={[type.body, { color: t.text, flexShrink: 1 }]} numberOfLines={1}>{label(c)}</Text>
             {dup ? <Icon name="info" size={14} color={t.warn} /> : null}
             {realBy.has(c.key) ? (
               <View style={[styles.realTag, { backgroundColor: t.warnSoft }]} accessibilityLabel={`You really spend about ${money(realBy.get(c.key)!.avg, { whole: true })} a month`}>
