@@ -239,18 +239,20 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         <Text style={[type.caption, { color: t.text3 }]}>/mo</Text>
       </View>
     ) : null;
+    // the group it lands in (phones: in the full-width part below, so the switches don't squeeze it)
+    const inGroup = ch?.action !== "skip" && (ch?.action !== "match" || ch.id !== "cash") ? (
+      <View style={[styles.row, { gap: 4, alignSelf: "flex-start", maxWidth: "100%", overflow: "hidden" }]}>
+        <Text style={[type.caption, { color: catGroup[k] ? t.accent : t.text3 }]}>{catGroup[k] ? "Moved to" : "In"}</Text>
+        <Select plain label={`${c.name}: group`} value={rowGroup(k, c.group)} options={allGroups()} onChange={(v) => setRowGroup(k, c.group, v)} />
+      </View>
+    ) : null;
     return (
       <View key={k} style={[styles.catRow, { borderTopColor: t.border }]}>
         <View style={styles.row}>
           {grip}
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[type.body, { color: ch?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]} numberOfLines={1}>{c.name}</Text>
-            {ch?.action !== "skip" && (ch?.action !== "match" || ch.id !== "cash") ? (
-              <View style={[styles.row, { gap: 4, alignSelf: "flex-start", maxWidth: "100%", overflow: "hidden" }]}>
-                <Text style={[type.caption, { color: catGroup[k] ? t.accent : t.text3 }]}>{catGroup[k] ? "Moved to" : "In"}</Text>
-                <Select plain label={`${c.name}: group`} value={rowGroup(k, c.group)} options={allGroups()} onChange={(v) => setRowGroup(k, c.group, v)} />
-              </View>
-            ) : null}
+            {wide ? inGroup : null}
             {amounts[k] !== undefined && Math.abs(amounts[k]! - c.average) > 0.5 ? (
               <Pressable onPress={() => setAmounts(({ [k]: _, ...m }) => m)} hitSlop={6} style={{ alignSelf: "flex-start" }}>
                 <Text style={[type.caption, { color: t.accent }]}>Reset to YNAB's {money(c.average, { whole: true })}</Text>
@@ -274,6 +276,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         </View>
         {!wide ? (
           <View style={{ gap: 4, alignItems: "flex-start" }}>
+            {inGroup}
             {perMonth}
             <Select plain label={`${c.name}: where it goes`} value={catValue(ch)} options={catOptions} onChange={(v) => setCat(k, v)} />
           </View>
