@@ -10,7 +10,7 @@ import { offersMatch, missingMatch } from "../lib/match";
 import { MATCH_PRESETS } from "../lib/presets";
 import { estimateJobTaxes, FILING_LABELS, sameTaxes, taxesFollowEstimate, taxTotal } from "../lib/tax";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { Button, DateField, FieldRow, IconButton, NumberInput, Segmented, Select, TextField, ToggleRow } from "./form";
+import { Button, DateField, FieldRow, IconButton, InfoText, InfoTip, NumberInput, Segmented, Select, TextField, ToggleRow } from "./form";
 import { Icon } from "./Icon";
 
 const HSA_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -295,6 +295,7 @@ function PaySection({
 function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean; change: (p: Partial<Income>) => void; marginalTax: number }) {
   const t = useTheme();
   const compact = useLayout().contentWidth < 600;
+  const [netTip, setNetTip] = useState(false);
   const [custom, setCustom] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const toggle = (k: string) => setOpen((o) => (o === k ? null : k));
@@ -313,6 +314,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
     (m) => (inc.matchRate1 ?? 0) === m.r1 && (inc.matchUpTo1 ?? 0) === m.u1 && (inc.matchRate2 ?? 0) === m.r2 && (inc.matchUpTo2 ?? 0) === m.u2,
   );
   const hasGross = (inc.gross ?? 0) > 0;
+  const netInfo = auto ? "Worked out from your pay and what comes out of it below: 401(k), taxes, HSA and other deductions." : "Typed from your pay stub.";
 
   const k401Summary =
     r.pretax <= 0
@@ -355,14 +357,16 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
       <View style={[styles.result, { backgroundColor: auto && pay.taxes === 0 && pay.gross > 0 ? t.warnSoft : t.accentSoft }]}>
         <View style={styles.between}>
           <View style={{ flex: 1 }}>
-            <Text style={[type.label, { color: t.text2 }]}>Take-home per paycheck</Text>
-            <Text style={[type.caption, { color: t.text3 }]}>
-              {auto
-                ? hasGross
-                  ? `${money(inc.net * CHECKS_IN_NORMAL_MONTH[inc.freq])} in a normal month${CHECKS_IN_NORMAL_MONTH[inc.freq] > 1 ? ` (${CHECKS_IN_NORMAL_MONTH[inc.freq]} paychecks)` : ""}`
-                  : "Worked out from your pay and what comes out of it"
-                : "Typed from your pay stub"}
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={[type.label, { color: t.text2 }]}>Take-home per paycheck</Text>
+              <InfoTip text={netInfo} label="Take-home per paycheck" open={netTip} onToggle={setNetTip} />
+            </View>
+            {auto && hasGross ? (
+              <Text style={[type.caption, { color: t.text3 }]}>
+                {money(inc.net * CHECKS_IN_NORMAL_MONTH[inc.freq])} in a normal month{CHECKS_IN_NORMAL_MONTH[inc.freq] > 1 ? ` (${CHECKS_IN_NORMAL_MONTH[inc.freq]} paychecks)` : ""}
+              </Text>
+            ) : null}
+            {netTip ? <InfoText text={netInfo} /> : null}
           </View>
           {auto ? (
             <Text style={[type.stat, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(inc.net)}</Text>
