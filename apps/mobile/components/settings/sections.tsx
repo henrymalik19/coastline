@@ -17,6 +17,7 @@ import { SharingEditor } from "../SharingEditor";
 import { ContributionsCard } from "../ContributionsCard";
 import { RetirementIncomeEditor } from "../RetirementIncomeEditor";
 import { GoalEditor } from "../GoalEditor";
+import { BankConnections } from "../BankConnections";
 import { BudgetEditor } from "../BudgetEditor";
 import { RetirementEssentials } from "../RetirementEssentials";
 import { PlanSteps } from "../PlanSteps";
@@ -265,6 +266,7 @@ function AccountsSection() {
       <Text style={[type.body, { color: t.text2 }]}>
         Cash is your emergency fund. Everything else counts as invested. Tap an account to rename it, change its type or remove it; drag its grip to reorder.
       </Text>
+      <BankConnections />
       <AccountsEditor afterRetirement={<ContributionsCard />} />
     </>
   );

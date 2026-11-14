@@ -5,6 +5,7 @@ import { Platform, StyleSheet } from "react-native";
 import { Icon, type IconName } from "../../components/Icon";
 import { Sidebar } from "../../components/Sidebar";
 import { useMonthRecord } from "../../lib/history";
+import { useBankAutoSync } from "../../lib/plaid";
 import { useIsWide } from "../../lib/layout";
 import { useTheme } from "../../lib/theme";
 
@@ -24,6 +25,8 @@ export default function TabsLayout() {
   const member = useMembership((s) => s.status);
   // this month's balances record (the history on Forecast), kept up to date as balances change
   useMonthRecord();
+  // connected banks: refresh balances once when the app opens (signed in)
+  useBankAutoSync();
   // the app has nothing to show until setup is done (e.g. a bookmarked link on a fresh device);
   // someone who adds purchases on another plan's cards goes to their shared budget
   if (hydrated && !onboarded) return <Redirect href={member === "member" ? "/shared" : "/onboarding"} />;
