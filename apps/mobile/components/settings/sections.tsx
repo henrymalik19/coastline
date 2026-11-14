@@ -53,7 +53,7 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
       { key: "savings", title: "Monthly savings", subtitle: "Now on the Budget tab", icon: "target", hidden: true },
       { key: "accounts", title: "Accounts", subtitle: "Balances you've saved and invested", icon: "database" },
       { key: "debts", title: "Debts", subtitle: "Balances, interest rates and minimums", icon: "card" },
-      { key: "properties", title: "Homes & rentals", subtitle: "What each is worth, its mortgage, rent and upkeep", icon: "home" },
+      { key: "properties", title: "Property", subtitle: "What each is worth, its mortgage, rent and upkeep", icon: "home" },
       { key: "goals", title: "Savings goals", subtitle: "Each goal becomes a step in your plan", icon: "target" },
     ],
   },

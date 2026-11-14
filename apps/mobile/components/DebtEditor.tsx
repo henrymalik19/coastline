@@ -276,7 +276,7 @@ function MortgageProperty({ debt }: { debt: Debt }) {
     });
   return (
     <View style={{ gap: 4 }}>
-      <FieldRow label="For" hint={props.length ? "A home or rental (Money → Homes & rentals)" : "Add the home or rental under Money → Homes & rentals"}>
+      <FieldRow label="For" hint={props.length ? "A home or rental (Money → Property)" : "Add the home or rental under Money → Property"}>
         <Select label={`${debtLabel(debt)} property`} value={mine?.id ?? ""} options={[{ value: "", label: "Not set" }, ...props.map((p) => ({ value: p.id, label: `${p.name || "Property"} (${p.kind === "rental" ? "rental" : "home"})` }))]} onChange={link} />
       </FieldRow>
       {mine?.kind === "rental" ? (

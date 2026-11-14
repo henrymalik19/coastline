@@ -97,7 +97,7 @@ export function RetirementIncomeEditor() {
             </View>
           ))}
           <Pressable role="link" onPress={() => router.push("/money/properties")} hitSlop={6} style={{ alignSelf: "flex-start", paddingBottom: space.sm }}>
-            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change under Homes & rentals →</Text>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change under Property →</Text>
           </Pressable>
         </Card>
       ) : null}

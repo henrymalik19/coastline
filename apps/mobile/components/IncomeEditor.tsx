@@ -175,7 +175,7 @@ function RentalValue({ inc }: { inc: Income }) {
         <NumberInput kind="money" label="Rental property value" value={account?.balance ?? 0} onChange={setValue} />
       </FieldRow>
       <Text style={[type.caption, { color: t.text3 }]}>
-        It's listed under Money → Homes & rentals.
+        It's listed under Money → Property.
       </Text>
     </View>
   );
@@ -723,7 +723,7 @@ export function IncomesEditor() {
     const at = state.incomes.findIndex((i) => i.id === inc.id);
     const hasProperty = !!propertyFor(state, inc.id);
     const hasMortgage = state.debts.some((d) => d.id === rentalMortgageId(inc.id));
-    const also = [hasProperty ? "its property under Homes & rentals" : "", hasMortgage ? "its mortgage in Debts" : ""].filter(Boolean).join(" and ");
+    const also = [hasProperty ? "its property under Money → Property" : "", hasMortgage ? "its mortgage in Debts" : ""].filter(Boolean).join(" and ");
     const msg = `"${inc.name || "This income"}" will be removed from your plan${also ? `, along with ${also}` : ""}.`;
     if (await confirm("Remove this income?", msg, "Remove"))
       update((p) => {

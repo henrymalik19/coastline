@@ -18,7 +18,7 @@ import { Card, Divider } from "./ui";
 const WORTH_INFO = "What they're worth counts in your net worth, not in Coast FI (it isn't money you can invest). A rental's costs come out of its rent, so they stay out of your retirement spending.";
 
 
-export function PropertiesEditor({ titled = true }: { /** Off on its own page, which already says "Homes & rentals". */ titled?: boolean } = {}) {
+export function PropertiesEditor({ titled = true }: { /** Off on its own page, which already says "Property". */ titled?: boolean } = {}) {
   const t = useTheme();
   const { state, result } = usePlan();
   const update = useStore((s) => s.update);
@@ -77,8 +77,8 @@ export function PropertiesEditor({ titled = true }: { /** Off on its own page, w
     <Card style={{ gap: space.sm }}>
       {titled ? (
         <View style={styles.row}>
-          <Text role="heading" aria-level={2} style={[type.heading, { color: t.text }]}>Homes and rentals</Text>
-          <InfoTip text={WORTH_INFO} label="Homes and rentals" open={worthTip} onToggle={setWorthTip} />
+          <Text role="heading" aria-level={2} style={[type.heading, { color: t.text }]}>Property</Text>
+          <InfoTip text={WORTH_INFO} label="Property" open={worthTip} onToggle={setWorthTip} />
         </View>
       ) : null}
       {titled && worthTip ? <InfoText text={WORTH_INFO} /> : null}
