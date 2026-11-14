@@ -29,7 +29,7 @@ export function ImportUndoCard({ children, onUndone, plain }: { children?: React
   const txns = useStore((s) => s.txns);
   const undoImport = useStore((s) => s.undoImport);
   const keepImport = useStore((s) => s.keepImport);
-  const [ask, setAsk] = useState(false);
+  const [ask, setAsk] = useState<"undo" | "keep" | null>(null);
   const left = useUndoDaysLeft();
   if (!importedAt) return null;
   const changed = lastImport ? changedSinceImport(txns, lastImport) : 0;
@@ -43,7 +43,16 @@ export function ImportUndoCard({ children, onUndone, plain }: { children?: React
             Not what you expected? Undo puts your budget and transactions back to how they were just before, and you can import again. You can undo until{" "}
             <Text style={{ color: t.text, fontWeight: "700" }}>{dayText(lastImport.at + UNDO_DAYS * DAY)}</Text>.
           </Text>
-          {ask ? (
+          {ask === "keep" ? (
+            <View style={[styles.ask, { borderColor: t.border }]}>
+              <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Keep the import as it is?</Text>
+              <Text style={[type.caption, { color: t.text2 }]}>You won't be able to undo it after this. Your budget and transactions stay exactly as they are.</Text>
+              <View style={[styles.row, { flexWrap: "wrap" }]}>
+                <Button title="Yes, keep it" tone="primary" onPress={() => { keepImport(); setAsk(null); }} style={{ minHeight: 40 }} />
+                <Button title="Cancel" tone="ghost" onPress={() => setAsk(null)} style={{ minHeight: 40 }} />
+              </View>
+            </View>
+          ) : ask === "undo" ? (
             <View style={[styles.ask, { borderColor: t.bad }]}>
               <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Undo the import?</Text>
               <Text style={[type.caption, { color: t.text2 }]}>
@@ -51,14 +60,14 @@ export function ImportUndoCard({ children, onUndone, plain }: { children?: React
                 {changed ? ` This also throws away the ${changed} transaction${changed === 1 ? "" : "s"} you added or changed since, and any budget changes.` : " Any budget changes you made since go too."}
               </Text>
               <View style={[styles.row, { flexWrap: "wrap" }]}>
-                <Button title="Yes, undo it" tone="danger" onPress={() => { undoImport(); setAsk(false); onUndone?.(); }} style={{ minHeight: 40 }} />
-                <Button title="Cancel" tone="ghost" onPress={() => setAsk(false)} style={{ minHeight: 40 }} />
+                <Button title="Yes, undo it" tone="danger" onPress={() => { undoImport(); setAsk(null); onUndone?.(); }} style={{ minHeight: 40 }} />
+                <Button title="Cancel" tone="ghost" onPress={() => setAsk(null)} style={{ minHeight: 40 }} />
               </View>
             </View>
           ) : (
             <View style={[styles.row, { flexWrap: "wrap" }]}>
-              <Button title={`Undo import · ${left} day${left === 1 ? "" : "s"} left`} onPress={() => setAsk(true)} />
-              <Button title="Keep it" tone="ghost" onPress={keepImport} />
+              <Button title={`Undo import · ${left} day${left === 1 ? "" : "s"} left`} onPress={() => setAsk("undo")} />
+              <Button title="Keep it" tone="ghost" onPress={() => setAsk("keep")} />
             </View>
           )}
         </>
@@ -78,7 +87,25 @@ export function ImportUndoReminder() {
   const router = useRouter();
   const left = useUndoDaysLeft();
   const keepImport = useStore((s) => s.keepImport);
+  const [sure, setSure] = useState(false);
   if (!left || left > 7) return null;
+  if (sure) {
+    return (
+      <View style={[styles.reminder, { backgroundColor: t.warnSoft }]}>
+        <Text style={[type.caption, { color: t.text, flex: 1, minWidth: 180 }]}>
+          <Text style={{ fontWeight: "700" }}>Keep the import as it is?</Text> You won't be able to undo it after this.
+        </Text>
+        <View style={styles.row}>
+          <Pressable role="button" onPress={keepImport} hitSlop={6}>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Yes, keep it</Text>
+          </Pressable>
+          <Pressable role="button" onPress={() => setSure(false)} hitSlop={6}>
+            <Text style={[type.caption, { color: t.text2, fontWeight: "700" }]}>Cancel</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={[styles.reminder, { backgroundColor: t.warnSoft }]}>
       <Text style={[type.caption, { color: t.text, flex: 1, minWidth: 180 }]}>
@@ -88,7 +115,7 @@ export function ImportUndoReminder() {
         <Pressable role="button" onPress={() => router.push("/money/import")} hitSlop={6}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Review</Text>
         </Pressable>
-        <Pressable role="button" onPress={keepImport} hitSlop={6}>
+        <Pressable role="button" onPress={() => setSure(true)} hitSlop={6}>
           <Text style={[type.caption, { color: t.text2, fontWeight: "700" }]}>Keep it</Text>
         </Pressable>
       </View>
