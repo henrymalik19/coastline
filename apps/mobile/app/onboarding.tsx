@@ -253,27 +253,49 @@ function MoneyStep() {
   const t = useTheme();
   const { state } = usePlan();
   const update = useStore((s) => s.update);
+  // three parts, each with what it adds up to
+  const props = state.properties ?? [];
+  const cash = state.accounts.filter((a) => a.type !== "property").reduce((a, x) => a + (+x.balance || 0), 0);
+  const worth = props.reduce((a, x) => a + (+x.value || 0), 0);
+  const owed = state.debts.reduce((a, x) => a + (+x.balance || 0), 0);
+  const homeOf = (id: string) => props.find((x) => x.mortgageId === id);
   return (
     <>
-      <Text style={[type.heading, { color: t.text }]}>Accounts</Text>
+      <SectionHead title="Accounts" total={money(cash, { whole: true })} info="Rough is fine. You'll update these at each monthly check-in. Tap an account to rename it, change its type or remove it." />
       <AccountsEditor />
-      <PropertiesEditor />
-      <Text style={[type.caption, { color: t.text3, marginTop: -space.xs }]}>
-        Rough is fine. You'll update these at each monthly check-in. Tap an account to rename it, change its type or remove it.
-      </Text>
-      <Text style={[type.heading, { color: t.text, marginTop: space.sm }]}>Debts</Text>
+      <SectionHead title="Home & property" total={money(worth, { whole: true })} info="What they're worth counts in your net worth, not in Coast FI (it isn't money you can invest). Add each one's mortgage right on it. A rental's costs come out of its rent, so they stay out of your retirement spending." />
+      <PropertiesEditor titled={false} />
+      <SectionHead title="Debts" total={owed ? `−${money(owed, { whole: true })}` : money(0)} info="Cards, car and student loans, and your mortgages. Their payments come into your budget in the next step." />
       {state.debts.map((dt, i) => (
-        <DebtEditor
-          key={dt.id}
-          debt={dt}
-          paidFrom={paidFromFor(state, dt.id)}
-          onChange={(patch) => update((p) => { p.debts[i] = { ...p.debts[i]!, ...patch }; })}
-          onRemove={() => update((p) => { p.debts.splice(i, 1); })}
-        />
+        <View key={dt.id} style={{ gap: 4 }}>
+          {homeOf(dt.id) ? <Text style={[type.caption, { color: t.text3 }]}>The mortgage on {homeOf(dt.id)!.name || "your home"} (above)</Text> : null}
+          <DebtEditor
+            debt={dt}
+            paidFrom={paidFromFor(state, dt.id)}
+            onChange={(patch) => update((p) => { p.debts[i] = { ...p.debts[i]!, ...patch }; })}
+            onRemove={() => update((p) => { p.debts.splice(i, 1); for (const x of p.properties ?? []) if (x.mortgageId === dt.id) delete x.mortgageId; })}
+          />
+        </View>
       ))}
       <AddDebtButtons hasAny={state.debts.length > 0} onAdd={(d) => update((p) => { p.debts.push(d); })} />
       {!state.debts.length ? <Text style={[type.caption, { color: t.text3 }]}>No debts? Skip this part.</Text> : null}
     </>
+  );
+}
+
+/** A part of a step: its heading, an (i), and what it adds up to. */
+function SectionHead({ title, total, info }: { title: string; total: string; info?: string }) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={{ gap: space.xs, marginTop: space.sm }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <Text role="heading" aria-level={2} style={[type.heading, { color: t.text }]}>{title}</Text>
+        {info ? <InfoTip text={info} label={title} open={open} onToggle={setOpen} /> : null}
+        <Text style={[type.label, { color: t.text2, marginLeft: "auto", fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{total}</Text>
+      </View>
+      {info && open ? <InfoText text={info} /> : null}
+    </View>
   );
 }
 
