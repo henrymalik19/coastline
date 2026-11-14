@@ -4,7 +4,7 @@
  * which are essential. Nothing changes until you press Import.
  */
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, InlineMoney, InlineSwitch, MonthField, Segmented, Select, ToggleRow } from "../../../components/form";
 import { Card, Divider, Screen } from "../../../components/ui";
@@ -13,11 +13,12 @@ import { usePlan } from "../../../lib/plan";
 import { isCard } from "../../../lib/register";
 import { monthKey, newId, useStore } from "../../../lib/store";
 import { space, type, useTheme } from "../../../lib/theme";
-import { buildImport, categoryKey, exportMonths, groupKey, parseYnab, readYnabZip, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabData } from "../../../lib/ynab";
+import { buildImport, categoryKey, exportMonths, groupKey, parseYnab, readYnabZip, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabCategory, type YnabData } from "../../../lib/ynab";
 import { sticky, stickyBottom } from "../../../lib/sticky";
 import { useLayout } from "../../../lib/layout";
 import { groupOrder } from "../../../lib/budgetOrder";
 import { ImportUndoCard } from "../../../components/ImportUndo";
+import { DragList, useDragZone } from "../../../components/DragList";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const ymText = (ym: string) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
@@ -80,6 +81,16 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const [groupMap, setGroupMap] = useState<Record<string, string>>({});
   // one category into a different group than the rest of its YNAB group
   const [catGroup, setCatGroup] = useState<Record<string, string>>({});
+  // drag a category onto another group's card: it lands in that card's group
+  const cardRowsRef = useRef<Record<string, YnabCategory[]>>({});
+  const cardTargetRef = useRef<(g: string) => string>((g) => g);
+  const zone = useDragZone((fromCard, from, toCard) => {
+    const c = cardRowsRef.current[fromCard]?.[from];
+    if (!c) return;
+    const k = categoryKey(c.group, c.name);
+    const to = cardTargetRef.current(toCard);
+    setCatGroup(({ [k]: _, ...m }) => (to === cardTargetRef.current(c.group) ? m : { ...m, [k]: to }));
+  });
   const [tab, setTab] = useState<"accounts" | "categories" | "matches">("accounts");
   const [showQuiet, setShowQuiet] = useState(false);
   const [showUnused, setShowUnused] = useState(false);
@@ -213,7 +224,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     setCatGroup(({ [k]: _, ...m }) => (v === groupTarget(g) ? m : { ...m, [k]: v }));
   const catValue = (c: CategoryChoice | undefined) => (!c ? "new" : c.action === "match" ? "match:" + c.id : c.action);
   const setCat = (k: string, v: string) => setCatMap((m) => ({ ...m, [k]: v.startsWith("match:") ? { action: "match", id: v.slice(6) } : { action: v as "new" | "skip" } }));
-  const categoryRow = (c: (typeof categories)[number]) => {
+  const categoryRow = (c: (typeof categories)[number], grip?: ReactNode) => {
     const k = categoryKey(c.group, c.name);
     const o = opts(k);
     const ch = catMap[k];
@@ -228,6 +239,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     return (
       <View key={k} style={[styles.catRow, { borderTopColor: t.border }]}>
         <View style={styles.row}>
+          {grip}
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[type.body, { color: ch?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]} numberOfLines={1}>{c.name}</Text>
             {ch?.action !== "skip" && (ch?.action !== "match" || ch.id !== "cash") ? (
@@ -382,7 +394,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
           {tab === "categories" ? (
             <Card style={{ gap: space.sm }}>
               <Text style={[type.caption, { color: t.text3 }]}>
-                Each comes in with what you assigned a month lately. Pick where each one goes, and which of your groups each YNAB group lands in. Turn off After retiring for what you won't pay then, and Essential for what you'd cut in an emergency.
+                Each comes in with what you assigned a month lately. Pick where each one goes, and which of your groups each YNAB group lands in. Drag a category onto another group to move it there. Turn off After retiring for what you won't pay then, and Essential for what you'd cut in an emergency.
               </Text>
               <View style={[styles.row, { paddingVertical: space.xs }, sticky(tabsH, t.surface)]}>
                 <Text style={[type.caption, { color: t.text3, flex: 1 }]}>Category</Text>
@@ -391,14 +403,25 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
                 <Text style={[type.caption, styles.col, { color: t.text3 }]}>After retiring</Text>
                 <Text style={[type.caption, styles.col, { color: t.text3 }]}>Essential</Text>
               </View>
-              {[...new Set(activeCats.map((c) => c.group))].map((g) => (
+              {(() => {
+                const cards = [...new Set(activeCats.map((c) => c.group))];
+                cardTargetRef.current = groupTarget;
+                const cardOf = (c: (typeof activeCats)[number]) => {
+                  const moved = catGroup[categoryKey(c.group, c.name)];
+                  return (moved && cards.find((g) => g && groupTarget(g) === moved)) ?? c.group;
+                };
+                const rows: Record<string, typeof activeCats> = {};
+                for (const g of cards) rows[g] = activeCats.filter((c) => cardOf(c) === g);
+                cardRowsRef.current = rows;
+                return cards;
+              })().map((g) => (
                 <View key={g} style={[styles.group, { borderColor: t.border, backgroundColor: t.surface2 }]}>
                   <View style={[styles.row, { flexWrap: "wrap", justifyContent: "space-between", paddingBottom: space.sm }]}>
                     <View style={[styles.row, { flexShrink: 1, gap: space.sm }]}>
                       <View style={[styles.groupDot, { backgroundColor: t.accent }]} />
                       <Text style={[type.heading, { color: t.text, flexShrink: 1 }]} numberOfLines={1}>{g || "No group"}</Text>
                       <View style={[styles.pill, { backgroundColor: t.surface }]}>
-                        <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]}>{activeCats.filter((c) => c.group === g).length}</Text>
+                        <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]}>{cardRowsRef.current[g]?.length ?? 0}</Text>
                       </View>
                     </View>
                     {g ? (
@@ -408,7 +431,14 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
                       </View>
                     ) : null}
                   </View>
-                  {activeCats.filter((c) => c.group === g).map(categoryRow)}
+                  <DragList
+                    zone={{ set: zone, id: g }}
+                    count={cardRowsRef.current[g]?.length ?? 0}
+                    keyOf={(n) => categoryKey(cardRowsRef.current[g]![n]!.group, cardRowsRef.current[g]![n]!.name)}
+                    nameOf={(n) => cardRowsRef.current[g]![n]!.name}
+                    onMove={() => {}}
+                    renderItem={(n, grip) => categoryRow(cardRowsRef.current[g]![n]!, grip)}
+                  />
                 </View>
               ))}
               {unusedCats.length ? (

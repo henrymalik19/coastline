@@ -16,7 +16,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Segmented, Select } from "../../components/form";
 import { ChangesLater, MonthlyAmount } from "../../components/ScheduleEditor";
 import { groupOf, groupOrder, moveGroup, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
-import { DragList, reorderAmong } from "../../components/DragList";
+import { DragList, reorderAmong, useDragZone } from "../../components/DragList";
 import { newId } from "../../lib/store";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Icon } from "../../components/Icon";
@@ -47,6 +47,13 @@ export default function Budget() {
   const compact = contentWidth < 600;
   const { state, result, actual, start } = usePlan();
   const update = useStore((s) => s.update);
+  // drag a category from one of your groups into another
+  const dragGroups = useRef<{ name: string; cats: { key: string }[] }[]>([]);
+  const zone = useDragZone((fromList, from, toList, to) => {
+    const c = dragGroups.current.find((g) => g.name === fromList)?.cats[from];
+    if (!c) return;
+    update((p) => { p.budget = moveToGroup(p.budget, p.budget.findIndex((b) => b.id === c.key), toList, to); });
+  });
   const clearTxns = useStore((s) => s.clearTxns);
   const thisMonth = monthKey(start);
   const [month, setMonth] = useState(thisMonth);
@@ -209,6 +216,7 @@ export default function Budget() {
   const groupNames = [...new Set([...groups.map((g) => g.name), ...groupOrder(state.budget)])];
   /** A group of only your own categories can be dragged and moved; one with savings, bills or debts keeps its place. */
   const ownGroup = (g: (typeof groups)[number]) => g.cats.every((c) => c.kind === "spending");
+  dragGroups.current = groups.filter(ownGroup);
   const rta = view.readyToAssign;
   // your real spending: categories whose recent average is well off the plan amount
   const realRows = showReal && history.months.length
@@ -680,8 +688,9 @@ export default function Budget() {
                     </View>
                   </View>
                 ) : null}
-                {ownGroup(g) && g.cats.length > 1 ? (
+                {ownGroup(g) ? (
                   <DragList
+                    zone={{ set: zone, id: g.name }}
                     count={g.cats.length}
                     keyOf={(n) => g.cats[n]!.key}
                     nameOf={(n) => g.cats[n]!.name}

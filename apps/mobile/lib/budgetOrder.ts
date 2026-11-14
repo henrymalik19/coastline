@@ -49,16 +49,20 @@ export function moveAmong<T extends { id: string }>(list: T[], id: string, by: -
   return out;
 }
 
-/** Move an item into another group (it goes to the end of that group; a new group goes last). */
-export function moveToGroup(items: BudgetItem[], index: number, group: string): BudgetItem[] {
+/**
+ * Move an item into another group: to the end of that group, or at `at` among its items (where you
+ * dropped it). A new group goes last.
+ */
+export function moveToGroup(items: BudgetItem[], index: number, group: string, at?: number): BudgetItem[] {
   const item = items[index];
   const name = group.trim();
   if (!item || !name || groupOf(item) === name) return items;
   const rest = items.filter((_, i) => i !== index);
   const moved = { ...item, group: name };
-  const last = rest.map((b, i) => (groupOf(b) === name ? i : -1)).filter((i) => i >= 0).at(-1);
-  if (last === undefined) return [...rest, moved];
-  return [...rest.slice(0, last + 1), moved, ...rest.slice(last + 1)];
+  const slots = rest.map((b, i) => (groupOf(b) === name ? i : -1)).filter((i) => i >= 0);
+  if (!slots.length) return [...rest, moved];
+  const pos = at !== undefined && at < slots.length ? slots[Math.max(0, at)]! : slots.at(-1)! + 1;
+  return [...rest.slice(0, pos), moved, ...rest.slice(pos)];
 }
 
 /** Merge one group into another: its items join the end of the other group, in their order. */

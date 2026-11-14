@@ -62,4 +62,12 @@ describe("moving items between groups", () => {
     expect(groupOrder(out)).toEqual(["Housing", "Food", "Health"]);
     expect(mergeGroup(items, "Food", "Food")).toBe(items);
   });
+
+  it("moves an item into another group where you drop it", () => {
+    const items = [item("rent", "Housing"), item("power", "Housing"), item("food", "Food"), item("gas", "Car"), item("misc")];
+    expect(ids(moveToGroup(items, 3, "Housing", 0))).toBe("gas,rent,power,food,misc");
+    expect(ids(moveToGroup(items, 3, "Housing", 1))).toBe("rent,gas,power,food,misc");
+    expect(ids(moveToGroup(items, 3, "Housing", 9))).toBe("rent,power,gas,food,misc");
+    expect(moveToGroup(items, 3, "Housing", 0)[0]!.group).toBe("Housing");
+  });
 });
