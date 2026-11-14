@@ -7,7 +7,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money } from "../lib/format";
 import { space, type, useTheme } from "../lib/theme";
 import { looksLikeEmergencyFund } from "./EmergencyFundNote";
-import { FieldRow, IconButton, InfoText, InfoTip, NumberInput, TextField } from "./form";
+import { BILLS_GROUP, linkedGroupChoices } from "../lib/budgetOrder";
+import { FieldRow, IconButton, InfoText, InfoTip, NumberInput, Select, TextField } from "./form";
 import { Icon } from "./Icon";
 import { ProgressBar } from "./ProgressRing";
 import { dueLabel, everyLabel, RecurringGoalFields } from "./RecurringGoalFields";
@@ -74,6 +75,18 @@ export function GoalEditor({ goal, onChange, onRemove }: { goal: Goal; onChange:
           </FieldRow>
           <Divider />
           <RecurringGoalFields goal={goal} onChange={onChange} />
+          {r ? (
+            <FieldRow label="Budget group" info="Where it's listed on your Budget. It's set aside the same way whichever group it's in.">
+              <View style={{ width: 170 }}>
+                <Select
+                  label="Budget group"
+                  options={linkedGroupChoices(state.budget, BILLS_GROUP, goal.budgetGroup).map((g) => ({ value: g, label: g }))}
+                  value={goal.budgetGroup?.trim() || BILLS_GROUP}
+                  onChange={(g) => onChange({ budgetGroup: g === BILLS_GROUP ? undefined : g })}
+                />
+              </View>
+            </FieldRow>
+          ) : null}
           <Divider />
           {r ? (
             <View style={styles.row}>

@@ -210,7 +210,7 @@ export type Goal = {
   target: number;
   saved: number;
   recurring?: RecurringGoal;
-  /** Budget group a recurring goal's set-aside is listed under (display only; missing = "Set aside"). */
+  /** Budget group a recurring goal's set-aside is listed under (display only; missing = "Bills"). */
   budgetGroup?: string;
 };
 export type RecurringGoal = {

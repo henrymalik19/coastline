@@ -4,6 +4,17 @@ import type { BudgetItem } from "@coastfi/engine";
 export const UNGROUPED = "Other";
 export const groupOf = (b: BudgetItem) => b.group?.trim() || UNGROUPED;
 
+/** Where a repeating bill / a debt payment is listed in the budget unless you pick a group. */
+export const BILLS_GROUP = "Bills";
+export const DEBTS_GROUP = "Debt payments";
+
+/** The groups a bill or debt payment can be listed under: its default, then your groups (and its current one). */
+export function linkedGroupChoices(items: BudgetItem[], fallback: string, current?: string): string[] {
+  const out = [fallback, ...groupOrder(items)];
+  if (current?.trim()) out.push(current.trim());
+  return [...new Set(out)];
+}
+
 /** Group names in the order they first appear. */
 export function groupOrder(items: BudgetItem[]): string[] {
   const out: string[] = [];

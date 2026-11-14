@@ -2,7 +2,7 @@ import { BUDGET_ITEM, monthsBetween, nextDue, setAsideFor, type BudgetItem, type
 import { useEffect, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../lib/confirm";
-import { groupOf, mergeGroup, moveGroup, moveToGroup, UNGROUPED } from "../lib/budgetOrder";
+import { BILLS_GROUP, DEBTS_GROUP, groupOf, mergeGroup, moveGroup, moveToGroup, UNGROUPED } from "../lib/budgetOrder";
 import { DragList, reorderAmong } from "./DragList";
 import { debtLabel } from "../lib/debts";
 import { paycheckFor } from "../lib/loans";
@@ -24,10 +24,10 @@ import { Card, Pill } from "./ui";
 
 /** Key of the read-only "Debt payments" group (not a real budget group). */
 const DEBT_KEY = "\u0000debts";
-/** Key of the read-only "Set aside" group (recurring goals). */
+/** Key of the read-only "Bills" group (repeating bills). */
 const SET_KEY = "\u0000setaside";
-const DEBT_LABEL = "Debt payments";
-const SET_LABEL = "Set aside";
+const DEBT_LABEL = DEBTS_GROUP;
+const SET_LABEL = BILLS_GROUP;
 
 /** Groups in the order they first appear; items without a group go under "Other". */
 function grouped(items: BudgetItem[]) {
@@ -70,15 +70,20 @@ export function BudgetEditor() {
   const isSetRow = (g: Goal) => !!g.recurring && g.target > 0;
   // a debt payment or set-aside can be listed under one of your groups instead (still read-only)
   const groupNames = new Set(groups.map((g) => g.name));
-  const placed = (x: { budgetGroup?: string }) => !!x.budgetGroup && groupNames.has(x.budgetGroup);
-  const debtRows = state.debts.filter((x) => isDebtRow(x) && !placed(x));
+  // where it's listed: the group you picked, else its default (Bills / Debt payments). When you have a
+  // group of that name it sits there, like on the Budget tab; otherwise in its own read-only group.
+  const debtGroup = (x: Debt) => x.budgetGroup?.trim() || DEBTS_GROUP;
+  const goalGroup = (g: Goal) => g.budgetGroup?.trim() || BILLS_GROUP;
+  const placedDebt = (x: Debt) => groupNames.has(debtGroup(x));
+  const placedGoal = (g: Goal) => groupNames.has(goalGroup(g));
+  const debtRows = state.debts.filter((x) => isDebtRow(x) && !placedDebt(x));
   const payrollLoans = state.debts.filter((x) => x.balance > 0 && x.payroll);
   const onDebts = selected === DEBT_KEY && debtRows.length > 0;
   // recurring goals are set aside every month, like a bill: shown read-only too
-  const setRows = state.goals.filter((g) => isSetRow(g) && !placed(g));
+  const setRows = state.goals.filter((g) => isSetRow(g) && !placedGoal(g));
   const onSet = selected === SET_KEY && setRows.length > 0;
-  const placedDebts = (group: string) => state.debts.filter((x) => isDebtRow(x) && x.budgetGroup === group);
-  const placedGoals = (group: string) => state.goals.filter((g) => isSetRow(g) && g.budgetGroup === group);
+  const placedDebts = (group: string) => state.debts.filter((x) => isDebtRow(x) && debtGroup(x) === group);
+  const placedGoals = (group: string) => state.goals.filter((g) => isSetRow(g) && goalGroup(g) === group);
   useEffect(() => {
     if (selected === DEBT_KEY && debtRows.length > 0) return;
     if (selected === SET_KEY && setRows.length > 0) return;
@@ -141,7 +146,7 @@ export function BudgetEditor() {
       if (group) x.budgetGroup = group;
       else delete x.budgetGroup;
     });
-    const home = kind === "debt" ? "Debt payments" : "Set aside";
+    const home = kind === "debt" ? DEBTS_GROUP : BILLS_GROUP;
     setNotice(`Moved to ${group ?? home}. It's still counted once and changes on the ${kind === "debt" ? "Debts" : "Savings goals"} page.`);
   };
   const debtFrom = (x: Debt) => {
@@ -155,9 +160,9 @@ export function BudgetEditor() {
 
   // debts and recurring goals reorder in their own lists (the same order shows on Debts / Savings goals)
   const moveDebt = (from: number, to: number) =>
-    update((p) => { p.debts = reorderAmong(p.debts, (x) => isDebtRow(x) && !placed(x), from, to); });
+    update((p) => { p.debts = reorderAmong(p.debts, (x) => isDebtRow(x) && !placedDebt(x), from, to); });
   const moveGoal = (from: number, to: number) =>
-    update((p) => { p.goals = reorderAmong(p.goals, (g) => isSetRow(g) && !placed(g), from, to); });
+    update((p) => { p.goals = reorderAmong(p.goals, (g) => isSetRow(g) && !placedGoal(g), from, to); });
   const noticeBox = notice ? (
     <View key="notice" style={{ paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.xs }}>
       <View style={[styles.hint, { backgroundColor: t.goodSoft }]}>
@@ -280,7 +285,7 @@ export function BudgetEditor() {
           return { key: g.name, title: g.name, subtitle: `${n} item${n === 1 ? "" : "s"}`, value: money(g.subtotal + linkedTotal(g.name)) };
         }),
         ...(debtRows.length ? [{ key: DEBT_KEY, title: "Debt payments", subtitle: "From your debts", value: money(debtHomeTotal) }] : []),
-        ...(setRows.length ? [{ key: SET_KEY, title: "Set aside", subtitle: "Recurring goals", value: money(setHomeTotal) }] : []),
+        ...(setRows.length ? [{ key: SET_KEY, title: BILLS_GROUP, subtitle: "Repeating bills", value: money(setHomeTotal) }] : []),
       ]}
       selected={onDebts ? DEBT_KEY : onSet ? SET_KEY : current?.name}
       onSelect={setSelected}
@@ -465,7 +470,7 @@ export function BudgetEditor() {
                   from={debtFrom(x)}
                   cols={cols}
                   inGroup
-                  moveTo={<MoveTo current={current.name} groups={[...groupNames, DEBT_LABEL]} what={debtLabel(x)} allowNew={false} onPick={(to) => place("debt", x.id, to === DEBT_LABEL ? undefined : to)} />}
+                  moveTo={<MoveTo current={current.name} groups={[...new Set([...groupNames, DEBT_LABEL])]} what={debtLabel(x)} allowNew={false} onPick={(to) => place("debt", x.id, to === DEBT_LABEL ? undefined : to)} />}
                 />
               )),
               ...placedGoals(current.name).map((g) => (
@@ -477,7 +482,7 @@ export function BudgetEditor() {
                   thisMonth={thisMonth}
                   cols={cols}
                   inGroup
-                  moveTo={<MoveTo current={current.name} groups={[...groupNames, SET_LABEL]} what={g.name || "goal"} allowNew={false} onPick={(to) => place("goal", g.id, to === SET_LABEL ? undefined : to)} />}
+                  moveTo={<MoveTo current={current.name} groups={[...new Set([...groupNames, SET_LABEL])]} what={g.name || "goal"} allowNew={false} onPick={(to) => place("goal", g.id, to === SET_LABEL ? undefined : to)} />}
                 />
               )),
             ]

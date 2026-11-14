@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Segmented, Select } from "../../components/form";
 import { ChangesLater, MonthlyAmount } from "../../components/ScheduleEditor";
-import { groupOf, groupOrder, moveGroup, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
+import { BILLS_GROUP, DEBTS_GROUP, groupOf, groupOrder, linkedGroupChoices, moveGroup, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
 import { DragList, reorderAmong, useDragZone } from "../../components/DragList";
 import { newId } from "../../lib/store";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -212,15 +212,22 @@ export default function Budget() {
 
   /* ---------- the month ---------- */
   const groups: { name: string; kind: BudgetCategory["kind"]; cats: BudgetCategory[] }[] = [];
-  for (const c of [...cats].sort((x, y) => ORDER[x.kind] - ORDER[y.kind])) {
+  // a bill or debt payment listed in one of your groups goes where that group is, not with the built-ins
+  const own = groupOrder(state.budget);
+  const rank = (c: BudgetCategory) => (own.includes(c.group) ? ORDER.spending * 1000 + own.indexOf(c.group) : ORDER[c.kind] * 1000);
+  for (const c of [...cats].sort((x, y) => rank(x) - rank(y))) {
     let g = groups.find((x) => x.name === c.group);
     if (!g) groups.push((g = { name: c.group, kind: c.kind, cats: [] }));
     g.cats.push(c);
   }
   const groupNames = [...new Set([...groups.map((g) => g.name), ...groupOrder(state.budget)])];
-  /** A group of only your own categories can be dragged and moved; one with savings, bills or debts keeps its place. */
-  const ownGroup = (g: (typeof groups)[number]) => g.cats.every((c) => c.kind === "spending");
-  dragGroups.current = groups.filter(ownGroup);
+  /**
+   * One of your groups (it has categories you made) can be moved, and its categories dragged, even with a
+   * bill or debt payment listed in it: those rows stay put at the top. The built-in groups keep their place.
+   */
+  const ownGroup = (g: (typeof groups)[number]) => own.includes(g.name);
+  const spendCats = (g: (typeof groups)[number]) => g.cats.filter((c) => c.kind === "spending");
+  dragGroups.current = groups.filter(ownGroup).map((g) => ({ name: g.name, cats: spendCats(g) }));
   const rta = view.readyToAssign;
   // your real spending: categories whose recent average is well off the plan amount
   const realRows = showReal && history.months.length
@@ -412,11 +419,30 @@ export default function Budget() {
         </View>
       );
     const isBill = c.kind === "bill";
+    const id = c.key.slice(5); // "goal:<id>" / "debt:<id>"
+    const linked = isBill ? state.goals.find((g) => g.id === id) : state.debts.find((x) => x.id === id);
+    const fallback = isBill ? BILLS_GROUP : DEBTS_GROUP;
+    const setGroup = (g: string) =>
+      update((p) => {
+        const x = isBill ? p.goals.find((y) => y.id === id) : p.debts.find((y) => y.id === id);
+        if (!x) return;
+        if (g === fallback) delete x.budgetGroup;
+        else x.budgetGroup = g;
+      });
     return (
-      <Pressable role="link" onPress={() => router.push(isBill ? "/money/goals" : "/money/debts")} hitSlop={6} style={styles.link}>
-        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{isBill ? "Change this bill (Savings goals)" : "Change this debt (Debts)"}</Text>
-        <Icon name="chevron" size={12} color={t.accent} />
-      </Pressable>
+      <View style={styles.section}>
+        {linked ? (
+          <FormList>
+            <FormRow label="Group">
+              <Select plain label="Group" value={linked.budgetGroup?.trim() || fallback} options={linkedGroupChoices(state.budget, fallback, linked.budgetGroup).map((g) => ({ value: g, label: g }))} onChange={setGroup} />
+            </FormRow>
+          </FormList>
+        ) : null}
+        <Pressable role="link" onPress={() => router.push(isBill ? "/money/goals" : "/money/debts")} hitSlop={6} style={styles.link}>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{isBill ? "Change this bill (Savings goals)" : "Change this debt (Debts)"}</Text>
+          <Icon name="chevron" size={12} color={t.accent} />
+        </Pressable>
+      </View>
     );
   };
 
@@ -696,20 +722,29 @@ export default function Budget() {
                   </View>
                 ) : null}
                 {ownGroup(g) ? (
-                  <DragList
-                    zone={{ set: zone, id: g.name }}
-                    grips={grips}
-                    count={g.cats.length}
-                    keyOf={(n) => g.cats[n]!.key}
-                    nameOf={(n) => g.cats[n]!.name}
-                    onMove={(from, to) => update((p) => { p.budget = reorderAmong(p.budget, (b) => groupOf(b) === g.name, from, to); })}
-                    renderItem={(n, grip) => (
-                      <View>
+                  <>
+                    {g.cats.filter((c) => c.kind !== "spending").map((c, n) => (
+                      <View key={c.key}>
                         {n > 0 ? <Divider /> : null}
-                        {line(g.cats[n]!, grip)}
+                        {line(c)}
                       </View>
-                    )}
-                  />
+                    ))}
+                    {g.cats.some((c) => c.kind !== "spending") && spendCats(g).length ? <Divider /> : null}
+                    <DragList
+                      zone={{ set: zone, id: g.name }}
+                      grips={grips}
+                      count={spendCats(g).length}
+                      keyOf={(n) => spendCats(g)[n]!.key}
+                      nameOf={(n) => spendCats(g)[n]!.name}
+                      onMove={(from, to) => update((p) => { p.budget = reorderAmong(p.budget, (b) => groupOf(b) === g.name, from, to); })}
+                      renderItem={(n, grip) => (
+                        <View>
+                          {n > 0 ? <Divider /> : null}
+                          {line(spendCats(g)[n]!, grip)}
+                        </View>
+                      )}
+                    />
+                  </>
                 ) : (
                   g.cats.map((c, n) => (
                     <View key={c.key}>
