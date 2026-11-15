@@ -2,9 +2,11 @@ import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { confirm } from "../lib/confirm";
 import { deleteAccount, sendCode, signOut, syncNow, useSync, verifyCode, type SyncStatus } from "../lib/sync";
+import { verifySecondStep } from "../lib/mfa";
 import { syncConfigured } from "../lib/supabase";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, TextField } from "./form";
+import { TwoStepSettings } from "./TwoStep";
 import { Card } from "./ui";
 
 const STATUS_TEXT: Record<SyncStatus, string> = {
@@ -33,7 +35,7 @@ export function SyncStatusLine() {
 /** Sign in with an emailed code, see sync status, sign out, delete account. */
 export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
   const t = useTheme();
-  const { status, email: signedInEmail, notice } = useSync();
+  const { status, email: signedInEmail, notice, secondStep } = useSync();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
@@ -82,6 +84,7 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
             }}
           />
         </View>
+        <TwoStepSettings />
         <View style={[styles.danger, { borderColor: t.border }]}>
           <Text style={[type.label, { color: t.text }]}>Delete account</Text>
           <Text style={[type.caption, { color: t.text3 }]}>
@@ -97,6 +100,30 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
                 void run(() => deleteAccount(false), "Your account and synced data were deleted.");
             }}
           />
+        </View>
+        {msg ? <Text role="status" style={[type.label, { color: msg.ok ? t.good : t.bad }]}>{msg.text}</Text> : null}
+      </Card>
+    );
+  }
+
+  if (secondStep !== undefined) {
+    return (
+      <Card style={{ gap: space.md }}>
+        <Text style={[type.heading, { color: t.text }]}>One more step</Text>
+        <Text style={[type.body, { color: t.text2 }]}>
+          {secondStep || "This account"} has two-step sign-in on. Enter the 6-digit code from your authenticator app.
+        </Text>
+        <View style={styles.row}>
+          <View style={{ width: 160 }}>
+            <TextField label="Authenticator code" placeholder="123456" value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} />
+          </View>
+          <Button
+            title="Continue"
+            tone="primary"
+            disabled={busy || code.length !== 6}
+            onPress={() => void run(async () => { await verifySecondStep(code); setCode(""); onSignedIn?.(); })}
+          />
+          <Button title="Cancel" tone="ghost" disabled={busy} onPress={() => void run(async () => { await signOut(false); setSent(false); setCode(""); })} />
         </View>
         {msg ? <Text role="status" style={[type.label, { color: msg.ok ? t.good : t.bad }]}>{msg.text}</Text> : null}
       </Card>

@@ -1,7 +1,7 @@
 // The Plaid core (supabase/functions/_shared/plaid-core.ts) runs here under Node with a fake store and a
 // fake Plaid: it doesn't depend on Supabase or Deno, and bank tokens are only ever stored encrypted.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handle, PlaidHttpError, type AccountRow, type PlaidStore } from "../../../supabase/functions/_shared/plaid-core";
+import { handle, needsSecondStep, PlaidHttpError, type AccountRow, type PlaidStore } from "../../../supabase/functions/_shared/plaid-core";
 
 const KEY = btoa(String.fromCharCode(...new Uint8Array(32).map((_, i) => i)));
 const env = { clientId: "id", secret: "sec", env: "sandbox", tokenKey: KEY };
@@ -145,5 +145,18 @@ describe("plaid core", () => {
     expect(calls[0]!.body).toMatchObject({ products: ["investments"] });
     await handle({ action: "link_token", planId: "u1", kind: "bank" }, "u1", env, store);
     expect(calls[1]!.body).toMatchObject({ products: ["transactions"], optional_products: ["liabilities"] });
+  });
+});
+
+describe("two-step sign-in", () => {
+  const tok = (claims: object) => `h.${btoa(JSON.stringify(claims)).replace(/=+$/, "")}.s`;
+  it("lets people without a second step through", () => {
+    expect(needsSecondStep(tok({ aal: "aal1" }), [])).toBe(false);
+    expect(needsSecondStep(tok({ aal: "aal1" }), [{ status: "unverified" }])).toBe(false);
+  });
+  it("needs aal2 once an authenticator app is set up", () => {
+    expect(needsSecondStep(tok({ aal: "aal1" }), [{ status: "verified" }])).toBe(true);
+    expect(needsSecondStep(tok({ aal: "aal2" }), [{ status: "verified" }])).toBe(false);
+    expect(needsSecondStep("not-a-token", [{ status: "verified" }])).toBe(true);
   });
 });

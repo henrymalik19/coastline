@@ -7,7 +7,7 @@
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by the runtime.
 
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { handle, PlaidHttpError, type PlaidEnv, type PlaidStore } from "../_shared/plaid-core.ts";
+import { handle, needsSecondStep, PlaidHttpError, type PlaidEnv, type PlaidStore } from "../_shared/plaid-core.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -76,6 +76,7 @@ Deno.serve(async (req) => {
     const jwt = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
     const user = jwt ? (await db.auth.getUser(jwt)).data.user : null;
     if (!user) throw new PlaidHttpError(401, "Sign in first.");
+    if (needsSecondStep(jwt!, user.factors)) throw new PlaidHttpError(401, "Enter the code from your authenticator app first.");
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     return json(await handle(body, user.id, env, supabaseStore(db)));
   } catch (e) {

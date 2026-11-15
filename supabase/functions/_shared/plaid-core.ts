@@ -55,6 +55,20 @@ export class PlaidHttpError extends Error {
   }
 }
 
+/**
+ * Someone who turned on two-step sign-in must have finished it (aal2 in their sign-in token) before
+ * touching their banks; an emailed code alone isn't enough. The token is already verified by Supabase.
+ */
+export function needsSecondStep(jwt: string, factors: { status?: string }[] | undefined): boolean {
+  if (!factors?.some((f) => f.status === "verified")) return false;
+  try {
+    const part = jwt.split(".")[1]!.replace(/-/g, "+").replace(/_/g, "/");
+    return (JSON.parse(atob(part.padEnd(part.length + ((4 - (part.length % 4)) % 4), "="))) as { aal?: string }).aal !== "aal2";
+  } catch {
+    return true;
+  }
+}
+
 /* ---------- Plaid API ---------- */
 
 type PlaidErrorBody = { error_code?: string; error_message?: string; display_message?: string | null };

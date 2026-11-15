@@ -26,6 +26,7 @@ import { freshPlan } from "./presets";
 import { loadLimits } from "./limits";
 import { checkMembership, onMembershipChange, onSharingSignIn, onSharingSignOut, publishViews } from "./sharing";
 import { useStore } from "./store";
+import { needsSecondStep } from "./mfa";
 import { supabase } from "./supabase";
 
 export type SyncStatus = "off" | "signedOut" | "syncing" | "synced" | "offline" | "error";
@@ -42,6 +43,8 @@ export const useSync = create<{
   error?: string;
   /** Why this device was signed out, when it wasn't the person's choice (the account was deleted elsewhere). */
   notice?: string;
+  /** Signed in with the emailed code, but the account also needs the authenticator app's code (this email). */
+  secondStep?: string;
 }>(() => ({ status: supabase ? "signedOut" : "off" }));
 
 /** The plan as the server has it: settings, lists, and (until it's turned into rows) the old JSON. */
@@ -453,9 +456,16 @@ function listen(userId: string, pid: string) {
 
 async function onSignedIn(session: Session) {
   if (!supabase) return;
+  // two-step sign-in is on and this sign-in hasn't finished it: load nothing until the app's code is in
+  // (a device that was syncing stops too: two-step was just turned on elsewhere)
+  if (await needsSecondStep()) {
+    if (useSync.getState().userId) leavePlan();
+    setSync({ status: "signedOut", secondStep: session.user.email ?? "" });
+    return;
+  }
   if (useSync.getState().userId === session.user.id) return;
   planId = undefined;
-  setSync({ userId: session.user.id, email: session.user.email ?? undefined, notice: undefined });
+  setSync({ userId: session.user.id, email: session.user.email ?? undefined, notice: undefined, secondStep: undefined });
   // link any invite first, so a shared plan loads instead of this account's own
   await onSharingSignIn(session.user.id, session.user.email).catch(() => undefined);
   await syncNow();
@@ -466,12 +476,18 @@ function onSignedOut() {
   const wasIn = !!useSync.getState().userId;
   if (wasIn && !signingOut && !goneNotice) goneNotice = "You were signed out: this device's sign-in ended, or the account no longer exists. Your plan is still here; sign in again to keep syncing.";
   signingOut = false;
+  leavePlan();
+  setSync({ notice: goneNotice, secondStep: undefined });
+  goneNotice = undefined;
+}
+
+/** Stop syncing and forget whose plan this was (the copy on this device stays). */
+function leavePlan() {
   onSharingSignOut();
   channel?.unsubscribe();
   channel = null;
   planId = undefined;
-  setSync({ status: supabase ? "signedOut" : "off", userId: undefined, email: undefined, planId: undefined, sharedBy: undefined, lastSyncedAt: undefined, error: undefined, notice: goneNotice });
-  goneNotice = undefined;
+  setSync({ status: supabase ? "signedOut" : "off", userId: undefined, email: undefined, planId: undefined, sharedBy: undefined, lastSyncedAt: undefined, error: undefined });
 }
 
 /** Call once at app start. Safe to call when sync isn't configured. */
