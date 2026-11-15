@@ -24,7 +24,8 @@
     },
     "scheme": "coastline",
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-status-bar"
     ]
   }
 }

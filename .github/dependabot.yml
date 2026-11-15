@@ -11,7 +11,16 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # React and React Native versions are set by the Expo SDK: they move with it, never on their own
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+      - dependency-name: "react-native"
     groups:
+      # Expo and the native packages it pins: CI fails if they drift from what Expo expects;
+      # fix with `npx expo install --fix` in apps/mobile
+      expo:
+        patterns: ["expo", "expo-*", "@expo/*", "react-native-*", "@react-native-async-storage/*"]
+        update-types: [minor, patch]
       dependencies:
         patterns: ["*"]
         update-types: [minor, patch]
