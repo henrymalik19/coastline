@@ -27,11 +27,10 @@ const PLAN = `"Month","Category Group/Category","Category Group","Category","Ass
 "Nov 2026","Everyday: Household","Everyday","Household","$50.00","-$30.00","$20.00"
 "Nov 2026","Savings: Roth IRA","Savings","Roth IRA","$500.00","-$500.00","$500.00"
 "Nov 2026","Credit Card Payments: Visa","Credit Card Payments","Visa","$100.00","$120.00","$-80.00"
-`.replace("Split (2/2) stuff", "Split (2/2) stuff");
+`;
 
 // the second split line is Household (YNAB puts each line's category on its row)
-const REG = REGISTER.replace(`"Split (1/2) food","$70.00"`, `"Split (1/2) food","$70.00"`)
-  .replace(`"Checking","","11/05/2026","Target","","","","Split (1/2) food"`, `"Checking","","11/05/2026","Target","Everyday: Groceries","Everyday","Groceries","Split (1/2) food"`)
+const REG = REGISTER.replace(`"Checking","","11/05/2026","Target","","","","Split (1/2) food"`, `"Checking","","11/05/2026","Target","Everyday: Groceries","Everyday","Groceries","Split (1/2) food"`)
   .replace(`"Checking","","11/05/2026","Target","","","","Split (2/2) stuff"`, `"Checking","","11/05/2026","Target","Everyday: Household","Everyday","Household","Split (2/2) stuff"`);
 
 describe("reading YNAB's files", () => {

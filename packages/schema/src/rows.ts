@@ -164,23 +164,26 @@ const set = (o: Obj, k: string, v: unknown) => {
 export function rowsToPlan(rows: PlanRows): { plan: Engine.PlanState; todoDone: Record<string, string[]>; onboarded: boolean } {
   const r = rows.plan;
   const t = rows.tables;
+  // row values become object keys below: never let one reach an object's prototype
+  const safeKey = (k: unknown) => k !== "__proto__" && k !== "constructor" && k !== "prototype";
   const sorted = (name: PlanTable) => [...(t[name] ?? [])].sort(bySort);
 
   const settings = back(r, SETTINGS);
   const shares: Obj = {};
   const amounts: Obj = {};
   for (const x of t.step_split ?? []) {
+    if (!safeKey(x.step)) continue;
     if (x.share !== null && x.share !== undefined) shares[x.step as string] = x.share;
     if (x.amount !== null && x.amount !== undefined) amounts[x.step as string] = x.amount;
   }
   set(settings, "shares", nonEmpty(shares));
   set(settings, "amounts", nonEmpty(amounts));
   const schedule: Record<string, Obj[]> = {};
-  for (const x of sorted("schedule_entry")) (schedule[x.key as string] ??= []).push(back(x, [["from", "from_month"], ["amount", "amount"], ["pct", "pct"]]));
+  for (const x of sorted("schedule_entry")) if (safeKey(x.key)) (schedule[x.key as string] ??= []).push(back(x, [["from", "from_month"], ["amount", "amount"], ["pct", "pct"]]));
   set(settings, "schedule", nonEmpty(schedule));
   const months = (source: string) => {
     const m: Record<string, Obj> = {};
-    for (const x of t.month_amount ?? []) if (x.source === source) (m[x.key as string] ??= {})[x.month as string] = x.amount;
+    for (const x of t.month_amount ?? []) if (x.source === source && safeKey(x.key) && safeKey(x.month)) (m[x.key as string] ??= {})[x.month as string] = x.amount;
     return nonEmpty(m);
   };
   set(settings, "scheduleMonths", months("schedule"));
