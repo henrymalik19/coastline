@@ -53,7 +53,7 @@ export default function Shared() {
       {!accounts.length ? (
         <Card>
           <Text style={[type.body, { color: t.text2 }]}>
-            {view ? "No cards are shared with you right now." : "Almost ready: the cards shared with you show up once the plan's owner opens Coastline."}
+            {view ? "No cards are shared with you right now." : "Almost ready: the cards shared with you show up once the plan's owner opens Coastwise."}
           </Text>
         </Card>
       ) : (
@@ -70,7 +70,7 @@ export default function Shared() {
       {view && view.categories.length ? (
         <View style={{ gap: space.sm }}>
           <SectionLabel>What&apos;s left in {monthTitle}</SectionLabel>
-          {stale ? <Text style={[type.caption, { color: t.text3 }]}>From {monthTitle}. This month&apos;s amounts show up once the plan&apos;s owner opens Coastline.</Text> : null}
+          {stale ? <Text style={[type.caption, { color: t.text3 }]}>From {monthTitle}. This month&apos;s amounts show up once the plan&apos;s owner opens Coastwise.</Text> : null}
           <Card padded={false}>
             {groups.map((g, gi) => (
               <View key={g}>

@@ -478,7 +478,7 @@ function LimitsSection() {
   return (
     <>
       <Text style={[type.body, { color: t.text2 }]}>
-        The most the IRS lets you put in each year. Coastline keeps these up to date for everyone when new limits are announced. Years after the last one reuse it (limits roughly track inflation, so flat is right in today's dollars).
+        The most the IRS lets you put in each year. Coastwise keeps these up to date for everyone when new limits are announced. Years after the last one reuse it (limits roughly track inflation, so flat is right in today's dollars).
       </Text>
       {[...state.limits].sort((x, y) => x.year - y.year).map((row) => (
         <Card key={row.year} style={{ gap: space.xs }}>
@@ -514,12 +514,12 @@ function DataSection() {
       const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
       const a = document.createElement("a");
       a.href = url;
-      a.download = `coastline-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `coastwise-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
       setMsg({ ok: true, text: "Downloaded your backup file." });
     } else {
-      await Share.share({ message: json, title: "Coastline backup" });
+      await Share.share({ message: json, title: "Coastwise backup" });
     }
   };
   const doImport = async () => {
@@ -530,7 +530,7 @@ function DataSection() {
       setText("");
       setMsg({ ok: true, text: "Restored. Your plan has been updated." });
     } catch (e) {
-      setMsg({ ok: false, text: e instanceof Error && e.message ? `Couldn't restore: ${e.message}` : "That doesn't look like a Coastline backup." });
+      setMsg({ ok: false, text: e instanceof Error && e.message ? `Couldn't restore: ${e.message}` : "That doesn't look like a Coastwise backup." });
     }
   };
 
@@ -550,11 +550,11 @@ function DataSection() {
       <Group title="Restore">
         <View style={{ paddingVertical: space.sm, gap: space.md }}>
           <TextInput
-            accessibilityLabel="Paste a Coastline backup"
+            accessibilityLabel="Paste a Coastwise backup"
             multiline
             value={text}
             onChangeText={setText}
-            placeholder="Paste the contents of a Coastline backup file here"
+            placeholder="Paste the contents of a Coastwise backup file here"
             placeholderTextColor={t.text3}
             style={[styles.textarea, { color: t.text, backgroundColor: t.surface2, borderColor: t.border }]}
           />

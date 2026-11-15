@@ -247,11 +247,11 @@ otp_expiry = 3600
 
 # Sign-in emails carry a 6-digit code (the app has no link handler)
 [auth.email.template.magic_link]
-subject = "Your Coastline sign-in code"
+subject = "Your Coastwise sign-in code"
 content_path = "./supabase/templates/code.html"
 
 [auth.email.template.confirmation]
-subject = "Your Coastline sign-in code"
+subject = "Your Coastwise sign-in code"
 content_path = "./supabase/templates/code.html"
 
 # Uncomment to customize email template

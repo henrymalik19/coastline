@@ -11,7 +11,7 @@ import { Button, Choice, FieldRow, TextField, Toggle } from "./form";
 import { Card, Divider } from "./ui";
 
 /** Where a member signs in (this site on the web). */
-const appUrl = () => (Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : "the Coastline app");
+const appUrl = () => (Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : "the Coastwise app");
 
 /**
  * Invite someone (a spouse, a partner) to add purchases on the cards you pick. They sign in with
@@ -76,7 +76,7 @@ export function SharingEditor() {
       await inviteMember(email, name, pick, role);
       setMsg(
         `Invited. Have ${name.trim() || "them"} open ${appUrl()}, tap Sign in and use ${email.trim().toLowerCase()}. They'll get a code by email.` +
-          (role === "full" ? " Your plan replaces anything they had set up in Coastline on that device." : ""),
+          (role === "full" ? " Your plan replaces anything they had set up in Coastwise on that device." : ""),
       );
       setEmail("");
       setName("");

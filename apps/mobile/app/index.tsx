@@ -51,7 +51,7 @@ function Landing() {
         <View style={styles.bar}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
             <Wave color={t.accent} />
-            <Text style={[type.heading, { color: t.text, fontWeight: "700" }]}>Coastline</Text>
+            <Text style={[type.heading, { color: t.text, fontWeight: "700" }]}>Coastwise</Text>
           </View>
           {syncConfigured ? (
             <Pressable role="link" onPress={signIn} hitSlop={8} style={{ paddingVertical: 6, paddingHorizontal: 4 }}>
@@ -67,7 +67,7 @@ function Landing() {
               Know when you can coast.
             </Text>
             <Text style={[styles.lede, { color: t.text2 }]}>
-              Coastline shows when the money you've already invested can grow into your full retirement on its own, so you'd only need to earn enough to
+              Coastwise shows when the money you've already invested can grow into your full retirement on its own, so you'd only need to earn enough to
               cover today's bills. Then it gives you a plan to get there.
             </Text>
             <View style={styles.ctas}>

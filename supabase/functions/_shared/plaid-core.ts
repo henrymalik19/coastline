@@ -218,7 +218,7 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
 
   switch (body.action) {
     case "link_token": {
-      const base = { client_name: "Coastline", language: "en", country_codes: ["US"], user: { client_user_id: userId } };
+      const base = { client_name: "Coastwise", language: "en", country_codes: ["US"], user: { client_user_id: userId } };
       if (body.itemId) {
         // update mode: sign in to the bank again (same connection)
         const it = await itemOf(body.itemId);

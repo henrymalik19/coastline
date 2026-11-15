@@ -243,7 +243,7 @@ Suggested first prompt:
 
 ## 10. Everyday budgeting (phases 6–10)
 
-Coastline grows from a planner into the place you run your money every day: an envelope budget with accounts and transactions, with the retirement plan built on top of it. The plan stops guessing from an ideal budget and works from what you actually earn, spend and save.
+Coastwise grows from a planner into the place you run your money every day: an envelope budget with accounts and transactions, with the retirement plan built on top of it. The plan stops guessing from an ideal budget and works from what you actually earn, spend and save.
 
 ### 10.1 Why, and the rules it follows
 
@@ -256,7 +256,7 @@ Coastline grows from a planner into the place you run your money every day: an e
 
 ### 10.2 How today's pieces map
 
-| Budget concept | Today in Coastline | Becomes |
+| Budget concept | Today in Coastwise | Becomes |
 |---|---|---|
 | Category group / category | Budget group / budget item | The same records, with a monthly *assigned* and *activity* |
 | Savings categories (IRA, brokerage, emergency fund) | Monthly savings per account | Categories linked to a plan account; assigning to them is the monthly saving |
@@ -327,7 +327,7 @@ Transactions live in tables, not the plan JSON: they grow without limit and sync
 
 Uses the user's YNAB personal access token. YNAB is called from a Supabase Edge Function, never from the app; the token is stored encrypted like Plaid tokens, or not at all for a one-time import.
 
-| From YNAB | Into Coastline |
+| From YNAB | Into Coastwise |
 |---|---|
 | Category groups and categories (with targets) | Category groups, categories and targets; offer to link them to budget items, goals and debts |
 | Accounts (budget and tracking, with balances) | Accounts (matched by name, or created), and debts for credit cards and loans |
@@ -335,7 +335,7 @@ Uses the user's YNAB personal access token. YNAB is called from a Supabase Edge 
 | Monthly assigned per category | `budget_months` |
 | Payees | Payees with their last category |
 
-The import is read-only on the YNAB side and can be re-run: it updates rows it created and skips ones you changed in Coastline.
+The import is read-only on the YNAB side and can be re-run: it updates rows it created and skips ones you changed in Coastwise.
 
 ### 10.6 Phases
 

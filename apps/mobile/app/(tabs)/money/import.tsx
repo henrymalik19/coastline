@@ -696,7 +696,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
       )}
     </View>
   ) : null;
-  const trademark = <Text style={[type.caption, { color: t.text3 }]}>Coastline isn't affiliated with YNAB. YNAB is a trademark of its owner.</Text>;
+  const trademark = <Text style={[type.caption, { color: t.text3 }]}>Coastwise isn't affiliated with YNAB. YNAB is a trademark of its owner.</Text>;
 
   return (
     <Screen title="Import from YNAB" back={setup ? backToSetup : () => router.navigate("/budget")} hideSettings={setup} narrow={!(wide && loaded)}>

@@ -58,7 +58,7 @@ export default function Onboarding() {
   };
 
   const titles: Record<Step, [string, string]> = {
-    start: ["Welcome to Coastline", "Setup takes about 5 minutes."],
+    start: ["Welcome to Coastwise", "Setup takes about 5 minutes."],
     you: ["About you", "Your age, when you'd like to retire, and how you file taxes"],
     income: ["Your income", "Every source of money that comes in"],
     budget: ["Your monthly budget", "What life costs now, and what you'll still pay after you retire"],

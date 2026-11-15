@@ -28,7 +28,7 @@ export default function SignIn() {
   const noPlan = !!email && !onboarded && member === "none" && (status === "synced" || status === "offline" || status === "error");
 
   return (
-    <Screen title="Sign in" subtitle="Load your plan from your Coastline account" narrow hideSettings back={() => (router.canGoBack() ? router.back() : router.replace("/"))}>
+    <Screen title="Sign in" subtitle="Load your plan from your Coastwise account" narrow hideSettings back={() => (router.canGoBack() ? router.back() : router.replace("/"))}>
       <AccountPanel />
       {loading ? <Text role="status" style={[type.body, { color: t.text2 }]}>Loading your plan…</Text> : null}
       {noPlan ? (
@@ -44,7 +44,7 @@ export default function SignIn() {
       ) : null}
       {!email ? (
         <Text style={[type.caption, { color: t.text3 }]}>
-          New to Coastline?{" "}
+          New to Coastwise?{" "}
           <Text role="link" style={{ color: t.accent, fontWeight: "700" }} onPress={() => router.replace("/onboarding")}>
             Set up a plan
           </Text>{" "}
