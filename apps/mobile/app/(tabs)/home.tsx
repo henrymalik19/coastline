@@ -17,6 +17,7 @@ import { spouseIraLabel } from "../../lib/spouse";
 import { monthTodos, shortfallText, usePlan, type Todo } from "../../lib/plan";
 import { NetWorthCard } from "../../components/MoneyCards";
 import { RewardsCard } from "../../components/RewardsCard";
+import { SaveNudge } from "../../components/SaveNudge";
 import { monthKey, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
 
@@ -257,6 +258,7 @@ export default function Home() {
           <Button title="Manage" onPress={() => router.push("/emergency")} />
         </View>
       ) : null}
+      <SaveNudge />
       {wide ? (
         <>
           {stats}

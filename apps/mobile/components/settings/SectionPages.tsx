@@ -59,7 +59,18 @@ export function SectionIndex({ base, title, subtitle }: { base: SectionBase; tit
   return (
     <Screen title={title} subtitle={subtitle} narrow hideSettings={base === "/settings"}>
       <SectionGroups base={base} />
+      {base === "/settings" ? <PrivacyLink /> : null}
     </Screen>
+  );
+}
+
+function PrivacyLink() {
+  const t = useTheme();
+  const router = useRouter();
+  return (
+    <Pressable role="link" onPress={() => router.push("/privacy")} hitSlop={8} style={{ alignSelf: "center", paddingVertical: space.sm }}>
+      <Text style={[type.caption, { color: t.text3, textDecorationLine: "underline" }]}>Privacy policy</Text>
+    </Pressable>
   );
 }
 

@@ -80,6 +80,10 @@ function BankCard() {
                 <Button title="Bank or card" icon="plus" disabled={busy} onPress={() => void connectBank("bank")} style={styles.small} />
                 <Button title="Investments" icon="plus" disabled={busy} onPress={() => void connectBank("investments")} style={styles.small} />
               </View>
+              <Text style={[type.caption, { color: t.text3 }]}>
+                How we handle bank data:{" "}
+                <Text role="link" style={{ color: t.accent, fontWeight: "600" }} onPress={() => router.push("/privacy")}>privacy policy</Text>
+              </Text>
               {__DEV__ ? (
                 <View style={styles.wrap}>
                   <Button title="Test bank (Sandbox)" tone="ghost" disabled={busy} onPress={() => void connectTestBank("bank")} style={styles.small} />

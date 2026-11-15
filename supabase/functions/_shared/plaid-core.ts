@@ -13,6 +13,7 @@
 //   reconnected  { itemId }                                                    -> { ok }
 //   sync         { force?: boolean }                                           -> { items }
 //   remove       { itemId }                                                    -> { ok }
+//   remove_all   {}  (your own plan only; before deleting the account)         -> { removed }
 //   sandbox_connect { kind }  (Sandbox only: a test bank without the Link window) -> { itemId }
 
 export type PlaidEnv = {
@@ -255,6 +256,22 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
       }
       await store.deleteItem(it.id);
       return { ok: true };
+    }
+    case "remove_all": {
+      // before deleting your account: disconnect every bank on your own plan at Plaid, so access (and billing) ends
+      if (planId !== userId) throw new PlaidHttpError(403, "Only the plan's owner can do that.");
+      const list = await store.items(planId);
+      for (const it of list) {
+        try {
+          await plaid("/item/remove", { access_token: await accessToken(it.id) });
+        } catch (e) {
+          // already gone at Plaid is fine; anything else (Plaid down, keys missing) stops so the account isn't deleted with banks still connected
+          const code = e instanceof PlaidHttpError ? e.code : undefined;
+          if (code !== "ITEM_NOT_FOUND" && code !== "INVALID_ACCESS_TOKEN") throw new PlaidHttpError(502, "Couldn't disconnect your banks. Try again in a moment.");
+        }
+        await store.deleteItem(it.id);
+      }
+      return { removed: list.length };
     }
     case "sandbox_connect": {
       if ((env.env ?? "sandbox") !== "sandbox") throw new PlaidHttpError(400, "Sandbox only.");

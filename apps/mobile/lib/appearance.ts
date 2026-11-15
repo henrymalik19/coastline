@@ -14,6 +14,9 @@ export const useAppearance = create<{
   /** Budget: compare categories with what you really spend (the line under Unassigned, ~$X on rows). */
   realSpending: boolean;
   setRealSpending: (on: boolean) => void;
+  /** Home: when you hid the "save your plan to an account" card (ISO time); it comes back after 30 days. */
+  saveNudgeHiddenAt?: string;
+  hideSaveNudge: () => void;
 }>()(
   persist(
     (set) => ({
@@ -21,6 +24,7 @@ export const useAppearance = create<{
       setAppearance: (appearance) => set({ appearance }),
       realSpending: true,
       setRealSpending: (realSpending) => set({ realSpending }),
+      hideSaveNudge: () => set({ saveNudgeHiddenAt: new Date().toISOString() }),
     }),
     { name: "coastline.appearance", storage: createJSONStorage(() => AsyncStorage) },
   ),

@@ -55,12 +55,11 @@ Settings → Backup & restore downloads (web) or shares (phone) a JSON backup of
   would overwrite the hosted settings. Change hosted auth settings in the dashboard.
 - Hosted auth settings (set in the dashboard): email OTP length 6; the "Magic Link" and
   "Confirm signup" templates use `supabase/templates/code.html` (subject "Your Coastwise
-  sign-in code"); custom SMTP via Resend (`smtp.resend.com:465`, user `resend`).
-
-> **TODO before opening to other users:** sign-in emails are sent from
-> `noreply@send.jobrx.ai`, borrowed from the JobRx Resend domain. Verify a Coastwise domain
-> in Resend and change the sender in Supabase → Authentication → Emails → SMTP Settings.
-> Also set the auth Site URL to the real app URL.
+  sign-in code"); custom SMTP via Resend (`smtp.resend.com:465`, user `resend`), sender
+  `Coastwise <noreply@send.getcoastwise.com>` (domain verified in Resend; DKIM, SPF and DMARC
+  in Cloudflare DNS). Site URL `https://getcoastwise.com`.
+- Domain `getcoastwise.com` (Cloudflare DNS) points at the Vercel project. Email Routing
+  forwards `privacy@` and `security@` to the owner's inbox.
 
 ## Web deploy (Vercel)
 

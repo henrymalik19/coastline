@@ -530,6 +530,13 @@ export async function signOut(forget = false) {
 /** Delete the account and all synced data. The copy on this device is kept unless `forget`. */
 export async function deleteAccount(forget: boolean) {
   if (!supabase) return;
+  // disconnect your banks at Plaid first (deleting the rows alone would leave Plaid's access, and its billing, running)
+  const me = useSync.getState().userId;
+  const banks = me ? await supabase.from("plaid_items").select("id").eq("plan_id", me).limit(1) : null;
+  if (banks && !banks.error && banks.data.length) {
+    const r = await supabase.functions.invoke("plaid", { body: { action: "remove_all", planId: me } });
+    if (r.error) throw new Error("Couldn't disconnect your banks, so your account wasn't deleted. Try again in a moment.");
+  }
   const { error } = await supabase.rpc("delete_my_account");
   if (error) throw error;
   await signOut(forget);

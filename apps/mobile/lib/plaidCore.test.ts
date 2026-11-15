@@ -118,6 +118,26 @@ describe("plaid core", () => {
     expect(Object.keys(accounts)).toHaveLength(0);
   });
 
+  it("disconnects every bank on your own plan before the account is deleted", async () => {
+    const { store, items } = memStore();
+    fakePlaid();
+    await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "bank" }, "u1", env, store);
+    await handle({ action: "exchange", planId: "u1", publicToken: "p2", kind: "investments" }, "u1", env, store);
+    const calls = fakePlaid();
+    expect(await handle({ action: "remove_all", planId: "u1" }, "u1", env, store)).toEqual({ removed: 2 });
+    expect(calls.filter((c) => c.path === "/item/remove")).toHaveLength(2);
+    expect(Object.keys(items)).toHaveLength(0);
+  });
+
+  it("keeps the connection (and stops) when Plaid can't disconnect it", async () => {
+    const { store, items } = memStore();
+    fakePlaid();
+    await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "bank" }, "u1", env, store);
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error_code: "INTERNAL_SERVER_ERROR" }), { status: 500 }));
+    await expect(handle({ action: "remove_all", planId: "u1" }, "u1", env, store)).rejects.toBeInstanceOf(PlaidHttpError);
+    expect(Object.keys(items)).toHaveLength(1);
+  });
+
   it("asks for investments only on an investment connection", async () => {
     const { store } = memStore();
     const calls = fakePlaid();
