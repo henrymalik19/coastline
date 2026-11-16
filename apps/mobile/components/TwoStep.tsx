@@ -49,13 +49,13 @@ export function TwoStepSettings() {
       ) : app ? (
         <>
           <Text style={[type.caption, { color: t.good, fontWeight: "700" }]}>On</Text>
-          <Text style={[type.caption, { color: t.text3 }]}>Signing in needs the emailed code and a code from your authenticator app.</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>Signing in needs your password (or an emailed code) plus a code from your authenticator app.</Text>
           <Button
             title="Turn off"
             disabled={busy}
             style={{ alignSelf: "flex-start" }}
             onPress={async () => {
-              if (await confirm("Turn off two-step sign-in?", "Signing in will need only the code we email you.", "Turn off"))
+              if (await confirm("Turn off two-step sign-in?", "Signing in will need only your password or the code we email you.", "Turn off"))
                 void run(async () => {
                   await removeAuthenticator(app.id);
                   setApp(null);
@@ -107,7 +107,7 @@ export function TwoStepSettings() {
       ) : (
         <>
           <Text style={[type.caption, { color: t.text3 }]}>
-            Off. Add an authenticator app so signing in needs a code from your phone as well as the one we email you.
+            Off. Add an authenticator app so signing in also needs a code from your phone. Then someone who learns your password or gets into your email still can't sign in.
           </Text>
           <Button
             title="Set up"

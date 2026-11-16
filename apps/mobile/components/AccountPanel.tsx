@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { confirm } from "../lib/confirm";
-import { deleteAccount, sendCode, signOut, syncNow, useSync, verifyCode, type SyncStatus } from "../lib/sync";
+import {
+  deleteAccount, MIN_PASSWORD, sendCode, setPassword, signInWithPassword, signOut, signOutOthers, syncNow, useSync, verifyCode, type SyncStatus,
+} from "../lib/sync";
 import { verifySecondStep } from "../lib/mfa";
 import { syncConfigured } from "../lib/supabase";
 import { radius, space, type, useTheme } from "../lib/theme";
@@ -38,6 +40,7 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
   const { status, email: signedInEmail, notice, secondStep } = useSync();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [password, setPasswordText] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -84,7 +87,23 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
             }}
           />
         </View>
+        <PasswordSettings />
         <TwoStepSettings />
+        <View style={[styles.danger, { borderColor: t.border }]}>
+          <Text style={[type.label, { color: t.text }]}>Other devices</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>
+            Signed in somewhere you don't use anymore, or don't recognize? Sign out everywhere except here.
+          </Text>
+          <Button
+            title="Sign out other devices"
+            disabled={busy}
+            style={{ alignSelf: "flex-start" }}
+            onPress={async () => {
+              if (await confirm("Sign out other devices?", "Every other device and browser will need to sign in again. This one stays signed in.", "Sign out others"))
+                void run(signOutOthers, "Other devices are signed out. Anything open there loses access within the hour.");
+            }}
+          />
+        </View>
         <View style={[styles.danger, { borderColor: t.border }]}>
           <Text style={[type.label, { color: t.text }]}>Delete account</Text>
           <Text style={[type.caption, { color: t.text3 }]}>
@@ -130,24 +149,35 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
     );
   }
 
+  const emailOk = /^\S+@\S+\.\S+$/.test(email.trim());
   return (
     <Card style={{ gap: space.md }}>
       {notice ? <Text role="status" style={[type.label, { color: t.warn }]}>{notice}</Text> : null}
       <Text style={[type.body, { color: t.text2 }]}>
-        Sign in to back up your plan and use it on all your devices. We'll email you a 6-digit code; no password needed.
+        Sign in to back up your plan and use it on all your devices.
       </Text>
       {!sent ? (
-        <View style={styles.row}>
-          <View style={{ flex: 1, minWidth: 220 }}>
-            <TextField label="Email" placeholder="you@example.com" value={email} onChange={setEmail} />
+        <>
+          <TextField label="Email" placeholder="you@example.com" value={email} onChange={setEmail} autoComplete="email" />
+          <TextField label="Password" placeholder="Password" value={password} onChange={setPasswordText} secure autoComplete="current-password" />
+          <View style={styles.row}>
+            <Button
+              title="Sign in"
+              tone="primary"
+              disabled={busy || !emailOk || !password}
+              onPress={() => void run(async () => { await signInWithPassword(email.trim(), password); setPasswordText(""); onSignedIn?.(); })}
+            />
+            <Button
+              title="Email me a code"
+              tone="ghost"
+              disabled={busy || !emailOk}
+              onPress={() => void run(async () => { await sendCode(email.trim()); setSent(true); setPasswordText(""); })}
+            />
           </View>
-          <Button
-            title="Email me a code"
-            tone="primary"
-            disabled={busy || !/^\S+@\S+\.\S+$/.test(email.trim())}
-            onPress={() => void run(async () => { await sendCode(email.trim()); setSent(true); })}
-          />
-        </View>
+          <Text style={[type.caption, { color: t.text3 }]}>
+            New here, no password yet, or forgot it? Use Email me a code. You can set a password in Account once you're in.
+          </Text>
+        </>
       ) : (
         <>
           <Text style={[type.caption, { color: t.text2 }]}>We sent a code to {email.trim()}. It can take a minute to arrive.</Text>
@@ -159,7 +189,7 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
               title="Sign in"
               tone="primary"
               disabled={busy || code.length !== 6}
-              onPress={() => void run(async () => { await verifyCode(email.trim(), code); onSignedIn?.(); })}
+              onPress={() => void run(async () => { await verifyCode(email.trim(), code); setSent(false); setCode(""); onSignedIn?.(); })}
             />
             <Button title="Use a different email" tone="ghost" onPress={() => { setSent(false); setCode(""); setMsg(null); }} />
           </View>
@@ -167,6 +197,60 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
       )}
       {msg ? <Text role="status" style={[type.label, { color: msg.ok ? t.good : t.bad }]}>{msg.text}</Text> : null}
     </Card>
+  );
+}
+
+/** Account settings: set or change the password used to sign in. */
+function PasswordSettings() {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const [pw, setPw] = useState("");
+  const [again, setAgain] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const close = () => { setOpen(false); setPw(""); setAgain(""); };
+  const problem =
+    pw.length > 0 && pw.length < MIN_PASSWORD ? `At least ${MIN_PASSWORD} characters.` : again.length > 0 && again !== pw ? "The passwords don't match." : null;
+  return (
+    <View style={[styles.danger, { borderColor: t.border }]}>
+      <Text style={[type.label, { color: t.text }]}>Password</Text>
+      <Text style={[type.caption, { color: t.text3 }]}>
+        Sign in with your email and a password instead of waiting for an emailed code. A password manager can create and remember a strong one.
+      </Text>
+      {open ? (
+        <>
+          <TextField label="New password" placeholder="New password" value={pw} onChange={setPw} secure autoComplete="new-password" />
+          <TextField label="Type it again" placeholder="Type it again" value={again} onChange={setAgain} secure autoComplete="new-password" />
+          {problem ? <Text style={[type.caption, { color: t.bad }]}>{problem}</Text> : null}
+          <View style={styles.row}>
+            <Button
+              title="Save password"
+              tone="primary"
+              disabled={busy || pw.length < MIN_PASSWORD || again !== pw}
+              onPress={() =>
+                void (async () => {
+                  setBusy(true);
+                  setMsg(null);
+                  try {
+                    await setPassword(pw);
+                    close();
+                    setMsg({ ok: true, text: "Password saved. Use it next time you sign in." });
+                  } catch (e) {
+                    setMsg({ ok: false, text: (e as Error)?.message || "Couldn't save it. Try again." });
+                  } finally {
+                    setBusy(false);
+                  }
+                })()
+              }
+            />
+            <Button title="Cancel" tone="ghost" disabled={busy} onPress={() => { close(); setMsg(null); }} />
+          </View>
+        </>
+      ) : (
+        <Button title="Set or change password" style={{ alignSelf: "flex-start" }} onPress={() => { setOpen(true); setMsg(null); }} />
+      )}
+      {msg ? <Text role="status" style={[type.label, { color: msg.ok ? t.good : t.bad }]}>{msg.text}</Text> : null}
+    </View>
   );
 }
 

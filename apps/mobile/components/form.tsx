@@ -215,8 +215,18 @@ export function InfoText({ text }: { text: string }) {
 }
 
 export function TextField({
-  value, onChange, label, placeholder, width = "100%",
-}: { value: string; onChange: (v: string) => void; label: string; placeholder?: string; width?: number | "100%" }) {
+  value, onChange, label, placeholder, width = "100%", secure, autoComplete,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+  placeholder?: string;
+  width?: number | "100%";
+  /** Hide what's typed (passwords). */
+  secure?: boolean;
+  /** Lets password managers fill or suggest the field. */
+  autoComplete?: "email" | "current-password" | "new-password" | "one-time-code";
+}) {
   const t = useTheme();
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -231,6 +241,10 @@ export function TextField({
         value={draft}
         placeholder={placeholder}
         placeholderTextColor={t.text3}
+        secureTextEntry={secure}
+        autoComplete={autoComplete}
+        autoCapitalize={secure || autoComplete === "email" ? "none" : undefined}
+        autoCorrect={secure || autoComplete === "email" ? false : undefined}
         onChangeText={(v) => { setDraft(v); typing.push(v); }}
         onFocus={() => setFocused(true)}
         onBlur={() => { typing.flush(); setFocused(false); }}

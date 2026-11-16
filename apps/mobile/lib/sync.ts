@@ -535,6 +535,37 @@ export async function verifyCode(email: string, token: string) {
   if (error) throw error;
 }
 
+export const MIN_PASSWORD = 10;
+
+export async function signInWithPassword(email: string, password: string) {
+  if (!supabase) throw new Error("Sync isn't set up in this build.");
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (!error) return;
+  // the same answer whether the email has an account or not, so it can't be used to find accounts
+  if (/invalid login credentials/i.test(error.message))
+    throw new Error("Wrong email or password. If you haven't set a password yet, email yourself a code instead.");
+  throw error;
+}
+
+/** Set or change the password for the signed-in account. */
+export async function setPassword(password: string) {
+  if (!supabase) throw new Error("Sync isn't set up in this build.");
+  if (password.length < MIN_PASSWORD) throw new Error(`Use at least ${MIN_PASSWORD} characters.`);
+  const { error } = await supabase.auth.updateUser({ password });
+  if (!error) return;
+  const code = (error as { code?: string }).code;
+  if (code === "same_password") throw new Error("That's already your password.");
+  if (code === "weak_password") throw new Error("That password is too easy to guess. Try a longer one.");
+  throw error;
+}
+
+/** Sign out every other device and browser; this one stays signed in. */
+export async function signOutOthers() {
+  if (!supabase) return;
+  const { error } = await supabase.auth.signOut({ scope: "others" });
+  if (error) throw error;
+}
+
 /** Sign out. The plan stays on this device unless `forget` is true. */
 export async function signOut(forget = false) {
   if (!supabase) return;
