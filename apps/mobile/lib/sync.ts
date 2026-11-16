@@ -27,6 +27,7 @@ import { loadLimits } from "./limits";
 import { checkMembership, onMembershipChange, onSharingSignIn, onSharingSignOut, publishViews } from "./sharing";
 import { useStore } from "./store";
 import { needsSecondStep } from "./mfa";
+import { AWAY_LIMIT_DAYS, awayTooLong, lastActive, noteActive } from "./idle";
 import { supabase } from "./supabase";
 
 export type SyncStatus = "off" | "signedOut" | "syncing" | "synced" | "offline" | "error";
@@ -490,6 +491,22 @@ function leavePlan() {
   setSync({ status: supabase ? "signedOut" : "off", userId: undefined, email: undefined, planId: undefined, sharedBy: undefined, lastSyncedAt: undefined, error: undefined });
 }
 
+/** Sign this device out if the app hasn't been opened on it for a long time (its plan stays). */
+async function signOutIfAway() {
+  if (!supabase) return;
+  const last = await lastActive();
+  if (awayTooLong(last, Date.now())) {
+    const { data } = await supabase.auth.getSession();
+    if (data.session) {
+      const { error } = await supabase.auth.signOut({ scope: "local" });
+      // couldn't reach the server: stay signed in for now and try again next time
+      if (error) return;
+      goneNotice = `You were signed out because Coastwise wasn't opened on this device for over ${AWAY_LIMIT_DAYS} days. Your plan is still here; sign in again to keep syncing.`;
+    }
+  }
+  noteActive();
+}
+
 /** Call once at app start. Safe to call when sync isn't configured. */
 export function startSync() {
   if (started || !supabase) return;
@@ -498,15 +515,22 @@ export function startSync() {
   void loadLimits().catch(() => undefined);
   // invited, removed, or given full access while signed in: sync the right plan
   onMembershipChange(() => void syncNow());
-  void supabase.auth.getSession().then(({ data }) => data.session && onSignedIn(data.session));
-  // run outside the auth callback: the auth client holds a lock while it runs, and every request
-  // (which reads the session) would wait for that lock, so awaiting them here would never finish
-  supabase.auth.onAuthStateChange((_event, session) => {
-    setTimeout(() => {
-      if (session) void onSignedIn(session);
-      else onSignedOut();
-    }, 0);
-  });
+  const auth = supabase.auth;
+  void (async () => {
+    // not opened for a long time (an old or shared device): sign it out before anything syncs
+    await signOutIfAway();
+    void auth.getSession().then(({ data }) => data.session && onSignedIn(data.session));
+    // run outside the auth callback: the auth client holds a lock while it runs, and every request
+    // (which reads the session) would wait for that lock, so awaiting them here would never finish
+    auth.onAuthStateChange((_event, session) => {
+      setTimeout(() => {
+        if (session) void onSignedIn(session);
+        else onSignedOut();
+      }, 0);
+    });
+  })();
+  AppState.addEventListener("change", (st) => st === "active" && noteActive());
+  if (Platform.OS === "web" && typeof window !== "undefined") window.addEventListener("focus", () => noteActive());
   // upload changes made on this device
   useStore.subscribe((s, prev) => {
     if (applyingRemote) return;
@@ -570,7 +594,8 @@ export async function signOutOthers() {
 export async function signOut(forget = false) {
   if (!supabase) return;
   signingOut = true;
-  await supabase.auth.signOut();
+  // this device only: other devices stay signed in (Account has "Sign out other devices" for those)
+  await supabase.auth.signOut({ scope: "local" });
   if (forget) useStore.getState().startFresh();
 }
 
