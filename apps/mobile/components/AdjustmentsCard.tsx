@@ -28,7 +28,7 @@ export const longMonth = (key: string) => {
  * One-off changes to a single month (a bonus, a big bill, unpaid time off): a what-if. They move the
  * what-if dates and odds; the real plan and your to-dos leave them out (real spending goes in Budget).
  */
-const INFO = "What if one month is different: a bonus, a big bill, unpaid time off? Add it to see how it moves your dates and odds. It's a what-if: your to-dos and the Table stay on your real plan. Real spending goes in Budget.";
+const INFO = "Try a month that's different: a bonus, a big bill, unpaid time off. That month's leftover money goes up or down and flows through your priority steps, so you see how it moves your accounts, dates and odds. It's a what-if, like the sliders: the numbers it changes show in orange until you remove it, and your to-dos and budget don't change. Something that really happened goes on the Budget tab as a transaction.";
 export function AdjustmentsCard({ start }: { start: Date }) {
   const t = useTheme();
   const { state } = usePlan();
@@ -62,11 +62,14 @@ export function AdjustmentsCard({ start }: { start: Date }) {
     <Card style={{ gap: space.md }}>
       <View style={styles.between}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1 }}>
-          <SectionLabel flush>One-off months</SectionLabel>
-          <InfoTip text={INFO} label="One-off months" open={tip} onToggle={setTip} />
+          <SectionLabel flush>What if one month is different?</SectionLabel>
+          <InfoTip text={INFO} label="What if one month is different" open={tip} onToggle={setTip} />
         </View>
         {!open ? <Button title="Add one" icon="plus" onPress={() => setOpen(true)} style={{ minHeight: 36, paddingHorizontal: space.md }} /> : null}
       </View>
+      <Text style={[type.caption, { color: t.text3, marginTop: -space.sm }]}>
+        A bonus, a big bill, unpaid time off. A what-if like the sliders: it doesn't change your budget or to-dos.
+      </Text>
       {tip ? <InfoText text={INFO} /> : null}
 
       {open ? (
@@ -131,7 +134,7 @@ export function AdjustmentsCard({ start }: { start: Date }) {
               <View key={a.id} style={[styles.item, { borderTopColor: t.border }]}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{a.note || KIND_TEXT[a.kind].label}</Text>
-                  <Text style={[type.caption, { color: t.text3 }]}>{longMonth(a.month)} · {KIND_TEXT[a.kind].verb}</Text>
+                  <Text style={[type.caption, { color: t.text3 }]}>{longMonth(a.month)} · {KIND_TEXT[a.kind].verb} · <Text style={{ color: t.warn, fontWeight: "700" }}>what-if</Text></Text>
                 </View>
                 <Text style={[type.label, { color: inflow ? t.good : t.bad, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>
                   {inflow ? "+" : "−"}{money(a.amount)}

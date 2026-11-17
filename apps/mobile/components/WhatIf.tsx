@@ -75,6 +75,18 @@ function Odds() {
   const [tip, setTip] = useState(false);
   const d = o.d;
   const b = sel !== null ? o.mc.bands[sel] : null;
+  // the range at your retirement age, in words (the chart below draws every age)
+  const atRetire = o.mc.bands[Math.min(o.mc.bands.length - 1, Math.max(0, Math.round(d.years)))];
+  // no retirement spending yet: there are no odds to show (everything would read 100% against $0)
+  if (o.fire <= 0)
+    return (
+      <Card style={{ gap: space.sm }}>
+        <SectionLabel flush>Range of outcomes</SectionLabel>
+        <Text style={[type.body, { color: t.text2 }]}>
+          Add your budget, or a yearly amount in Money → What you'll spend, to see how likely you are to reach your number.
+        </Text>
+      </Card>
+    );
   const info = `Markets don't grow in a straight line. This runs 2,000 possible futures with ups and downs and shows the middle of them (the line) and the spread: the darker band is the middle half of outcomes, the lighter one 80%. Not a guarantee.`;
   return (
     <Card style={{ gap: space.md }}>
@@ -89,6 +101,13 @@ function Odds() {
         <Button title={table ? "Chart" : "Table"} onPress={() => setTable((v) => !v)} />
       </View>
       {tip ? <InfoText text={info} /> : null}
+      {atRetire ? (
+        <Text style={[type.body, { color: t.text2 }]}>
+          At {d.retireAge}, you'd most likely have about <Text style={{ color: t.text, fontWeight: "700" }}>{money(atRetire.p50, { whole: true })}</Text>. In 8 out of 10
+          futures, between {money(atRetire.p10, { whole: true })} and {money(atRetire.p90, { whole: true })}
+          {o.fire > 0 ? `, against the ${money(o.fire, { whole: true })} you need` : ""}.
+        </Text>
+      ) : null}
       <Legend
         items={[
           { key: "m", label: "Median", color: t.series.k401 },

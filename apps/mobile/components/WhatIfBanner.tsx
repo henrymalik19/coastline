@@ -24,7 +24,7 @@ export function WhatIfBanner() {
       <View style={{ flex: 1, minWidth: 200, gap: 2 }}>
         <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>What-ifs are on</Text>
         <Text style={[type.caption, { color: t.text2 }]}>
-          The numbers in orange include them, so they aren't your real plan.{sliders ? "" : " One-off changes you're trying are still on."}
+          The numbers in orange include them, so they aren't your real plan.{sliders ? "" : " A one-month what-if (like a bonus or a big bill) is still on."}
         </Text>
       </View>
       <View style={styles.actions}>
