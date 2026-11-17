@@ -37,7 +37,7 @@ export function SyncStatusLine() {
 /** Sign in with an emailed code, see sync status, sign out, delete account. */
 export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
   const t = useTheme();
-  const { status, email: signedInEmail, notice, secondStep } = useSync();
+  const { status, email: signedInEmail, notice, secondStep, choosingPassword } = useSync();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [password, setPasswordText] = useState("");
@@ -160,6 +160,21 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
         <>
           <TextField label="Email" placeholder="you@example.com" value={email} onChange={setEmail} autoComplete="email" />
           <TextField label="Password" placeholder="Password" value={password} onChange={setPasswordText} secure autoComplete="current-password" />
+          <Text
+            role="link"
+            style={[type.caption, { color: t.accent, fontWeight: "700", alignSelf: "flex-start" }]}
+            onPress={() =>
+              void run(async () => {
+                if (!emailOk) throw new Error("Enter your email first, then tap Forgot password.");
+                await sendCode(email.trim());
+                useSync.setState({ choosingPassword: true });
+                setSent(true);
+                setPasswordText("");
+              })
+            }
+          >
+            Forgot password?
+          </Text>
           <View style={styles.row}>
             <Button
               title="Sign in"
@@ -175,12 +190,15 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
             />
           </View>
           <Text style={[type.caption, { color: t.text3 }]}>
-            New here, no password yet, or forgot it? Use Email me a code. You can set a password in Account once you're in.
+            New here, or never set a password? Use Email me a code. You can set a password in Account once you're in.
           </Text>
         </>
       ) : (
         <>
-          <Text style={[type.caption, { color: t.text2 }]}>We sent a code to {email.trim()}. It can take a minute to arrive.</Text>
+          <Text style={[type.caption, { color: t.text2 }]}>
+            We sent a code to {email.trim()}. It can take a minute to arrive.
+            {choosingPassword ? " Enter it to sign in, then you'll set a new password." : ""}
+          </Text>
           <View style={styles.row}>
             <View style={{ width: 160 }}>
               <TextField label="6-digit code" placeholder="123456" value={code} onChange={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} />
@@ -191,7 +209,7 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
               disabled={busy || code.length !== 6}
               onPress={() => void run(async () => { await verifyCode(email.trim(), code); setSent(false); setCode(""); onSignedIn?.(); })}
             />
-            <Button title="Use a different email" tone="ghost" onPress={() => { setSent(false); setCode(""); setMsg(null); }} />
+            <Button title="Use a different email" tone="ghost" onPress={() => { setSent(false); setCode(""); setMsg(null); useSync.setState({ choosingPassword: undefined }); }} />
           </View>
         </>
       )}
@@ -203,17 +221,19 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
 /** Account settings: set or change the password used to sign in. */
 function PasswordSettings() {
   const t = useTheme();
-  const [open, setOpen] = useState(false);
+  // just signed in after "Forgot password?": start with the form open
+  const resetting = useSync((s) => !!s.choosingPassword);
+  const [open, setOpen] = useState(resetting);
   const [pw, setPw] = useState("");
   const [again, setAgain] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const close = () => { setOpen(false); setPw(""); setAgain(""); };
+  const close = () => { setOpen(false); setPw(""); setAgain(""); useSync.setState({ choosingPassword: undefined }); };
   const problem =
     pw.length > 0 && pw.length < MIN_PASSWORD ? `At least ${MIN_PASSWORD} characters.` : again.length > 0 && again !== pw ? "The passwords don't match." : null;
   return (
     <View style={[styles.danger, { borderColor: t.border }]}>
-      <Text style={[type.label, { color: t.text }]}>Password</Text>
+      <Text style={[type.label, { color: t.text }]}>{resetting ? "Set a new password" : "Password"}</Text>
       <Text style={[type.caption, { color: t.text3 }]}>
         Sign in with your email and a password instead of waiting for an emailed code. A password manager can create and remember a strong one.
       </Text>

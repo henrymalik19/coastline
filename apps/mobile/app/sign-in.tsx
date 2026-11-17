@@ -14,15 +14,15 @@ export default function SignIn() {
   const t = useTheme();
   const router = useRouter();
   const onboarded = useStore((s) => s.onboarded);
-  const { email, status } = useSync();
+  const { email, status, choosingPassword } = useSync();
   const member = useMembership((s) => s.status);
 
   // once the account's plan arrives (or this device already has one), go to it; someone invited to
-  // another plan goes to their shared budget
+  // another plan goes to their shared budget. After "Forgot password?", Account comes first to set a new one.
   useEffect(() => {
-    if (onboarded) router.replace("/home");
+    if (onboarded) router.replace(email && choosingPassword ? "/settings/account" : "/home");
     else if (member === "member") router.replace("/shared");
-  }, [onboarded, member, router]);
+  }, [onboarded, member, router, email, choosingPassword]);
 
   const loading = !!email && (status === "syncing" || status === "signedOut" || member === "unknown");
   const noPlan = !!email && !onboarded && member === "none" && (status === "synced" || status === "offline" || status === "error");

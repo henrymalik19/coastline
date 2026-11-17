@@ -46,6 +46,8 @@ export const useSync = create<{
   notice?: string;
   /** Signed in with the emailed code, but the account also needs the authenticator app's code (this email). */
   secondStep?: string;
+  /** Signed in with an emailed code after "Forgot password?": Account opens the new-password form. */
+  choosingPassword?: boolean;
 }>(() => ({ status: supabase ? "signedOut" : "off" }));
 
 /** The plan as the server has it: settings, lists, and (until it's turned into rows) the old JSON. */
@@ -488,7 +490,7 @@ function leavePlan() {
   channel?.unsubscribe();
   channel = null;
   planId = undefined;
-  setSync({ status: supabase ? "signedOut" : "off", userId: undefined, email: undefined, planId: undefined, sharedBy: undefined, lastSyncedAt: undefined, error: undefined });
+  setSync({ status: supabase ? "signedOut" : "off", userId: undefined, email: undefined, planId: undefined, sharedBy: undefined, lastSyncedAt: undefined, error: undefined, choosingPassword: undefined });
 }
 
 /** Sign this device out if the app hasn't been opened on it for a long time (its plan stays). */
