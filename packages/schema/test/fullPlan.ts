@@ -10,6 +10,7 @@ export function fullPlan(): PlanState {
     retireAge: 60,
     healthcare: 3500,
     medicare: 800,
+    retireSpending: 96000,
     currentInvestMonthly: 250,
     filingStatus: "mfj",
     spouse: { name: "Sam", age: 33 },

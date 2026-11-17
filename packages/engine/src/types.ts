@@ -318,6 +318,11 @@ export type PlanState = {
    * `healthcare` amount for all of retirement, as before.
    */
   medicare?: number;
+  /**
+   * A set yearly amount to spend in retirement (today's dollars), used instead of adding up the budget.
+   * It covers everything you'll pay once retired, healthcare from 65 included. Unset or 0: use the budget.
+   */
+  retireSpending?: number;
   currentInvestMonthly: number;
   incomes: Income[];
   budget: BudgetItem[];
@@ -476,6 +481,10 @@ export type Derived = {
   debtMins: number;
   monthlyExpenses: number;
   retireMonthly: number;
+  /** Retirement spending a month added up from the budget (before what-ifs), whether or not a set amount replaces it. */
+  retireMonthlyBudget: number;
+  /** Retirement spending comes from a set yearly amount, not the budget. */
+  retireSpendingSet: boolean;
   retireAnnual: number;
   emergencyMonths: number;
   /** Monthly cost of essential budget items + debt minimums. */

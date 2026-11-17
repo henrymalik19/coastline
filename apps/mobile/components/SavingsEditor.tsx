@@ -16,10 +16,12 @@ import { space, type, useTheme } from "../lib/theme";
 import { Icon } from "./Icon";
 import { plannedNow, ScheduleEditor, scheduleSummary, useSchedule } from "./ScheduleEditor";
 import { Card, Divider } from "./ui";
+import { useOpenPage } from "../lib/nav";
 
 export function SavingsEditor() {
   const t = useTheme();
   const router = useRouter();
+  const openPage = useOpenPage();
   const { state, result, actual, start } = usePlan();
   const row0 = actual.months[0]!;
   const forecasts = accountForecasts(state, result.d, actual, result.d.r);
@@ -83,7 +85,7 @@ export function SavingsEditor() {
         <Text style={[type.caption, { color: t.text2 }]}>
           {fromPay.length ? fromPay.join(" · ") : "No 401(k) or HSA from your paychecks yet."}{fromPay.length ? "." : ""} These come out before take-home, so they're set on your job.
         </Text>
-        <Pressable role="link" onPress={() => router.push("/money/income")} hitSlop={6} style={styles.link}>
+        <Pressable role="link" onPress={() => openPage("/money/income")} hitSlop={6} style={styles.link}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change on your job (Income)</Text>
           <Icon name="chevron" size={12} color={t.accent} />
         </Pressable>
@@ -109,7 +111,7 @@ export function SavingsEditor() {
           <Text style={[type.caption, { color: t.text3 }]}>
             These divide what's due by the months until it's due, so the money is ready in time. Change them under Savings goals.
           </Text>
-          <Pressable role="link" onPress={() => router.push("/money/goals")} hitSlop={6} style={styles.link}>
+          <Pressable role="link" onPress={() => openPage("/money/goals")} hitSlop={6} style={styles.link}>
             <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Savings goals</Text>
             <Icon name="chevron" size={12} color={t.accent} />
           </Pressable>

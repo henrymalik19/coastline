@@ -4,7 +4,7 @@
  * emergency). One list, so you can answer it all at once.
  */
 import { StyleSheet, Text, View } from "react-native";
-import { InlineSwitch } from "./form";
+import { FieldRow, InlineSwitch, NumberInput, Select } from "./form";
 import { Card, Divider } from "./ui";
 import { groupOf, groupOrder } from "../lib/budgetOrder";
 import { money } from "../lib/format";
@@ -28,8 +28,46 @@ export function RetirementEssentials() {
   const essential = items.filter((b) => b.essential !== false).reduce((a, b) => a + b.amount, 0);
   const groups = groupOrder(items);
 
+  const fixed = d.retireSpendingSet;
+  const budgetYearly = d.retireMonthlyBudget * 12;
+  const target = state.retireSpending ?? 0;
+  const gap = budgetYearly - target;
+
   return (
     <>
+      <Card style={{ gap: space.sm }}>
+        <FieldRow
+          label="Retirement spending"
+          info="Work it out from your budget (the categories you'd still pay, plus healthcare and home costs), or type the yearly amount you plan to spend, like $100,000. A set amount covers everything, healthcare from 65 included. Social Security and pensions still come off it."
+        >
+          <Select
+            label="Retirement spending"
+            value={fixed ? "set" : "budget"}
+            options={[{ value: "budget", label: "From my budget" }, { value: "set", label: "A set amount" }]}
+            onChange={(v) =>
+              update((p) => {
+                // start the set amount from what the budget adds up to, rounded to $1,000
+                p.retireSpending = v === "set" ? Math.max(1000, Math.round(budgetYearly / 1000) * 1000) : undefined;
+              })
+            }
+          />
+        </FieldRow>
+        {fixed ? (
+          <>
+            <FieldRow label="Yearly amount" hint="Today's dollars, everything you'll spend in a year">
+              <NumberInput kind="money" label="Yearly retirement spending" value={target} onChange={(v) => update((p) => { p.retireSpending = v > 0 ? v : undefined; })} />
+            </FieldRow>
+            <Text style={[type.caption, { color: Math.abs(gap) < 500 ? t.text3 : t.text2 }]}>
+              Your budget's retirement items add up to {money(budgetYearly, { whole: true })}/yr
+              {Math.abs(gap) < 500
+                ? ", about the same as your set amount."
+                : gap > 0
+                  ? `, ${money(gap, { whole: true })} more than your set amount. Your plan uses the set amount.`
+                  : `, ${money(-gap, { whole: true })} less than your set amount. Your plan uses the set amount.`}
+            </Text>
+          </>
+        ) : null}
+      </Card>
       <Card style={{ gap: space.sm }}>
         <Text style={[type.body, { color: t.text2 }]}>
           For each category: would you still pay it after you retire, and is it essential (what you'd keep paying in a money emergency)?
@@ -38,7 +76,11 @@ export function RetirementEssentials() {
           <View style={[styles.total, { backgroundColor: t.surface2 }]}>
             <Text style={[type.title, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(afterRetiring, { whole: true })}<Text style={[type.caption, { color: t.text3 }]}>/mo</Text></Text>
             <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Still paid after retiring</Text>
-            <Text style={[type.caption, { color: t.text3 }]}>Plus healthcare and home costs, this sets your retirement number ({money(result.fire, { whole: true })})</Text>
+            <Text style={[type.caption, { color: t.text3 }]}>
+              {fixed
+                ? "For comparison only: your set amount drives your retirement number"
+                : `Plus healthcare and home costs, this sets your retirement number (${money(result.fire, { whole: true })})`}
+            </Text>
           </View>
           <View style={[styles.total, { backgroundColor: t.surface2 }]}>
             <Text style={[type.title, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(essential, { whole: true })}<Text style={[type.caption, { color: t.text3 }]}>/mo</Text></Text>

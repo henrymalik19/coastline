@@ -8,7 +8,7 @@ import { isSpendingItem } from "./schedule";
 import type { Derived, PlanState, RunResult } from "./types";
 import { num, sum } from "./util";
 
-export type SpendingLine = { key: "budget" | "healthcare" | "bills" | "escrow" | "home" | "whatif"; label: string; monthly: number };
+export type SpendingLine = { key: "budget" | "healthcare" | "bills" | "escrow" | "home" | "set" | "whatif"; label: string; monthly: number };
 
 export type FireBreakdown = {
   /** Retirement spending a month, piece by piece (adds up to `retireMonthly`). */
@@ -67,23 +67,26 @@ function supports(value: number, d: Derived, o: Pick<RunResult, "homeBridge" | "
 export function fireBreakdown(s: PlanState, o: RunResult): FireBreakdown {
   const d = o.d;
   const p = spendingParts(s, d);
-  const before = p.budget + p.healthcare + p.bills + p.escrow + p.home;
   const delta = num(s.whatif?.spendDelta);
-  const spending: SpendingLine[] = [
-    { key: "budget", label: "Budget items still paid", monthly: p.budget },
-    { key: "healthcare", label: s.medicare === undefined ? "Healthcare" : "Healthcare from 65 (Medicare)", monthly: p.healthcare },
-    { key: "bills", label: "Bills set aside (yearly and other)", monthly: p.bills },
-    { key: "escrow", label: "Property tax + insurance (escrow)", monthly: p.escrow },
-    { key: "home", label: "Home costs and upkeep", monthly: p.home },
-    { key: "whatif", label: `What-if: spending ${delta >= 0 ? "+" : "−"}${Math.round(Math.abs(delta) * 100)}%`, monthly: before * delta },
-  ];
+  const whatif = (before: number): SpendingLine => ({ key: "whatif", label: `What-if: spending ${delta >= 0 ? "+" : "−"}${Math.round(Math.abs(delta) * 100)}%`, monthly: before * delta });
+  const set = d.retireSpendingSet ? num(s.retireSpending) / 12 : 0;
+  const spending: SpendingLine[] = d.retireSpendingSet
+    ? [{ key: "set", label: "Your set amount", monthly: set }, whatif(set)]
+    : [
+        { key: "budget", label: "Budget items still paid", monthly: p.budget },
+        { key: "healthcare", label: s.medicare === undefined ? "Healthcare" : "Healthcare from 65 (Medicare)", monthly: p.healthcare },
+        { key: "bills", label: "Bills set aside (yearly and other)", monthly: p.bills },
+        { key: "escrow", label: "Property tax + insurance (escrow)", monthly: p.escrow },
+        { key: "home", label: "Home costs and upkeep", monthly: p.home },
+        whatif(p.budget + p.healthcare + p.bills + p.escrow + p.home),
+      ];
   const gross = 1 - d.taxRate * o.preShareFinal;
   const need = Math.max(0, d.retireAnnual - d.retireIncomeAnnual);
   const base = need / d.swr;
   const growth = Math.pow(1 + d.r, Math.max(0, d.years));
   const coastValue = d.invested * growth;
   return {
-    spending: spending.filter((x) => Math.abs(x.monthly) > 0.005 || x.key === "budget" || x.key === "healthcare"),
+    spending: spending.filter((x) => Math.abs(x.monthly) > 0.005 || x.key === "budget" || x.key === "healthcare" || x.key === "set"),
     retireMonthly: d.retireMonthly,
     retireAnnual: d.retireAnnual,
     income: d.retireIncomeAnnual,
@@ -130,7 +133,9 @@ export function fiLevels(s: PlanState, o: RunResult): FiLevel[] {
   const fireAt = (monthly: number) => Math.max(0, monthly * 12 - d.retireIncomeAnnual) / gross / d.swr + bridges;
   const delta = 1 + num(s.whatif?.spendDelta);
   const e = spendingParts(s, d, true);
-  const lean = (e.budget + e.healthcare + e.bills + e.escrow + e.home) * delta;
+  // essentials come from the budget; with a set amount, they're never more than it
+  const essentials = (e.budget + e.healthcare + e.bills + e.escrow + e.home) * delta;
+  const lean = d.retireSpendingSet ? Math.min(essentials, d.retireMonthly) : essentials;
   const level = (key: FiLevel["key"], label: string, monthly: number, fire: number): FiLevel => ({
     key, label, monthly, fire,
     coastNow: coastNumberAt(fire, d.r, d.years),

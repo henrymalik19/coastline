@@ -20,6 +20,7 @@ import { ProgressBar } from "./ProgressRing";
 import { dueLabel, everyLabel } from "./RecurringGoalFields";
 import { contributionKey, plannedNow } from "./ScheduleEditor";
 import { Card, Divider } from "./ui";
+import { useOpenPage } from "../lib/nav";
 
 const typeLabel = (k: AccountType) => ACCOUNT_TYPES.find((x) => x.value === k)?.label ?? k;
 const pct = (v: number) => percent(v, 1).replace(/\.0%$/, "%");
@@ -105,6 +106,7 @@ export function NetWorthCard({ startOpen = false }: { startOpen?: boolean }) {
 export function GoalsCard() {
   const t = useTheme();
   const router = useRouter();
+  const openPage = useOpenPage();
   const { state, result, start } = usePlan();
   const cash = result.d.bal.cash;
   const goals = state.goals ?? [];
@@ -112,7 +114,7 @@ export function GoalsCard() {
     <Card style={{ gap: space.xs }}>
       <View style={[styles.line, { marginBottom: space.xs }]}>
         <Text role="heading" aria-level={2} style={[type.heading, { color: t.text, flex: 1 }]}>Savings goals</Text>
-        <Pressable role="link" accessibilityLabel="Edit savings goals" onPress={() => router.push("/money/goals")} hitSlop={8} style={styles.manage}>
+        <Pressable role="link" accessibilityLabel="Edit savings goals" onPress={() => openPage("/money/goals")} hitSlop={8} style={styles.manage}>
           <Text style={[type.label, { color: t.accent, fontWeight: "700" }]}>Edit</Text>
           <Icon name="chevron" size={14} color={t.accent} />
         </Pressable>

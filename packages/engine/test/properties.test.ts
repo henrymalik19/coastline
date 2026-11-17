@@ -112,6 +112,11 @@ function expectParity(input: PlanState) {
   // no Medicare amount on these plans: healthcare runs all of retirement, as in the prototype
   expect(od.healthRetired).toBe(s.healthcare);
   delete od.healthRetired;
+  // no set retirement amount on these plans: spending comes from the budget, as in the prototype
+  expect(od.retireSpendingSet).toBe(false);
+  expect(od.retireMonthlyBudget as number).toBeCloseTo((od.retireMonthly as number) / (1 + (s.whatif?.spendDelta || 0)), 6);
+  delete od.retireSpendingSet;
+  delete od.retireMonthlyBudget;
   const theirs = ref.run(structuredClone(s), START) as AnyRun;
   const strip = ({ whenBalance: _a, whenCoastPct: _b, ...rest }: AnyRun) => rest;
   expect(strip(ours)).toEqual(strip(theirs));

@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { sendFeedback } from "../Beta";
+import { isAppPath } from "../../lib/nav";
 import { useAppearance } from "../../lib/appearance";
 import { money } from "../../lib/format";
 import { usePlan } from "../../lib/plan";
@@ -8,7 +9,7 @@ import { syncConfigured } from "../../lib/supabase";
 import { useSync } from "../../lib/sync";
 import { useSharing } from "../../lib/sharing";
 import { radius, space, type, useTheme } from "../../lib/theme";
-import { Icon } from "../Icon";
+import { Icon, type IconName } from "../Icon";
 import { useFillPage } from "../MasterDetail";
 import { Card, Divider, Screen } from "../ui";
 import { findSection, SECTION_SCREENS, SECTIONS } from "./sections";
@@ -38,6 +39,7 @@ function useSummaries(): Record<string, string> {
       const items = state.budget.filter((b) => !b.accountId);
       const after = items.filter((b) => b.inRetirement).reduce((a, b) => a + b.amount, 0);
       const ess = items.filter((b) => b.essential !== false).reduce((a, b) => a + b.amount, 0);
+      if (result.d.retireSpendingSet) return `Set amount: ${money(state.retireSpending ?? 0, { whole: true })}/yr`;
       return items.length ? `${money(after)}/mo after retiring · ${money(ess)} essential` : "No categories yet";
     })(),
     retirementIncome: retire.length + result.d.rentals.length ? `${retire.length + result.d.rentals.length} · ${money(result.d.retireIncomeAnnual / 12)}/mo` : "None added",
@@ -103,6 +105,60 @@ function PrivacyLink() {
   );
 }
 
+/** Pages that live outside Money and Settings but belong in a menu too (they're also linked from Home). */
+function PlanToolLinks() {
+  const t = useTheme();
+  const router = useRouter();
+  const { state, result } = usePlan();
+  const links: { key: string; title: string; summary: string; icon: IconName; href: string }[] = [
+    {
+      key: "number",
+      title: "Your number",
+      summary: result.fire > 0 ? `How your FIRE number (${money(result.fire, { whole: true })}) and Coast number are worked out` : "How your FIRE and Coast numbers are worked out",
+      icon: "target",
+      href: "/number",
+    },
+    {
+      key: "emergency",
+      title: "Emergency mode",
+      summary: state.emergency?.active ? "On: investing is paused" : "Pause investing during a money emergency",
+      icon: "shield",
+      href: "/emergency",
+    },
+  ];
+  return (
+    <View style={{ gap: space.sm }}>
+      <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.xs }]}>Your plan</Text>
+      <Card padded={false}>
+        {links.map((l, i) => (
+          <View key={l.key}>
+            <Pressable
+              role="link"
+              accessibilityLabel={`${l.title}: ${l.summary}`}
+              onPress={() => router.push(l.href as never)}
+              style={(st) => {
+                const hovered = (st as typeof st & { hovered?: boolean }).hovered;
+                return [styles.row, { backgroundColor: st.pressed || hovered ? t.surface2 : "transparent" }];
+              }}
+            >
+              <View style={[styles.icon, { backgroundColor: t.accentSoft }]}>
+                <Icon name={l.icon} size={18} color={t.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[type.body, { color: t.text, fontWeight: "500" }]}>{l.title}</Text>
+                <Text style={[type.caption, { color: t.text3 }]}>{l.summary}</Text>
+              </View>
+              <Icon name="chevron" size={18} color={t.text3} />
+            </Pressable>
+            {i < links.length - 1 ? <View style={{ marginLeft: 64 }}><Divider /></View> : null}
+          </View>
+        ))}
+      </Card>
+      <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.xs }]}>What if you save more or returns change? Try it on Forecast → What if.</Text>
+    </View>
+  );
+}
+
 /** The page rows on their own (the Money tab puts its accounts above them). */
 export function SectionGroups({ base, heading }: { base: SectionBase; heading?: string }) {
   const t = useTheme();
@@ -141,6 +197,7 @@ export function SectionGroups({ base, heading }: { base: SectionBase; heading?: 
           </Card>
         </View>
       ))}
+      {base === "/money" ? <PlanToolLinks /> : null}
     </>
   );
 }
@@ -153,7 +210,8 @@ export function SectionPage({ base }: { base: SectionBase }) {
   const router = useRouter();
   const fillPage = useFillPage();
   // `from`: the section page that linked here (e.g. Savings goals → Accounts), so Back returns to it
-  const { section, from } = useLocalSearchParams<{ section: string; from?: string }>();
+  // `back`: the screen that opened this page (Your number, Home, Budget…), so Back returns there
+  const { section, from, back } = useLocalSearchParams<{ section: string; from?: string; back?: string }>();
   const meta = findSection(section);
   const fromMeta = from && from !== section ? findSection(from) : undefined;
   const Body = meta ? SECTION_SCREENS[meta.key] : undefined;
@@ -164,8 +222,8 @@ export function SectionPage({ base }: { base: SectionBase }) {
       subtitle={meta?.subtitle}
       narrow={!(meta && FULL_PAGE.has(meta.key))}
       fill={fillPage && !!meta && FULL_PAGE.has(meta.key)}
-      // always back to its list (Money or Settings), even when opened from another tab or a link
-      back={() => router.navigate(fromMeta ? `${base}/${fromMeta.key}` : base)}
+      // back to the screen that opened it, else to its list (Money or Settings), even when opened from another tab
+      back={() => router.navigate((isAppPath(back) ? back : fromMeta ? `${base}/${fromMeta.key}` : base) as never)}
       hideSettings
     >
       {Body ? <Body /> : <Text style={{ color: t.text2 }}>That page doesn't exist.</Text>}

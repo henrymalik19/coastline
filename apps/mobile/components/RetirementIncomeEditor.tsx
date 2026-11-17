@@ -7,6 +7,7 @@ import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, FieldRow, IconButton, NumberInput, TextField } from "./form";
 import { Card, Divider } from "./ui";
+import { useOpenPage } from "../lib/nav";
 
 const KINDS: { value: RetirementIncomeKind; label: string; name: string; startAge: number; hint: string }[] = [
   {
@@ -45,6 +46,7 @@ export function RetirementIncomeEditor() {
     });
 
   const router = useRouter();
+  const openPage = useOpenPage();
   const rentals = result.d.rentals;
   const covered = result.d.retireIncomeAnnual / 12;
   const spend = result.d.retireMonthly;
@@ -96,7 +98,7 @@ export function RetirementIncomeEditor() {
               </View>
             </View>
           ))}
-          <Pressable role="link" onPress={() => router.push("/money/properties")} hitSlop={6} style={{ alignSelf: "flex-start", paddingBottom: space.sm }}>
+          <Pressable role="link" onPress={() => openPage("/money/properties")} hitSlop={6} style={{ alignSelf: "flex-start", paddingBottom: space.sm }}>
             <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change under Property →</Text>
           </Pressable>
         </Card>

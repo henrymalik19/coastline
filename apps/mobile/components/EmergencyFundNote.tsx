@@ -12,11 +12,13 @@ import { Icon } from "./Icon";
 import { MonthlyAmount } from "./ScheduleEditor";
 import { Card, Divider, Pill } from "./ui";
 import { ProgressBar } from "./ProgressRing";
+import { useOpenPage } from "../lib/nav";
 
 /** Goals pages: the emergency fund is already a plan step, so it shouldn't be added as a goal. */
 export function EmergencyFundNote({ linkToSettings = true }: { linkToSettings?: boolean }) {
   const t = useTheme();
   const router = useRouter();
+  const openPage = useOpenPage();
   const { state, result } = usePlan();
   const full = result.plan.fullTarget;
   const cash = result.d.bal.cash;
@@ -42,7 +44,7 @@ export function EmergencyFundNote({ linkToSettings = true }: { linkToSettings?: 
         </View>
       ) : null}
       {linkToSettings ? (
-        <Pressable role="link" onPress={() => router.push("/money/goals")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+        <Pressable role="link" onPress={() => openPage("/money/goals")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change emergency fund size →</Text>
         </Pressable>
       ) : null}
@@ -123,6 +125,7 @@ const styles = StyleSheet.create({
 export function EmergencyFundGoal() {
   const t = useTheme();
   const router = useRouter();
+  const openPage = useOpenPage();
   const { state, result, actual, start } = usePlan();
   const [planOpen, setPlanOpen] = useState(false);
   const [showAccounts, setShowAccounts] = useState(false);
@@ -186,7 +189,7 @@ export function EmergencyFundGoal() {
             ))}
           </View>
         ) : null}
-        <Pressable role="link" onPress={() => router.push("/money/accounts?from=goals")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+        <Pressable role="link" onPress={() => openPage("/money/accounts?from=goals")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Update cash balances →</Text>
         </Pressable>
       </View>

@@ -43,8 +43,10 @@ export function derive(s: PlanState, startDate: Date): Derived {
   // healthcare: your own insurance until Medicare at 65, then Medicare's cost; the difference until 65 is a bridge
   const healthRetired = s.medicare === undefined ? num(s.healthcare) : Math.max(0, num(s.medicare));
   const healthBridge = s.medicare === undefined ? 0 : Math.max(0, num(s.healthcare) - healthRetired) * 12 * Math.max(0, 65 - s.retireAge);
-  const retireMonthly =
-    (sum(budget.filter((b) => b.inRetirement).map((b) => b.amount)) + healthRetired + setAsideRetired + escrowMonthly + homeMonthly) * (1 + (w.spendDelta || 0));
+  const retireMonthlyBudget = sum(budget.filter((b) => b.inRetirement).map((b) => b.amount)) + healthRetired + setAsideRetired + escrowMonthly + homeMonthly;
+  // a set yearly amount replaces the budget's total (it already covers healthcare from 65 and home costs)
+  const retireSpendingSet = num(s.retireSpending) > 0;
+  const retireMonthly = (retireSpendingSet ? num(s.retireSpending) / 12 : retireMonthlyBudget) * (1 + (w.spendDelta || 0));
   const years = Math.max(0, Math.round(s.retireAge - s.age));
 
   // income in retirement: the yearly total once everything has started, plus the savings
@@ -97,6 +99,8 @@ export function derive(s: PlanState, startDate: Date): Derived {
     monthlyExpenses,
     retireMonthly,
     retireAnnual: retireMonthly * 12,
+    retireMonthlyBudget,
+    retireSpendingSet,
     emergencyMonths: monthlyExpenses > 0 ? bal.cash / monthlyExpenses : Infinity,
     essentialExpenses,
     runwayEssential: essentialExpenses > 0 ? bal.cash / essentialExpenses : Infinity,

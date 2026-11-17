@@ -31,6 +31,7 @@ import { debtLabel } from "../../lib/debts";
 import { Card, Divider } from "../ui";
 import { HealthcareSuggestion } from "../HealthcareSuggestion";
 import { hsaEverEligible, HsaEligibilityChanges } from "../HsaEligibility";
+import { useOpenPage } from "../../lib/nav";
 
 /* ---------- registry ---------- */
 
@@ -379,6 +380,7 @@ function AssumptionsSection() {
   const { state } = usePlan();
   const update = useStore((s) => s.update);
   const router = useRouter();
+  const openPage = useOpenPage();
   const pct = (key: string, label: string, info: string, value: number, set: (v: number) => void, max = 1, hint?: string) => (
     <FieldRow key={key} label={label} hint={hint} info={info}>
       <NumberInput kind="percent" label={label} value={value} max={max} onChange={set} />
@@ -410,7 +412,7 @@ function AssumptionsSection() {
         <Rows>
           {[
             <FieldRow key="e" label="Emergency fund" hint={`${state.plan.efMonths} months · starter ${state.plan.starterEFMonths != null ? `${state.plan.starterEFMonths} mo` : money(state.plan.starterEF)}. Set under Savings goals`}>
-              <Button title="Savings goals" onPress={() => router.push("/money/goals")} />
+              <Button title="Savings goals" onPress={() => openPage("/money/goals")} />
             </FieldRow>,
             pct("hi", '"High-interest" debt starts at', HELP.highApr, state.plan.highApr, (v) => update((p) => { p.plan.highApr = v; })),
             <TaxBracketRow key="mt" />,

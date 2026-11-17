@@ -9,6 +9,7 @@ import { space, type, useTheme } from "../lib/theme";
 import { Button, FieldRow, NumberInput, Segmented } from "./form";
 import { Card, Divider } from "./ui";
 import { hsaEligibleInYear } from "./HsaEligibility";
+import { useOpenPage } from "../lib/nav";
 
 /**
  * What you've already put in for the tax year. With it, the plan knows the exact room left (and that
@@ -19,6 +20,7 @@ export function ContributionsCard() {
   const { state, start, actual } = usePlan();
   const update = useStore((s) => s.update);
   const router = useRouter();
+  const openPage = useOpenPage();
   const thisYear = start.getFullYear();
   const beforeDeadline = start.getMonth() <= 3; // Jan–Apr: last year's IRA/HSA can still be made
   const c = state.contributed;
@@ -39,20 +41,18 @@ export function ContributionsCard() {
   // nothing entered for this year: say what the plan assumes instead (earlier paychecks at today's amounts)
   const entered = !!c && c.year === year;
   const est = year === thisYear && start.getMonth() > 0 ? actual.ytdBefore : undefined;
-  const hint = (k: keyof typeof caps, what: string) =>
+  const hint = (k: keyof typeof caps) =>
     entered
-      ? `${what} · ${money(left(k))} of ${money(caps[k])} left`
+      ? `${money(left(k), { whole: true })} of ${money(caps[k], { whole: true })} left`
       : k === "ira" || k === "iraSpouse"
-        ? `Not entered · the plan assumes nothing went in yet this year`
-        : `Not entered · the plan assumes about ${money(est?.[k] ?? 0, { whole: true })} from this year's earlier paychecks`;
+        ? "Not entered · plan assumes $0"
+        : `Not entered · plan assumes about ${money(est?.[k] ?? 0, { whole: true })}`;
+  const deadline = `You can add for ${year} until April 15, ${year + 1}.`;
 
   return (
     <Card style={{ gap: space.sm }}>
       <Text role="heading" aria-level={2} style={[type.heading, { color: t.text }]}>Contributed so far in {year}</Text>
-      <Text style={[type.caption, { color: t.text3 }]}>
-        Check your 401(k) website, pay stub (year-to-date) and IRA/HSA statements. With these, the plan uses the exact room left instead of guessing
-        {beforeDeadline ? "" : `, and any IRA/HSA room left for ${year} can still be filled until April 15, ${year + 1}`}.
-      </Text>
+      <Text style={[type.caption, { color: t.text3 }]}>From your 401(k) site, pay stub or statements, so the plan knows your exact room left.</Text>
       {beforeDeadline ? (
         <Segmented
           label="Tax year"
@@ -61,17 +61,21 @@ export function ContributionsCard() {
           onChange={(v) => update((p) => { p.contributed = { year: Number(v), k401: 0, ira: 0, hsa: 0, ...(c && c.year === Number(v) ? c : null) }; })}
         />
       ) : null}
-      <FieldRow label="Your 401(k)" hint={hint("k401", "Your own contributions")}>
+      <FieldRow
+        label="Your 401(k)"
+        hint={hint("k401")}
+        info={`Only what came out of your own paychecks in ${year} (your pay stub's year-to-date 401(k) line), not your employer's match.`}
+      >
         <NumberInput kind="money" label={`401(k) contributed in ${year}`} value={values.k401} onChange={(v) => set({ k401: v })} />
       </FieldRow>
       <Divider />
-      <FieldRow label={spIra ? "Your IRA" : "IRA"} hint={hint("ira", "Traditional + Roth together")}>
+      <FieldRow label={spIra ? "Your IRA" : "IRA"} hint={hint("ira")} info={`Traditional and Roth IRA together; they share one limit. ${deadline}`}>
         <NumberInput kind="money" label={`IRA contributed for ${year}`} value={values.ira} onChange={(v) => set({ ira: v })} />
       </FieldRow>
       {spIra ? (
         <>
           <Divider />
-          <FieldRow label={spouseIraLabel(state)} hint={hint("iraSpouse", "Their own limit")}>
+          <FieldRow label={spouseIraLabel(state)} hint={hint("iraSpouse")} info={`Their own limit, separate from yours. ${deadline}`}>
             <NumberInput kind="money" label={`${spouseIraLabel(state)} contributed for ${year}`} value={values.iraSpouse} onChange={(v) => set({ iraSpouse: v })} />
           </FieldRow>
         </>
@@ -79,31 +83,26 @@ export function ContributionsCard() {
       {hsaEligibleInYear(state, year) ? (
         <>
           <Divider />
-          <FieldRow label="HSA" hint={hint("hsa", "Yours + your employer's")}>
+          <FieldRow label="HSA" hint={hint("hsa")} info={`Yours plus your employer's; they share one limit. ${deadline}`}>
             <NumberInput kind="money" label={`HSA contributed for ${year}`} value={values.hsa} onChange={(v) => set({ hsa: v })} />
           </FieldRow>
         </>
       ) : null}
       {!hsaEligibleInYear(state, year) ? (
         <Text style={[type.caption, { color: t.text3 }]}>
-          No HSA here because your plan says you don't have an HSA-eligible health plan.{" "}
-          <Text role="link" style={{ color: t.accent, fontWeight: "700" }} onPress={() => router.push("/settings/assumptions")}>
-            Change it in Assumptions
+          No HSA: your plan says you're not on an HSA-eligible health plan.{" "}
+          <Text role="link" style={{ color: t.accent, fontWeight: "700" }} onPress={() => openPage("/settings/assumptions")}>
+            Change
           </Text>
         </Text>
       ) : null}
       {!entered ? (
         // a 0 that's right (nothing went in yet) looks the same as nothing entered: say so explicitly
-        <View style={{ gap: 6 }}>
-          <Button title="These are right" icon="check" tone="primary" onPress={() => set({})} style={{ alignSelf: "flex-start", minHeight: 40 }} />
-          <Text style={[type.caption, { color: t.text3 }]}>Use these amounts as entered, even $0, instead of the plan&apos;s guess.</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" }}>
+          <Button title="These are right" icon="check" tone="primary" onPress={() => set({})} style={{ minHeight: 40 }} />
+          <Text style={[type.caption, { color: t.text3, flexShrink: 1 }]}>Use them as entered, even $0.</Text>
         </View>
       ) : null}
-      <View>
-        <Text style={[type.caption, { color: t.text3 }]}>
-          Your 401(k): only what came out of your own paychecks (not the employer match). HSA: yours plus your employer&apos;s. IRA and HSA contributions for {year} can be made until April 15, {year + 1}. A 401(k) only counts what comes out of paychecks in {year}.
-        </Text>
-      </View>
     </Card>
   );
 }

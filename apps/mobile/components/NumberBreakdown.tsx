@@ -9,12 +9,14 @@ import { radius, space, type, useTheme } from "../lib/theme";
 import { Select } from "./form";
 import { Slider } from "./Slider";
 import { Card, Divider, Pill, SectionLabel } from "./ui";
+import { useOpenPage } from "../lib/nav";
 
 const SWRS = [0.03, 0.0325, 0.035, 0.0375, 0.04, 0.045];
 
 export function NumberBreakdown() {
   const t = useTheme();
   const router = useRouter();
+  const openPage = useOpenPage();
   const { state, result: o, start } = usePlan();
   const update = useStore((s) => s.update);
   const b = fireBreakdown(state, o);
@@ -53,16 +55,19 @@ export function NumberBreakdown() {
       <View style={{ gap: 2 }}>
         {b.spending.map((x) => <View key={x.key}>{row(x.label, `${x.monthly < 0 ? "−" : ""}${money(Math.abs(x.monthly), { whole: true })}/mo`, { indent: true })}</View>)}
         <Divider />
-        {row("Retirement spending", per(b.retireAnnual), { strong: true })}
-        <Pressable role="link" onPress={() => router.push("/money/retirement")} hitSlop={6} style={{ alignSelf: "flex-start", marginTop: 2 }}>
-          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Choose which categories you'd still pay →</Text>
+        {row("Retirement spending", per(b.retireAnnual), {
+          strong: true,
+          sub: d.retireSpendingSet ? `Your budget's retirement items add up to ${money(d.retireMonthlyBudget * 12, { whole: true })}/yr` : undefined,
+        })}
+        <Pressable role="link" onPress={() => openPage("/money/retirement")} hitSlop={6} style={{ alignSelf: "flex-start", marginTop: 2 }}>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{d.retireSpendingSet ? "Change your set amount →" : "Choose which categories you'd still pay, or set an amount →"}</Text>
         </Pressable>
-        <Pressable role="link" onPress={() => router.push("/money/healthcare")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+        <Pressable role="link" onPress={() => openPage("/money/healthcare")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change healthcare →</Text>
         </Pressable>
       </View>
       <View style={{ gap: 4 }}>
-        <Text style={[type.caption, { color: t.text3 }]}>Change it: {d.retireMonthly > 0 ? `${state.whatif.spendDelta >= 0 ? "+" : "−"}${Math.abs(Math.round(state.whatif.spendDelta * 100))}% from your budget` : "add budget items marked “Still paid after you retire”"}</Text>
+        <Text style={[type.caption, { color: t.text3 }]}>Change it: {d.retireMonthly > 0 ? `${state.whatif.spendDelta >= 0 ? "+" : "−"}${Math.abs(Math.round(state.whatif.spendDelta * 100))}% from ${d.retireSpendingSet ? "your set amount" : "your budget"}` : "add budget items marked “Still paid after you retire”"}</Text>
         <Slider label="Retirement spending change" valueText={`${Math.round(state.whatif.spendDelta * 100)} percent`} value={state.whatif.spendDelta * 100} min={-40} max={40} step={5} onChange={(v) => update((p) => { p.whatif.spendDelta = v / 100; })} />
       </View>
 
@@ -71,7 +76,7 @@ export function NumberBreakdown() {
         {b.income - b.rentalIncome > 0.5 ? row("Social Security and pensions", `− ${per(b.income - b.rentalIncome)}`, { indent: true }) : null}
         {Math.abs(b.rentalIncome) > 0.5 ? row("Rent you keep getting", `${b.rentalIncome >= 0 ? "−" : "+"} ${per(Math.abs(b.rentalIncome))}`, { indent: true, sub: "Rentals and rooms you'll keep renting, less a cushion" }) : null}
         {row("From your savings", per(b.need), { strong: true })}
-        <Pressable role="link" onPress={() => router.push("/money/retirementIncome")} hitSlop={6} style={{ alignSelf: "flex-start", marginTop: 2 }}>
+        <Pressable role="link" onPress={() => openPage("/money/retirementIncome")} hitSlop={6} style={{ alignSelf: "flex-start", marginTop: 2 }}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{b.income - b.rentalIncome > 0.5 ? "Change Social Security and pensions →" : "Add Social Security or a pension →"}</Text>
         </Pressable>
       </View>

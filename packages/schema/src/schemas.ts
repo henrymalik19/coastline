@@ -180,6 +180,7 @@ export const PlanStateSchema = z.object({
   retireAge: z.number().min(0).max(120),
   healthcare: nonNeg,
   medicare: nonNeg.optional(),
+  retireSpending: nonNeg.optional(),
   currentInvestMonthly: nonNeg,
   incomes: z.array(IncomeSchema),
   budget: z.array(BudgetItemSchema),

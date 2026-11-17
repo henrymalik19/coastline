@@ -13,6 +13,7 @@ import { monthKey, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, IconButton, InfoText, InfoTip, MonthField, NumberInput } from "./form";
 import { Icon } from "./Icon";
+import { useOpenPage } from "../lib/nav";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export const monthName = (key: string) => `${MON[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
@@ -291,8 +292,9 @@ export function ChangesLater({ k, label, base, unit = "/mo", note, prompt = "Cha
 export function PayrollNote({ what }: { what: string }) {
   const t = useTheme();
   const router = useRouter();
+  const openPage = useOpenPage();
   return (
-    <Pressable role="link" onPress={() => router.push("/money/income")} hitSlop={6} style={styles.link}>
+    <Pressable role="link" onPress={() => openPage("/money/income")} hitSlop={6} style={styles.link}>
       <Text style={[type.caption, { color: t.accent, fontWeight: "700", flexShrink: 1 }]}>{what} contributions are set per paycheck on your job (Income)</Text>
       <Icon name="chevron" size={12} color={t.accent} />
     </Pressable>

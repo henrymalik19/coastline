@@ -9,12 +9,14 @@ import { money } from "../../lib/format";
 import { usePlan } from "../../lib/plan";
 import { monthKey, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
+import { useOpenPage } from "../../lib/nav";
 
 const LENGTHS = [1, 2, 3, 6, 12];
 
 /** Emergency mode: pause the plan, keep cash, optionally cut to essentials / pause 401(k). */
 export default function Emergency() {
   const router = useRouter();
+  const openPage = useOpenPage();
   const t = useTheme();
   const { state, result: o, start, actual } = usePlan();
   const update = useStore((s) => s.update);
@@ -109,7 +111,7 @@ export default function Emergency() {
         <View style={[styles.essentials, { backgroundColor: t.surface2 }]}>
           <Text style={[type.caption, { color: t.text3 }]}>
             Ticked = you'd keep paying it.{" "}
-            <Text role="link" onPress={() => router.push("/money/retirement")} style={{ color: t.accent, fontWeight: "700" }}>See them with retirement</Text>
+            <Text role="link" onPress={() => openPage("/money/retirement")} style={{ color: t.accent, fontWeight: "700" }}>See them with retirement</Text>
           </Text>
           {state.budget.map((b, i) => {
             if (b.accountId) return null; // money moved to an account, not spending

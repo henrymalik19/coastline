@@ -22,12 +22,14 @@ import { RewardsCard } from "../../components/RewardsCard";
 import { SaveNudge } from "../../components/SaveNudge";
 import { monthKey, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
+import { useOpenPage } from "../../lib/nav";
 
 const oddsTone = (p: number): Tone => (p >= 0.8 ? "good" : p >= 0.6 ? "warn" : "bad");
 
 export default function Home() {
   const t = useTheme();
   const router = useRouter();
+  const openPage = useOpenPage();
   // `wide` = room for two cards side by side; stats go 4 or 2 per row
   const { twoColumn: wide, statColumns } = useLayout();
   const { state, result: o, start, actual, whatIfOn } = usePlan();
@@ -122,7 +124,7 @@ export default function Home() {
           tone={Number.isFinite(d.emergencyMonths) && d.emergencyMonths < 3 ? t.warn : undefined}
         />
         {o.mortgagesAtRetire.length ? (
-          <Pressable role="link" onPress={() => router.push("/money/debts")} style={[styles.homeNote, { backgroundColor: t.warnSoft }]}>
+          <Pressable role="link" onPress={() => openPage("/money/debts")} style={[styles.homeNote, { backgroundColor: t.warnSoft }]}>
             <Text style={[type.caption, { color: t.text2, flex: 1 }]}>
               {o.mortgagesAtRetire.length === 1 ? "Your mortgage" : "Your mortgages"} will still have {money(o.homeBridge, { whole: true })} owed when you retire, so your number includes it. <Text style={{ color: t.accent, fontWeight: "700" }}>See it on Debts</Text>
             </Text>

@@ -6,6 +6,7 @@ import { useSync } from "../lib/sync";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, IconButton } from "./form";
 import { Icon } from "./Icon";
+import { useOpenPage } from "../lib/nav";
 
 const DAY = 86_400_000;
 
@@ -16,6 +17,7 @@ const DAY = 86_400_000;
 export function SaveNudge() {
   const t = useTheme();
   const router = useRouter();
+  const openPage = useOpenPage();
   const email = useSync((s) => s.email);
   const hiddenAt = useAppearance((s) => s.saveNudgeHiddenAt);
   const hide = useAppearance((s) => s.hideSaveNudge);
@@ -32,7 +34,7 @@ export function SaveNudge() {
         </Text>
       </View>
       <View style={styles.actions}>
-        <Button title="Save my plan" tone="primary" onPress={() => router.push("/settings/account")} />
+        <Button title="Save my plan" tone="primary" onPress={() => openPage("/settings/account")} />
         <IconButton icon="close" label="Hide for now" onPress={hide} />
       </View>
     </View>

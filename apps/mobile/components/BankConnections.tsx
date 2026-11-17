@@ -19,6 +19,7 @@ import { useSync } from "../lib/sync";
 import { space, type, useTheme } from "../lib/theme";
 import { Button, IconButton, InfoText, InfoTip, Select } from "./form";
 import { Card, Divider, SectionLabel } from "./ui";
+import { useOpenPage } from "../lib/nav";
 
 const INFO =
   "Connect your bank, cards and investment accounts through Plaid, and their balances come in on their own (about once a day). Match each one to an account or debt here, add it as a new one, or leave it out. Coastwise only reads balances; it can't move money. You sign in to each bank once (in Plaid's window, never in Coastwise); one sign-in brings in all your accounts there. Now and then a bank asks you to reconnect.";
@@ -40,6 +41,7 @@ export function BankConnections() {
 function BankCard() {
   const t = useTheme();
   const router = useRouter();
+  const openPage = useOpenPage();
   const planId = useSync((s) => s.planId);
   const userId = useSync((s) => s.userId);
   const { items, accounts, busy, error, loaded } = usePlaid();
@@ -65,7 +67,7 @@ function BankCard() {
       {!signedIn ? (
         <View style={{ gap: space.sm }}>
           <Text style={[type.body, { color: t.text2 }]}>Connect your bank and balances stay up to date on their own. It uses your Coastwise account, so you'll sign in to that first (once on this device).</Text>
-          <Button title="Connect a bank" icon="plus" onPress={() => router.push("/settings/account")} style={{ alignSelf: "flex-start" }} />
+          <Button title="Connect a bank" icon="plus" onPress={() => openPage("/settings/account")} style={{ alignSelf: "flex-start" }} />
         </View>
       ) : (
         <>
