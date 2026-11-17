@@ -568,6 +568,8 @@ export const MIN_PASSWORD = 10;
 
 export async function signInWithPassword(email: string, password: string) {
   if (!supabase) throw new Error("Sync isn't set up in this build.");
+  // signing in with a password means you know it: drop a "Forgot password?" started earlier
+  useSync.setState({ choosingPassword: undefined });
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (!error) return;
   // the same answer whether the email has an account or not, so it can't be used to find accounts

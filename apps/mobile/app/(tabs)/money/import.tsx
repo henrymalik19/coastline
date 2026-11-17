@@ -4,7 +4,7 @@
  * which are essential. Nothing changes until you press Import.
  */
 import { useRouter } from "expo-router";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, InfoText, InfoTip, InlineMoney, InlineSwitch, MonthField, Segmented, Select, ToggleRow } from "../../../components/form";
 import { Icon, type IconName } from "../../../components/Icon";
@@ -99,6 +99,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   });
   const [tab, setTab] = useState<"accounts" | "categories" | "matches">("accounts");
   const [showQuiet, setShowQuiet] = useState(false);
+  // the accounts tucked under "leaving out", fixed while you're on the Accounts list
+  const [tucked, setTucked] = useState<Set<string> | null>(null);
   const [showUnused, setShowUnused] = useState(false);
   const [catTip, setCatTip] = useState(false);
   const [acctTip, setAcctTip] = useState(false);
@@ -200,7 +202,17 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
 
   const since = from;
   const quietAccounts = data ? accounts.filter((a) => quietAccount(data, a.name, a.balance, since)) : [];
-  const activeAccounts = accounts.filter((a) => !quietAccounts.includes(a));
+  // accounts you're leaving out (closed, empty, or set to "Nothing") are tucked away under one link. Decided when
+  // the list opens, so a row you just changed doesn't jump away; it moves the next time you come back.
+  const leftOut = accounts.filter((a) => (tucked ? tucked.has(a.name) : quietAccounts.includes(a)));
+  const activeAccounts = accounts.filter((a) => !leftOut.includes(a));
+  const importing = accounts.filter((a) => choices[a.name]?.action !== "skip").length;
+  useEffect(() => {
+    if (!data || tab !== "accounts") return;
+    setTucked(new Set(accounts.filter((a) => choices[a.name]?.action === "skip" || quietAccount(data, a.name, a.balance, since)).map((a) => a.name)));
+    // only when the list opens (a new file, or coming back to Accounts): not on every change you make in it
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, tab]);
   const unusedCats = data ? categories.filter((c) => unusedCategory(data, c, since)) : [];
   const activeCats = categories.filter((c) => !unusedCats.includes(c));
   const accountRow = (a: YnabAccount, i: number, showKind = false) => (
@@ -430,7 +442,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
           <View onLayout={(e) => setTabsH(Math.round(e.nativeEvent.layout.height))} style={[styles.pinned, sticky(0, t.bg)]}>
           {(() => {
             const tabs = [
-              { value: "accounts" as const, label: `Accounts (${activeAccounts.length})` },
+              { value: "accounts" as const, label: `Accounts (${importing})` },
               { value: "categories" as const, label: `Categories (${activeCats.length})` },
               ...(preview.matches.length ? [{ value: "matches" as const, label: `Matches (${preview.matches.length})` }] : []),
             ];
@@ -461,15 +473,20 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
                   </View>
                 );
               })}
-              {quietAccounts.length ? (
+              {leftOut.length ? (
                 <>
                   <Divider />
                   <Pressable role="button" aria-expanded={showQuiet} onPress={() => setShowQuiet((v) => !v)} hitSlop={6}>
                     <Text style={[type.label, { color: t.accent, fontWeight: "700" }]}>
-                      {showQuiet ? "Hide" : "Show"} {quietAccounts.length} closed or empty {quietAccounts.length === 1 ? "account" : "accounts"} (left out)
+                      {showQuiet ? "Hide" : "Show"} {leftOut.length} {leftOut.length === 1 ? "account" : "accounts"} you're leaving out
                     </Text>
                   </Pressable>
-                  {showQuiet ? quietAccounts.map((a, i) => accountRow(a, i, true)) : null}
+                  {showQuiet ? (
+                    <>
+                      <Text style={[type.caption, { color: t.text3 }]}>Closed, empty, or set to Nothing. Change one to bring it in.</Text>
+                      {leftOut.map((a, i) => accountRow(a, i, true))}
+                    </>
+                  ) : null}
                 </>
               ) : null}
             </Card>

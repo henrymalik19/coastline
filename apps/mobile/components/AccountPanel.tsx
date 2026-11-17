@@ -186,7 +186,7 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
               title="Email me a code"
               tone="ghost"
               disabled={busy || !emailOk}
-              onPress={() => void run(async () => { await sendCode(email.trim()); setSent(true); setPasswordText(""); })}
+              onPress={() => void run(async () => { useSync.setState({ choosingPassword: undefined }); await sendCode(email.trim()); setSent(true); setPasswordText(""); })}
             />
           </View>
           <Text style={[type.caption, { color: t.text3 }]}>
