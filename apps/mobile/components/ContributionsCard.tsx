@@ -1,4 +1,5 @@
 import { limitsFor } from "@coastfi/engine";
+import { useRouter } from "expo-router";
 import { Text, View } from "react-native";
 import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
@@ -17,6 +18,7 @@ export function ContributionsCard() {
   const t = useTheme();
   const { state, start, actual } = usePlan();
   const update = useStore((s) => s.update);
+  const router = useRouter();
   const thisYear = start.getFullYear();
   const beforeDeadline = start.getMonth() <= 3; // Jan–Apr: last year's IRA/HSA can still be made
   const c = state.contributed;
@@ -81,6 +83,14 @@ export function ContributionsCard() {
             <NumberInput kind="money" label={`HSA contributed for ${year}`} value={values.hsa} onChange={(v) => set({ hsa: v })} />
           </FieldRow>
         </>
+      ) : null}
+      {!hsaEligibleInYear(state, year) ? (
+        <Text style={[type.caption, { color: t.text3 }]}>
+          No HSA here because your plan says you don't have an HSA-eligible health plan.{" "}
+          <Text role="link" style={{ color: t.accent, fontWeight: "700" }} onPress={() => router.push("/settings/assumptions")}>
+            Change it in Assumptions
+          </Text>
+        </Text>
       ) : null}
       {!entered ? (
         // a 0 that's right (nothing went in yet) looks the same as nothing entered: say so explicitly

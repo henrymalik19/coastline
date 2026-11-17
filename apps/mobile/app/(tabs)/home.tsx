@@ -1,4 +1,4 @@
-import { budgetView, isHighInterest, paysExtra } from "@coastfi/engine";
+import { budgetView, DISPLAY_INFLATION, inFutureDollars, isHighInterest, paysExtra } from "@coastfi/engine";
 import { needsCategory } from "../../lib/categories";
 import { budgetKeyFor } from "../../lib/budgetLinks";
 import { useCategories } from "../../lib/categories";
@@ -66,6 +66,9 @@ export default function Home() {
   };
 
   const coastAge = o.crossing === null ? null : d.age + o.crossing;
+  // for the future-dollars note on the FIRE number
+  const yearsToRetire = Math.max(0, d.retireAge - d.age);
+  const retireYear = start.getFullYear() + Math.round(yearsToRetire);
   const coastAgeCons = o.crossingC === null ? null : d.age + o.crossingC;
 
   /* ---------- pieces ---------- */
@@ -146,7 +149,7 @@ export default function Home() {
       label="FIRE number"
       value={money(o.fire, { whole: true })}
       hint={`${money(d.retireAnnual, { whole: true })}/yr at ${percent(d.swr, 1)}`}
-      info={`What you'll want invested when you retire: your yearly retirement spending (${money(d.retireAnnual, { whole: true })}${d.retireIncomeAnnual > 0 ? ", minus Social Security or pensions" : ""}) divided by a ${percent(d.swr, 1)} withdrawal rate, with a little extra for taxes on pre-tax money${o.homeBridge > 0.5 ? `, plus the ${money(o.homeBridge, { whole: true })} still owed on your mortgage when you retire` : ""}. Withdrawing ${percent(d.swr, 1)} a year is meant to last for life.`}
+      info={`What you'll want invested when you retire: your yearly retirement spending (${money(d.retireAnnual, { whole: true })}${d.retireIncomeAnnual > 0 ? ", minus Social Security or pensions" : ""}) divided by a ${percent(d.swr, 1)} withdrawal rate, with a little extra for taxes on pre-tax money${o.homeBridge > 0.5 ? `, plus the ${money(o.homeBridge, { whole: true })} still owed on your mortgage when you retire` : ""}. Withdrawing ${percent(d.swr, 1)} a year is meant to last for life. Everything here is in today's dollars; in ${retireYear} dollars, at ${percent(DISPLAY_INFLATION)} inflation, it's about ${money(inFutureDollars(o.fire, yearsToRetire), { whole: true })}.`}
     />,
     <Stat
       key="odds"

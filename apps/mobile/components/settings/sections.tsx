@@ -4,6 +4,7 @@ import { useState, type ComponentType, type ReactNode } from "react";
 import { Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../../lib/confirm";
 import { money, percent } from "../../lib/format";
+import { DISPLAY_INFLATION, nominalReturn } from "@coastfi/engine";
 import { estimateBracket } from "../../lib/tax";
 import { HELP } from "../../lib/help";
 import { usePlan } from "../../lib/plan";
@@ -388,7 +389,15 @@ function AssumptionsSection() {
       <Group title="Market assumptions" hint="Everything is in today's dollars, so returns and raises are after inflation.">
         <Rows>
           {[
-            pct("ret", "Yearly return (after inflation)", HELP.ret, state.ret, (v) => update((p) => { p.ret = v; }), 0.2, "Default 5%"),
+            pct(
+              "ret",
+              "Yearly return (after inflation)",
+              HELP.ret,
+              state.ret,
+              (v) => update((p) => { p.ret = v; }),
+              0.2,
+              `About ${percent(nominalReturn(state.ret), 1)} before inflation, at ${percent(DISPLAY_INFLATION)} inflation. Default 5%`,
+            ),
             pct("vol", "Volatility", HELP.vol, state.vol, (v) => update((p) => { p.vol = v; }), 0.6, "Default 15%"),
             pct("fee", "Fund fees", HELP.fee, state.fee, (v) => update((p) => { p.fee = v; }), 0.05),
             pct("swr", "Withdrawal rate", HELP.swr, state.swr, (v) => update((p) => { p.swr = Math.max(0.001, v); }), 0.1, "Default 3.5%"),

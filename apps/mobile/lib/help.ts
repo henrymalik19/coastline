@@ -40,7 +40,7 @@ export const HELP = {
   minPayment: "The smallest payment the lender requires each month.",
 
   ret:
-    "How much investments grow per year after inflation (so everything stays in today's dollars). Stock-heavy portfolios have averaged roughly 5–7%; 5% is a sober assumption.",
+    "How much investments grow per year after inflation (so everything stays in today's dollars). Stock-heavy portfolios have averaged roughly 5–7% after inflation, which is about 8–10% before inflation, the number you'll often see quoted; 5% is a sober assumption.",
   vol:
     "How bumpy returns are. Stocks swing about 15–18% in a typical year. Higher volatility widens the range of outcomes in the projection.",
   fee: "The yearly cost of your funds (the expense ratio). Index funds are often 0.03–0.2%.",

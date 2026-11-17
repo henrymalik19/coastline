@@ -1,5 +1,5 @@
 /** Your number: how the FIRE and Coast numbers are worked out, and the FI levels. */
-import { baristaFi, FAT_FACTOR, fireBreakdown, fiLevels } from "@coastfi/engine";
+import { baristaFi, DISPLAY_INFLATION, FAT_FACTOR, fireBreakdown, fiLevels, inFutureDollars } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money, monthLabel, percent } from "../lib/format";
@@ -21,8 +21,10 @@ export function NumberBreakdown() {
   const levels = fiLevels(state, o);
   const barista = baristaFi(o);
   const d = o.d;
+  const yearsToRetire = Math.max(0, d.retireAge - d.age);
+  const retireYear = start.getFullYear() + Math.round(yearsToRetire);
 
-  const row = (label: string, value: string, opts: { sub?: string; strong?: boolean; indent?: boolean; tone?: string } = {}) => (
+  const row =(label: string, value: string, opts: { sub?: string; strong?: boolean; indent?: boolean; tone?: string } = {}) => (
     <View style={[styles.row, opts.indent ? { paddingLeft: space.md } : null]}>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={[opts.strong ? type.body : type.caption, { color: opts.strong ? t.text : t.text2, fontWeight: opts.strong ? "700" : "500" }]}>{label}</Text>
@@ -82,7 +84,14 @@ export function NumberBreakdown() {
         {b.healthBridge > 0.5 ? row("Plus health insurance until 65", `+ ${money(b.healthBridge, { whole: true })}`, { indent: true, sub: `${money(state.healthcare, { whole: true })}/mo from ${d.retireAge} until Medicare starts` }) : null}
         {b.homeBridge > 0.5 ? row(o.mortgagesAtRetire.length > 1 ? "Plus mortgages still owed" : "Plus mortgage still owed", `+ ${money(b.homeBridge, { whole: true })}`, { indent: true, sub: `What's left when you retire: ${o.mortgagesAtRetire.map((x) => x.name || "Mortgage").join(", ")}` }) : null}
         <Divider />
-        {row("FIRE number", money(b.fire, { whole: true }), { strong: true, sub: `Invested by age ${d.retireAge}` })}
+        {row("FIRE number", money(b.fire, { whole: true }), { strong: true, sub: `Invested by age ${d.retireAge}, in today's dollars` })}
+        {b.fire > 0.5
+          ? row(
+              `In ${retireYear} dollars`,
+              `≈ ${money(inFutureDollars(b.fire, yearsToRetire), { whole: true })}`,
+              { indent: true, sub: `The same amount after ${percent(DISPLAY_INFLATION)} inflation a year, for comparing with calculators that show future dollars` },
+            )
+          : null}
       </View>
       <View style={[styles.row, { flexWrap: "wrap" }]}>
         <Text style={[type.caption, { color: t.text3, flex: 1, minWidth: 160 }]}>Withdrawal rate: lower is safer and needs more saved.</Text>
