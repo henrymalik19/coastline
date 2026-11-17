@@ -121,8 +121,18 @@ Not yet. Build for where testers actually struggle, not a guess.
 - [ ] **Explain my plan:** plain-language answers like "Why can I coast at 41?", using only the app's own numbers.
 - Not planned: reading paystubs. They're too sensitive, and copying three numbers off one is quick.
 
+## 9. Plan accuracy
+
+- [ ] **Code: automatic retirement tax estimate.** Today "Tax on pre-tax withdrawals" is a flat 10% you can change. Instead, estimate it the way the app already estimates your current tax bracket:
+  - From retirement spending, filing status, Social Security (part of it is taxed) and a state rate.
+  - It's the *average* tax on money taken out of pre-tax accounts, not your bracket. For example, about 8.5% federal single or 4% married on $60k a year (2025 rules), plus state.
+  - Show it as "Estimated: 9.2%", with a way to set your own, like the current-bracket field.
+  - Engine work with tests (tax brackets live in the engine, never the app). Update the brackets each year with the contribution limits.
+  - **When:** after the first testers, unless they question the 10%.
+
 ## Done
 
+- 2026-11-17: Retirement spending can be a set yearly amount (compared with the budget); returns and the FIRE number shown before inflation too; Back returns where you came from; Money → Your plan.
 - 2026-11-17: Ready for testers: Send feedback, visit counting (Vercel Web Analytics), `pnpm stats`, Forgot password, a BETA tag and welcome line, and an empty plan that asks for a budget instead of showing nonsense.
 - 2026-11-16: Devices unused for 30 days are signed out; Sign out ends only this device's sign-in.
 - 2026-11-16: Password sign-in (the emailed code stays for new accounts and forgotten passwords); Sign out other devices.

@@ -18,6 +18,7 @@ import { ProgressBar, ProgressRing } from "../components/ProgressRing";
 import { IncomesEditor } from "../components/IncomeEditor";
 import { NeedsBudget } from "../components/NeedsBudget";
 import { BetaNote } from "../components/Beta";
+import { SetRetirementAmount } from "../components/RetireAmount";
 import { Card, Divider, Screen } from "../components/ui";
 import { HealthcareSuggestion } from "../components/HealthcareSuggestion";
 import { ageLabel, money, percent } from "../lib/format";
@@ -254,7 +255,12 @@ function IncomeStep() {
 }
 
 function BudgetStep() {
-  return <BudgetEditor />;
+  return (
+    <>
+      <SetRetirementAmount />
+      <BudgetEditor />
+    </>
+  );
 }
 
 function MoneyStep() {

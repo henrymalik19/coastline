@@ -2,6 +2,7 @@ import { Text, type ViewStyle } from "react-native";
 import { space, type, useTheme } from "../lib/theme";
 import { Button } from "./form";
 import { Card } from "./ui";
+import { SetRetirementAmount } from "./RetireAmount";
 
 /** Shown instead of the Coast FI result while the plan has no retirement spending, so there's no number to work out yet. */
 export function NeedsBudget({ onPress, style }: { onPress: () => void; style?: ViewStyle }) {
@@ -14,6 +15,7 @@ export function NeedsBudget({ onPress, style }: { onPress: () => void; style?: V
         you retire.
       </Text>
       <Button title="Add my budget" tone="primary" style={{ alignSelf: "flex-start" }} onPress={onPress} />
+      <SetRetirementAmount prompt="Or type how much you'll spend a year in retirement" confirm />
     </Card>
   );
 }
