@@ -18,6 +18,7 @@ import { monthTodos, shortfallText, usePlan, type Todo } from "../../lib/plan";
 import { NetWorthCard } from "../../components/MoneyCards";
 import { NeedsBudget } from "../../components/NeedsBudget";
 import { BetaTag } from "../../components/Beta";
+import { WhatIfBanner } from "../../components/WhatIfBanner";
 import { RewardsCard } from "../../components/RewardsCard";
 import { SaveNudge } from "../../components/SaveNudge";
 import { monthKey, useStore } from "../../lib/store";
@@ -86,7 +87,7 @@ export default function Home() {
         </ProgressRing>
         <View style={{ flex: 1, gap: space.xs }}>
           <Text style={[type.label, { color: t.text3 }]}>You can stop investing at</Text>
-          <Text style={[type.display, { color: t.text, fontSize: wide ? 40 : 30, lineHeight: wide ? 46 : 36 }]}>
+          <Text style={[type.display, { color: whatIfOn ? t.warn : t.text, fontSize: wide ? 40 : 30, lineHeight: wide ? 46 : 36 }]}>
             {coastAge === null ? "Not yet" : o.crossing === 0 ? "Now" : `Age ${Math.floor(coastAge)}`}
           </Text>
           <Text style={[type.caption, { color: t.text3 }]}>
@@ -150,6 +151,7 @@ export default function Home() {
       key="fire"
       label="FIRE number"
       value={money(o.fire, { whole: true })}
+      tone={whatIfOn ? "warn" : undefined}
       hint={`${money(d.retireAnnual, { whole: true })}/yr at ${percent(d.swr, 1)}`}
       info={`What you'll want invested when you retire: your yearly retirement spending (${money(d.retireAnnual, { whole: true })}${d.retireIncomeAnnual > 0 ? ", minus Social Security or pensions" : ""}) divided by a ${percent(d.swr, 1)} withdrawal rate, with a little extra for taxes on pre-tax money${o.homeBridge > 0.5 ? `, plus the ${money(o.homeBridge, { whole: true })} still owed on your mortgage when you retire` : ""}. Withdrawing ${percent(d.swr, 1)} a year is meant to last for life. Everything here is in today's dollars; in ${retireYear} dollars, at ${percent(DISPLAY_INFLATION)} inflation, it's about ${money(inFutureDollars(o.fire, yearsToRetire), { whole: true })}.`}
     />,
@@ -157,7 +159,7 @@ export default function Home() {
       key="odds"
       label={`Odds of FIRE by ${d.retireAge}`}
       value={percent(o.mc.probFire)}
-      tone={oddsTone(o.mc.probFire)}
+      tone={whatIfOn ? "warn" : oddsTone(o.mc.probFire)}
       hint="Across 2,000 market paths"
       info={`Markets don't grow in a straight line. We simulate 2,000 possible futures with ups and downs (${percent(d.vol)} volatility) and count how many reach your FIRE number by age ${d.retireAge} if you follow the plan.`}
     />,
@@ -165,6 +167,7 @@ export default function Home() {
       key="days"
       label="Freedom bought"
       value={`${Math.round(o.freedomDays).toLocaleString("en-US")} days`}
+      tone={whatIfOn ? "warn" : undefined}
       hint="Of retirement spending, today"
       info="What you've invested divided by one day of retirement spending: how many days of not working you've already paid for."
     />,
@@ -273,6 +276,7 @@ export default function Home() {
         </View>
       ) : null}
       <SaveNudge />
+      <WhatIfBanner />
       {wide ? (
         <>
           {o.fire > 0 ? stats : null}

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { AccountsForecast } from "../../components/AccountsForecast";
+import { WhatIfBanner } from "../../components/WhatIfBanner";
 import { AccountsProgress } from "../../components/AccountsProgress";
 import { longMonth } from "../../components/AdjustmentsCard";
 import { BalanceChart } from "../../components/BalanceChart";
@@ -99,7 +100,7 @@ export default function Forecast() {
         </>
       ) : (
         <>
-          <Text style={[type.title, compact ? { fontSize: 22, lineHeight: 28 } : null, { color: t.text }]}>
+          <Text style={[type.title, compact ? { fontSize: 22, lineHeight: 28 } : null, { color: whatIfOn ? t.warn : t.text }]}>
             Coast FI in {monthLabel(start, coastM)}
             {coastAge !== null ? <Text style={{ color: t.text3 }}> · age {coastAge}</Text> : null}
           </Text>
@@ -114,9 +115,9 @@ export default function Forecast() {
       {o.fire > 0 ? <View style={{ gap: 4, marginTop: space.xs }}>
         <View style={{ flexDirection: "row", gap: space.md, marginBottom: 4 }}>
           {[
-            { k: "Coast FI number", v: o.coastNow, c: t.text },
+            { k: "Coast FI number", v: o.coastNow, c: whatIfOn ? t.warn : t.text },
             { k: "Invested now", v: o.d.invested, c: t.text },
-            { k: "Still to go", v: Math.max(0, o.coastNow - o.d.invested), c: o.coastNow - o.d.invested <= 0.5 ? t.good : t.text },
+            { k: "Still to go", v: Math.max(0, o.coastNow - o.d.invested), c: whatIfOn ? t.warn : o.coastNow - o.d.invested <= 0.5 ? t.good : t.text },
           ].map((x) => (
             <View key={x.k} style={{ flex: 1, minWidth: 0 }}>
               <Text numberOfLines={1} style={[type.caption, { color: t.text3 }]}>{x.k}</Text>
@@ -192,11 +193,7 @@ export default function Forecast() {
           Only what you've set: your paychecks, your employer's match, debt payments, and what you assign in Budget. Money you haven't assigned isn't added anywhere.
         </Text>
       ) : null}
-      {tab === "table" && whatIfOn ? (
-        <Text role="status" style={[type.caption, { color: t.warn, fontWeight: "600" }]}>
-          What-ifs are on: amounts they change are in orange. Turn them off in What if to see your plan as set.
-        </Text>
-      ) : null}
+      {tab === "table" ? <WhatIfBanner /> : null}
       {tab === "table" ? (
         <AccountsForecast key={pick ?? "all"} state={state} o={real} start={start} fill initialPick={pick} compare={whatIfOn ? { plan: forecastReal, d: realD } : undefined} />
       ) : tab === "whatif" ? (
@@ -205,6 +202,7 @@ export default function Forecast() {
         </ScrollView>
       ) : (
         <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
+          <WhatIfBanner />
           {state.emergency?.active ? (
             <Card style={{ backgroundColor: t.warnSoft, borderColor: t.warn }}>
               <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Paused for emergency mode through {longMonth(state.emergency.until)}</Text>

@@ -13,7 +13,7 @@ import { usePlan } from "../lib/plan";
 import { useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 
-const SLIDERS_INFO = "Try a change and see your dates and odds move. Extra savings go through your priority order. These are only what-ifs: your to-dos and the Table stay on your real plan. Retire at is different: it changes your actual retirement age.";
+const SLIDERS_INFO = "Try a change and see your dates and odds move. Extra savings go through your priority order. These are only what-ifs: your to-dos stay on your real plan, and while they're on, Home, Overview and the Table show what they change in orange. Retire at is different: it changes your actual retirement age.";
 
 export function WhatIf() {
   const t = useTheme();
