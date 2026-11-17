@@ -32,29 +32,74 @@ Daily backups, and the project isn't paused for inactivity.
 - [ ] **Owner:** Authentication → Passwords: turn on leaked password protection.
 - [ ] **Owner:** Authentication → Passwords: minimum length 10, which matches what the app asks for.
 
-## 4. Charging for Coastwise
+## 4. Coastwise Plus (the paid plan)
 
-Proposed: a free plan plus one paid plan. Bank linking is the main paid feature because Plaid charges for every linked bank every month.
+**Free:** the Coast FI planner, the envelope budget with manual entries, YNAB import.
+**Plus, about $6/month or $50/year:** linked banks that update automatically, and sharing a plan with a partner.
+A 14-day free trial starts when someone first tries to link a bank or invite someone.
+The plan's owner pays; people they share with get Plus features on that plan.
+Not planned: ads, selling data, lifetime deals (Plaid costs keep coming every month).
 
-- [ ] **Owner:** Look up what Plaid charges for each linked bank each month and confirm the price covers it.
-- [ ] **Free:** the Coast FI planner, the envelope budget with manual entries, YNAB import.
-- [ ] **Plus, about $6/month or $50/year:** linked banks that update automatically, and sharing a plan with a partner. 14-day free trial when someone first links a bank.
-- [ ] **Code:** Paywall behind a feature flag (`EXPO_PUBLIC_FF_…`).
-- [ ] **Code:** Stripe checkout on the web.
-- [ ] **Code:** App Store and Google Play subscriptions when the phone apps ship. RevenueCat can handle all three; it's a new dependency, so it needs a go-ahead first.
-- Not planned: ads, selling data, lifetime deals (Plaid costs keep coming every month).
+**Rules**
+- The server decides who has Plus, never the app. Stripe tells the server through a webhook, and the database and the `plaid` function check it.
+- When Plus ends, nothing is deleted. Linked banks stop updating and turn into manual accounts, and shared people keep viewing but no one new can be invited. After 30 days, banks are disconnected at Plaid so they stop costing money.
+- Everything ships behind `EXPO_PUBLIC_FF_PLUS` and goes live together with bank linking (section 2).
+
+**Build steps**
+1. [ ] **Code: who has Plus.** A `subscription` table (one row per account: status, renewal date, trial end, Stripe ids). Only the server writes it, and people can read only their own row. A `has_plus(plan)` database function, with `comp` status for you and early users. Tests for the security rules.
+2. [ ] **Code: enforce it.** The `plaid` function refuses new links and updates without Plus. The database refuses new invites without Plus. Tests for both.
+3. [ ] **Owner: Stripe in test mode.** Create the Plus product with monthly and yearly prices, and turn on the customer portal (cancel, change card, invoices). Set the Supabase secrets `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_YEARLY`.
+4. [ ] **Code: a `billing` function.** It starts Stripe Checkout (with the 14-day trial) and opens the customer portal. It calls Stripe directly, with no new package.
+5. [ ] **Code: a `stripe-webhook` function.** It checks Stripe's signature and keeps the `subscription` row up to date: started, renewed, payment failed, cancelled, ended.
+6. [ ] **Code: in the app.** A Plus screen shown when someone taps Connect bank or Invite without Plus. Account → Plan & billing shows the status, the trial days left, and Manage billing. Sharing and bank screens explain what happens when Plus ends.
+7. [ ] **Code: a nightly clean-up.** Disconnects banks at Plaid 30 days after Plus ends.
+8. [ ] **Code + Owner: legal pages.** Terms of service and a cancellation and refund policy, plus an update to the privacy page to mention Stripe. Stripe requires these before taking real payments.
+9. [ ] **Test end to end in Stripe test mode:** trial, pay, card declined, cancel, resubscribe, a shared plan, and the clean-up.
+10. [ ] **Owner: go live.** Switch Stripe to live keys and turn on `EXPO_PUBLIC_FF_PLUS` together with `EXPO_PUBLIC_FF_BANKS`.
+11. [ ] Later: App Store and Google Play subscriptions when the phone apps ship. RevenueCat can handle all three; it's a new dependency, so it needs a go-ahead first.
+
+**Decisions before building**
+- [ ] Ask for a card up front for the trial? Recommended: yes. Each bank link costs money, and trials with a card convert better.
+- [ ] Final price, after checking what Plaid charges for each linked bank each month.
+- [ ] Give the first users free Plus (for example, the first 50 users for a year) in exchange for feedback?
 
 ## 5. Phone apps (App Store and Google Play)
 
 - [ ] **Code:** Face ID / fingerprint lock when the app opens. Needs the `expo-local-authentication` package, so it needs a go-ahead first.
 - [ ] **Code:** Sign in with Apple and Google. Needs an Apple developer account. Apple requires Sign in with Apple once other social sign-ins are offered.
-- [ ] **Code:** In-app subscriptions (see section 4).
+- [ ] **Code:** In-app subscriptions (section 4, step 11).
 
 ## 6. Security housekeeping
 
 - [ ] **Owner:** Replace the Resend API key with a sending-only key.
 - [ ] **Owner:** Add a backup authenticator device to the Supabase account.
 - [ ] Dependabot: the two moderate `glob` / `minimatch` alerts come from Expo's command-line tools. Dependabot can't fix them on its own; they clear when Expo updates those tools.
+
+## 7. First users
+
+Don't wait for bank linking. The free plan is useful today, so launch it as a free beta now and add Plus when banks are ready.
+
+**Ready for users when**
+- [ ] Five people who have never seen the app set up a plan and a budget on their phone without help. Watch them, or ask for a screen recording, and fix whatever they get stuck on.
+- [ ] Nothing gets lost: a plan survives signing out and back in, a second device, and a day offline.
+- [ ] Errors reach you: add error reporting so a crash on someone's phone shows up for you. It's a new dependency, so it needs a go-ahead first.
+- [ ] A simple way to count users: sign-ups and weekly active accounts, counted from the database, with no tracking scripts.
+- [ ] A way to reach you: a Feedback link in Settings and a support email.
+- [ ] Privacy page done; terms of service done (also needed for Plus).
+- [ ] Supabase backups on (Pro, section 3) once real people's data is in it.
+
+**Goals**
+- [ ] First 10 real users (not friends doing you a favor) who still open the app every week a month later.
+- [ ] 100 sign-ups, with 25 using it every week.
+- [ ] First paying Plus user.
+- The number that matters most: of the people who sign up, how many are still using it 4 weeks later.
+
+**Getting users**
+- [ ] A free Coast FI calculator page that works without signing up. People search for "coast fi calculator", and it's the best way in. Show the result, then offer "save this plan and track it" as the sign-up.
+- [ ] Communities: r/coastFIRE, r/financialindependence, r/Fire, the Bogleheads forum. Share it as "I built this, what's missing?", follow each community's self-promotion rules, and reply to every comment.
+- [ ] People leaving YNAB over its price: the YNAB import is the hook (r/ynab, r/budget).
+- [ ] Build in public: short weekly posts on X, Threads or Bluesky showing what shipped and the numbers.
+- [ ] Later, once there are steady weekly users: Product Hunt, FIRE podcasts and newsletters, and a few how-to articles ("What is Coast FI?", "How much do I need to coast?").
 
 ## Done
 
