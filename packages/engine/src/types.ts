@@ -378,7 +378,12 @@ export type Txn = {
   payee?: string;
   memo?: string;
   categoryId?: string;
-  splits?: { categoryId: string; amount: number; memo?: string }[];
+  splits?: { categoryId: string; amount: number; memo?: string; originalCategory?: string }[];
+  /**
+   * The category it had where it came from ("Group: Category" in YNAB), kept when that category wasn't
+   * brought in. Not shown or editable; there so old spending can be sorted into it later.
+   */
+  originalCategory?: string;
   /** The other account of a transfer (each side is its own transaction). */
   transferAccountId?: string;
   /** The id of the other side of a transfer. */

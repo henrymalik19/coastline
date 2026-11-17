@@ -541,8 +541,19 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
       cleared: t.cleared, source: "ynab", importId: id, updatedAt: now,
     };
     // a split line whose category has nowhere to go stays (with no category), so the split adds up
-    if (t.splits?.length) tx.splits = t.splits.map((s) => ({ categoryId: catOf(s.group, s.category) ?? "", amount: s.amount, ...(s.memo ? { memo: s.memo } : {}) }));
-    else { const k = catOf(t.group, t.category); if (k) tx.categoryId = k; }
+    // a category that wasn't brought in is kept (hidden) as "Group: Category", for sorting old spending later
+    const original = (group: string, name: string) => (name || group ? [group, name].filter(Boolean).join(": ") : undefined);
+    if (t.splits?.length)
+      tx.splits = t.splits.map((s) => {
+        const k = catOf(s.group, s.category);
+        const orig = !k ? original(s.group, s.category) : undefined;
+        return { categoryId: k ?? "", amount: s.amount, ...(s.memo ? { memo: s.memo } : {}), ...(orig ? { originalCategory: orig } : {}) };
+      });
+    else {
+      const k = catOf(t.group, t.category);
+      if (k) tx.categoryId = k;
+      else { const orig = original(t.group, t.category); if (orig) tx.originalCategory = orig; }
+    }
     // needs a category here: YNAB had none, or its category was left out
     const hadCategory = t.splits?.length ? t.splits.every((s) => !!s.category) : !!t.category;
     // a transfer to an account you left out (an old or closed one): still a transfer, not spending, so it

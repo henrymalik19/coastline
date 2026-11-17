@@ -7,6 +7,7 @@ import { useRouter } from "expo-router";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, InfoText, InfoTip, InlineMoney, InlineSwitch, MonthField, Segmented, Select, ToggleRow } from "../../../components/form";
+import { Icon, type IconName } from "../../../components/Icon";
 import { Card, Divider, Screen } from "../../../components/ui";
 import { money } from "../../../lib/format";
 import { usePlan } from "../../../lib/plan";
@@ -406,10 +407,20 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         Each account starts with its balance on the first day{from ? ` (${ymText(from)})` : ""}; transactions and what you assigned come in from then on.
       </Text>
       {monthCount > 6 ? (
-        <Text style={[type.caption, { color: t.text2 }]}>
-          Bringing in {monthCount} months is fine, but 2 or 3 is usually enough to start: older months mostly add history to scroll through. Only this
-          month's and last month's transactions ever need a category.
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: 12, borderWidth: 1, borderColor: t.accent, backgroundColor: t.accentSoft, flexWrap: "wrap" }}>
+          <Icon name="info" size={18} color={t.accent} />
+          <View style={{ flex: 1, minWidth: 200, gap: 2 }}>
+            <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{monthCount} months is a lot to bring in</Text>
+            <Text style={[type.caption, { color: t.text2 }]}>
+              2 or 3 is usually enough to start. Older months mostly add history to scroll through, and only this month's and last month's transactions
+              ever need a category.
+            </Text>
+          </View>
+          {/* two months back, plus this one: 3 months */}
+          {months.includes(recentMonths(thisMonth, 2)[0]!) ? (
+            <Button title="Use the last 3 months" onPress={() => setRange(recentMonths(thisMonth, 2)[0]!)} />
+          ) : null}
+        </View>
       ) : null}
       {doneNote}
     </Card>
@@ -604,41 +615,54 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     { n: preview.summary.accountsAdded, label: "New accounts", sub: "the rest matched or left out" },
     { n: preview.summary.months, label: preview.summary.months === 1 ? "Month assigned" : "Months assigned", sub: "what you gave each category" },
   ] : [];
-  const notes = preview ? (
-    <>
-      {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut ? (
-        <Text style={[type.caption, { color: t.text2 }]}>
-          <Text style={{ fontWeight: "700", color: t.text }}>
-            {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut} recent{" "}
-            {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut === 1 ? "transaction" : "transactions"}
-          </Text>{" "}
-          will need a category
-          {preview.summary.needsCategoryFromYnab && preview.summary.needsCategoryLeftOut
-            ? ` (${preview.summary.needsCategoryFromYnab} had none in YNAB, ${preview.summary.needsCategoryLeftOut} are in categories you left out)`
-            : preview.summary.needsCategoryLeftOut ? " (they're in categories you left out)" : " (they had none in YNAB)"}
-          . You'll find them under Transactions.
-        </Text>
-      ) : null}
-      {preview.summary.olderWithoutCategory || preview.summary.transfersOutside ? (
-        <Text style={[type.caption, { color: t.text3 }]}>
-          Nothing to do for the rest:
-          {preview.summary.olderWithoutCategory ? ` ${preview.summary.olderWithoutCategory} older ones without a category stay as history` : ""}
-          {preview.summary.olderWithoutCategory && preview.summary.transfersOutside ? ", and" : ""}
-          {preview.summary.transfersOutside ? ` ${preview.summary.transfersOutside} transfers to accounts you left out stay as transfers` : ""}.
-        </Text>
-      ) : null}
-      {preview.summary.categoriesRemoved ? (
-        <Text style={[type.caption, { color: t.text2 }]}>
-          {preview.summary.categoriesRemoved} empty starter {preview.summary.categoriesRemoved === 1 ? "category" : "categories"} YNAB doesn't have will be removed.
-        </Text>
-      ) : null}
-      {preview.summary.accountsRemoved ? (
-        <Text style={[type.caption, { color: t.text2 }]}>
-          {preview.summary.accountsRemoved === 1 ? "Your empty checking/savings account is" : `${preview.summary.accountsRemoved} empty checking/savings accounts are`} replaced by YNAB's.
-        </Text>
-      ) : null}
-      <Text style={[type.caption, { color: t.text3 }]}>{setup ? "You can undo the import for 30 days." : "Your other transactions stay. You can undo the import for 30 days."}</Text>
-    </>
+  // what happens besides the numbers: one line each, with an icon (to do, nothing to do, removed, undo)
+  const s = preview?.summary;
+  const toSort = s ? s.needsCategoryFromYnab + s.needsCategoryLeftOut : 0;
+  const noteRow = (key: string, icon: IconName, color: string, title: string, detail?: string) => (
+    <View key={key} style={{ flexDirection: "row", gap: space.sm, alignItems: "flex-start" }}>
+      <View style={{ paddingTop: 1 }}>
+        <Icon name={icon} size={16} color={color} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+        <Text style={[type.label, { color: t.text }]}>{title}</Text>
+        {detail ? <Text style={[type.caption, { color: t.text3 }]}>{detail}</Text> : null}
+      </View>
+    </View>
+  );
+  const notes = s ? (
+    <View style={{ gap: space.md, padding: space.md, borderRadius: 12, backgroundColor: t.surface2 }}>
+      {toSort
+        ? noteRow(
+            "sort",
+            "receipt",
+            t.accent,
+            `${toSort} recent ${toSort === 1 ? "transaction" : "transactions"} to categorize`,
+            [
+              s.needsCategoryFromYnab ? `${s.needsCategoryFromYnab} had none in YNAB` : "",
+              s.needsCategoryLeftOut ? `${s.needsCategoryLeftOut} ${s.needsCategoryLeftOut === 1 ? "is" : "are"} in categories you left out` : "",
+            ].filter(Boolean).join(", ") + ". You'll find them under Transactions.",
+          )
+        : null}
+      {s.olderWithoutCategory || s.transfersOutside
+        ? noteRow(
+            "rest",
+            "check",
+            t.good,
+            toSort ? "Nothing to do for the rest" : "Nothing to categorize",
+            [
+              s.olderWithoutCategory ? `${s.olderWithoutCategory} older ones without a category stay as history` : "",
+              s.transfersOutside ? `${s.transfersOutside} transfers to accounts you left out stay as transfers` : "",
+            ].filter(Boolean).join(" · "),
+          )
+        : null}
+      {s.categoriesRemoved
+        ? noteRow("cats", "trash", t.text3, `${s.categoriesRemoved} empty starter ${s.categoriesRemoved === 1 ? "category" : "categories"} will be removed`, "YNAB doesn't have them, and they have nothing in them.")
+        : null}
+      {s.accountsRemoved
+        ? noteRow("accts", "wallet", t.text3, s.accountsRemoved === 1 ? "Your empty checking/savings account is replaced by YNAB's" : `${s.accountsRemoved} empty checking/savings accounts are replaced by YNAB's`)
+        : null}
+      {noteRow("undo", "back", t.text3, "You can undo the import for 30 days", setup ? undefined : "Your other transactions stay as they are.")}
+    </View>
   ) : null;
   const confirmBox = preview ? (
     <View style={{ gap: space.sm, flex: 1, minWidth: 180 }}>

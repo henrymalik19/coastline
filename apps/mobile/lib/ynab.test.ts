@@ -242,6 +242,8 @@ describe("choosing where categories go, and matching your own transactions", () 
     expect(skip.txns.find((t) => t.payee === "Target")!.splits!.map((s) => [s.categoryId, s.amount])).toEqual([[expect.stringMatching(/./), -70], ["", -30]]);
     expect(skip.summary.needsCategoryLeftOut).toBe(1);
     expect(skip.summary.needsCategoryFromYnab).toBe(0);
+    // the left-out category is kept (hidden) on that line, for sorting old spending later; the other line doesn't need it
+    expect(skip.txns.find((t) => t.payee === "Target")!.splits!.map((s) => s.originalCategory)).toEqual([undefined, "Everyday: Household"]);
   });
 
   it("a transfer to an account you left out stays a transfer, needing no category", () => {

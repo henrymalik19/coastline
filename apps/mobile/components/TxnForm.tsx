@@ -132,13 +132,19 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
       source: txn?.source ?? ("manual" as const),
       importId: txn?.importId,
       transferId: txn?.transferId,
+      // kept from an import (hidden): the category it had there
+      originalCategory: txn?.originalCategory,
     };
     if (kind === "transfer" && fromTracking) saveTxn({ ...base, accountId: to, amount, transferAccountId: acct, categoryId: "ready", splits: undefined }, isoDay(start));
     // to a loan: its payment line; to an IRA or brokerage: the category you picked (else Unassigned)
     else if (kind === "transfer") saveTxn({ ...base, splits: undefined, transferAccountId: to, categoryId: !toTracking ? undefined : toInvest ? xferCat : toLine ? toTracking.key : "ready" }, isoDay(start));
     else if (parts) {
       const sign = kind === "in" ? 1 : -1;
-      saveTxn({ ...base, transferAccountId: undefined, categoryId: undefined, splits: parts.map((p) => ({ categoryId: p.cat, amount: sign * p.amount })) }, isoDay(start));
+      // a split line keeps its original category when it's the same line as before (same position)
+      saveTxn(
+        { ...base, transferAccountId: undefined, categoryId: undefined, splits: parts.map((p, i) => ({ categoryId: p.cat, amount: sign * p.amount, ...(txn?.splits?.[i]?.originalCategory ? { originalCategory: txn.splits[i]!.originalCategory } : {}) })) },
+        isoDay(start),
+      );
     } else saveTxn({ ...base, transferAccountId: undefined, splits: undefined, categoryId: kind === "in" ? cat || "ready" : cat }, isoDay(start));
     onClose();
   };

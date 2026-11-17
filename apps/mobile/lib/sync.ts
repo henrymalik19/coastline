@@ -119,10 +119,10 @@ const fromRow = (r: CheckinRow): Checkin | null => {
 };
 
 /* ---------- transactions: their own table, row by row ---------- */
-type SplitRow = { sort: number; category_id: string; amount: number | string; memo: string | null };
+type SplitRow = { sort: number; category_id: string; amount: number | string; memo: string | null; original_category?: string | null };
 type TxnRow = {
   id: string; account_id: string; date: string; amount: number | string; payee: string | null; memo: string | null;
-  category_id: string | null; transfer_account_id: string | null; transfer_id: string | null;
+  category_id: string | null; transfer_account_id: string | null; transfer_id: string | null; original_category?: string | null;
   cleared: Txn["cleared"]; source: Txn["source"]; import_id: string | null; deleted: boolean; client_updated_at: number | string;
   tracked_amount?: number | string | null;
   transaction_split?: SplitRow[];
@@ -132,16 +132,19 @@ const txnToRow = (t: Txn) => ({
   id: t.id, account_id: t.accountId, date: t.date, amount: t.amount, payee: t.payee ?? null, memo: t.memo ?? null,
   category_id: t.categoryId ?? null, transfer_account_id: t.transferAccountId ?? null,
   transfer_id: t.transferId ?? null, cleared: t.cleared, source: t.source, import_id: t.importId ?? null,
-  deleted: !!t.deleted, client_updated_at: t.updatedAt, tracked_amount: t.trackedAmount ?? null,
-  splits: (t.splits ?? []).map((x) => ({ category_id: x.categoryId, amount: x.amount, memo: x.memo ?? null })),
+  deleted: !!t.deleted, client_updated_at: t.updatedAt, tracked_amount: t.trackedAmount ?? null, original_category: t.originalCategory ?? null,
+  splits: (t.splits ?? []).map((x) => ({ category_id: x.categoryId, amount: x.amount, memo: x.memo ?? null, original_category: x.originalCategory ?? null })),
 });
 const txnFromRow = (r: TxnRow): Txn | null => {
   const parsed = TxnSchema.safeParse({
     id: r.id, accountId: r.account_id, date: String(r.date).slice(0, 10), amount: Number(r.amount),
     payee: r.payee ?? undefined, memo: r.memo ?? undefined, categoryId: r.category_id ?? undefined,
     splits: r.transaction_split?.length
-      ? [...r.transaction_split].sort((a, b) => a.sort - b.sort).map((x) => ({ categoryId: x.category_id, amount: Number(x.amount), ...(x.memo ? { memo: x.memo } : {}) }))
+      ? [...r.transaction_split]
+          .sort((a, b) => a.sort - b.sort)
+          .map((x) => ({ categoryId: x.category_id, amount: Number(x.amount), ...(x.memo ? { memo: x.memo } : {}), ...(x.original_category ? { originalCategory: x.original_category } : {}) }))
       : undefined,
+    ...(r.original_category ? { originalCategory: r.original_category } : {}),
     transferAccountId: r.transfer_account_id ?? undefined, transferId: r.transfer_id ?? undefined,
     cleared: r.cleared, source: r.source, importId: r.import_id ?? undefined, updatedAt: Number(r.client_updated_at),
     trackedAmount: r.tracked_amount === null || r.tracked_amount === undefined ? undefined : Number(r.tracked_amount),
@@ -172,7 +175,7 @@ async function pushTxns(owner: string): Promise<void> {
 
 async function fetchTxns(owner: string): Promise<Txn[] | null> {
   if (!supabase || !txnTable) return null;
-  const res = await supabase.from("transaction").select("*, transaction_split(sort, category_id, amount, memo)").eq("plan_id", owner);
+  const res = await supabase.from("transaction").select("*, transaction_split(sort, category_id, amount, memo, original_category)").eq("plan_id", owner);
   if (res.error) {
     if (missingTable(res.error)) {
       txnTable = false;
