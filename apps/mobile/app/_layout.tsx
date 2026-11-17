@@ -6,6 +6,7 @@ import { ConfirmHost } from "../components/ConfirmHost";
 import { rollForwardNow } from "../lib/rollForwardNow";
 import { useStore } from "../lib/store";
 import { startSync } from "../lib/sync";
+import { startVisitCounting } from "../lib/analytics";
 import { useTheme } from "../lib/theme";
 
 /**
@@ -26,6 +27,7 @@ body { overscroll-behavior-y: none; }
 export default function RootLayout() {
   const t = useTheme();
   useEffect(() => startSync(), []);
+  useEffect(() => startVisitCounting(), []);
   // changes whose month has come move into their fields (once saved data has loaded, and on return)
   const hydrated = useStore((s) => s.hydrated);
   const onboarded = useStore((s) => s.onboarded);

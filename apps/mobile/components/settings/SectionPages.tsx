@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { useAppearance } from "../../lib/appearance";
 import { money } from "../../lib/format";
 import { usePlan } from "../../lib/plan";
@@ -59,8 +59,38 @@ export function SectionIndex({ base, title, subtitle }: { base: SectionBase; tit
   return (
     <Screen title={title} subtitle={subtitle} narrow hideSettings={base === "/settings"}>
       <SectionGroups base={base} />
+      {base === "/settings" ? <FeedbackRow /> : null}
       {base === "/settings" ? <PrivacyLink /> : null}
     </Screen>
+  );
+}
+
+export const FEEDBACK_EMAIL = "feedback@getcoastwise.com";
+
+/** Email the owner: something confusing, missing or broken. */
+function FeedbackRow() {
+  const t = useTheme();
+  return (
+    <Card padded={false}>
+      <Pressable
+        role="link"
+        accessibilityLabel="Send feedback"
+        onPress={() => void Linking.openURL(`mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent("Coastwise feedback")}`).catch(() => undefined)}
+        style={(st) => {
+          const hovered = (st as typeof st & { hovered?: boolean }).hovered;
+          return [styles.row, { backgroundColor: st.pressed || hovered ? t.surface2 : "transparent" }];
+        }}
+      >
+        <View style={[styles.icon, { backgroundColor: t.accentSoft }]}>
+          <Icon name="mail" size={18} color={t.accent} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[type.body, { color: t.text, fontWeight: "500" }]}>Send feedback</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>Something confusing, missing or broken? Every email gets read.</Text>
+        </View>
+        <Icon name="chevron" size={18} color={t.text3} />
+      </Pressable>
+    </Card>
   );
 }
 

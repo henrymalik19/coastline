@@ -5,7 +5,7 @@ import { space, type, useTheme } from "../lib/theme";
 
 /** Contact for privacy questions and requests (forwarded to the owner). */
 const PRIVACY_EMAIL = "privacy@getcoastwise.com";
-const UPDATED = "November 14, 2026";
+const UPDATED = "November 17, 2026";
 
 type Part = { h: string; p: (string | { b: string[] })[] };
 
@@ -21,12 +21,13 @@ const PARTS: Part[] = [
     p: [
       {
         b: [
-          "Your email address, if you create an account. It's how you sign in (we email you a code).",
+          "Your email address, if you create an account. It's how you sign in, with a password or a code we email you.",
           "The plan you enter: income, budget, accounts and balances, debts, property, goals, transactions you add or import, and your settings.",
           "If you connect a bank through Plaid: the names, types and last 4 digits of your accounts, their balances and credit limits, card and loan rates and minimum payments, and transactions when the app imports them.",
         ],
       },
       "If you use Coastwise without an account, your plan stays on your device and we don't receive it.",
+      "Visit counts: on getcoastwise.com, Vercel Web Analytics counts visits, which pages are viewed, and which site sent you (like reddit.com). It uses no cookies, doesn't identify you, and never sees your plan.",
     ],
   },
   {
@@ -55,7 +56,7 @@ const PARTS: Part[] = [
       {
         b: [
           "With the people you choose, if you share your plan with a spouse or partner.",
-          "With the services that run Coastwise for us: Supabase (database and sign-in, in the US), Vercel (hosting the app), Resend (sign-in emails) and Plaid (bank connections). They may use it only to provide their service.",
+          "With the services that run Coastwise for us: Supabase (database and sign-in, in the US), Vercel (hosting the app and counting visits), Resend (sign-in emails) and Plaid (bank connections). They may use it only to provide their service.",
           "If the law requires it.",
         ],
       },

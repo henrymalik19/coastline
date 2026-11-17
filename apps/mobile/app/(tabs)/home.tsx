@@ -16,6 +16,7 @@ import { useLayout } from "../../lib/layout";
 import { spouseIraLabel } from "../../lib/spouse";
 import { monthTodos, shortfallText, usePlan, type Todo } from "../../lib/plan";
 import { NetWorthCard } from "../../components/MoneyCards";
+import { NeedsBudget } from "../../components/NeedsBudget";
 import { RewardsCard } from "../../components/RewardsCard";
 import { SaveNudge } from "../../components/SaveNudge";
 import { monthKey, useStore } from "../../lib/store";
@@ -67,7 +68,10 @@ export default function Home() {
   const coastAgeCons = o.crossingC === null ? null : d.age + o.crossingC;
 
   /* ---------- pieces ---------- */
-  const hero = (
+  // no retirement spending yet: there's no number to show, so ask for the budget instead
+  const hero = o.fire <= 0 ? (
+    <NeedsBudget style={wide ? { flex: 3 } : undefined} onPress={() => router.push("/budget")} />
+  ) : (
     <Card style={wide ? { flex: 3 } : undefined}>
       <View style={styles.heroRow}>
         <ProgressRing progress={o.progress} size={wide ? 168 : 132} stroke={wide ? 14 : 12} label={`${percent(o.progress)} of the way to Coast FI`}>
@@ -80,7 +84,11 @@ export default function Home() {
             {coastAge === null ? "Not yet" : o.crossing === 0 ? "Now" : `Age ${Math.floor(coastAge)}`}
           </Text>
           <Text style={[type.caption, { color: t.text3 }]}>
-            {coastAge !== null && o.crossing! > 0 ? `${ageLabel(coastAge)} · ${monthLabel(start, Math.round(o.crossing! * 12))}` : "Not before your retirement age"}
+            {coastAge === null
+              ? "Not before your retirement age"
+              : o.crossing! > 0
+                ? `${ageLabel(coastAge)} · ${monthLabel(start, Math.round(o.crossing! * 12))}`
+                : "You've already reached Coast FI"}
           </Text>
         </View>
       </View>
@@ -261,7 +269,7 @@ export default function Home() {
       <SaveNudge />
       {wide ? (
         <>
-          {stats}
+          {o.fire > 0 ? stats : null}
           <View style={styles.wideRow}>
             {hero}
             {thisMonth}
@@ -274,7 +282,8 @@ export default function Home() {
       ) : (
         <>
           {hero}
-          {stats}
+          {/* FIRE number, odds and freedom bought mean nothing without retirement spending */}
+          {o.fire > 0 ? stats : null}
           <NetWorthCard />
           {thisMonth}
           <RewardsCard />

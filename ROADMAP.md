@@ -80,7 +80,7 @@ Not planned: ads, selling data, lifetime deals (Plaid costs keep coming every mo
 Don't wait for bank linking. The free plan is useful today, so launch it as a free beta now and add Plus when banks are ready.
 
 **Ready for users when**
-- [ ] Five people who have never seen the app set up a plan and a budget on their phone without help. Watch them, or ask for a screen recording, and fix whatever they get stuck on.
+- [ ] Five people who have never seen the app set up a plan and a budget on their phone without help. Watch them, or ask for a screen recording, and fix whatever they get stuck on. The step-by-step plan, messages to send and session script are in [docs/first-five-users.md](docs/first-five-users.md).
 - [ ] Nothing gets lost: a plan survives signing out and back in, a second device, and a day offline.
 - [ ] Errors reach you: add error reporting so a crash on someone's phone shows up for you. It's a new dependency, so it needs a go-ahead first.
 - [ ] A simple way to count users: sign-ups and weekly active accounts, counted from the database, with no tracking scripts.

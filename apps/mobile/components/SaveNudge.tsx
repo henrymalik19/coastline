@@ -28,7 +28,7 @@ export function SaveNudge() {
         <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Save your plan to an account</Text>
         <Text style={[type.caption, { color: t.text2 }]}>
           Right now it's only on this device, so clearing your browser or losing your phone would lose it. An account keeps it safe and on every
-          device. No password: we email you a code.
+          device. All it takes is your email: we send you a code.
         </Text>
       </View>
       <View style={styles.actions}>

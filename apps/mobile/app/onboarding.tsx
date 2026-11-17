@@ -16,6 +16,7 @@ import { useFillPage } from "../components/MasterDetail";
 import { useMembership } from "../lib/sharing";
 import { ProgressBar, ProgressRing } from "../components/ProgressRing";
 import { IncomesEditor } from "../components/IncomeEditor";
+import { NeedsBudget } from "../components/NeedsBudget";
 import { Card, Divider, Screen } from "../components/ui";
 import { HealthcareSuggestion } from "../components/HealthcareSuggestion";
 import { ageLabel, money, percent } from "../lib/format";
@@ -101,7 +102,7 @@ export default function Onboarding() {
       {step === "property" ? <PropertyStep /> : null}
       {step === "debts" ? <DebtsStep /> : null}
       {step === "goals" ? <GoalsStep /> : null}
-      {step === "review" ? <ReviewStep /> : null}
+      {step === "review" ? <ReviewStep toBudget={() => setStep("budget")} /> : null}
 
       {step === "start" ? null : (
       <View style={[styles.between, { marginTop: space.sm }]}>
@@ -361,12 +362,14 @@ function GoalsStep() {
   );
 }
 
-function ReviewStep() {
+function ReviewStep({ toBudget }: { toBudget: () => void }) {
   const t = useTheme();
   const { result: o } = usePlan();
   const d = o.d;
   const short = d.leanMonthly - d.monthlyExpenses < 0;
   const coastAge = o.crossing === null ? null : d.age + o.crossing;
+  // nothing to spend in retirement yet: every number would be 0 (or "already there"), so ask for the budget instead
+  if (o.fire <= 0) return <NeedsBudget onPress={toBudget} />;
   return (
     <>
       {short ? (
