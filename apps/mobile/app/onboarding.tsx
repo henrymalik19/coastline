@@ -17,6 +17,7 @@ import { useMembership } from "../lib/sharing";
 import { ProgressBar, ProgressRing } from "../components/ProgressRing";
 import { IncomesEditor } from "../components/IncomeEditor";
 import { NeedsBudget } from "../components/NeedsBudget";
+import { BetaNote } from "../components/Beta";
 import { Card, Divider, Screen } from "../components/ui";
 import { HealthcareSuggestion } from "../components/HealthcareSuggestion";
 import { ageLabel, money, percent } from "../lib/format";
@@ -93,6 +94,7 @@ export default function Onboarding() {
         </Text>
       ) : null}
       {step === "start" ? <StartStep onFresh={next} /> : null}
+      {step === "start" ? <BetaNote /> : null}
       {step === "you" ? <YouStep /> : null}
       {step === "you" ? <RetirementIncomeBlock /> : null}
       {step === "income" ? <IncomeStep /> : null}

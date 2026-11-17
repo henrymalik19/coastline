@@ -3,6 +3,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions,
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient, Line, Path, Stop, Text as SvgText } from "react-native-svg";
 import { Button } from "../components/form";
+import { BetaNote, BetaTag } from "../components/Beta";
 import { Icon, type IconName } from "../components/Icon";
 import { Card } from "../components/ui";
 import { useMembership } from "../lib/sharing";
@@ -64,6 +65,7 @@ function Landing() {
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
             <Wave color={t.accent} />
             <Text style={[type.heading, { color: t.text, fontWeight: "700" }]}>Coastwise</Text>
+            <BetaTag />
           </View>
           {syncConfigured ? (
             <Pressable role="link" onPress={signIn} hitSlop={8} style={{ paddingVertical: 6, paddingHorizontal: 4 }}>
@@ -89,6 +91,7 @@ function Landing() {
             <Text style={[type.caption, { color: t.text3 }]}>
               {syncConfigured ? "No account needed to start. Sign in later to use your plan on every device." : "Your data stays on this device."}
             </Text>
+            <BetaNote />
           </View>
           <View style={{ flex: wide ? 1 : undefined, width: wide ? undefined : "100%" }}>
             <Card padded={false} style={{ overflow: "hidden" }}>

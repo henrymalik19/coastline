@@ -7,6 +7,7 @@ import { usePlan } from "../lib/plan";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Icon, type IconName } from "./Icon";
 import { SyncStatusLine } from "./AccountPanel";
+import { BetaTag } from "./Beta";
 import { ProgressBar } from "./ProgressRing";
 
 /** Desktop web navigation: replaces the bottom tab bar on wide windows. */
@@ -24,7 +25,10 @@ export function Sidebar({ state, descriptors, emitter, navigateToTab, icons }: B
           <Icon name="trend" size={18} color="#fff" />
         </View>
         <View>
-          <Text style={[type.heading, { color: t.text }]}>Coastwise</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Text style={[type.heading, { color: t.text }]}>Coastwise</Text>
+            <BetaTag />
+          </View>
           <Text style={[type.caption, { color: t.text3 }]}>Planner</Text>
         </View>
       </View>

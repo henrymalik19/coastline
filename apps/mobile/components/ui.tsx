@@ -13,9 +13,11 @@ import { InfoText, InfoTip } from "./form";
  * phone-width column.
  */
 export function Screen({
-  title, subtitle, children, right, narrow, back, hideSettings, fill, maxWidth: maxWidthProp,
+  title, subtitle, children, right, narrow, back, hideSettings, fill, maxWidth: maxWidthProp, titleTag,
 }: {
   title: string; subtitle?: string; children: ReactNode; right?: ReactNode;
+  /** Something small shown right after the title, like a "Beta" tag. */
+  titleTag?: ReactNode;
   /** Forms and text: cap at a readable width instead of filling the screen. */
   narrow?: boolean;
   /** Show a back button (sub-pages). Pass a function to choose where it goes. */
@@ -59,7 +61,14 @@ export function Screen({
         ) : null}
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
-            <Text role="heading" aria-level={1} style={[type.title, { color: t.text }]}>{title}</Text>
+            {titleTag ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                <Text role="heading" aria-level={1} style={[type.title, { color: t.text }]}>{title}</Text>
+                {titleTag}
+              </View>
+            ) : (
+              <Text role="heading" aria-level={1} style={[type.title, { color: t.text }]}>{title}</Text>
+            )}
             {subtitle ? <Text style={[type.body, { color: t.text3, marginTop: 2 }]}>{subtitle}</Text> : null}
           </View>
           {headerRight}

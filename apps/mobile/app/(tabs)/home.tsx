@@ -17,6 +17,7 @@ import { spouseIraLabel } from "../../lib/spouse";
 import { monthTodos, shortfallText, usePlan, type Todo } from "../../lib/plan";
 import { NetWorthCard } from "../../components/MoneyCards";
 import { NeedsBudget } from "../../components/NeedsBudget";
+import { BetaTag } from "../../components/Beta";
 import { RewardsCard } from "../../components/RewardsCard";
 import { SaveNudge } from "../../components/SaveNudge";
 import { monthKey, useStore } from "../../lib/store";
@@ -255,7 +256,7 @@ export default function Home() {
 
   /* ---------- layout: dashboard on desktop web, single column on phones ---------- */
   return (
-    <Screen title="Coastwise" subtitle={monthLabel(start, 0, true)}>
+    <Screen title="Coastwise" titleTag={<BetaTag />} subtitle={monthLabel(start, 0, true)}>
       {state.emergency?.active ? (
         <View style={[styles.banner, { backgroundColor: t.warnSoft }]} role="status">
           <Icon name="shield" size={20} color={t.warn} />

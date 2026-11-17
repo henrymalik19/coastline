@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { sendFeedback } from "../Beta";
 import { useAppearance } from "../../lib/appearance";
 import { money } from "../../lib/format";
 import { usePlan } from "../../lib/plan";
@@ -65,8 +66,6 @@ export function SectionIndex({ base, title, subtitle }: { base: SectionBase; tit
   );
 }
 
-export const FEEDBACK_EMAIL = "feedback@getcoastwise.com";
-
 /** Email the owner: something confusing, missing or broken. */
 function FeedbackRow() {
   const t = useTheme();
@@ -75,7 +74,7 @@ function FeedbackRow() {
       <Pressable
         role="link"
         accessibilityLabel="Send feedback"
-        onPress={() => void Linking.openURL(`mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent("Coastwise feedback")}`).catch(() => undefined)}
+        onPress={sendFeedback}
         style={(st) => {
           const hovered = (st as typeof st & { hovered?: boolean }).hovered;
           return [styles.row, { backgroundColor: st.pressed || hovered ? t.surface2 : "transparent" }];
