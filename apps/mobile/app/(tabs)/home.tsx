@@ -199,7 +199,10 @@ export default function Home() {
         <View style={{ paddingHorizontal: space.lg, paddingBottom: space.md, marginTop: -space.xs, gap: 4 }}>
           <Text style={[type.caption, { color: t.text2, fontVariant: ["tabular-nums"] }]}>
             {money(m0.income)} in − {money(m0.expenses)} costs ={" "}
-            <Text style={{ fontWeight: "700", color: t.text }}>{money(Math.max(0, m0.income - m0.expenses))}</Text> for your plan
+            <Text style={{ fontWeight: "700", color: t.text }}>{money(Math.max(0, m0.income - m0.expenses))}</Text> for your priority steps.{" "}
+            <Text role="link" style={{ color: t.accent, fontWeight: "700" }} onPress={() => openPage("/settings/priorities")}>
+              See the order
+            </Text>
           </Text>
           {m0.extraCheck ? (
             <Text style={[type.caption, { color: t.text3 }]}>

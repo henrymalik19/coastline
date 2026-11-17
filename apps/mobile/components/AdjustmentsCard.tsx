@@ -135,7 +135,7 @@ export function AdjustmentsCard({ start, embedded }: { start: Date; /** Inside a
               <View key={a.id} style={[styles.item, { borderTopColor: t.border }]}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{a.note || KIND_TEXT[a.kind].label}</Text>
-                  <Text style={[type.caption, { color: t.text3 }]}>{longMonth(a.month)} · {KIND_TEXT[a.kind].verb} · <Text style={{ color: t.warn, fontWeight: "700" }}>what-if</Text></Text>
+                  <Text style={[type.caption, { color: t.text3 }]}>{longMonth(a.month)} · {KIND_TEXT[a.kind].verb}</Text>
                 </View>
                 <Text style={[type.label, { color: inflow ? t.good : t.bad, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>
                   {inflow ? "+" : "−"}{money(a.amount)}
