@@ -102,6 +102,18 @@ export function linkedAccount(s: Pick<PlanState, "plan" | "accounts"> & Partial<
 }
 
 /**
+ * What you invest yourself from take-home pay each month (an IRA, a brokerage, an HSA you fund
+ * yourself; never the paycheck 401(k), which comes from your income). The amount you typed, or if
+ * you haven't, what your budget's investing categories add up to.
+ */
+export function investFromTakeHome(s: Pick<PlanState, "plan" | "accounts" | "budget" | "currentInvestMonthly"> & Partial<Pick<PlanState, "spouse">>): { monthly: number; fromBudget: boolean } {
+  const own = num(s.currentInvestMonthly);
+  if (own > 0) return { monthly: own, fromBudget: false };
+  const budgeted = (s.budget ?? []).filter((b) => linkedAccount(s, b)).reduce((t, b) => t + Math.max(0, num(b.amount)), 0);
+  return { monthly: budgeted, fromBudget: budgeted > 0 };
+}
+
+/**
  * Budget items linked to an account set that account's monthly amount ("acct:<id>"), unless the
  * account already has its own. Several items on one account add up.
  */

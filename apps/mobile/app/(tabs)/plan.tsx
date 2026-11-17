@@ -1,4 +1,4 @@
-import { coastNumberAt, type AccountKey } from "@coastfi/engine";
+import { coastNumberAt, investFromTakeHome, type AccountKey } from "@coastfi/engine";
 import { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -150,6 +150,7 @@ export default function Forecast() {
     </Card>
   );
 
+  const selfInvest = investFromTakeHome(state);
   const better = o.projectedFinal >= o.altFinal;
   const diff = o.projectedFinal - o.altFinal;
   const cmpRow = (labelText: string, hint: string, value: number, strong: boolean) => (
@@ -158,7 +159,7 @@ export default function Forecast() {
         <Text style={[type.body, { color: t.text, fontWeight: strong ? "700" : "500" }]}>{labelText}</Text>
         <Text style={[type.caption, { color: t.text3 }]}>{hint}</Text>
       </View>
-      <Text style={[type.heading, { color: strong ? t.text : t.text2, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(value, { whole: true })}</Text>
+      <Text style={[type.heading, { color: whatIfOn ? t.warn : strong ? t.text : t.text2, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(value, { whole: true })}</Text>
     </View>
   );
   const compare = (
@@ -168,12 +169,17 @@ export default function Forecast() {
       <View style={[styles.cmpBox, { borderColor: t.border }]}>
         {cmpRow("Following this plan", "Your priority order", o.projectedFinal, true)}
         <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: t.border }} />
-        {cmpRow("Keeping things as they are", `Investing ${money(state.currentInvestMonthly, { whole: true })}/mo like today`, o.altFinal, false)}
+        {cmpRow(
+          "Keeping things as they are",
+          `Your paycheck 401(k) and HSA, plus ${money(selfInvest.monthly, { whole: true })}/mo you invest yourself${selfInvest.fromBudget ? " (from your Budget)" : ""}. Everything else stays in cash.`,
+          o.altFinal,
+          false,
+        )}
       </View>
       {better && diff > 0.5 ? (
         <View style={[styles.cmpDiff, { backgroundColor: t.goodSoft }]}>
           <Text style={[type.body, { color: t.text, flex: 1 }]}>The plan comes out ahead by</Text>
-          <Text style={[type.heading, { color: t.good, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(diff, { whole: true })}</Text>
+          <Text style={[type.heading, { color: whatIfOn ? t.warn : t.good, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(diff, { whole: true })}</Text>
         </View>
       ) : null}
     </Card>

@@ -3,7 +3,7 @@ import { limitsFor } from "./limits";
 import { checksInMonth } from "./paychecks";
 import type { Adjustment, Alloc, Debt, Derived, FundKey, MonthRow, PlanEvent, PlanResult, PlanSettings, PlanState, SimulateOptions, Goal, RecurringGoal, Limits } from "./types";
 import { addMonths, monthsBetween, num, sum } from "./util";
-import { budgetScheduleMonths, BUDGET_ITEM, HSAEMP, hsaEligibleIn, isSpendingItem, isSpouseIra, isValueKey, linkedItemSchedules, mergeAccountSchedules, mergeMonths, PAYDED, PAYGROSS, PAYNET, payPerCheck, scheduleAmount, valueIn } from "./schedule";
+import { budgetScheduleMonths, BUDGET_ITEM, HSAEMP, hsaEligibleIn, investFromTakeHome, isSpendingItem, isSpouseIra, isValueKey, linkedItemSchedules, mergeAccountSchedules, mergeMonths, PAYDED, PAYGROSS, PAYNET, payPerCheck, scheduleAmount, valueIn } from "./schedule";
 import { matchFor } from "./match";
 export { scheduleAmount } from "./schedule";
 
@@ -467,7 +467,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     if (inEmergency) {
       // emergency: keep everything left over as cash (debt minimums were already paid)
     } else if (mode === "current") {
-      let inv = Math.min(avail, num(s.currentInvestMonthly) + extraMonthly);
+      let inv = Math.min(avail, investFromTakeHome(s).monthly + extraMonthly);
       const toIra = Math.min(inv, capIra);
       alloc.ira += toIra;
       ytd.ira += toIra;

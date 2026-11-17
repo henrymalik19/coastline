@@ -4,7 +4,7 @@ import { useState, type ComponentType, type ReactNode } from "react";
 import { Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../../lib/confirm";
 import { money, percent } from "../../lib/format";
-import { DISPLAY_INFLATION, nominalReturn } from "@coastfi/engine";
+import { DISPLAY_INFLATION, investFromTakeHome, nominalReturn } from "@coastfi/engine";
 import { estimateBracket } from "../../lib/tax";
 import { HELP } from "../../lib/help";
 import { usePlan } from "../../lib/plan";
@@ -196,9 +196,6 @@ function Profile() {
     onChange={(v) => update((p) => { p.filingStatus = v; })}
   />
 </FieldRow>,
-            <FieldRow key="cur" label="What you invest today" hint="Per month, from take-home pay" info={HELP.currentInvest}>
-              <NumberInput kind="money" label="What you invest today per month" value={state.currentInvestMonthly} onChange={(v) => update((p) => { p.currentInvestMonthly = v; })} />
-            </FieldRow>,
           ]}
         </Rows>
       </Group>
@@ -269,8 +266,39 @@ function AccountsSection() {
         Cash is your emergency fund. Everything else counts as invested. Tap an account to rename it, change its type or remove it; drag its grip to reorder.
       </Text>
       <BankConnections />
-      <AccountsEditor afterRetirement={<ContributionsCard />} />
+      <AccountsEditor
+        afterRetirement={
+          <>
+            <SelfInvestCard />
+            <ContributionsCard />
+          </>
+        }
+      />
     </>
+  );
+}
+
+/** What you invest yourself from take-home (not the paycheck 401(k)): typed, or from the Budget's investing categories. */
+function SelfInvestCard() {
+  const t = useTheme();
+  const { state } = usePlan();
+  const update = useStore((s) => s.update);
+  const auto = investFromTakeHome({ ...state, currentInvestMonthly: 0 });
+  return (
+    <Card style={{ gap: space.sm }}>
+      <FieldRow
+        label="You invest from take-home"
+        hint="Per month: IRA or brokerage, not your 401(k)"
+        info="What you move into an IRA or brokerage yourself each month. Your paycheck 401(k) and HSA come from Income, so don't add them here. Used to compare your current habits with following the plan (Forecast → Overview)."
+      >
+        <NumberInput kind="money" label="You invest from take-home per month" value={state.currentInvestMonthly} onChange={(v) => update((p) => { p.currentInvestMonthly = v; })} />
+      </FieldRow>
+      {state.currentInvestMonthly <= 0 && auto.fromBudget ? (
+        <Text style={[type.caption, { color: t.text3 }]}>
+          Using {money(auto.monthly, { whole: true })}/mo from your Budget's investing categories. Type an amount to use your own instead.
+        </Text>
+      ) : null}
+    </Card>
   );
 }
 

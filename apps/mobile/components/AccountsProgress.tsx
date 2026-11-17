@@ -11,6 +11,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { debtLabel } from "../lib/debts";
 import { money, monthLabel } from "../lib/format";
 import { usePlan } from "../lib/plan";
+import { useOpenPage } from "../lib/nav";
 import { stepInfo } from "../lib/steps";
 import { space, type, useTheme } from "../lib/theme";
 import { InfoText, InfoTip, Select } from "./form";
@@ -40,7 +41,8 @@ const INFO = "Where each account stands now (solid) and where your plan gets it 
 
 export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void }) {
   const t = useTheme();
-  const { state, result, forecast, start } = usePlan();
+  const { state, result, forecast, start, whatIfOn } = usePlan();
+  const openPage = useOpenPage();
   const txns = useStore((s) => s.txns);
   const d = result.d;
   const pl = forecast;
@@ -187,6 +189,8 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       color: t.series.debt,
     });
   }
+  // one link for the whole card, not one per account
+  const needs = rows.find((r) => r.needs)?.needs;
 
   return (
     <Card padded={false}>
@@ -210,6 +214,11 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
           <View style={styles.keyItem}><View style={[styles.keySw, { backgroundColor: t.accent }]} /><Text style={[type.caption, { color: t.text3 }]}>In now</Text></View>
           <View style={styles.keyItem}><View style={[styles.keySw, { backgroundColor: t.accent, opacity: 0.35 }]} /><Text style={[type.caption, { color: t.text3 }]}>By {selLabel}, at your amounts</Text></View>
         </View>
+        {needs ? (
+          <Text role="link" style={[type.caption, { color: t.accent, fontWeight: "600" }]} onPress={() => openPage("/money/accounts")}>
+            {needs.replace(/ \(Money → Accounts\)$/, "")} →
+          </Text>
+        ) : null}
       </View>
       {rows.map((r, i) => (
         <View key={r.key}>
@@ -232,7 +241,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
               <Icon name="chevron" size={14} color={t.text3} />
             </Pressable>
             <View style={styles.statusWrap}>
-              <RowStatus r={r} />
+              <RowStatus r={r} whatIf={whatIfOn} />
             </View>
           </View>
         </View>
@@ -243,16 +252,15 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
 }
 
 /** One line under the bar: how it's going, a nudge when something's missing, and an ⓘ with the rest. */
-function RowStatus({ r }: { r: Row }) {
+function RowStatus({ r, whatIf }: { r: Row; /** What-ifs are on: the forecast line is orange, like every number they change. */ whatIf?: boolean }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
   return (
     <>
       <View style={[styles.line, { gap: 4 }]}>
-        <Text style={[type.caption, { color: r.done ? t.good : t.text3, fontWeight: r.done ? "700" : "400", flexShrink: 1 }]} numberOfLines={1}>{r.status}</Text>
+        <Text style={[type.caption, { color: r.done ? t.good : whatIf ? t.warn : t.text3, fontWeight: r.done || whatIf ? "700" : "400", flexShrink: 1 }]} numberOfLines={1}>{r.status}</Text>
         {r.info ? <InfoTip text={r.info} label={r.name} open={open} onToggle={setOpen} /> : null}
       </View>
-      {r.needs ? <Text style={[type.caption, { color: t.warn }]} numberOfLines={1}>{r.needs}</Text> : null}
       {open && r.info ? <InfoText text={r.info} /> : null}
     </>
   );
