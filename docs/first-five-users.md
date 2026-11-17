@@ -62,7 +62,7 @@ Coastwise works without an account, so some people will try it without signing u
 
 > **Title:** I built a Coast FI planner + envelope budget. Looking for 5 people to try it and tell me what's confusing
 >
-> I've been working on Coastwise (getcoastwise.com/?utm_source=reddit&utm_campaign=coastfire), a free app that works out your Coast FI number and when you'll hit it, and pairs that with an envelope budget so the plan stays tied to what you actually spend. It works without an account, and your plan stays on your device unless you choose to sync it.
+> I've been working on Coastwise ([getcoastwise.com](https://getcoastwise.com/?utm_source=reddit&utm_campaign=coastfire)), a free app that works out your Coast FI number and when you'll hit it, and pairs that with an envelope budget so the plan stays tied to what you actually spend. It works without an account, and your plan stays on your device unless you choose to sync it.
 >
 > I'm looking for 5 people who've never seen it to try it for the first time and tell me what's confusing: on a 30-minute video call, or on your own with a screen recording or a few answers by email. Made-up numbers are fine. Testers get the paid version free for a year once it launches.
 >
