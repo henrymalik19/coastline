@@ -10,6 +10,7 @@ import { CalendarModal } from "./Calendar";
 import { Icon } from "./Icon";
 import { categoryText, isoDay, useCategories } from "../lib/categories";
 import { outsideName } from "../lib/outside";
+import { buildPayees, suggestPayees } from "../lib/payees";
 import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
 import { budgetAccounts, trackingAccounts } from "../lib/register";
@@ -93,20 +94,18 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
     </View>
   );
 
-  // a payee you've used before suggests its last category
-  const payees = useMemo(() => {
-    const m = new Map<string, string | undefined>();
-    for (const x of [...txns].filter((y) => !y.deleted && y.payee).sort((a, b) => a.updatedAt - b.updatedAt)) m.set(x.payee!.trim().toLowerCase(), x.categoryId);
-    return m;
-  }, [txns]);
+  // payees you've used before: suggested as you type, and picking one fills in its last category
+  const payees = useMemo(() => buildPayees(txns), [txns]);
   const pickPayee = (v: string) => {
     setPayee(v);
     if (!txn && !cat) {
-      const c = payees.get(v.trim().toLowerCase());
+      const c = payees.get(v.trim().toLowerCase())?.categoryId;
       if (c && c !== "ready") setCat(c);
     }
   };
-  const known = payee.trim().length >= 2 ? [...payees.keys()].filter((p) => p.startsWith(payee.trim().toLowerCase()) && p !== payee.trim().toLowerCase()).slice(0, 3) : [];
+  const known = suggestPayees(payees, payee);
+  // a name you haven't used before: saved with this transaction, then suggested next time
+  const newPayee = payee.trim().length >= 2 && !payees.has(payee.trim().toLowerCase()) && !known.length;
 
   const toTracking = tracking.find((a) => a.id === to);
   // a transfer to an IRA or brokerage: you pick the category (the one linked to that account, by default)
@@ -228,10 +227,14 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                   {known.length ? (
                     <View style={[styles.suggest]}>
                       {known.map((p) => (
-                        <Pressable key={p} role="button" onPress={() => pickPayee(p.replace(/\b\w/g, (c) => c.toUpperCase()))} style={[styles.chip, { borderColor: t.border, backgroundColor: t.surface }]}>
-                          <Text style={[type.caption, { color: t.text2 }]}>{p}</Text>
+                        <Pressable key={p.name} role="button" accessibilityLabel={`Use ${p.name}`} onPress={() => pickPayee(p.name)} style={[styles.chip, { borderColor: t.border, backgroundColor: t.surface }]}>
+                          <Text style={[type.caption, { color: t.text2 }]}>{p.name}</Text>
                         </Pressable>
                       ))}
+                    </View>
+                  ) : newPayee ? (
+                    <View style={[styles.suggest]}>
+                      <Text style={[type.caption, { color: t.text3 }]}>New payee: it'll be suggested next time.</Text>
                     </View>
                   ) : null}
                   {divider}

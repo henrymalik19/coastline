@@ -113,6 +113,8 @@ export default function Budget() {
   const showReal = useAppearance((s) => s.realSpending);
   const setShowReal = useAppearance((s) => s.setRealSpending);
   const [adding, setAdding] = useState<{ txn?: Txn; categoryId?: string; kind?: "out" | "in"; amount?: number; from?: string } | null>(null);
+  // the account picked on the Transactions list: a new transaction added from there starts in it
+  const [listAcct, setListAcct] = useState("all");
   const monthTxns = txns.filter((x) => !x.deleted && x.date.startsWith(month));
   const i = between(thisMonth, month);
   const entry = b?.months?.[month];
@@ -607,7 +609,7 @@ export default function Budget() {
       <ImportUndoReminder />
       {!view.started || tab !== "accounts" ? monthBar : null}
       {view.started && tab === "transactions" ? (
-        <TransactionsList key={(acctParam ?? "all") + (needsParam ?? "")} month={month} account={acctParam} onlyNeedsCategory={needsParam === "1"} stickyTop={barH} />
+        <TransactionsList key={(acctParam ?? "all") + (needsParam ?? "")} month={month} account={acctParam} onlyNeedsCategory={needsParam === "1"} stickyTop={barH} onAccountChange={setListAcct} />
       ) : view.started && tab === "accounts" ? (
         <BudgetAccounts onTransfer={(from) => setAdding({ from })} stickyTop={barH} />
       ) : view.started ? (
@@ -790,7 +792,17 @@ export default function Budget() {
           <Text style={[type.body, { color: t.text2 }]}>Your budget starts in {nameOf(b.start)}.</Text>
         </Card>
       )}
-      {adding ? <TxnForm txn={adding.txn} categoryId={adding.categoryId} initialKind={adding.kind} initialAmount={adding.amount} transferFrom={adding.from} onClose={() => setAdding(null)} /> : null}
+      {adding ? (
+        <TxnForm
+          txn={adding.txn}
+          categoryId={adding.categoryId}
+          initialKind={adding.kind}
+          initialAmount={adding.amount}
+          transferFrom={adding.from}
+          accountId={!adding.txn && !adding.from && tab === "transactions" && listAcct !== "all" ? listAcct : undefined}
+          onClose={() => setAdding(null)}
+        />
+      ) : null}
       {month === thisMonth && i === 0 ? <View style={{ height: 1 }} /> : <Pill tone="neutral">{i > 0 ? "A future month: assign ahead if you like" : "A past month"}</Pill>}
     </Screen>
   );

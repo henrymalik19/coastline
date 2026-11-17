@@ -31,7 +31,18 @@ const dayHead = (d: string) => {
 };
 
 /** `month` is "YYYY-MM" (the budget's month); `account` starts the list on one account. */
-export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop = 0 }: { month: string; account?: string; /** Open showing only the ones that need a category. */ onlyNeedsCategory?: boolean; /** Where the filters stop, under the Budget's toolbar. */ stickyTop?: number }) {
+export function TransactionsList({
+  month, account, onlyNeedsCategory, stickyTop = 0, onAccountChange,
+}: {
+  month: string;
+  account?: string;
+  /** Open showing only the ones that need a category. */
+  onlyNeedsCategory?: boolean;
+  /** Where the filters stop, under the Budget's toolbar. */
+  stickyTop?: number;
+  /** The account picked ("all" for every account), so Add a transaction can start in it. */
+  onAccountChange?: (id: string) => void;
+}) {
   const t = useTheme();
   const router = useRouter();
   const { contentWidth } = useLayout();
@@ -42,6 +53,8 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
   const cats = useCategories();
   const accounts = budgetAccounts(state);
   const [acct, setAcct] = useState(account && budgetAccounts(state).some((a) => a.id === account) ? account : "all");
+  // tell the Budget screen, so its Add a transaction starts in this account
+  useEffect(() => { onAccountChange?.(acct); }, [acct]); // eslint-disable-line react-hooks/exhaustive-deps
   const [allMonths, setAllMonths] = useState(false);
   const [q, setQ] = useState("");
   const [needsCat, setNeedsCat] = useState(!!onlyNeedsCategory);
