@@ -29,7 +29,8 @@ export const longMonth = (key: string) => {
  * what-if dates and odds; the real plan and your to-dos leave them out (real spending goes in Budget).
  */
 const INFO = "Try a month that's different: a bonus, a big bill, unpaid time off. That month's leftover money goes up or down and flows through your priority steps, so you see how it moves your accounts, dates and odds. It's a what-if, like the sliders: the numbers it changes show in orange until you remove it, and your to-dos and budget don't change. Something that really happened goes on the Budget tab as a transaction.";
-export function AdjustmentsCard({ start }: { start: Date }) {
+export function AdjustmentsCard({ start, embedded }: { start: Date; /** Inside another card (What if), not a card of its own. */ embedded?: boolean }) {
+  const Wrap = embedded ? View : Card;
   const t = useTheme();
   const { state } = usePlan();
   const update = useStore((s) => s.update);
@@ -59,7 +60,7 @@ export function AdjustmentsCard({ start }: { start: Date }) {
   };
 
   return (
-    <Card style={{ gap: space.md }}>
+    <Wrap style={{ gap: space.md }}>
       <View style={styles.between}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1 }}>
           <SectionLabel flush>What if one month is different?</SectionLabel>
@@ -152,7 +153,7 @@ export function AdjustmentsCard({ start }: { start: Date }) {
       ) : !open ? (
         <Text style={[type.caption, { color: t.text3 }]}>None. Every month is a normal one.</Text>
       ) : null}
-    </Card>
+    </Wrap>
   );
 }
 

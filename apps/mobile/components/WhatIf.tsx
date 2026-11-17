@@ -6,7 +6,8 @@ import { Button, InfoText, InfoTip } from "./form";
 import { ProjectionChart } from "./ProjectionChart";
 import { Slider } from "./Slider";
 import { Legend } from "./StackedBars";
-import { Card, Pill, SectionLabel } from "./ui";
+import { Card, Divider, Pill, SectionLabel } from "./ui";
+import { confirm } from "../lib/confirm";
 import { money, percent } from "../lib/format";
 import { useLayout } from "../lib/layout";
 import { usePlan } from "../lib/plan";
@@ -23,7 +24,6 @@ export function WhatIf() {
   const [tip, setTip] = useState(false);
   const w = state.whatif;
   const d = o.d;
-  const slidersOn = !!(w.extra || w.retDelta || w.spendDelta);
 
   const sliders = (
     <Card style={{ gap: space.md }}>
@@ -39,8 +39,8 @@ export function WhatIf() {
         <SliderRow label="Extra saved a month" value={`+${money(w.extra, { whole: true })}`}>
           <Slider label="Extra saved per month" valueText={money(w.extra)} value={w.extra} min={0} max={2000} step={50} onChange={(v) => update((p) => { p.whatif.extra = v; })} />
         </SliderRow>
-        <SliderRow label="Returns vs. assumed" value={`${w.retDelta >= 0 ? "+" : "−"}${Math.abs(w.retDelta * 100).toFixed(2).replace(/\.?0+$/, "")} pts`}>
-          <Slider label="Returns versus assumption" valueText={`${(w.retDelta * 100).toFixed(2)} points`} value={w.retDelta * 100} min={-3} max={2} step={0.25} onChange={(v) => update((p) => { p.whatif.retDelta = v / 100; })} />
+        <SliderRow label={`Yearly return (yours: ${percent(state.ret, 1)})`} value={percent(state.ret + w.retDelta, 2).replace(/0+%$/, "%").replace(/\.%$/, "%")}>
+          <Slider label="Yearly return to try" valueText={`${percent(state.ret + w.retDelta, 2)} a year, your setting is ${percent(state.ret, 1)}`} value={w.retDelta * 100} min={-3} max={2} step={0.25} onChange={(v) => update((p) => { p.whatif.retDelta = v / 100; })} />
         </SliderRow>
         <SliderRow label="Retirement spending" value={`${w.spendDelta >= 0 ? "+" : "−"}${Math.abs(Math.round(w.spendDelta * 100))}%`}>
           <Slider label="Retirement spending change" valueText={`${Math.round(w.spendDelta * 100)} percent`} value={w.spendDelta * 100} min={-40} max={40} step={5} onChange={(v) => update((p) => { p.whatif.spendDelta = v / 100; })} />
@@ -49,14 +49,29 @@ export function WhatIf() {
           <Slider label="Retirement age" valueText={`age ${state.retireAge}`} value={state.retireAge} min={Math.max(state.age + 1, 35)} max={75} step={1} onChange={(v) => update((p) => { p.retireAge = v; })} />
         </SliderRow>
       </View>
-      <Button title="Reset sliders" disabled={!slidersOn} onPress={() => update((p) => { p.whatif = { extra: 0, retDelta: 0, spendDelta: 0 }; })} style={{ alignSelf: "flex-start" }} />
+      <Divider />
+      <AdjustmentsCard start={start} embedded />
+      <Divider />
+      <Button
+        title="Reset all what-ifs"
+        disabled={!whatIfOn}
+        onPress={async () => {
+          const months = (state.adjustments ?? []).length;
+          if (months && !(await confirm("Reset all what-ifs?", `This puts the sliders back and removes ${months === 1 ? "the one-month what-if" : `${months} one-month what-ifs`}.`, "Reset")))
+            return;
+          update((p) => {
+            p.whatif = { extra: 0, retDelta: 0, spendDelta: 0 };
+            p.adjustments = [];
+          });
+        }}
+        style={{ alignSelf: "flex-start" }}
+      />
     </Card>
   );
 
   return (
     <View style={{ gap: space.lg }}>
       {sliders}
-      <AdjustmentsCard start={start} />
       <Odds />
       <Text style={[type.caption, { color: t.text3 }]}>
         {percent(d.r, 2)} real return after fees, {percent(d.vol)} volatility.
