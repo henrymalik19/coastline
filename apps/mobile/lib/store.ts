@@ -51,6 +51,8 @@ export type AppState = {
   mergeTxns: (incoming: Txn[]) => void;
   /** Bring in an import (from YNAB): the plan it made, and its transactions (same ids replace older copies). */
   importBudget: (plan: PlanState, txns: Txn[], replaced?: string[]) => void;
+  /** Recount balances for today (upcoming transactions count on their day). Run when the app opens or comes back. */
+  refreshBalances: () => void;
   /** Put the plan and transactions back as they were just before the last import. */
   undoImport: () => void;
   /** Keep the import as it is: no more undo (drops the copy kept for it). */
@@ -138,6 +140,15 @@ export const useStore = create<AppState>()(
         applyRegisterBalances(plan, list);
         applyTracked(plan, t, null);
         set({ txns: list.map((x) => (x.id === id ? { ...x, trackedAmount: undefined } : x)), plan, updatedAt: stamp });
+      },
+      refreshBalances: () => {
+        // a new day: upcoming transactions whose day has come now count in balances
+        const plan = structuredClone(get().plan);
+        applyRegisterBalances(plan, get().txns);
+        const was = get().plan;
+        const changed =
+          plan.accounts.some((a, i) => a.balance !== was.accounts[i]?.balance) || plan.debts.some((d, i) => d.balance !== was.debts[i]?.balance);
+        if (changed) set({ plan, updatedAt: now() });
       },
       clearTxns: () => {
         const stamp = now();

@@ -14,6 +14,7 @@ import { usePlan } from "../../../lib/plan";
 import { isCard } from "../../../lib/register";
 import { monthKey, newId, useStore } from "../../../lib/store";
 import { space, type, useTheme } from "../../../lib/theme";
+import { isoDay } from "../../../lib/categories";
 import { buildImport, categoryKey, exportMonths, groupKey, parseYnab, readYnabZip, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabCategory, type YnabData } from "../../../lib/ynab";
 import { sticky, stickyBottom } from "../../../lib/sticky";
 import { useLayout } from "../../../lib/layout";
@@ -71,6 +72,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const existing = useStore((s) => s.txns);
   const thisMonth = monthKey(start);
   const [data, setData] = useState<YnabData | null>(null);
+  // scheduled transactions dated after today, left out of this import
+  const [future, setFuture] = useState(0);
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
@@ -125,6 +128,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
       try {
         const d = await readFiles(input.files!);
         if (!d.txns.length) throw new Error("No transactions in that file.");
+        // YNAB's scheduled ones (dated after today) come in as upcoming: they count on their day
+        setFuture(d.txns.filter((x) => x.date > isoDay(start)).length);
         setData(d);
         setFileName([...input.files!].find((x) => /\.zip$/i.test(x.name))?.name ?? input.files![0]?.name ?? "");
         const since = recentMonths(thisMonth, 2)[0]!;
@@ -677,6 +682,15 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         : null}
       {s.accountsRemoved
         ? noteRow("accts", "wallet", t.text3, s.accountsRemoved === 1 ? "Your empty checking/savings account is replaced by YNAB's" : `${s.accountsRemoved} empty checking/savings accounts are replaced by YNAB's`)
+        : null}
+      {future
+        ? noteRow(
+            "future",
+            "calendar",
+            t.text3,
+            `${future} scheduled ${future === 1 ? "transaction comes" : "transactions come"} in as upcoming`,
+            "They're dated after today, so they don't change your balances or spending until their day.",
+          )
         : null}
       {noteRow("undo", "back", t.text3, "You can undo the import for 30 days", setup ? undefined : "Your other transactions stay as they are.")}
     </View>

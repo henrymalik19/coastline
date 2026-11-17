@@ -3,7 +3,7 @@
  * cards) for the budget's month, with search and an account filter. Tap one to change it. Each
  * account's register (reconcile) is a tap away.
  */
-import { isStartTxn, registerBalance, startTxnId, type Txn } from "@coastfi/engine";
+import { isStartTxn, isUpcoming, registerBalance, startTxnId, type Txn } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -81,8 +81,11 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [txns, acct, month, allMonths, q, needsCat, cats]);
 
-  const inTotal = list.reduce((a, x) => a + (x.amount > 0 && !x.transferAccountId ? x.amount : 0), 0);
-  const outTotal = list.reduce((a, x) => a + (x.amount < 0 && !x.transferAccountId ? -x.amount : 0), 0);
+  // dated after today: upcoming, shown greyed at the top and not counted until their day
+  const today = isoDay(start);
+  const happened = list.filter((x) => !isUpcoming(x, today));
+  const inTotal = happened.reduce((a, x) => a + (x.amount > 0 && !x.transferAccountId ? x.amount : 0), 0);
+  const outTotal = happened.reduce((a, x) => a + (x.amount < 0 && !x.transferAccountId ? -x.amount : 0), 0);
   const missing = txns.filter((x) => !x.deleted && uncategorized(x)).length;
 
   if (!state.budgetPlan || !accounts.length) {
@@ -109,8 +112,9 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
 
   // one account picked: what it holds (or owes), what has cleared, and reconcile ("does your bank say $X?")
   const hasReg = !!picked && txns.some((x) => !x.deleted && x.id === startTxnId(picked.id));
-  const working = picked ? (hasReg ? registerBalance(0, txns, picked.id) : picked.balance) : 0;
-  const cleared = picked ? (hasReg ? registerBalance(0, txns, picked.id, true) : picked.balance) : 0;
+  const working = picked ? (hasReg ? registerBalance(0, txns, picked.id, false, today) : picked.balance) : 0;
+  const cleared = picked ? (hasReg ? registerBalance(0, txns, picked.id, true, today) : picked.balance) : 0;
+  const upcomingTotal = picked ? txns.filter((x) => !x.deleted && x.accountId === picked.id && isUpcoming(x, today)).reduce((a, x) => a + x.amount, 0) : 0;
   const card = picked?.kind === "card";
   const show = (v: number) => (card ? `${money(-v)} owed` : money(v));
   const bankTarget = card ? -bankSays : bankSays;
@@ -131,6 +135,11 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
           <Text style={[type.label, { color: t.text3 }]}>{picked.name} · {card ? "you owe" : "balance"}</Text>
           <Text style={[type.title, { color: working < 0 && !card ? t.bad : t.text, fontVariant: ["tabular-nums"] }]}>{card ? money(-working) : money(working)}</Text>
           <Text style={[type.caption, { color: t.text3 }]}>Cleared {show(cleared)}</Text>
+          {Math.abs(upcomingTotal) > 0.005 ? (
+            <Text style={[type.caption, { color: t.text3 }]}>
+              {show(working + upcomingTotal)} after upcoming ({upcomingTotal > 0 ? "+" : "−"}{money(Math.abs(upcomingTotal))})
+            </Text>
+          ) : null}
         </View>
         <Button title="Reconcile" icon="check" onPress={() => { setBankSays(Math.round((card ? -cleared : cleared) * 100) / 100); setReconciling((v) => !v); }} style={{ minHeight: 36 }} />
       </View>
@@ -166,8 +175,9 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
           </Pressable>
         ) : null}
       </View>
-      <View style={[styles.row, { gap: space.sm }]}>
-        <View style={compact ? { flex: 1, minWidth: 0 } : { width: 240 }}>
+      {/* phones: the account and the search each get their own line */}
+      <View style={[styles.row, { gap: space.sm }, compact ? { flexDirection: "column", alignItems: "stretch" } : null]}>
+        <View style={compact ? { width: "100%" } : { width: 240 }}>
           <Select
             label="Account"
             value={acct}
@@ -175,7 +185,7 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
             options={[{ value: "all", label: `All accounts (${accounts.length})` }, ...accounts.map((a) => ({ value: a.id, label: a.name, hint: a.kind === "card" ? "Credit card" : "Cash account" }))]}
           />
         </View>
-        <View style={{ flex: 1, minWidth: compact ? 0 : 200 }}>
+        <View style={compact ? { width: "100%" } : { flex: 1, minWidth: 200 }}>
           <TextField label="Search transactions" placeholder={compact ? "Search" : "Search payee, category, amount"} value={q} onChange={setQ} />
         </View>
       </View>
@@ -200,16 +210,18 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
           {days.map((g, gi) => (
             <View key={g.date}>
               <View style={[styles.dayHead, { backgroundColor: t.surface2, borderTopWidth: gi ? StyleSheet.hairlineWidth : 0, borderTopColor: t.border }, sticky(stickyTop + filtersH, t.surface2), gi === 0 ? { borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg } : null]}>
-                <Text style={[type.overline, { color: t.text3 }]}>{dayHead(g.date)}</Text>
+                <Text style={[type.overline, { color: g.date > today ? t.accent : t.text3 }]}>
+                  {dayHead(g.date)}{g.date > today ? " · Upcoming" : ""}
+                </Text>
               </View>
               {g.items.map((x, i) => (
                 <View key={x.id}>
                   {i > 0 ? <Divider /> : null}
                   <Pressable
                     role="button"
-                    accessibilityLabel={`${x.payee || "Transaction"} ${x.amount > 0 ? "plus" : "minus"} ${money(Math.abs(x.amount))}. Change`}
+                    accessibilityLabel={`${g.date > today ? "Upcoming: " : ""}${x.payee || "Transaction"} ${x.amount > 0 ? "plus" : "minus"} ${money(Math.abs(x.amount))}. Change`}
                     onPress={() => setEditing(x)}
-                    style={({ pressed }) => [styles.txn, pressed ? { backgroundColor: t.surface2 } : null]}
+                    style={({ pressed }) => [styles.txn, g.date > today ? { opacity: 0.6 } : null, pressed ? { backgroundColor: t.surface2 } : null]}
                   >
                     <ClearedDot status={x.cleared} onToggle={() => saveTxn({ ...x, cleared: x.cleared === "cleared" ? "uncleared" : "cleared" }, isoDay(start))} />
                     <View style={{ flex: 1, minWidth: 0 }}>

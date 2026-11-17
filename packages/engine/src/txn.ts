@@ -24,11 +24,11 @@ const ymOf = (date: string) => date.slice(0, 7);
  * from that card's payment category. A transfer out to an account you don't budget (an IRA, a loan)
  * spends from the category on it.
  */
-export function txnActivity(txns: Txn[], month: string, cards: Record<string, string>): TxnActivity {
+export function txnActivity(txns: Txn[], month: string, cards: Record<string, string>, asOf?: string): TxnActivity {
   const out: TxnActivity = { income: 0, spent: {}, cardFunded: {} };
   const add = (rec: Record<string, number>, k: string, v: number) => { rec[k] = (rec[k] ?? 0) + v; };
   for (const t of txns) {
-    if (t.deleted || ymOf(t.date) !== month) continue;
+    if (t.deleted || ymOf(t.date) !== month || isUpcoming(t, asOf)) continue;
     const amt = num(t.amount);
     const card = cards[t.accountId];
     // a payment to a card: spends from its payment category (counted once, on the card's side)
@@ -54,11 +54,17 @@ export function txnActivity(txns: Txn[], month: string, cards: Record<string, st
   return out;
 }
 
-/** An account's balance: where its register started, plus everything since (cleared only, if asked). */
-export function registerBalance(opening: number, txns: Txn[], accountId: string, clearedOnly = false): number {
+/**
+ * A transaction dated after `asOf` ("YYYY-MM-DD", today): it's upcoming, so it doesn't count in balances or
+ * spending until its day comes. Without `asOf`, everything counts.
+ */
+export const isUpcoming = (t: Pick<Txn, "date">, asOf?: string): boolean => !!asOf && t.date > asOf;
+
+/** An account's balance: where its register started, plus everything since (cleared only, if asked), up to `asOf`. */
+export function registerBalance(opening: number, txns: Txn[], accountId: string, clearedOnly = false, asOf?: string): number {
   let b = num(opening);
   for (const t of txns) {
-    if (t.deleted || t.accountId !== accountId) continue;
+    if (t.deleted || t.accountId !== accountId || isUpcoming(t, asOf)) continue;
     if (clearedOnly && t.cleared === "uncleared") continue;
     b += num(t.amount);
   }

@@ -87,11 +87,17 @@ export function startTxnFor(p: PlanState, txns: Txn[], accountId: string, today:
   };
 }
 
-/** Set each started account's balance from its transactions (cash: the balance; card: what you owe). */
-export function applyRegisterBalances(p: PlanState, txns: Txn[]): void {
+/** Today as "YYYY-MM-DD" (local): transactions after it are upcoming and don't count in balances yet. */
+export const todayIso = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/**
+ * Set each started account's balance from its transactions (cash: the balance; card: what you owe), counting
+ * only what has happened by `asOf` (today): upcoming ones count on their day.
+ */
+export function applyRegisterBalances(p: PlanState, txns: Txn[], asOf = todayIso()): void {
   for (const acct of budgetAccounts(p)) {
     if (!hasRegister(txns, acct.id)) continue;
-    const bal = Math.round(registerBalance(0, txns, acct.id) * 100) / 100;
+    const bal = Math.round(registerBalance(0, txns, acct.id, false, asOf) * 100) / 100;
     const a = p.accounts.find((x) => x.id === acct.id);
     if (a) {
       a.balance = bal;

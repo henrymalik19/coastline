@@ -130,6 +130,14 @@ Not yet. Build for where testers actually struggle, not a guess.
   - Engine work with tests (tax brackets live in the engine, never the app). Update the brackets each year with the contribution limits.
   - **When:** after the first testers, unless they question the 10%.
 
+## 9b. Scheduled and repeating transactions (later)
+
+Upcoming transactions already work: anything dated after today shows under "Upcoming" and counts on its day.
+
+- [ ] **Code: repeating transactions:** "rent, $1,500, every month on the 1st" creates the next one as upcoming each time, like YNAB's scheduled transactions. Edit or skip one, or stop the series.
+- [ ] **Code: transfers to an IRA or loan dated in the future** move that account's balance on their day, not when they're entered (today they move it right away).
+- **When:** if testers ask. For regular bills, repeating bills in Savings goals already set money aside each month.
+
 ## 10. Reports (later)
 
 - [ ] **Code: spending by category over the months.** A chart on the Budget tab of what you really spent in each category, month by month, from your transactions.

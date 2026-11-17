@@ -11,7 +11,7 @@ import { BudgetAccounts } from "../../components/BudgetAccounts";
 import { TransactionsList } from "../../components/TransactionsList";
 import { cardMap, liveBudget } from "../../lib/register";
 import { linkableAccounts, suggestedAccount } from "../../lib/budgetDupes";
-import { needsCategory, needsCategorySince } from "../../lib/categories";
+import { isoDay, needsCategory, needsCategorySince } from "../../lib/categories";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Segmented, Select } from "../../components/form";
@@ -88,7 +88,8 @@ export default function Budget() {
   const b = liveBudget(state, txns);
   const cats = useMemo(() => budgetCategories(state, result.d, actual, start, month), [state, result, actual, start, month]);
   const cards = useMemo(() => cardMap(state), [state]);
-  const view = budgetView(b, cats, month, { txns, cards });
+  // upcoming transactions (dated after today) don't count until their day
+  const view = budgetView(b, cats, month, { txns, cards, asOf: isoDay(start) });
   // what you really spent in recent full months, against what the plan uses
   const history = useMemo(() => spendingHistory(b, cats, thisMonth, { txns, cards }), [b, cats, thisMonth, txns, cards]);
   const [realOpen, setRealOpen] = useState(false);

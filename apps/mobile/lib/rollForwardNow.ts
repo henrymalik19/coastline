@@ -10,4 +10,6 @@ export function rollForwardNow(now = new Date()): void {
   if (!s.hydrated || !s.onboarded) return;
   const draft = structuredClone(s.plan);
   if (rollForward(draft, monthKey(now))) s.setPlan(draft);
+  // upcoming transactions whose day has come now count in balances
+  useStore.getState().refreshBalances();
 }

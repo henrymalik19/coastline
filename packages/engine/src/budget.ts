@@ -131,8 +131,8 @@ export function budgetView(
   b: BudgetState | undefined,
   cats: Pick<BudgetCategory, "key" | "moves" | "target">[],
   month: string,
-  /** Transactions, and which accounts are credit cards (account id → its payment category). */
-  tx?: { txns: Txn[]; cards: Record<string, string> },
+  /** Transactions, and which accounts are credit cards (account id → its payment category). `asOf` (today): later ones are upcoming and don't count yet. */
+  tx?: { txns: Txn[]; cards: Record<string, string>; asOf?: string },
 ): BudgetView {
   const empty: BudgetView = { month, started: false, income: 0, readyToAssign: 0, assigned: 0, spent: 0, overspentBefore: 0, assignedLater: 0, lines: {} };
   if (!b || month < b.start) {
@@ -146,7 +146,7 @@ export function budgetView(
   let view: BudgetView | null = null;
   for (let m = b.start; m <= month; m = addMonths(m, 1)) {
     const e = b.months?.[m] ?? {};
-    const act = tx ? txnActivity(tx.txns, m, tx.cards) : undefined;
+    const act = tx ? txnActivity(tx.txns, m, tx.cards, tx.asOf) : undefined;
     const lines: Record<string, BudgetLine> = {};
     let monthAssigned = 0;
     let monthSpent = 0;

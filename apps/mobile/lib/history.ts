@@ -8,7 +8,7 @@ import { budgetCategories, budgetView, derive, project, type PlanResult, type Pl
 import type { Checkin } from "@coastfi/schema";
 import { useEffect } from "react";
 import { netWorth } from "./networth";
-import { cardMap, liveBudget } from "./register";
+import { cardMap, liveBudget, todayIso } from "./register";
 import { monthKey, useStore } from "./store";
 import { usePlan } from "./plan";
 import { prevMonthKey, streakFrom, type Streak } from "./historyCore";
@@ -75,7 +75,7 @@ export function streakFor(state: PlanState, o: RunResult, actual: PlanResult, st
   if (b && txns.some((t) => !t.deleted && !t.payee?.startsWith("Starting balance"))) {
     const cur = monthKey(start);
     const keys = new Set<string>();
-    const tx = { txns, cards: cardMap(state) };
+    const tx = { txns, cards: cardMap(state), asOf: todayIso(start) };
     for (let m = cur, i = 0; m >= b.start && i < 24; m = prevMonthKey(m), i++) {
       const v = budgetView(b, budgetCategories(state, o.d, actual, start, m), m, tx);
       // within budget: no category ended up overspent (money saved up from earlier months counts)
