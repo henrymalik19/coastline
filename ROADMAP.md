@@ -95,14 +95,35 @@ Don't wait for bank linking. The free plan is useful today, so launch it as a fr
 - The number that matters most: of the people who sign up, how many are still using it 4 weeks later.
 
 **Getting users**
-- [ ] A free Coast FI calculator page that works without signing up. People search for "coast fi calculator", and it's the best way in. Show the result, then offer "save this plan and track it" as the sign-up.
+- [ ] A free Coast FI calculator page that works without signing up (for example getcoastwise.com/coast-fi-calculator). People search for "coast fi calculator", and it's the best way in.
+  - Five inputs (age, retirement age, invested today, yearly spending, expected return) and an instant answer ("you can coast at 41"), using the engine's math.
+  - Under the answer: "Save this plan and track it", which starts setup with those numbers filled in.
+  - **Code:** the page must be plain HTML that search engines can read. The site is currently one page that builds itself in the browser (`web.output: "single"`), so this page needs static rendering. It's a moderate build change with no new dependencies.
+  - **When:** after the first five tester sessions, so it can be the simple way in that avoids whatever slows people down in setup.
 - [ ] Communities: r/coastFIRE, r/financialindependence, r/Fire, the Bogleheads forum. Share it as "I built this, what's missing?", follow each community's self-promotion rules, and reply to every comment.
 - [ ] People leaving YNAB over its price: the YNAB import is the hook (r/ynab, r/budget).
 - [ ] Build in public: short weekly posts on X, Threads or Bluesky showing what shipped and the numbers.
 - [ ] Later, once there are steady weekly users: Product Hunt, FIRE podcasts and newsletters, and a few how-to articles ("What is Coast FI?", "How much do I need to coast?").
 
+## 8. AI features (later)
+
+Not yet. Build for where testers actually struggle, not a guess.
+
+**Rules**
+- AI never works out money numbers. The engine does all the math, and AI only fills in or explains.
+- People see and confirm anything AI fills in before it's saved.
+- Sending someone's financial details to an AI provider must be on the privacy page first. Bank data from Plaid also has to follow Plaid's rules on sharing with other services.
+- It costs money per use, so these belong in Plus. If built, use Claude.
+
+**Ideas, best first**
+- [ ] **Quick setup from a sentence:** "I'm 32, make $85k, have $60k in my 401(k), rent is $1,800" fills in the setup steps for the person to check. Aimed at the 8-step setup.
+- [ ] **Sort bank transactions into budget categories**, once bank linking is live: simple rules first, AI for the rest.
+- [ ] **Explain my plan:** plain-language answers like "Why can I coast at 41?", using only the app's own numbers.
+- Not planned: reading paystubs. They're too sensitive, and copying three numbers off one is quick.
+
 ## Done
 
+- 2026-11-17: Ready for testers: Send feedback, visit counting (Vercel Web Analytics), `pnpm stats`, Forgot password, a BETA tag and welcome line, and an empty plan that asks for a budget instead of showing nonsense.
 - 2026-11-16: Devices unused for 30 days are signed out; Sign out ends only this device's sign-in.
 - 2026-11-16: Password sign-in (the emailed code stays for new accounts and forgotten passwords); Sign out other devices.
 - 2026-11-15: Two-step sign-in with an authenticator app, enforced by the database and the Plaid function.
