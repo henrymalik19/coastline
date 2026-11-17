@@ -1,4 +1,4 @@
-import { derive, k401Cost, run, simulatePlan, type LimitsRow, type MonthRow, type PlanResult, type PlanState, type RunResult } from "@coastfi/engine";
+import { derive, k401Cost, run, simulatePlan, type Derived, type LimitsRow, type MonthRow, type PlanResult, type PlanState, type RunResult } from "@coastfi/engine";
 import { withProperties } from "@coastfi/schema";
 import { useLimits } from "./limits";
 import { money } from "./format";
@@ -62,7 +62,18 @@ export function effectivePlan(saved: PlanState, limits?: LimitsRow[]): PlanState
  * `forecast` is the Forecast tab's view: only the amounts you set (paychecks, match, minimums, your
  * schedules and budget), with nothing added from what's left over.
  */
-type PlanRun = { state: PlanState; result: RunResult; start: Date; actual: PlanResult; forecast: PlanResult; whatIfOn: boolean };
+type PlanRun = {
+  state: PlanState;
+  result: RunResult;
+  start: Date;
+  actual: PlanResult;
+  /** The Forecast tab's months, what-ifs included. */
+  forecast: PlanResult;
+  /** The same without what-ifs (to mark what the what-ifs changed), and its derived numbers. */
+  forecastReal: PlanResult;
+  realD: Derived;
+  whatIfOn: boolean;
+};
 
 /**
  * One engine run per saved plan, shared by every screen piece that calls usePlan. (A useMemo in
@@ -78,8 +89,12 @@ function computePlan(saved: PlanState, start: Date, limits: LimitsRow[]): PlanRu
   const whatIfOn = !!(state.whatif && (state.whatif.extra || state.whatif.retDelta || state.whatif.spendDelta)) || oneOffs;
   const real = state.whatif?.extra || state.adjustments?.length ? { ...state, whatif: { extra: 0, retDelta: 0, spendDelta: 0 }, adjustments: [] } : state;
   const actual = real !== state ? simulatePlan(real, derive(real, start)) : result.plan;
-  const forecast = simulatePlan(real, derive(real, start), { autoFill: false });
-  const value = { state, result, start, actual, forecast, whatIfOn };
+  // the Forecast tab shows what-ifs; the same plan without any marks what they changed
+  const noWhatIf = whatIfOn ? { ...state, whatif: { extra: 0, retDelta: 0, spendDelta: 0 }, adjustments: [] } : state;
+  const realD = noWhatIf === state ? result.d : derive(noWhatIf, start);
+  const forecastReal = simulatePlan(noWhatIf, realD, { autoFill: false });
+  const forecast = whatIfOn ? simulatePlan(state, result.d, { autoFill: false }) : forecastReal;
+  const value = { state, result, start, actual, forecast, forecastReal, realD, whatIfOn };
   shared = { saved, start, limits, value };
   return value;
 }

@@ -2,12 +2,12 @@
  * Your priority order: where money your budget doesn't assign goes, step by step (emergency fund,
  * the full match, debts, HSA, IRA, 401(k), goals, brokerage). Lives in Settings → Priority order.
  */
-import { isHighInterest, paysExtra } from "@coastfi/engine";
+import { accountGroup, isHighInterest, paysExtra } from "@coastfi/engine";
 import { useState } from "react";
 import { useRouter } from "expo-router";
 import { budgetKeyFor } from "../lib/budgetLinks";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Chip, FormList, FormRow, InlineMoney, Segmented, Select } from "./form";
+import { Chip, FormList, FormRow, InlineMoney, NumberInput, Segmented, Select } from "./form";
 import { Icon } from "./Icon";
 import { ProgressBar } from "./ProgressRing";
 import { Card, Divider, Pill, Screen, SectionLabel } from "./ui";
@@ -53,7 +53,6 @@ export function PlanSteps() {
     add(firstOf((k) => k.startsWith("goal:")), a0.goals);
     add(firstOf((k) => k === "taxable"), a0.taxable);
   }
-  if (!activeKeys.size && open[0]) activeKeys.add(open[0].key);
   /** What a step gets this month (from the plan as you'll really do it). */
   const gets = (k: string): number => {
     if (!a0) return 0;
@@ -127,6 +126,61 @@ export function PlanSteps() {
     stageMap.set(k, [...(stageMap.get(k) ?? []), info]);
   }
   const stages = [...stageMap.entries()].sort((x, y) => x[0] - y[0]);
+  // why a step is never reached: nothing is ever left over, "invest the rest" sits above it, or the steps above use it all
+  const poured = (m: (typeof months)[number]) => m.alloc.ef + m.alloc.debt + m.alloc.k401TakeHome + m.alloc.ira + m.alloc.hsa + m.alloc.taxable + m.alloc.goals;
+  const anyLeft = months.some((m) => poured(m) > 0.5 || m.alloc.leftover > 0.5);
+  const restAt = infos.findIndex((x) => x.key === "taxable");
+  const restReached = restAt >= 0 && startOf("taxable") !== null;
+  const notReachedWhy = (info: StepInfo): string =>
+    !anyLeft
+      ? "Your budget uses all your take-home, so nothing is left over for this"
+      : restReached && infos.indexOf(info) > restAt
+        ? "“Invest the rest” is above it and takes everything left"
+        : `The steps above take everything left until you retire at ${o.d.retireAge}`;
+  // a step whose account you don't have yet (the plan still counts the money there)
+  const NEEDS: Record<string, { group: string; name: string }> = {
+    ira: { group: "ira", name: "an IRA" },
+    k401: { group: "k401", name: "a 401(k)" },
+    hsa: { group: "hsa", name: "an HSA" },
+    taxable: { group: "taxable", name: "a brokerage account" },
+  };
+  const missingAccount = (key: string): string | null => {
+    const need = NEEDS[key];
+    if (!need || state.accounts.some((a) => accountGroup(a) === need.group)) return null;
+    return `You don't have ${need.name} in Accounts yet. Open one to follow this step, then add it in Money → Accounts.`;
+  };
+  // what's left after every step: kept as cash (the plan's last, fixed step)
+  const year1 = months.slice(0, 12);
+  const keptAvg = year1.length ? year1.reduce((a, m) => a + Math.max(0, m.alloc.leftover), 0) / year1.length : 0;
+  const keptText = state.emergency?.active
+    ? "Emergency mode is on: everything left stays as cash"
+    : keptAvg > 0.5
+      ? `About ${money(keptAvg, { whole: true })}/mo stays in checking and savings over the next year`
+      : restReached
+        ? "Nothing: “Invest the rest” takes whatever reaches it"
+        : "Nothing left over: the steps above use it all";
+
+  // steps that run together (a step sharing what's left with the next) share one number
+  const stepNumber = new Map<string, number>();
+  {
+    let n = 0;
+    let withNext = false;
+    for (const info of infos) {
+      if (!withNext) n++;
+      stepNumber.set(info.key, n);
+      const j = infos.indexOf(info);
+      const splits = !info.done && !info.skip && info.key !== "taxable" && info.key !== "match" && j < infos.length - 1 && (amounts[info.key] !== undefined || (shares[info.key] ?? 1) < 1);
+      withNext = splits;
+    }
+  }
+  const groupSize = (k: string) => [...stepNumber.values()].filter((n) => n === stepNumber.get(k)).length;
+  /** Later steps of a group (they show a line joining them to the group's number, not the number again). */
+  const continues = (info: StepInfo) => {
+    const j = infos.indexOf(info);
+    return j > 0 && stepNumber.get(infos[j - 1]!.key) === stepNumber.get(info.key);
+  };
+  // nothing gets money this month: "Now" is the next step, but only if the plan ever reaches it
+  if (!activeKeys.size && open[0] && startOf(open[0].key) !== null) activeKeys.add(open[0].key);
   const pad = compact ? space.md : space.lg;
 
   /** Details, split and order for one step (shown under its stage when you tap it). */
@@ -148,7 +202,8 @@ export function PlanSteps() {
     const bk = info.done || info.skip ? null : budgetKeyFor(state, info.key, thisMk);
     const got = bk ? state.budgetPlan?.months?.[thisMk]?.assigned?.[bk] : undefined;
     const paycheck = !info.done && !info.skip && !bk && (info.key === "k401" || info.key === "match" || info.key === "hsa");
-    const shareValue = amt !== undefined ? "amount" : String(shares[info.key] ?? 1);
+    const share = shares[info.key] ?? 1;
+    const mode = amt !== undefined ? "amount" : share < 1 ? "share" : "off";
     return (
       <View key={"more-" + info.key} style={[styles.more, { marginLeft: compact ? 48 : 60, marginRight: pad }]}>
         {compact ? null : <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{info.label}</Text>}
@@ -177,25 +232,45 @@ export function PlanSteps() {
               </Pressable>
             ) : null}
             {canShare ? (
-              <FormRow label="Run alongside the next step" hint={shareValue === "1" ? "Off: this step finishes before the next one starts" : `The rest of what's left goes to ${partnerName} at the same time`}>
+              <FormRow label="Run alongside the next step" hint={mode === "off" ? "Off: this step finishes before the next one starts" : `The rest of what's left goes to ${partnerName} at the same time`}>
                 <Select
                   plain
                   label={`${info.title}: run alongside the next step`}
-                  value={shareValue}
+                  value={mode}
                   options={[
-                    { value: "1", label: "No, finish this first" },
-                    { value: "0.75", label: "Yes, 75% here" },
-                    { value: "0.5", label: "Yes, half here" },
-                    { value: "0.25", label: "Yes, 25% here" },
-                    ...(amt !== undefined ? [{ value: "amount", label: `Yes, ${money(amt, { whole: true })} a month here` }] : []),
+                    { value: "off", label: "No, finish this first" },
+                    { value: "share", label: "Yes, a share of what's left" },
+                    ...(canAmount ? [{ value: "amount", label: "Yes, a set amount a month" }] : []),
                   ]}
-                  onChange={(v) => { if (v !== "amount") setSplit(info.key, { share: Number(v) }); }}
+                  onChange={(v) => {
+                    if (v === mode) return;
+                    if (v === "off") setSplit(info.key, { share: 1 });
+                    else if (v === "share") setSplit(info.key, { share: 0.5 });
+                    // start from what it gets this month, rounded to $25 (at least $25)
+                    else setSplit(info.key, { amount: Math.max(25, Math.round(gets(info.key) / 25) * 25) });
+                  }}
                 />
               </FormRow>
             ) : null}
-            {canShare && amt !== undefined ? (
-              <FormRow label="Each month" hint={changed ? `${changed} month${changed === 1 ? "" : "s"} changed on the Budget tab` : undefined}>
-                <InlineMoney label={`${info.title}, amount a month`} value={amt} onChange={(v) => setSplit(info.key, { amount: v })} />
+            {canShare && mode === "share" ? (
+              <FormRow label="Share for this step" hint={`${Math.round((1 - share) * 100)}% of what's left goes on to ${partnerName}`}>
+                <View style={{ width: 120 }}>
+                  <NumberInput
+                    kind="percent"
+                    label={`${info.title}, share of what's left`}
+                    value={share}
+                    max={0.95}
+                    onChange={(v) => setSplit(info.key, { share: Math.min(0.95, Math.max(0.01, v)) })}
+                  />
+                </View>
+              </FormRow>
+            ) : null}
+            {canShare && mode === "amount" ? (
+              <FormRow
+                label="Each month"
+                hint={changed ? `${changed} month${changed === 1 ? "" : "s"} changed on the Budget tab` : `Up to this much; the rest goes on to ${partnerName}`}
+              >
+                <InlineMoney label={`${info.title}, amount a month`} value={amt ?? 0} onChange={(v) => setSplit(info.key, { amount: v })} />
               </FormRow>
             ) : null}
           </FormList>
@@ -219,18 +294,35 @@ export function PlanSteps() {
     const partner = nextOpen(info.key);
     const splitNote = canShare && (amt !== undefined || share < 1) ? `${amt !== undefined ? money(amt, { whole: true }) + "/mo" : Math.round(share * 100) + "% of what's left"}, alongside ${partner ? partner.title : "the next steps"}` : "";
     const dim = info.done || info.skip;
+    // steps that run together: an accent edge on each, the number once, a line joining the rest to it
+    const grouped = !dim && groupSize(info.key) > 1;
+    const joined = grouped && continues(info);
+    const n = stepNumber.get(info.key) ?? i + 1;
     return (
       <Pressable
         key={info.key}
         role="button"
         aria-expanded={isOpen}
-        accessibilityLabel={`Step ${i + 1}: ${info.title}. ${isOpen ? "Hide" : "Show"} details`}
+        accessibilityLabel={`Step ${n}${grouped ? `, running together with ${groupSize(info.key) - 1} other step${groupSize(info.key) > 2 ? "s" : ""}` : ""}: ${info.title}. ${isOpen ? "Hide" : "Show"} details`}
         onPress={() => toggle(info.key)}
-        style={({ pressed }) => [styles.step, { paddingHorizontal: pad }, compact ? { gap: space.sm } : null, pressed ? { backgroundColor: t.surface2 } : null]}
+        style={({ pressed }) => [
+          styles.step,
+          { paddingHorizontal: pad },
+          grouped ? { borderLeftWidth: 3, borderLeftColor: t.accent, paddingLeft: pad - 3, backgroundColor: t.accentSoft } : null,
+          compact ? { gap: space.sm } : null,
+          pressed ? { backgroundColor: t.surface2 } : null,
+        ]}
       >
-        <View style={[styles.num, { backgroundColor: info.done ? t.good : active ? t.accent : t.surface2 }]}>
-          {info.done ? <Icon name="check" size={14} color="#fff" /> : <Text style={[type.caption, { fontWeight: "700", color: active ? "#fff" : t.text2 }]}>{i + 1}</Text>}
-        </View>
+        {joined ? (
+          <View style={[styles.num, { backgroundColor: "transparent" }]} aria-hidden>
+            <View style={{ position: "absolute", top: -space.md - 2, bottom: 6, width: 2, backgroundColor: t.accent, borderRadius: 1 }} />
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: t.accent, position: "absolute", bottom: 2 }} />
+          </View>
+        ) : (
+          <View style={[styles.num, { backgroundColor: info.done ? t.good : active || grouped ? t.accent : t.surface2 }]}>
+            {info.done ? <Icon name="check" size={14} color="#fff" /> : <Text style={[type.caption, { fontWeight: "700", color: active || grouped ? "#fff" : t.text2 }]}>{n}</Text>}
+          </View>
+        )}
         <View style={{ flex: 1, gap: 3, minWidth: 0 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
             <Text numberOfLines={1} style={[type.body, { fontWeight: "600", color: dim ? t.text3 : t.text, flexShrink: 1 }]}>{info.skip ? `${info.title} (skipped)` : info.title}</Text>
@@ -238,6 +330,8 @@ export function PlanSteps() {
             {info.action ? <Pill tone="bad">To do</Pill> : null}
           </View>
           {splitNote ? <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]} numberOfLines={1}>{splitNote}</Text> : null}
+          {!dim && startOf(info.key) === null ? <Text style={[type.caption, { color: t.text3 }]}>{notReachedWhy(info)}</Text> : null}
+          {!dim && missingAccount(info.key) ? <Text style={[type.caption, { color: t.warn }]}>{missingAccount(info.key)}</Text> : null}
           {info.progress !== undefined && !info.done ? (
             <View style={{ maxWidth: 280, marginTop: 3 }}>
               <ProgressBar progress={info.progress} color={t.good} />
@@ -304,9 +398,30 @@ export function PlanSteps() {
           <View style={[styles.dateLabel, { backgroundColor: t.surface2, paddingHorizontal: pad }]}>
             <Text style={[type.overline, { color: t.accent }]}>{m === 0 ? "This month" : m >= 1e9 ? "Not reached in the plan" : monthLabel(start, m)}</Text>
           </View>
-          {line(list, "s" + m)}
+          {m >= 1e9
+            ? // steps that never start don't run together: one per line, in order
+              list.map((info, j) => (
+                <View key={"nr-" + info.key}>
+                  {j > 0 ? <View style={{ marginLeft: compact ? 48 : 60 }}><Divider /></View> : null}
+                  {line([info], "nr" + info.key)}
+                </View>
+              ))
+            : line(list, "s" + m)}
         </View>
       ))}
+      {/* the fixed last step: whatever is still left stays as cash (can't be moved or removed) */}
+      <View style={[styles.dateLabel, { backgroundColor: t.surface2, paddingHorizontal: pad }]}>
+        <Text style={[type.overline, { color: t.text3 }]}>Always last</Text>
+      </View>
+      <View style={[styles.step, { paddingHorizontal: pad }, compact ? { gap: space.sm } : null]} accessibilityLabel={`Always last: anything left is kept as cash. ${keptText}`}>
+        <View style={[styles.num, { backgroundColor: t.surface2 }]}>
+          <Icon name="wallet" size={14} color={t.text2} />
+        </View>
+        <View style={{ flex: 1, gap: 3, minWidth: 0 }}>
+          <Text style={[type.body, { fontWeight: "600", color: t.text }]}>Anything left: kept as cash</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>{keptText}</Text>
+        </View>
+      </View>
     </Card>
   );
 

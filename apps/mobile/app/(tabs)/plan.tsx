@@ -37,7 +37,8 @@ export default function Forecast() {
   const { twoColumn, contentWidth } = useLayout();
   const compact = contentWidth < 600;
   const [whyOpen, setWhyOpen] = useState(false);
-  const { state, result: o, start, forecast } = usePlan();
+  const { state, result: o, start, forecast, forecastReal, realD, whatIfOn } = usePlan();
+  // the table: what you've set, with your what-ifs (what they change shows in orange)
   const real = { ...o, plan: forecast };
   const { view } = useLocalSearchParams<{ view?: string }>();
   const [tab, setTab] = useState<ViewKey>(view === "forecast" || view === "table" ? "table" : view === "whatif" ? "whatif" : "overview");
@@ -191,8 +192,13 @@ export default function Forecast() {
           Only what you've set: your paychecks, your employer's match, debt payments, and what you assign in Budget. Money you haven't assigned isn't added anywhere.
         </Text>
       ) : null}
+      {tab === "table" && whatIfOn ? (
+        <Text role="status" style={[type.caption, { color: t.warn, fontWeight: "600" }]}>
+          What-ifs are on: amounts they change are in orange. Turn them off in What if to see your plan as set.
+        </Text>
+      ) : null}
       {tab === "table" ? (
-        <AccountsForecast key={pick ?? "all"} state={state} o={real} start={start} fill initialPick={pick} />
+        <AccountsForecast key={pick ?? "all"} state={state} o={real} start={start} fill initialPick={pick} compare={whatIfOn ? { plan: forecastReal, d: realD } : undefined} />
       ) : tab === "whatif" ? (
         <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
           <WhatIf />

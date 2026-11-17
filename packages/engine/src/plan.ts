@@ -149,7 +149,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   let ytd = { k401: 0, ira: 0, hsa: 0 };
   let scale = (12 - mo0) / 12; // first year: prorate caps for the months left
   // What's already been contributed this tax year, if known: exact room instead of prorating, and
-  // IRA/HSA room for last year can still be used January–April (the April 15 deadline).
+  // IRA/HSA room for last year is planned January–March: the deadline is April 15, and April's money
+  // often comes after it, so the plan doesn't count on April (an April contribution you make still counts).
   const known = s.contributed;
   const iraCapFor = (lim: Limits, age: number) => lim.ira + (age >= 50 ? lim.iraCatch : 0);
   const hsaCapFor = (lim: Limits, age: number, ym: string) => (hsaEligibleIn(p, ym) ? (p.hsaFamily ? lim.hsaFamily : lim.hsaSelf) + (age >= 55 ? lim.hsaCatch : 0) : 0);
@@ -164,7 +165,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     ytd = { k401: num(known.k401), ira: num(known.ira), hsa: num(known.hsa) };
     ytdSp = num(known.iraSpouse);
     scale = 1;
-  } else if (known && num(known.year) === y0 - 1 && mo0 <= 3) {
+  } else if (known && num(known.year) === y0 - 1 && mo0 <= 2) {
     const Lp = limitsFor(s.limits, y0 - 1);
     prior = { ira: Math.max(0, iraCapFor(Lp, d.age) - num(known.ira)), hsa: Math.max(0, hsaCapFor(Lp, d.age, `${y0 - 1}-12`) - num(known.hsa)), year: y0 - 1 };
     if (hasSpIra) priorSp = Math.max(0, iraCapFor(Lp, spAge0) - num(known.iraSpouse));
@@ -241,8 +242,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       ytdSp = 0;
       scale = 1;
     }
-    if (mo > 3) {
-      prior = { ira: 0, hsa: 0, year: 0 }; // after April 15, last year's room is gone
+    if (mo > 2) {
+      prior = { ira: 0, hsa: 0, year: 0 }; // from April, the plan stops counting on last year's room (deadline April 15)
       priorSp = 0;
     }
     const L = limitsFor(s.limits, y);
@@ -511,7 +512,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
             ytd.hsa += put / hsaCost;
             avail -= put;
           } else if (step === "hsa") {
-            // last year's room first (Jan–Apr), then this year's
+            // last year's room first (Jan–Mar), then this year's
             const put = Math.min(avail, prior.hsa + capHsa);
             const toPrior = Math.min(put, prior.hsa);
             prior.hsa -= toPrior;
@@ -528,7 +529,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
             ytd.ira += put - toPrior;
             avail -= put;
           } else if (step === "iraSpouse") {
-            // your spouse's IRA: last year's room first (Jan–Apr), then this year's
+            // your spouse's IRA: last year's room first (Jan–Mar), then this year's
             const put = Math.min(avail, priorSp + capSp - iraSp + priorIraSp);
             if (put <= 0) return;
             const toPrior = Math.min(put, priorSp);
@@ -613,7 +614,12 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         doStep(step);
         avail += held;
       }
-      for (const step of autoFill ? order : []) {
+      // without auto-fill, money you haven't assigned stays put, except a what-if's extra savings:
+      // that goes through your steps like the plan would (so the forecast shows the what-if)
+      const fillExtra = !autoFill && extraMonthly > 0;
+      const notPoured = fillExtra ? Math.max(0, avail - extraMonthly) : 0;
+      avail -= notPoured;
+      for (const step of autoFill || fillExtra ? order : []) {
         if (avail <= 1e-9) break;
         if (handSet.has(step) || scheduledStep(step)) continue;
         // a step with a share gets only that part of what's left; the rest goes on to the next steps
@@ -623,6 +629,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         doStep(step);
         avail += held;
       }
+      avail += notPoured;
     }
     alloc.leftover = avail;
     if (autoFill) cash += avail;

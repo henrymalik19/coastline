@@ -555,7 +555,7 @@ export type MonthRow = {
   setAside: number;
   /** `setAside` per recurring goal, by goal id. */
   setAsideBy: Record<string, number>;
-  /** Part of `alloc.ira` / `alloc.hsa` that counts toward last year (Jan–Apr, before the April 15 deadline). */
+  /** Part of `alloc.ira` / `alloc.hsa` that counts toward last year (planned Jan–Mar, ahead of the April 15 deadline). */
   priorIra: number;
   priorHsa: number;
   /** Part of `alloc.ira` that went to your spouse's IRA, and the part of that for last year. Only with a spouse's IRA. */

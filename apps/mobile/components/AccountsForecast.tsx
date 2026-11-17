@@ -3,7 +3,7 @@
  * year against the limit, and the balance ahead. View only: monthly amounts are set under Money →
  * Monthly savings (and paychecks under Income).
  */
-import { accountForecasts, mergeAccountSchedules, BUCKET_LABELS, scheduleAmount, type AccountForecast, type AccountKey, type PlanState, type RunResult, type ScheduleEntry } from "@coastfi/engine";
+import { accountForecasts, mergeAccountSchedules, BUCKET_LABELS, scheduleAmount, type AccountForecast, type AccountKey, type Derived, type PlanResult, type PlanState, type RunResult, type ScheduleEntry } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -26,6 +26,8 @@ type Props = {
   fill?: boolean;
   /** Start on this account (from the overview). */
   initialPick?: string;
+  /** The same plan without what-ifs: amounts the what-ifs changed are shown in orange. */
+  compare?: { plan: PlanResult; d: Derived };
 };
 
 // thin, quiet scrollbars for the table (web)
@@ -43,7 +45,7 @@ const ym = (start: Date, m: number) => {
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const monthName = (key: string) => `${MON[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
 
-export function AccountsForecast({ state, o, start, fill, initialPick }: Props) {
+export function AccountsForecast({ state, o, start, fill, initialPick, compare }: Props) {
   const t = useTheme();
   const update = useStore((s) => s.update);
   const router = useRouter();
@@ -58,6 +60,18 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
   const pl = o.plan;
   const d = o.d;
   const all = accountForecasts(state, d, pl, d.r);
+  // without what-ifs, to mark (orange) the amounts they change
+  const realBy = new Map((compare ? accountForecasts(state, compare.d, compare.plan, compare.d.r) : []).map((a) => [a.key, a]));
+  const amountOf = (a: AccountForecast, i: number) => {
+    const m = a.months[i];
+    return !m ? 0 : a.key.startsWith("debt:") ? m.paycheck + m.plan : m.total;
+  };
+  const whatIfChanged = (a: AccountForecast, i: number, what: "amount" | "balance") => {
+    const r = realBy.get(a.key);
+    if (!compare) return false;
+    if (!r) return true;
+    return what === "balance" ? Math.abs((a.months[i]?.balance ?? 0) - (r.months[i]?.balance ?? 0)) > 0.5 : Math.abs(amountOf(a, i) - amountOf(r, i)) > 0.5;
+  };
   // each account's own amount, added up by kind (what the plan uses)
   const merged = { ...state.plan, ...mergeAccountSchedules(state) };
   const schedule = merged.schedule ?? {};
@@ -118,9 +132,10 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
     const m = a.months[i]!;
     const month = ym(start, i);
     const changed = oneOffs[k]?.[month] !== undefined;
+    const wi = whatIfChanged(a, i, "amount");
     const value = isDebt(k) ? m.paycheck + m.plan : m.total;
-    const main = <Text style={[type.caption, { color: changed ? t.accent : t.text, fontWeight: changed ? "700" : "500", width, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(value)}</Text>;
-    // money put in January to April that counts toward last year's limit
+    const main = <Text style={[type.caption, { color: wi ? t.warn : changed ? t.accent : t.text, fontWeight: changed || wi ? "700" : "500", width, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(value)}</Text>;
+    // money put in January to March that counts toward last year's limit
     if (!m.prior) return main;
     return (
       <View style={{ alignItems: "flex-end" }}>
@@ -413,7 +428,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
         {cols.map((x) => (
           <View key={x.key} style={[{ flexDirection: "row", alignItems: "center" }, groupEdge]}>
             <View style={{ width: COL, paddingHorizontal: 8, alignItems: "flex-end" }}>{amountCell(x, i, COL - 16)}</View>
-            {num(money(x.months[i]!.balance), t.text2)}
+            {num(money(x.months[i]!.balance), whatIfChanged(x, i, "balance") ? t.warn : t.text2)}
           </View>
         ))}
         {filler}
@@ -513,9 +528,9 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
                   {forLast > 0.5 ? <Text numberOfLines={1} style={[type.caption, { color: t.accent, fontSize: 11, fontVariant: ["tabular-nums"] }]}>{money(forLast, { whole: true })} for {m.y - 1}</Text> : null}
                 </View>
               ) : (
-                sCell(added > 0.5 ? money(added) : "–", changed ? t.accent : added > 0.5 ? t.text : t.text3, changed)
+                sCell(added > 0.5 ? money(added) : "–", whatIfChanged(one, i, "amount") ? t.warn : changed ? t.accent : added > 0.5 ? t.text : t.text3, changed)
               )}
-              {sCell(money(m.balance), t.text, true)}
+              {sCell(money(m.balance), whatIfChanged(one, i, "balance") ? t.warn : t.text, true)}
             </View>
           );
         })}
