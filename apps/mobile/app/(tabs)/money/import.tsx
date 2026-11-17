@@ -37,6 +37,8 @@ const unusedCategory = (d: YnabData, c: { group: string; name: string; average: 
     !d.assigned.some((a) => same(a.group, a.category) && recent(a.month) && a.assigned > 0) &&
     !d.txns.some((t) => recent(t.date.slice(0, 7)) && (same(t.group, t.category) || (t.splits ?? []).some((x) => same(x.group, x.category))));
 };
+/** Left out, or kept as a hidden category: either way it has no monthly amount or retirement switches. */
+const offBudget = (c?: CategoryChoice) => c?.action === "skip" || c?.action === "hidden";
 const KIND_LABEL = { cash: "Checking or savings", card: "Credit card", invest: "Investment (tracking)", loan: "Loan (tracking)" } as const;
 const ACCT_INFO =
   "Same as one you already have (its balance and transactions join it), a new account, or left out. Closed and empty accounts start left out.";
@@ -143,7 +145,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         })));
         setCatMap(Object.fromEntries(ynabCategories(d, recentMonths(thisMonth)).map((c) => {
           const sug = suggestCategory(state, c);
-          return [categoryKey(c.group, c.name), sug.action === "new" && unusedCategory(d, c, since) ? { action: "skip" } : sug];
+          return [categoryKey(c.group, c.name), sug.action === "new" && unusedCategory(d, c, since) ? { action: "hidden" } : sug];
         })));
         setTab("accounts");
       } catch (e) {
@@ -242,6 +244,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const mine = saved.budget.filter((b) => !b.accountId);
   const catOptions = [
     { value: "new", label: "A new category" },
+    { value: "hidden", label: "A hidden category", hint: "Keeps its transactions, not on your budget" },
     ...mine.map((b) => ({ value: "match:" + b.id, label: `Your ${b.name || "category"}`, hint: b.group })),
     { value: "match:cash", label: "Your Emergency fund" },
     { value: "skip", label: "Nothing (left out)" },
@@ -263,21 +266,21 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const setRowGroup = (k: string, g: string, v: string) =>
     setCatGroup(({ [k]: _, ...m }) => (v === groupTarget(g) ? m : { ...m, [k]: v }));
   const catValue = (c: CategoryChoice | undefined) => (!c ? "new" : c.action === "match" ? "match:" + c.id : c.action);
-  const setCat = (k: string, v: string) => setCatMap((m) => ({ ...m, [k]: v.startsWith("match:") ? { action: "match", id: v.slice(6) } : { action: v as "new" | "skip" } }));
+  const setCat = (k: string, v: string) => setCatMap((m) => ({ ...m, [k]: v.startsWith("match:") ? { action: "match", id: v.slice(6) } : { action: v as "new" | "hidden" | "skip" } }));
   const categoryRow = (c: (typeof categories)[number], grip?: ReactNode) => {
     const k = categoryKey(c.group, c.name);
     const o = opts(k);
     const ch = catMap[k];
     // left out, or into the Emergency fund: it isn't spending, so the switches don't apply
     const spending = !ch || ch.action === "new" || (ch.action === "match" && ch.id !== "cash");
-    const perMonth = ch?.action !== "skip" ? (
+    const perMonth = !offBudget(ch) ? (
       <View style={[styles.row, { gap: 4 }, wide ? { width: 190 } : null, wide ? { justifyContent: "flex-end" } : null]}>
         <InlineMoney compact={!wide} label={`${c.name}: a month`} value={amounts[k] ?? c.average} onChange={(v) => setAmounts((m) => ({ ...m, [k]: v }))} />
         <Text style={[type.caption, { color: t.text3 }]}>/mo</Text>
       </View>
     ) : null;
     // the group it lands in (phones: in the full-width part below, so the switches don't squeeze it)
-    const inGroup = ch?.action !== "skip" && (ch?.action !== "match" || ch.id !== "cash") ? (
+    const inGroup = !offBudget(ch) && (ch?.action !== "match" || ch.id !== "cash") ? (
       <View style={[styles.row, { gap: 4, alignSelf: "flex-start", maxWidth: "100%", overflow: "hidden" }]}>
         <Text style={[type.caption, { color: catGroup[k] ? t.accent : t.text3 }]}>{catGroup[k] ? "Moved to" : "In"}</Text>
         <Select plain label={`${c.name}: group`} value={rowGroup(k, c.group)} options={allGroups()} onChange={(v) => setRowGroup(k, c.group, v)} />
@@ -292,7 +295,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     // phones: the name and amount on top, then each choice on its own labelled line, so nothing floats
     // away from the category it belongs to
     if (!wide) {
-      const groupLine = ch?.action !== "skip" && (ch?.action !== "match" || ch.id !== "cash");
+      const groupLine = !offBudget(ch) && (ch?.action !== "match" || ch.id !== "cash");
       return (
         <View key={k} style={[styles.phoneRow, { backgroundColor: t.surface, borderColor: t.border }]}>
           <View style={[styles.row, { alignItems: "flex-start" }]}>
@@ -324,7 +327,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
               </View>
             </View>
           ) : (
-            <Text style={[type.caption, { color: t.text3 }]}>{ch?.action === "skip" ? "Not brought in" : "Savings, not spending"}</Text>
+            <Text style={[type.caption, { color: t.text3 }]}>{ch?.action === "skip" ? "Not brought in" : ch?.action === "hidden" ? "Comes in hidden: keeps its transactions, not on your budget or plan" : "Savings, not spending"}</Text>
           )}
           {/* move just this one to another group, without dragging */}
           {groupLine && !catGroup[k] ? (
@@ -354,7 +357,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
               <View style={styles.col}><InlineSwitch label={`${c.name}: essential`} value={o.essential} onChange={(v) => setOpt({ essential: v })} /></View>
             </>
           ) : (
-            <Text style={[type.caption, { color: t.text3, width: 84 * 2 + space.sm, textAlign: "center" }]}>{ch?.action === "skip" ? "Not brought in" : "Savings, not spending"}</Text>
+            <Text style={[type.caption, { color: t.text3, width: 84 * 2 + space.sm, textAlign: "center" }]}>{ch?.action === "skip" ? "Not brought in" : ch?.action === "hidden" ? "Comes in hidden: keeps its transactions, not on your budget or plan" : "Savings, not spending"}</Text>
           )}
         </View>
       </View>
@@ -590,7 +593,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
                   <Divider />
                   <Pressable role="button" aria-expanded={showUnused} onPress={() => setShowUnused((v) => !v)} hitSlop={6}>
                     <Text style={[type.label, { color: t.accent, fontWeight: "700" }]}>
-                      {showUnused ? "Hide" : "Show"} {unusedCats.length} {unusedCats.length === 1 ? "category" : "categories"} you haven't used lately (left out)
+                      {showUnused ? "Hide" : "Show"} {unusedCats.length} {unusedCats.length === 1 ? "category" : "categories"} you haven't used lately (they come in hidden)
                     </Text>
                   </Pressable>
                   {showUnused ? unusedCats.map(categoryRow) : null}
@@ -633,7 +636,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   ) : null;
   const stats = preview ? [
     { n: preview.summary.transactions, label: "Transactions", sub: preview.summary.transactionsMatched ? `replacing ${preview.summary.transactionsMatched} of yours` : "with starting balances" },
-    { n: preview.summary.categoriesAdded + preview.summary.categoriesUpdated, label: "Categories", sub: `${preview.summary.categoriesAdded} new · ${preview.summary.categoriesUpdated} matched${preview.summary.categoriesSkipped ? ` · ${preview.summary.categoriesSkipped} left out` : ""}` },
+    { n: preview.summary.categoriesAdded + preview.summary.categoriesUpdated, label: "Categories", sub: `${preview.summary.categoriesAdded} new · ${preview.summary.categoriesUpdated} matched${preview.summary.categoriesHidden ? ` · ${preview.summary.categoriesHidden} hidden` : ""}${preview.summary.categoriesSkipped ? ` · ${preview.summary.categoriesSkipped} left out` : ""}` },
     { n: preview.summary.accountsAdded, label: "New accounts", sub: "the rest matched or left out" },
     { n: preview.summary.months, label: preview.summary.months === 1 ? "Month assigned" : "Months assigned", sub: "what you gave each category" },
   ] : [];

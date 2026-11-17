@@ -18,7 +18,7 @@ export function RetirementEssentials() {
   const update = useStore((s) => s.update);
   const d = result.d;
   // investing categories (money moved into an account) aren't spending, so they aren't here
-  const items = state.budget.filter((b) => !b.accountId);
+  const items = state.budget.filter((b) => !b.accountId && !b.hidden);
   const set = (id: string, patch: { inRetirement?: boolean; essential?: boolean }) =>
     update((p) => {
       const it = p.budget.find((x) => x.id === id);

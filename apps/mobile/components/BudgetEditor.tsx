@@ -34,6 +34,7 @@ function grouped(items: BudgetItem[]) {
   const order: string[] = [];
   const map = new Map<string, { item: BudgetItem; index: number }[]>();
   items.forEach((item, index) => {
+    if (item.hidden) return; // hidden categories are on the Budget tab's Hidden list
     const g = groupOf(item);
     if (!map.has(g)) { map.set(g, []); order.push(g); }
     map.get(g)!.push({ item, index });
@@ -90,7 +91,7 @@ export function BudgetEditor() {
     if (!selected || !groups.some((g) => g.name === selected)) setSelected(groups[0]?.name);
   }, [names, debtRows.length, setRows.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const current = onDebts || onSet ? undefined : groups.find((g) => g.name === selected) ?? groups[0];
-  const retireMonthly = state.budget.filter((b) => b.inRetirement && !b.accountId).reduce((a, b) => a + b.amount, 0);
+  const retireMonthly = state.budget.filter((b) => b.inRetirement && !b.accountId && !b.hidden).reduce((a, b) => a + b.amount, 0);
 
   const newGroupName = () => {
     const existing = new Set(groups.map((g) => g.name));
@@ -109,7 +110,8 @@ export function BudgetEditor() {
   const addItem = (group: string) => {
     const id = newId();
     update((p) => {
-      const last = p.budget.map((b, i) => (groupOf(b) === group ? i : -1)).filter((i) => i >= 0).at(-1) ?? p.budget.length - 1;
+      const firstHidden = p.budget.findIndex((b) => b.hidden);
+      const last = p.budget.map((b, i) => (!b.hidden && groupOf(b) === group ? i : -1)).filter((i) => i >= 0).at(-1) ?? (firstHidden < 0 ? p.budget.length : firstHidden) - 1;
       p.budget.splice(last + 1, 0, { id, name: "", amount: 0, inRetirement: true, group });
     });
     setEditing(id); // a new item opens ready to fill in
@@ -134,7 +136,7 @@ export function BudgetEditor() {
     const linked = placedDebts(group).length + placedGoals(group).length;
     if (await confirm(`Remove "${group}"?`, `This removes the group and its ${count} item${count === 1 ? "" : "s"}.${linked ? " Debt payments and set-asides listed here go back to their own groups." : ""}`, "Remove"))
       update((p) => {
-        p.budget = p.budget.filter((b) => groupOf(b) !== group);
+        p.budget = p.budget.filter((b) => b.hidden || groupOf(b) !== group);
         regroupLinked(p, group, undefined);
       });
   };
@@ -438,7 +440,7 @@ export function BudgetEditor() {
                 count={current.rows.length}
                 keyOf={(i) => current.rows[i]!.item.id}
                 nameOf={(i) => current.rows[i]!.item.name || "item"}
-                onMove={(from, to) => update((p) => { p.budget = reorderAmong(p.budget, (b) => groupOf(b) === current.name, from, to); })}
+                onMove={(from, to) => update((p) => { p.budget = reorderAmong(p.budget, (b) => !b.hidden && groupOf(b) === current.name, from, to); })}
                 renderItem={(i, grip) => {
                   const { item, index } = current.rows[i]!;
                   return (

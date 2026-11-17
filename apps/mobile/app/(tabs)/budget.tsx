@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Segmented, Select } from "../../components/form";
 import { ChangesLater, MonthlyAmount } from "../../components/ScheduleEditor";
-import { BILLS_GROUP, DEBTS_GROUP, groupOf, groupOrder, linkedGroupChoices, moveGroup, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
+import { BILLS_GROUP, DEBTS_GROUP, groupOf, groupOrder, linkedGroupChoices, moveGroup, moveToGroup, setHidden, UNGROUPED } from "../../lib/budgetOrder";
 import { DragList, reorderAmong, useDragZone } from "../../components/DragList";
 import { newId } from "../../lib/store";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -64,6 +64,7 @@ export default function Budget() {
   const [month, setMonth] = useState(thisMonth);
   const [open, setOpen] = useState<string | null>(null);
   const [groupOpen, setGroupOpen] = useState<string | null>(null);
+  const [hiddenOpen, setHiddenOpen] = useState(false);
   const [groupDraft, setGroupDraft] = useState("");
   const router = useRouter();
   const openPage = useOpenPage();
@@ -152,7 +153,9 @@ export default function Budget() {
     // a category added next to your savings is saving up, not spending you keep after you retire
     const saving = cats.some((c) => c.group === group && c.kind === "saving");
     update((p) => {
-      const last = p.budget.map((x, i) => (groupOf(x) === group ? i : -1)).filter((i) => i >= 0).at(-1) ?? p.budget.length - 1;
+      // after the group's last shown category; a new group goes before the hidden ones (they stay at the end)
+      const firstHidden = p.budget.findIndex((x) => x.hidden);
+      const last = p.budget.map((x, i) => (!x.hidden && groupOf(x) === group ? i : -1)).filter((i) => i >= 0).at(-1) ?? (firstHidden < 0 ? p.budget.length : firstHidden) - 1;
       p.budget.splice(last + 1, 0, { id, name: "", amount: 0, inRetirement: !saving, group, ...(saving ? { essential: false } : {}) });
     });
     setOpen(id);
@@ -220,7 +223,10 @@ export default function Budget() {
   // a bill or debt payment listed in one of your groups goes where that group is, not with the built-ins
   const own = groupOrder(state.budget);
   const rank = (c: BudgetCategory) => (own.includes(c.group) ? ORDER.spending * 1000 + own.indexOf(c.group) : ORDER[c.kind] * 1000);
-  for (const c of [...cats].sort((x, y) => rank(x) - rank(y))) {
+  // hidden categories aren't in the groups: they're listed at the end (an overspent one always shows)
+  const hiddenCats = cats.filter((c) => c.hidden);
+  const overHidden = hiddenCats.filter((c) => view.lines[c.key]!.available < -0.005);
+  for (const c of [...cats].filter((x) => !x.hidden).sort((x, y) => rank(x) - rank(y))) {
     let g = groups.find((x) => x.name === c.group);
     if (!g) groups.push((g = { name: c.group, kind: c.kind, cats: [] }));
     g.cats.push(c);
@@ -234,10 +240,19 @@ export default function Budget() {
   const spendCats = (g: (typeof groups)[number]) => g.cats.filter((c) => c.kind === "spending");
   dragGroups.current = groups.filter(ownGroup).map((g) => ({ name: g.name, cats: spendCats(g) }));
   const rta = view.readyToAssign;
+  // overspent categories (red): Unassigned doesn't count them, so they come first
+  const red = cats.filter((c) => view.lines[c.key]!.available < -0.005);
+  const redTotal = red.reduce((a, c) => a - view.lines[c.key]!.available, 0);
+  // went over last month: it reset to $0 and came out of this month's Unassigned, so it's tagged here
+  const prevMonth = shift(month, -1);
+  const prevView = month > b.start ? budgetView(b, cats, prevMonth, { txns, cards, asOf: isoDay(start) }) : null;
+  const lastOver = prevView ? cats.flatMap((c) => { const a = prevView.lines[c.key]?.available ?? 0; return a < -0.005 ? [{ c, amount: -a }] : []; }) : [];
+  const lastOverTotal = lastOver.reduce((a, x) => a + x.amount, 0);
+  const overLast = new Map(lastOver.map((x) => [x.c.key, x.amount]));
   // your real spending: categories whose recent average is well off the plan amount
   const realRows = showReal && history.months.length
     ? cats
-        .filter((c) => c.kind === "spending" && !c.account && history.avg[c.key] !== undefined)
+        .filter((c) => c.kind === "spending" && !c.account && !c.hidden && history.avg[c.key] !== undefined)
         .map((c) => ({ c, avg: Math.round(history.avg[c.key]!), plan: c.target }))
         .filter((r) => Math.abs(r.avg - r.plan) >= Math.max(10, r.plan * 0.1))
         // you kept your own amount after seeing this: only flag it again if spending moved well away
@@ -291,7 +306,10 @@ export default function Budget() {
           <Text style={[type.caption, { color: t.text3 }]}>
             {rta < -0.5 ? "You've assigned more than you have. Take some back from a category." : rta > 0.5 ? "Assign it to your categories below." : "All of it is assigned."}
             {view.assignedLater > 0.5 ? ` ${money(view.assignedLater)} is already assigned to later months.` : ""}
-            {view.overspentBefore > 0.5 ? ` ${money(view.overspentBefore)} went to overspending in earlier months.` : ""}
+            {lastOver.length
+              ? ` ${lastOver.length === 1 ? label(lastOver[0]!.c) : `${lastOver.length} categories`} went ${money(lastOverTotal)} over in ${MON[Number(prevMonth.slice(5, 7)) - 1]}; it came out of this month.${view.overspentBefore - lastOverTotal > 0.5 ? ` (${money(view.overspentBefore - lastOverTotal)} more from earlier months.)` : ""}`
+              : view.overspentBefore > 0.5 ? ` ${money(view.overspentBefore)} went to overspending in earlier months.` : ""}
+            {red.length ? ` ${red.length === 1 ? `${label(red[0]!)} is` : `${red.length} categories are`} overspent by ${money(redTotal)}: cover ${red.length === 1 ? "it" : "them"}, or it comes out of next month.` : ""}
           </Text>
         </View>
       </View>
@@ -323,6 +341,47 @@ export default function Budget() {
     if (c.kind === "spending") {
       const it = state.budget.find((x) => x.id === c.key);
       if (!it) return null;
+      if (it.hidden)
+        return (
+          <View style={styles.section}>
+            <Text style={[type.overline, { color: t.text3 }]}>Hidden category</Text>
+            <FormList>
+              <FormRow label="Name">
+                <InlineText label="Category name" placeholder="e.g. Moving" value={it.name} onChange={(v) => editItem(it.id, { name: v })} />
+              </FormRow>
+              <FormRow label="Show on budget" hint="Pick the group it goes in">
+                <Select
+                  plain
+                  label="Show on budget in group"
+                  value=""
+                  placeholder="Choose a group"
+                  options={groupNames.map((g) => ({ value: g, label: g }))}
+                  onChange={(g) => {
+                    setOpen(null);
+                    update((p) => {
+                      p.budget = setHidden(p.budget, it.id, false);
+                      p.budget = moveToGroup(p.budget, p.budget.findIndex((x) => x.id === it.id), g);
+                    });
+                  }}
+                />
+              </FormRow>
+            </FormList>
+            <Text style={[type.caption, { color: t.text3 }]}>Not on your budget and not in your plan. Its transactions stay in it.</Text>
+            <View style={styles.chips}>
+              <Chip
+                title="Delete"
+                icon="trash"
+                tone="danger"
+                onPress={async () => {
+                  if (await confirm(`Delete "${it.name || "this category"}"?`, "Its transactions are kept but won't have a category.", "Delete")) {
+                    setOpen(null);
+                    update((p) => { p.budget = p.budget.filter((x) => x.id !== it.id); });
+                  }
+                }}
+              />
+            </View>
+          </View>
+        );
       const linkable = linkableAccounts(state);
       const linkedTo = linkable.find((a) => a.id === it.accountId);
       return (
@@ -371,6 +430,17 @@ export default function Budget() {
           />
           <View style={[styles.chips, { justifyContent: "space-between" }]}>
             <Text style={[type.caption, { color: t.text3, flex: 1 }]}>{compact ? "Tap Reorder above the categories, then drag a grip to move one." : "Drag a category's grip to reorder it or move it to another group."}</Text>
+            {linkedTo ? null : (
+              <Chip
+                title="Hide"
+                icon="close"
+                onPress={async () => {
+                  if (!(await confirm(`Hide "${it.name || "this category"}"?`, "It leaves your budget and your plan, but keeps its transactions. Find it under Hidden at the bottom of the budget. An overspent one still shows until you cover it.", "Hide"))) return;
+                  setOpen(null);
+                  update((p) => { p.budget = setHidden(p.budget, it.id, true); });
+                }}
+              />
+            )}
             <Chip
               title="Delete"
               icon="trash"
@@ -461,11 +531,22 @@ export default function Budget() {
         <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, pressed ? { backgroundColor: t.surface2 } : null]}>
           <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
             {grip}
-            <Text style={[type.body, { color: t.text, flexShrink: 1 }]} numberOfLines={1}>{label(c)}</Text>
+            <View style={{ flexShrink: 1, minWidth: 0 }}>
+              <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{label(c)}</Text>
+              {/* phones: under the name, so the name keeps its line */}
+              {overLast.has(c.key) && compact ? (
+                <Text style={[type.caption, { color: t.bad, fontWeight: "700", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>−{money(overLast.get(c.key)!)} over last month</Text>
+              ) : null}
+            </View>
             {dup ? <Icon name="info" size={14} color={t.warn} /> : null}
             {realBy.has(c.key) ? (
               <View style={[styles.realTag, { backgroundColor: t.warnSoft }]} accessibilityLabel={`You really spend about ${money(realBy.get(c.key)!.avg, { whole: true })} a month`}>
                 <Text style={[type.caption, { color: t.warn, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>~{money(realBy.get(c.key)!.avg, { whole: true })}</Text>
+              </View>
+            ) : null}
+            {overLast.has(c.key) && !compact ? (
+              <View style={[styles.realTag, { backgroundColor: t.badSoft }]} accessibilityLabel={`Went ${money(overLast.get(c.key)!)} over last month`}>
+                <Text style={[type.caption, { color: t.bad, fontWeight: "700", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>−{money(overLast.get(c.key)!)} last month</Text>
               </View>
             ) : null}
           </View>
@@ -565,6 +646,7 @@ export default function Budget() {
             {categoryEditor(c)}
             <Text style={[type.caption, { color: t.text3 }]}>
               {l.carried > 0.5 ? `${money(l.carried)} carried over from last month. ` : ""}
+              {overLast.has(c.key) ? `It went ${money(overLast.get(c.key)!)} over last month: that came out of this month's Unassigned. Assign a little more if it keeps happening. ` : ""}
               {c.kind === "saving" && c.moves
                 ? "Stays available until you record the transfer to the account (Transaction → Transfer). Your plan uses what you assign here."
                 : c.kind === "saving"
@@ -741,7 +823,7 @@ export default function Budget() {
                       count={spendCats(g).length}
                       keyOf={(n) => spendCats(g)[n]!.key}
                       nameOf={(n) => spendCats(g)[n]!.name}
-                      onMove={(from, to) => update((p) => { p.budget = reorderAmong(p.budget, (b) => groupOf(b) === g.name, from, to); })}
+                      onMove={(from, to) => update((p) => { p.budget = reorderAmong(p.budget, (b) => !b.hidden && groupOf(b) === g.name, from, to); })}
                       renderItem={(n, grip) => (
                         <View>
                           {n > 0 ? <Divider /> : null}
@@ -761,6 +843,31 @@ export default function Budget() {
               </Card>
             );
           })}
+          {hiddenCats.length ? (
+            <Card padded={false}>
+              <Pressable
+                role="button"
+                aria-expanded={hiddenOpen}
+                accessibilityLabel={`Hidden categories (${hiddenCats.length}): ${hiddenOpen ? "hide the list" : "show them"}`}
+                onPress={() => setHiddenOpen((v) => !v)}
+                style={[styles.groupHead, { borderBottomColor: t.border }, compact ? { paddingHorizontal: space.md } : null]}
+              >
+                <Text style={[type.overline, { color: t.text2, flex: 1 }]} numberOfLines={1}>Hidden ({hiddenCats.length})</Text>
+                <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{hiddenOpen ? "Hide list" : "Show"}</Text>
+              </Pressable>
+              {hiddenOpen ? (
+                <Text style={[type.caption, { color: t.text3, paddingHorizontal: compact ? space.md : space.lg, paddingTop: space.sm }]}>
+                  Off your budget and out of your plan, but they keep their transactions. One that's overspent shows here until you cover it.
+                </Text>
+              ) : null}
+              {(hiddenOpen ? hiddenCats : overHidden).map((c, n) => (
+                <View key={c.key}>
+                  {n > 0 ? <Divider /> : null}
+                  {line(c)}
+                </View>
+              ))}
+            </Card>
+          ) : null}
           <Pressable role="link" onPress={() => router.push("/settings")} hitSlop={6} style={styles.link}>
             <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Manage income, accounts, debts and goals</Text>
             <Icon name="chevron" size={12} color={t.accent} />
@@ -770,7 +877,7 @@ export default function Budget() {
             <Button title={`Add to ${groupOrder(state.budget)[0] ?? UNGROUPED}`} icon="plus" tone="ghost" onPress={() => addItem(groupOrder(state.budget)[0] ?? UNGROUPED)} style={{ minHeight: 36 }} />
           </View>
           <Text style={[type.caption, { color: t.text3 }]}>
-            Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement && !x.accountId).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number.{" "}
+            Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement && !x.accountId && !x.hidden).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number.{" "}
             <Text role="link" onPress={() => openPage("/money/retirement")} style={{ color: t.accent, fontWeight: "700" }}>Choose what's included</Text>. Bills come from repeating savings goals and debt payments from Debts; tap one to change it there. Spent and paid come from the transactions you record.
           </Text>
           <Button title="Import from YNAB" icon="database" tone="ghost" onPress={() => router.push("/money/import")} style={{ alignSelf: "flex-start" }} />

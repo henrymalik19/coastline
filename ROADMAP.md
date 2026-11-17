@@ -142,7 +142,11 @@ Upcoming transactions already work: anything dated after today shows under "Upco
 
 - [ ] **Code: spending by category over the months.** A chart on the Budget tab of what you really spent in each category, month by month, from your transactions.
   - With a long YNAB import it starts with years of history instead of empty.
-  - **Goes with it: old YNAB categories as hidden categories.** Categories left out of an import (not used lately) come in hidden: not on the budget and no money assigned, but holding their old transactions. Then old spending shows in its real category in the report instead of "No category". Needs a `hidden` flag on categories (a migration).
+  - Hidden categories (done 2026-11-17) mean old YNAB spending already sits in its real category.
+- [ ] **Code: merge categories.** "Merge into…" on a category moves all its transactions (and split lines) into another category, hidden or not, and removes the old one. Asks first; can't be undone.
+- [ ] **Code: AI clean-up of hidden categories.** A "Clean up" screen asks Claude to group similar hidden categories ("Birthday gifts", "Christmas", "Xmas 2023" → "Gifts"). Each suggestion is approved or skipped one at a time, and approving runs the merge above. Sends only category names and a few payees, says so before sending, and the API key stays on the server (an edge function). Needs merge first.
+  - Lighter option if rewriting feels risky: let a report group hidden categories under a heading without changing any transactions.
+- [ ] **Code (only if testers ask): choose how overspending works.** A plan setting "When a category goes over": take it from next month's Unassigned (today, like YNAB) or keep it red in the category until covered. One rule for every month: switching recalculates all months (warn first). With "keep it red", add a "Cover all overspending" button so a YNAB import doesn't start as a wall of red. Today's "over last month" line and Unassigned note already make overspending hard to miss.
 - [ ] **Code: net worth over time** from your monthly check-ins.
 - **When:** once testers have a few months of real data, or ask how they're doing over time.
 

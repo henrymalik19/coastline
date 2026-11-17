@@ -114,7 +114,7 @@ export default function Emergency() {
             <Text role="link" onPress={() => openPage("/money/retirement")} style={{ color: t.accent, fontWeight: "700" }}>See them with retirement</Text>
           </Text>
           {state.budget.map((b, i) => {
-            if (b.accountId) return null; // money moved to an account, not spending
+            if (b.accountId || b.hidden) return null; // money moved to an account (not spending), or a hidden category
             const keep = b.essential !== false;
             return (
               <Pressable

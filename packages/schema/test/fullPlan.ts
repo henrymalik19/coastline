@@ -27,6 +27,7 @@ export function fullPlan(): PlanState {
     budget: [
       { id: "food", name: "Groceries", amount: 900, inRetirement: true, group: "Food", essential: true, keptAt: 1050 },
       { id: "roth", name: "Roth IRA", amount: 500, inRetirement: false, group: "Savings", essential: false, noSuggest: true, accountId: "ira" },
+      { id: "moving", name: "Moving", amount: 0, inRetirement: false, group: "Life", hidden: true },
     ],
     accounts: [
       { id: "ira", name: "Roth IRA", type: "roth", balance: 12000.12, counts: "ira", owner: "spouse", plaidAccountId: "p1" },

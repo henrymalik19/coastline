@@ -286,7 +286,8 @@ export function suggestChoice(plan: PlanState, a: YnabAccount, taken: Set<string
 
 export type YnabCategory = { group: string; name: string; average: number };
 /** What to do with a YNAB category: add it, put it into one of the plan's (a category id, or "cash" for the Emergency fund), or leave it out. */
-export type CategoryChoice = { action: "new" } | { action: "match"; id: string } | { action: "skip" };
+/** What a YNAB category becomes: a new category, one of yours, a hidden category (keeps its transactions, off the budget and plan), or nothing. */
+export type CategoryChoice = { action: "new" } | { action: "match"; id: string } | { action: "hidden" } | { action: "skip" };
 
 /** The plan's category a YNAB category most likely is: the same name, or the Emergency fund for an emergency fund. */
 export function suggestCategory(plan: PlanState, c: Pick<YnabCategory, "name">): CategoryChoice {
@@ -357,7 +358,7 @@ export type ImportResult = {
   /** Each of your transactions paired with the YNAB one that looks like the same (for you to confirm). */
   matches: { mine: Txn; ynab: Txn }[];
   summary: {
-    accountsAdded: number; accountsRemoved: number; categoriesAdded: number; categoriesUpdated: number; categoriesRemoved: number; categoriesSkipped: number;
+    accountsAdded: number; accountsRemoved: number; categoriesAdded: number; categoriesUpdated: number; categoriesRemoved: number; categoriesSkipped: number; categoriesHidden: number;
     transactions: number; transactionsMatched: number; months: number;
     /** Recent transactions (this month and last) that will need a category: YNAB had none, or you left their category out. */
     needsCategoryFromYnab: number; needsCategoryLeftOut: number;
@@ -399,7 +400,7 @@ export const recentMonths = (thisMonth: string, n = 3) => Array.from({ length: n
 /** Turn YNAB's data into the plan's categories, assignments, accounts and transactions. */
 export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): ImportResult {
   const plan = structuredClone(input);
-  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, olderWithoutCategory: 0, transfersOutside: 0 };
+  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, olderWithoutCategory: 0, transfersOutside: 0 };
   // only this month's and last month's transactions are asked for a category (older ones are history)
   const [ty, tm] = o.thisMonth.split("-").map(Number) as [number, number];
   const recentFrom = tm === 1 ? `${ty - 1}-12-01` : `${ty}-${String(tm - 1).padStart(2, "0")}-01`;
@@ -455,13 +456,24 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   const itemOf = new Map<string, string>();
   const matchedAmount = new Map<string, number>();
   const groupFor = (g: string) => o.groupMap?.[groupKey(g)] ?? g;
+  // hidden ones go after everything shown (that's where hidden categories live)
+  const hiddenItems: BudgetItem[] = [];
   for (const c of cats) {
     const k = categoryKey(c.group, c.name);
     const opts = o.categories[k] ?? { inRetirement: true, essential: true };
     const ch = o.categoryMap?.[k] ?? suggestCategory(plan, c);
     if (ch.action === "skip") { summary.categoriesSkipped++; continue; }
+    if (ch.action === "hidden") {
+      const id = o.newId();
+      itemOf.set(k, id);
+      hiddenItems.push({ id, name: c.name, amount: 0, inRetirement: false, group: (o.categoryGroup?.[k] ?? groupFor(c.group)) || undefined, hidden: true });
+      summary.categoriesHidden++;
+      continue;
+    }
     const hit = ch.action === "match" ? plan.budget.find((b) => b.id === ch.id) : undefined;
     if (ch.action === "match" && ch.id === "cash") { itemOf.set(k, "cash"); summary.categoriesUpdated++; continue; }
+    // one of your hidden categories: it just takes the transactions (no amount, still hidden)
+    if (hit?.hidden) { itemOf.set(k, hit.id); summary.categoriesUpdated++; continue; }
     if (hit) {
       itemOf.set(k, hit.id);
       // two of YNAB's put into one: their amounts add up
@@ -481,6 +493,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     plan.budget.push(item);
     summary.categoriesAdded++;
   }
+  plan.budget.push(...hiddenItems);
   if (o.removeEmpty) {
     const keep = new Set(itemOf.values());
     const before = plan.budget.length;

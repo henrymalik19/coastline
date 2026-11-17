@@ -1,6 +1,6 @@
 import type { BudgetItem } from "@coastfi/engine";
 import { describe, expect, it } from "vitest";
-import { groupOrder, mergeGroup, moveAmong, moveGroup, moveItem, moveToGroup } from "./budgetOrder";
+import { groupOrder, mergeGroup, moveAmong, moveGroup, moveItem, moveToGroup, setHidden } from "./budgetOrder";
 
 const item = (id: string, group?: string): BudgetItem => ({ id, name: id, amount: 0, inRetirement: true, group });
 const ids = (xs: BudgetItem[]) => xs.map((x) => x.id).join(",");
@@ -69,5 +69,37 @@ describe("moving items between groups", () => {
     expect(ids(moveToGroup(items, 3, "Housing", 1))).toBe("rent,gas,power,food,misc");
     expect(ids(moveToGroup(items, 3, "Housing", 9))).toBe("rent,power,gas,food,misc");
     expect(moveToGroup(items, 3, "Housing", 0)[0]!.group).toBe("Housing");
+  });
+});
+
+describe("hidden categories in the order", () => {
+  const hid = (id: string, group?: string): BudgetItem => ({ ...item(id, group), hidden: true });
+  const items = [item("rent", "Housing"), item("food", "Food"), hid("moving", "Housing")];
+
+  it("don't make a group, and stay at the end when groups move", () => {
+    expect(groupOrder([item("a", "X"), hid("b", "Y")])).toEqual(["X"]);
+    expect(ids(moveGroup(items, "Food", -1))).toBe("food,rent,moving");
+  });
+
+  it("hiding moves it to the end (and unlinks it from an account); showing puts it back at the end of its group", () => {
+    const linked = [{ ...item("roth", "Savings"), accountId: "ira" }, item("food", "Food")];
+    const h = setHidden(linked, "roth", true);
+    expect(ids(h)).toBe("food,roth");
+    expect(h[1]).toMatchObject({ hidden: true });
+    expect(h[1]!.accountId).toBeUndefined();
+    const shown = setHidden(items, "moving", false);
+    expect(ids(shown)).toBe("rent,moving,food");
+    expect(shown[1]!.hidden).toBeUndefined();
+    // its group is gone: before the other hidden ones
+    expect(ids(setHidden([item("a", "X"), hid("b", "Gone"), hid("c")], "b", false))).toBe("a,b,c");
+  });
+
+  it("aren't moved into by items, and a merged group renames them in place", () => {
+    expect(ids(moveToGroup(items, 1, "Housing"))).toBe("rent,food,moving");
+    expect(ids(moveToGroup(items, 0, "New"))).toBe("food,rent,moving");
+    expect(moveItem(items, 0, 1)).toBe(items);
+    const merged = mergeGroup(items, "Housing", "Food");
+    expect(ids(merged)).toBe("food,rent,moving");
+    expect(merged.map((b) => b.group)).toEqual(["Food", "Food", "Food"]);
   });
 });

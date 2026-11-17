@@ -150,7 +150,9 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
 
   const catOptions = [
     ...(kind === "in" ? [{ value: "ready", label: "Unassigned", hint: "Income: assign it on the Budget tab" }] : []),
-    ...cats.map((c) => ({ value: c.key, label: c.label, hint: c.group })),
+    // hidden categories last, marked: still pickable (a one-off)
+    ...cats.filter((c) => !c.hidden).map((c) => ({ value: c.key, label: c.label, hint: c.group })),
+    ...cats.filter((c) => c.hidden).map((c) => ({ value: c.key, label: c.label, hint: "Hidden" })),
   ];
 
   return (
@@ -319,7 +321,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                           plain
                           label="Category"
                           value={xferCat}
-                          options={[{ value: "ready", label: "Unassigned", hint: "No category" }, ...cats.map((c) => ({ value: c.key, label: c.label, hint: c.account === to ? "Linked to this account" : c.group }))]}
+                          options={[{ value: "ready", label: "Unassigned", hint: "No category" }, ...cats.filter((c) => !c.hidden).map((c) => ({ value: c.key, label: c.label, hint: c.account === to ? "Linked to this account" : c.group }))]}
                           onChange={setXferPick}
                         />,
                       )}

@@ -36,7 +36,7 @@ function useSummaries(): Record<string, string> {
     profile: `Age ${state.age} · retire at ${state.retireAge}`,
     healthcare: state.retireAge >= 65 ? `Medicare ${money(state.medicare ?? 0)}/mo` : `${money(state.healthcare)}/mo until 65 · ${money(state.medicare ?? 0)}/mo after`,
     retirement: (() => {
-      const items = state.budget.filter((b) => !b.accountId);
+      const items = state.budget.filter((b) => !b.accountId && !b.hidden);
       const after = items.filter((b) => b.inRetirement).reduce((a, b) => a + b.amount, 0);
       const ess = items.filter((b) => b.essential !== false).reduce((a, b) => a + b.amount, 0);
       if (result.d.retireSpendingSet) return `Set amount: ${money(state.retireSpending ?? 0, { whole: true })}/yr`;
@@ -44,7 +44,7 @@ function useSummaries(): Record<string, string> {
     })(),
     retirementIncome: retire.length + result.d.rentals.length ? `${retire.length + result.d.rentals.length} · ${money(result.d.retireIncomeAnnual / 12)}/mo` : "None added",
     income: state.incomes.length ? `${state.incomes.length} source${state.incomes.length > 1 ? "s" : ""} · ${money(result.d.leanMonthly)}/mo` : "None yet",
-    budget: `${state.budget.length} items · ${money(result.d.budgetTotal)}/mo`,
+    budget: `${state.budget.filter((b) => !b.hidden).length} items · ${money(result.d.budgetTotal)}/mo`,
     savings: (() => { const n = Object.keys({ ...(state.plan.schedule ?? {}), ...(state.plan.scheduleMonths ?? {}) }).length; return n ? `${n} account${n > 1 ? "s" : ""} set · ${money(result.plan.months[0]?.plannedAsk ?? 0)}/mo` : "None set"; })(),
     accounts: `${state.accounts.length} accounts · ${money(result.d.invested + result.d.bal.cash)}`,
     properties: (() => { const ps = state.properties ?? []; const r = ps.filter((p) => p.kind === "rental").length; return ps.length ? `${ps.length - r ? `${ps.length - r} home${ps.length - r > 1 ? "s" : ""}` : ""}${ps.length - r && r ? " · " : ""}${r ? `${r} rental${r > 1 ? "s" : ""}` : ""} · ${money(result.d.bal.property ?? 0)}` : "None"; })(),

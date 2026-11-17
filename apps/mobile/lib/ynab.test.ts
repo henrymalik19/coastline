@@ -246,6 +246,22 @@ describe("choosing where categories go, and matching your own transactions", () 
     expect(skip.txns.find((t) => t.payee === "Target")!.splits!.map((s) => s.originalCategory)).toEqual([undefined, "Everyday: Household"]);
   });
 
+  it("a category kept as hidden takes its transactions, off the budget and plan", () => {
+    const { plan, d, opts } = base();
+    const r = buildImport(plan, d, { ...opts, categoryMap: { [categoryKey("Everyday", "Household")]: { action: "hidden" } } });
+    expect(r.summary.categoriesHidden).toBe(1);
+    const hh = r.plan.budget.find((b) => b.name === "Household")!;
+    expect(hh).toMatchObject({ hidden: true, amount: 0, group: "Everyday" });
+    expect(r.plan.budget.at(-1)!.id).toBe(hh.id); // hidden ones go last
+    const line = r.txns.find((t) => t.payee === "Target")!.splits![1]!;
+    expect(line.categoryId).toBe(hh.id);
+    expect(line.originalCategory).toBeUndefined();
+    expect(r.summary.needsCategoryLeftOut).toBe(0);
+    // importing again: it goes into the same hidden category, which stays hidden with no amount
+    const again = buildImport(r.plan, d, { ...opts, existing: r.txns });
+    expect(again.plan.budget.filter((b) => b.name === "Household")).toEqual([hh]);
+  });
+
   it("a transfer to an account you left out stays a transfer, needing no category", () => {
     const { plan, d, opts } = base();
     const r = buildImport(plan, d, { ...opts, accounts: { Visa: { action: "skip" } } });

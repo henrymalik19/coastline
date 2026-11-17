@@ -83,6 +83,12 @@ export type BudgetItem = {
    * flagged again only if your spending moves well away from this.
    */
   keptAt?: number;
+  /**
+   * Hidden: off the budget and out of your plan (no monthly amount, not in your retirement number), but it
+   * still holds its transactions. For a one-off, or an old YNAB category. If it's overspent it shows on the
+   * Budget until you cover it.
+   */
+  hidden?: boolean;
 };
 /** "property": what a home or rental is worth. Counts in net worth, not as invested money for Coast FI. */
 export type AccountType = "pretax" | "roth" | "taxable" | "hsa" | "cash" | "property";

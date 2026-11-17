@@ -99,7 +99,11 @@ export function TransactionsList({
   const happened = list.filter((x) => !isUpcoming(x, today));
   const inTotal = happened.reduce((a, x) => a + (x.amount > 0 && !x.transferAccountId ? x.amount : 0), 0);
   const outTotal = happened.reduce((a, x) => a + (x.amount < 0 && !x.transferAccountId ? -x.amount : 0), 0);
-  const missing = txns.filter((x) => !x.deleted && uncategorized(x)).length;
+  // the count follows the account picker, like everything else here; ones in other accounts get a link instead
+  const inView = (x: Txn) => acct === "all" || x.accountId === acct || x.transferAccountId === acct;
+  const missingAll = txns.filter((x) => !x.deleted && uncategorized(x));
+  const missing = missingAll.filter(inView).length;
+  const missingElsewhere = missingAll.length - missing;
 
   if (!state.budgetPlan || !accounts.length) {
     return (
@@ -182,9 +186,14 @@ export function TransactionsList({
         <Pressable role="checkbox" aria-checked={allMonths || needsCat} disabled={needsCat} onPress={() => setAllMonths((v) => !v)} hitSlop={6} style={[styles.chip, { borderColor: allMonths || needsCat ? t.accent : t.border, backgroundColor: allMonths || needsCat ? t.accentSoft : t.surface }]}>
           <Text style={[type.caption, { color: allMonths || needsCat ? t.accent : t.text2, fontWeight: "700" }]}>All months</Text>
         </Pressable>
-        {missing ? (
+        {missing || needsCat ? (
           <Pressable role="checkbox" aria-checked={needsCat} onPress={() => setNeedsCat((v) => !v)} hitSlop={6} style={[styles.chip, { borderColor: needsCat ? t.warn : t.border, backgroundColor: needsCat ? t.warnSoft : t.surface }]}>
             <Text style={[type.caption, { color: needsCat ? t.text : t.warn, fontWeight: "700" }]}>Needs a category ({missing})</Text>
+          </Pressable>
+        ) : missingElsewhere ? (
+          // none in this account, but some in others: one tap shows them all
+          <Pressable role="link" onPress={() => { setAcct("all"); setNeedsCat(true); }} hitSlop={6}>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{missingElsewhere} to categorize in other accounts</Text>
           </Pressable>
         ) : null}
       </View>

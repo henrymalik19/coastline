@@ -38,6 +38,8 @@ export type BudgetCategory = {
   moves: boolean;
   /** A category you made for money moved to this account (an IRA, a brokerage): investing, not spending. */
   account?: string;
+  /** Hidden: off the budget list unless it's overspent; no plan amount. */
+  hidden?: boolean;
 };
 
 export type BudgetLine = {
@@ -84,6 +86,10 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
   // spending: the budget (and categories you made for money moved to an account, like "Roth IRA")
   for (const b of s.budget ?? []) {
     const linked = linkedAccount(s, b);
+    if (b.hidden) {
+      out.push({ key: b.id, group: b.group?.trim() || "Other", name: b.name || "Budget item", kind: "spending", target: 0, moves: false, hidden: true });
+      continue;
+    }
     out.push({ key: b.id, group: b.group?.trim() || "Other", name: b.name || "Budget item", kind: "spending", target: Math.max(0, valueIn(s.plan, BUDGET_ITEM + b.id, month, num(b.amount))), moves: false, ...(linked ? { account: linked.id } : {}) });
   }
   // bills: repeating goals

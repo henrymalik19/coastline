@@ -15,11 +15,30 @@ export function linkedGroupChoices(items: BudgetItem[], fallback: string, curren
   return [...new Set(out)];
 }
 
-/** Group names in the order they first appear. */
+/** Group names in the order they first appear (hidden categories don't make a group). */
 export function groupOrder(items: BudgetItem[]): string[] {
   const out: string[] = [];
-  for (const b of items) if (!out.includes(groupOf(b))) out.push(groupOf(b));
+  for (const b of items) if (!b.hidden && !out.includes(groupOf(b))) out.push(groupOf(b));
   return out;
+}
+
+/**
+ * Hide a category (it goes to the end of the list, after everything shown, keeping its group name) or show
+ * it again (at the end of its group, or of the list if that group is gone).
+ */
+export function setHidden(items: BudgetItem[], id: string, hidden: boolean): BudgetItem[] {
+  const item = items.find((b) => b.id === id);
+  if (!item || !!item.hidden === hidden) return items;
+  const rest = items.filter((b) => b.id !== id);
+  if (hidden) {
+    const { accountId: _, ...plain } = item;
+    return [...rest, { ...plain, hidden: true }];
+  }
+  const { hidden: _h, ...shown } = item;
+  const g = groupOf(item);
+  const last = rest.map((b, i) => (!b.hidden && groupOf(b) === g ? i : -1)).filter((i) => i >= 0).at(-1);
+  const at = last !== undefined ? last + 1 : rest.findIndex((b) => b.hidden) < 0 ? rest.length : rest.findIndex((b) => b.hidden);
+  return [...rest.slice(0, at), shown, ...rest.slice(at)];
 }
 
 /** Move a whole group one place earlier (-1) or later (+1). Items keep their order inside groups. */
@@ -29,7 +48,7 @@ export function moveGroup(items: BudgetItem[], group: string, by: -1 | 1): Budge
   const j = i + by;
   if (i < 0 || j < 0 || j >= order.length) return items;
   [order[i], order[j]] = [order[j]!, order[i]!];
-  return order.flatMap((g) => items.filter((b) => groupOf(b) === g));
+  return [...order.flatMap((g) => items.filter((b) => !b.hidden && groupOf(b) === g)), ...items.filter((b) => b.hidden)];
 }
 
 /** Move an item one place up (-1) or down (+1) within its own group. */
@@ -38,7 +57,7 @@ export function moveItem(items: BudgetItem[], index: number, by: -1 | 1): Budget
   if (!item) return items;
   const g = groupOf(item);
   let j = index + by;
-  while (j >= 0 && j < items.length && groupOf(items[j]!) !== g) j += by;
+  while (j >= 0 && j < items.length && (items[j]!.hidden || groupOf(items[j]!) !== g)) j += by;
   if (j < 0 || j >= items.length) return items;
   const out = [...items];
   [out[index], out[j]] = [out[j]!, out[index]!];
@@ -70,8 +89,11 @@ export function moveToGroup(items: BudgetItem[], index: number, group: string, a
   if (!item || !name || groupOf(item) === name) return items;
   const rest = items.filter((_, i) => i !== index);
   const moved = { ...item, group: name };
-  const slots = rest.map((b, i) => (groupOf(b) === name ? i : -1)).filter((i) => i >= 0);
-  if (!slots.length) return [...rest, moved];
+  const slots = rest.map((b, i) => (!b.hidden && groupOf(b) === name ? i : -1)).filter((i) => i >= 0);
+  if (!slots.length) {
+    const firstHidden = rest.findIndex((b) => b.hidden);
+    return firstHidden < 0 || item.hidden ? [...rest, moved] : [...rest.slice(0, firstHidden), moved, ...rest.slice(firstHidden)];
+  }
   const pos = at !== undefined && at < slots.length ? slots[Math.max(0, at)]! : slots.at(-1)! + 1;
   return [...rest.slice(0, pos), moved, ...rest.slice(pos)];
 }
@@ -79,10 +101,15 @@ export function moveToGroup(items: BudgetItem[], index: number, group: string, a
 /** Merge one group into another: its items join the end of the other group, in their order. */
 export function mergeGroup(items: BudgetItem[], from: string, into: string): BudgetItem[] {
   if (from === into) return items;
-  const moving = items.filter((b) => groupOf(b) === from).map((b) => ({ ...b, group: into }));
-  if (!moving.length) return items;
-  const rest = items.filter((b) => groupOf(b) !== from);
-  const last = rest.map((b, i) => (groupOf(b) === into ? i : -1)).filter((i) => i >= 0).at(-1);
-  if (last === undefined) return [...rest, ...moving];
+  // hidden ones from that group just take the new group's name, staying where they are
+  const renamed = items.map((b) => (b.hidden && groupOf(b) === from ? { ...b, group: into } : b));
+  const moving = renamed.filter((b) => !b.hidden && groupOf(b) === from).map((b) => ({ ...b, group: into }));
+  if (!moving.length) return renamed;
+  const rest = renamed.filter((b) => b.hidden || groupOf(b) !== from);
+  const last = rest.map((b, i) => (!b.hidden && groupOf(b) === into ? i : -1)).filter((i) => i >= 0).at(-1);
+  if (last === undefined) {
+    const firstHidden = rest.findIndex((b) => b.hidden);
+    return firstHidden < 0 ? [...rest, ...moving] : [...rest.slice(0, firstHidden), ...moving, ...rest.slice(firstHidden)];
+  }
   return [...rest.slice(0, last + 1), ...moving, ...rest.slice(last + 1)];
 }

@@ -87,15 +87,15 @@ export function valueIn(p: Pick<PlanSettings, "schedule" | "scheduleMonths"> | u
   return scheduleAmount(p ?? {}, key, month) ?? base;
 }
 
-/** A budget item that's spending (not money moved to one of your accounts). */
-export const isSpendingItem = (b: { accountId?: string }): boolean => !b.accountId;
+/** A budget item that's spending in your plan (not money moved to one of your accounts, and not hidden). */
+export const isSpendingItem = (b: { accountId?: string; hidden?: boolean }): boolean => !b.accountId && !b.hidden;
 
 /**
  * The account a budget item moves money to, when it's one the plan adds to (an IRA, a brokerage, an
  * HSA you fund yourself). Cash, a 401(k) or an account that's gone: none.
  */
-export function linkedAccount(s: Pick<PlanState, "plan" | "accounts"> & Partial<Pick<PlanState, "spouse">>, b: { accountId?: string }): Account | undefined {
-  if (!b.accountId) return undefined;
+export function linkedAccount(s: Pick<PlanState, "plan" | "accounts"> & Partial<Pick<PlanState, "spouse">>, b: { accountId?: string; hidden?: boolean }): Account | undefined {
+  if (!b.accountId || b.hidden) return undefined;
   const a = (s.accounts ?? []).find((x) => x.id === b.accountId);
   const kind = a ? accountPlanKey(s, a) : null;
   return a && kind && kind !== "cash" ? a : undefined;
