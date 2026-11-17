@@ -2,7 +2,7 @@
  * Your priority order: where money your budget doesn't assign goes, step by step (emergency fund,
  * the full match, debts, HSA, IRA, 401(k), goals, brokerage). Lives in Settings → Priority order.
  */
-import { accountGroup, isHighInterest, paysExtra } from "@coastfi/engine";
+import { accountGroup, isHighInterest, isSpouseIra, paysExtra, STEP_LABELS, type StepKey } from "@coastfi/engine";
 import { useState } from "react";
 import { useRouter } from "expo-router";
 import { budgetKeyFor } from "../lib/budgetLinks";
@@ -17,6 +17,11 @@ import { usePlan } from "../lib/plan";
 import { stepInfo, type StepInfo } from "../lib/steps";
 import { monthKey, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
+
+/** Steps you can turn off (the emergency fund, the match and high-interest debt always stay). */
+const OFFABLE: StepKey[] = ["hsa", "ira", "iraSpouse", "k401", "lowDebt", "taxable"];
+/** Where steps go when turned back on. */
+const DEFAULT_ORDER: StepKey[] = ["starterEF", "match", "highDebt", "fullEF", "hsa", "ira", "iraSpouse", "k401", "lowDebt", "taxable"];
 
 export function PlanSteps() {
   const t = useTheme();
@@ -87,6 +92,21 @@ export function PlanSteps() {
       p.plan.amounts = Object.keys(am).length ? am : undefined;
       p.plan.amountsBy = Object.keys(by).length ? by : undefined;
     });
+  /** Take a step out of the order (it waits under "Not used"), or put it back where it normally goes. */
+  const turnOff = (key: StepKey) =>
+    update((p) => {
+      p.plan.steps = p.plan.steps.filter((s) => s !== key);
+      if (p.plan.shares) delete p.plan.shares[key];
+      if (p.plan.amounts) delete p.plan.amounts[key];
+    });
+  const turnOn = (key: StepKey) =>
+    update((p) => {
+      if (p.plan.steps.includes(key)) return;
+      // just before the next step that normally comes after it, else at the end
+      const later = DEFAULT_ORDER.slice(DEFAULT_ORDER.indexOf(key) + 1);
+      const at = p.plan.steps.findIndex((s) => later.includes(s) || (s.startsWith("goal:") && later.includes("taxable")));
+      p.plan.steps.splice(at < 0 ? p.plan.steps.length : at, 0, key);
+    });
   const move = (i: number, dir: -1 | 1) =>
     update((p) => {
       const s = p.plan.steps;
@@ -117,7 +137,12 @@ export function PlanSteps() {
   };
   // finished and skipped steps first, then the rest by when they start: steps that start in the same
   // month share a line (side by side on a wide screen)
-  const finished = infos.filter((i) => i.done || i.skip);
+  const finished = infos.filter((i) => i.done && !i.skip);
+  // "Not used": steps that can't be used now (no HSA-eligible plan) and steps you turned off
+  const skipped = infos.filter((i) => i.skip);
+  const hasSpouseIra = !!state.spouse && state.accounts.some((a) => isSpouseIra(state, a));
+  const turnedOff = OFFABLE.filter((k) => !state.plan.steps.includes(k) && (k !== "iraSpouse" || hasSpouseIra));
+  const investRest = state.plan.steps.includes("taxable");
   const stageMap = new Map<number, StepInfo[]>();
   for (const info of infos) {
     if (info.done || info.skip) continue;
@@ -154,7 +179,11 @@ export function PlanSteps() {
   const keptAvg = year1.length ? year1.reduce((a, m) => a + Math.max(0, m.alloc.leftover), 0) / year1.length : 0;
   const keptText = state.emergency?.active
     ? "Emergency mode is on: everything left stays as cash"
-    : keptAvg > 0.5
+    : !investRest
+      ? keptAvg > 0.5
+        ? `Investing the rest is off, so about ${money(keptAvg, { whole: true })}/mo stays in checking and savings over the next year`
+        : "Investing the rest is off, so whatever's left stays in checking and savings"
+      : keptAvg > 0.5
       ? `About ${money(keptAvg, { whole: true })}/mo stays in checking and savings over the next year`
       : restReached
         ? "Nothing: “Invest the rest” takes whatever reaches it"
@@ -204,17 +233,16 @@ export function PlanSteps() {
     const paycheck = !info.done && !info.skip && !bk && (info.key === "k401" || info.key === "match" || info.key === "hsa");
     const share = shares[info.key] ?? 1;
     const mode = amt !== undefined ? "amount" : share < 1 ? "share" : "off";
+    // the row already says when a step isn't reached, so the details don't repeat it
+    const status = parts.filter((x) => !/not reached/i.test(x));
     return (
       <View key={"more-" + info.key} style={[styles.more, { marginLeft: compact ? 48 : 60, marginRight: pad }]}>
-        {compact ? null : <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{info.label}</Text>}
-        {parts.length ? (
-          <FormList>
-            {parts.map((d, j) => (
-              <View key={j} style={styles.detailRow}>
-                <Text style={[type.caption, { color: t.text2, flex: 1 }]}>{d}</Text>
-              </View>
+        {status.length ? (
+          <View style={{ gap: 2 }}>
+            {status.map((d, j) => (
+              <Text key={j} style={[type.caption, { color: t.text2 }]}>{d}</Text>
             ))}
-          </FormList>
+          </View>
         ) : null}
         {bk || paycheck || canShare ? (
           <FormList>
@@ -276,8 +304,9 @@ export function PlanSteps() {
           </FormList>
         ) : null}
         <View style={styles.chipRow}>
-          <Chip title="Earlier in the order" icon="up" disabled={idx === 0} onPress={() => move(idx, -1)} />
-          <Chip title="Later" icon="down" disabled={idx === state.plan.steps.length - 1} onPress={() => move(idx, 1)} />
+          <Chip title="Move up" icon="up" disabled={idx === 0} onPress={() => move(idx, -1)} />
+          <Chip title="Move down" icon="down" disabled={idx === state.plan.steps.length - 1} onPress={() => move(idx, 1)} />
+          {OFFABLE.includes(info.key as StepKey) && !info.done ? <Chip title="Turn off" icon="close" onPress={() => turnOff(info.key as StepKey)} /> : null}
         </View>
       </View>
     );
@@ -422,6 +451,37 @@ export function PlanSteps() {
           <Text style={[type.caption, { color: t.text3 }]}>{keptText}</Text>
         </View>
       </View>
+      {/* outside the order: steps that can't be used now, and steps you turned off */}
+      {skipped.length || turnedOff.length ? (
+        <>
+          <View style={[styles.dateLabel, { backgroundColor: t.surface2, paddingHorizontal: pad }]}>
+            <Text style={[type.overline, { color: t.text3 }]}>Not used</Text>
+          </View>
+          {[
+            ...skipped.map((info) => ({ key: info.key, title: STEP_LABELS[info.key as keyof typeof STEP_LABELS] ?? info.title, why: info.meta.replace(/^Skipped: /, "").replace(/^./, (c) => c.toUpperCase()), off: false })),
+            ...turnedOff.map((k) => ({
+              key: k,
+              title: k === "taxable" ? "Invest the rest in brokerage" : STEP_LABELS[k as keyof typeof STEP_LABELS],
+              why: k === "taxable" ? "Turned off: whatever's left stays as cash instead" : "Turned off: the plan skips it",
+              off: true,
+            })),
+          ].map((x, j) => (
+            <View key={"off-" + x.key}>
+              {j > 0 ? <View style={{ marginLeft: compact ? 48 : 60 }}><Divider /></View> : null}
+              <View style={[styles.step, { paddingHorizontal: pad }, compact ? { gap: space.sm } : null]}>
+                <View style={[styles.num, { backgroundColor: t.surface2 }]}>
+                  <Icon name="minus" size={14} color={t.text3} />
+                </View>
+                <View style={{ flex: 1, gap: 3, minWidth: 0 }}>
+                  <Text style={[type.body, { fontWeight: "600", color: t.text3 }]}>{x.title}</Text>
+                  <Text style={[type.caption, { color: t.text3 }]}>{x.why}</Text>
+                </View>
+                {x.off ? <Chip title="Turn on" icon="plus" onPress={() => turnOn(x.key as StepKey)} /> : null}
+              </View>
+            </View>
+          ))}
+        </>
+      ) : null}
     </Card>
   );
 
@@ -433,7 +493,7 @@ const styles = StyleSheet.create({
   step: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
   num: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   moves: { flexDirection: "row", alignItems: "center" },
-  more: { gap: space.sm, paddingBottom: space.md },
+  more: { gap: space.sm, paddingTop: space.sm, paddingBottom: space.md },
   budgetLink: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" },
   detailRow: { paddingHorizontal: space.md, paddingVertical: 10 },
   linkRow: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, minHeight: 50 },
