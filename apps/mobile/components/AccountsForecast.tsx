@@ -341,6 +341,8 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
     <Text style={[type.caption, { width: w, paddingHorizontal: 8, textAlign: "right", color, fontWeight: bold ? "700" : "500", fontVariant: ["tabular-nums"] }]}>{v}</Text>
   );
   const groupEdge = { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: t.border };
+  // with only a few accounts the columns don't reach the edge: this takes up the rest, so rows fill the table
+  const filler = <View style={[{ flex: 1 }, groupEdge]} />;
   const monthCell = (content: React.ReactNode, bg: string, z = 1, now = false) => (
     <View style={[{ width: MW, paddingHorizontal: 8, justifyContent: "center", backgroundColor: bg, zIndex: z, borderLeftWidth: 3, borderLeftColor: now ? t.accent : "transparent" }, stick({ left: 0 })]}>{content}</View>
   );
@@ -365,6 +367,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
           </Pressable>
         );
       })}
+      {filler}
     </View>
   );
   const head2 = (
@@ -376,6 +379,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
           {num(isDebt(x.key) ? "Owed" : "Balance", t.text3)}
         </View>
       ))}
+      {filler}
     </View>
   );
   const todayRow = (
@@ -387,6 +391,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
           {num(money(openBal(x)), t.text2)}
         </View>
       ))}
+      {filler}
     </View>
   );
   const bodyRows = rows.map((i) => {
@@ -411,6 +416,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
             {num(money(x.months[i]!.balance), t.text2)}
           </View>
         ))}
+        {filler}
       </View>
     );
   });
@@ -472,7 +478,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
     <Text numberOfLines={1} style={[type.caption, styles.sNum, { color, fontWeight: bold ? "700" : "500" }]}>{v}</Text>
   );
   const singleTable = one ? (
-    <View style={[{ borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, overflow: "hidden", width: "100%", maxWidth: 720 }, fill ? { flex: 1, minHeight: 0 } : { maxHeight: 620 }]}>
+    <View style={[{ borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, overflow: "hidden", width: "100%" }, fill ? { flex: 1, minHeight: 0 } : { maxHeight: 620 }]}>
       <View style={[styles.sRow, { backgroundColor: t.surface, borderBottomWidth: 1, borderBottomColor: t.border }]}>
         <Text style={[type.overline, styles.sMonth, { color: t.text3 }]}>Month</Text>
         <Text style={[type.overline, styles.sNum, { color: t.text3 }]}>{isDebt(one.key) ? "Paid" : "Added"}</Text>
@@ -522,7 +528,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick }: Props) 
       {...({ dataSet: { ledger: "1" } } as object)}
       style={[{ overflow: "auto" as never, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border }, fill ? { flex: 1, minHeight: 0 } : { maxHeight: 620 }]}
     >
-      <View style={{ alignSelf: "flex-start" }}>{gridInner}</View>
+      <View style={{ alignSelf: "flex-start", minWidth: "100%" }}>{gridInner}</View>
     </View>
   ) : (
     <ScrollView style={fill ? { flex: 1 } : { maxHeight: 620 }}>
