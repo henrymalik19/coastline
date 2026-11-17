@@ -1,0 +1,76 @@
+import type { PlanState, Txn } from "@coastfi/engine";
+import { describe, expect, it } from "vitest";
+import { freshPlan } from "./presets";
+import { buildImport, parseYnab } from "./ynab";
+import { applyYnabUpdate, planYnabUpdate } from "./ynabUpdate";
+
+const HEAD = `"Account","Flag","Date","Payee","Category Group/Category","Category Group","Category","Memo","Outflow","Inflow","Cleared"\n`;
+const row = (date: string, payee: string, group: string, cat: string, out: string, inflow = "$0.00") =>
+  `"Checking","","${date}","${payee}","${group}: ${cat}","${group}","${cat}","","${out}","${inflow}","Cleared"\n`;
+const PAY = row("11/01/2026", "Employer", "Inflow", "Ready to Assign", "$0.00", "$4,000.00");
+const KROGER = row("11/02/2026", "Kroger", "Everyday", "Groceries", "$120.00");
+// the first export, then a newer one: Shell's amount changed in YNAB, and two new ones (one in a category you don't have)
+const V1 = HEAD + row("11/03/2026", "Shell", "Car", "Gas", "$40.00") + KROGER + PAY;
+const V2 = HEAD + row("11/12/2026", "Etsy", "Fun", "Gifts", "$25.00") + row("11/10/2026", "Costco", "Everyday", "Groceries", "$80.00") + row("11/03/2026", "Shell", "Car", "Gas", "$45.00") + KROGER + PAY;
+
+function imported() {
+  const plan: PlanState = freshPlan();
+  plan.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 0 }];
+  plan.budget = [
+    { id: "food", name: "Groceries", amount: 600, inRetirement: true, group: "Everyday" },
+    { id: "gas", name: "Gas", amount: 100, inRetirement: true, group: "Car" },
+  ];
+  let n = 0;
+  const newId = () => `n${++n}`;
+  const r = buildImport(plan, parseYnab(V1), { from: "2026-11", thisMonth: "2026-11", accounts: { Checking: { action: "match", id: "chk" } }, categories: {}, removeEmpty: false, newId });
+  const txns = r.txns.map((t) => ({ ...t, updatedAt: 100 }));
+  return { plan: r.plan, txns, newId };
+}
+const mine: Txn = { id: "m1", accountId: "chk", date: "2026-11-10", amount: -80, payee: "Costco", cleared: "uncleared", source: "manual", updatedAt: 150 };
+
+describe("update transactions from YNAB", () => {
+  it("brings in what's new or changed, finds what's gone, and leaves categories and amounts alone", () => {
+    const { plan, txns, newId } = imported();
+    const u = planYnabUpdate(plan, parseYnab(V2), [...txns, mine], 100, "2026-11", newId);
+    expect(u.add.map((t) => [t.payee, t.amount]).sort()).toEqual([["Costco", -80], ["Etsy", -25], ["Shell", -45]]);
+    expect(u.gone.map((t) => [t.payee, t.amount])).toEqual([["Shell", -40]]);
+    expect(u.keptEdited).toEqual([]);
+    expect(u.replaced).toEqual(["m1"]); // yours, the same as YNAB's new Costco
+    expect(u.hiddenAdded.map((b) => [b.name, b.hidden])).toEqual([["Gifts", true]]);
+    expect(u.add.find((t) => t.payee === "Etsy")!.categoryId).toBe(u.hiddenAdded[0]!.id);
+    expect(u.add.find((t) => t.payee === "Costco")!.categoryId).toBe("food");
+    expect(u.skippedAccounts).toEqual([]);
+  });
+
+  it("keeps one of YNAB's you changed here, and it becomes yours", () => {
+    const { plan, txns, newId } = imported();
+    const edited = txns.map((t) => (t.payee === "Shell" ? { ...t, memo: "road trip", updatedAt: 200 } : t));
+    const u = planYnabUpdate(plan, parseYnab(V2), edited, 100, "2026-11", newId);
+    expect(u.gone).toEqual([]);
+    expect(u.keptEdited.map((t) => t.memo)).toEqual(["road trip"]);
+    const out = applyYnabUpdate(edited, u, 100, true, 300);
+    expect(out.find((t) => t.memo === "road trip")).toMatchObject({ source: "manual", updatedAt: 300 });
+    expect(out.filter((t) => !t.deleted && t.payee === "Shell").length).toBe(2); // yours and YNAB's new one
+  });
+
+  it("applies it: new ones in, gone ones out only if you say so", () => {
+    const { plan, txns, newId } = imported();
+    const u = planYnabUpdate(plan, parseYnab(V2), [...txns, mine], 100, "2026-11", newId);
+    const out = applyYnabUpdate([...txns, mine], u, 100, true, 300);
+    const live = out.filter((t) => !t.deleted && !t.id.startsWith("start:"));
+    expect(live.map((t) => [t.payee, t.amount]).sort()).toEqual([["Costco", -80], ["Employer", 4000], ["Etsy", -25], ["Kroger", -120], ["Shell", -45]]);
+    expect(out.find((t) => t.id === "m1")).toMatchObject({ deleted: true, updatedAt: 300 });
+    const keep = applyYnabUpdate([...txns, mine], u, 100, false, 300);
+    expect(keep.filter((t) => !t.deleted && t.payee === "Shell").length).toBe(2);
+    // the same export again: nothing new
+    const again = planYnabUpdate(plan, parseYnab(V2), out, 300, "2026-11", newId);
+    expect([again.add.length, again.gone.length, again.replaced.length]).toEqual([0, 0, 0]);
+  });
+
+  it("skips accounts you don't have here", () => {
+    const { plan, txns, newId } = imported();
+    const u = planYnabUpdate(plan, parseYnab(V2.replace(`"Checking","","11/12/2026"`, `"Savings","","11/12/2026"`)), txns, 100, "2026-11", newId);
+    expect(u.skippedAccounts).toEqual(["Savings"]);
+    expect(u.add.some((t) => t.payee === "Etsy")).toBe(false);
+  });
+});

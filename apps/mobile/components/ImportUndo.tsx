@@ -6,9 +6,9 @@
 import { useRouter } from "expo-router";
 import { useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Button } from "./form";
+import { Button, ToggleRow } from "./form";
 import { Card } from "./ui";
-import { canUndoImport, changedSinceImport, UNDO_DAYS } from "../lib/importUndo";
+import { addedSinceImport, canUndoImport, UNDO_DAYS } from "../lib/importUndo";
 import { useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 
@@ -22,6 +22,16 @@ export function useUndoDaysLeft(): number {
   return lastImport && canUndoImport(lastImport, now) ? Math.max(1, Math.ceil((lastImport.at + UNDO_DAYS * DAY - now) / DAY)) : 0;
 }
 
+/**
+ * Whether this budget came from a YNAB import: the import's record (synced), or, for one made before that
+ * was synced, YNAB's transactions in it. Then there's no second import (undo it, or start over).
+ */
+export function useImported(): boolean {
+  const importedAt = useStore((s) => s.importedAt);
+  const fromYnab = useStore((s) => s.txns.some((x) => x.source === "ynab" && !x.deleted));
+  return !!importedAt || fromYnab;
+}
+
 export function ImportUndoCard({ children, onUndone, plain }: { children?: ReactNode; onUndone?: () => void; /** No card around it (inside another one). */ plain?: boolean }) {
   const t = useTheme();
   const lastImport = useStore((s) => s.lastImport);
@@ -30,12 +40,16 @@ export function ImportUndoCard({ children, onUndone, plain }: { children?: React
   const undoImport = useStore((s) => s.undoImport);
   const keepImport = useStore((s) => s.keepImport);
   const [ask, setAsk] = useState<"undo" | "keep" | null>(null);
+  // keep the transactions you added since (where their account was there before the import)
+  const [keepAdded, setKeepAdded] = useState(true);
   const left = useUndoDaysLeft();
-  if (!importedAt) return null;
-  const changed = lastImport ? changedSinceImport(txns, lastImport) : 0;
+  const imported = useImported();
+  if (!imported) return null;
+  const added = lastImport ? addedSinceImport(txns, lastImport) : { keep: 0, remove: 0 };
+  const addedAll = added.keep + added.remove;
   const body = (
     <View style={{ gap: space.sm }}>
-      <Text style={[type.heading, { color: t.text }]}>Imported from YNAB on {dayText(importedAt)}</Text>
+      <Text style={[type.heading, { color: t.text }]}>{importedAt ? `Imported from YNAB on ${dayText(importedAt)}` : "Imported from YNAB"}</Text>
       {children}
       {left && lastImport ? (
         <>
@@ -56,11 +70,22 @@ export function ImportUndoCard({ children, onUndone, plain }: { children?: React
             <View style={[styles.ask, { borderColor: t.bad }]}>
               <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Undo the import?</Text>
               <Text style={[type.caption, { color: t.text2 }]}>
-                Everything it brought in is removed, on your other devices too.
-                {changed ? ` This also throws away the ${changed} transaction${changed === 1 ? "" : "s"} you added or changed since, and any budget changes.` : " Any budget changes you made since go too."}
+                Everything it brought in is removed, on your other devices too, and your budget goes back to how it was (changes you made since go too).
               </Text>
+              {addedAll ? (
+                added.keep ? (
+                  <ToggleRow
+                    label={`Keep the ${added.keep} transaction${added.keep === 1 ? "" : "s"} you added since`}
+                    hint={`They stay in your own accounts; one in a category the import made needs a category again.${added.remove ? ` ${added.remove} in accounts the import made can't stay.` : ""} Off: they're removed too.`}
+                    value={keepAdded}
+                    onChange={setKeepAdded}
+                  />
+                ) : (
+                  <Text style={[type.caption, { color: t.text2 }]}>The {added.remove} transaction{added.remove === 1 ? "" : "s"} you added since {added.remove === 1 ? "is" : "are"} in accounts the import made, so {added.remove === 1 ? "it goes" : "they go"} too.</Text>
+                )
+              ) : null}
               <View style={[styles.row, { flexWrap: "wrap" }]}>
-                <Button title="Yes, undo it" tone="danger" onPress={() => { undoImport(); setAsk(null); onUndone?.(); }} style={{ minHeight: 40 }} />
+                <Button title="Yes, undo it" tone="danger" onPress={() => { undoImport(keepAdded); setAsk(null); onUndone?.(); }} style={{ minHeight: 40 }} />
                 <Button title="Cancel" tone="ghost" onPress={() => setAsk(null)} style={{ minHeight: 40 }} />
               </View>
             </View>

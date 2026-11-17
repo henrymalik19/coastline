@@ -17,7 +17,8 @@
  */
 import type { PlanState, Txn } from "@coastfi/engine";
 import type { Checkin } from "@coastfi/schema";
-import { CheckinSchema, diffRows, PLAN_TABLES, planToRows, PlanStateSchema, rowsToPlan, TxnSchema, type PlanRows, type PlanTable } from "@coastfi/schema";
+import { CheckinSchema, diffRows, PLAN_TABLES, planToRows, PlanStateSchema, rowsToPlan, TxnSchema, withProperties, type PlanRows, type PlanTable } from "@coastfi/schema";
+import { canUndoImport, parseUndo, type ImportSnapshot } from "./importUndo";
 import type { RealtimeChannel, Session } from "@supabase/supabase-js";
 import { AppState, Platform } from "react-native";
 import { create } from "zustand";
@@ -196,6 +197,58 @@ async function pullTxns(owner: string): Promise<void> {
   void publishViews();
 }
 
+/* ---------- the import from YNAB (one row per plan; see the ynab_import migration) ---------- */
+
+let importTable = true;
+type ImportRow = { imported_at: number | null; synced_at: number | null; undo: { at?: unknown; plan?: unknown; had?: unknown; before?: unknown } | null };
+
+/** Save this device's import record (imported, undone, kept, or started over) when it changed here. */
+async function pushImport(owner: string): Promise<void> {
+  const s = useStore.getState();
+  if (!supabase || !importTable || !s.importDirty) return;
+  const keep = s.lastImport && canUndoImport(s.lastImport, Date.now()) ? s.lastImport : null;
+  const res = await supabase.from("ynab_import").upsert(
+    { plan_id: owner, imported_at: s.importedAt ?? null, synced_at: s.importedAt ? (s.ynabSyncedAt ?? s.importedAt) : null, undo: s.importedAt && keep ? keep : null, updated_at: new Date().toISOString() },
+    { onConflict: "plan_id" },
+  );
+  if (res.error) {
+    if (missingTable(res.error)) { importTable = false; return; }
+    throw res.error;
+  }
+  // only if nothing changed while it saved
+  const n = useStore.getState();
+  if (n.importedAt === s.importedAt && n.lastImport === s.lastImport && n.ynabSyncedAt === s.ynabSyncedAt) useStore.setState({ importDirty: false });
+}
+
+/** Take in the import record from the server (another device imported, undid or kept it). */
+async function pullImport(owner: string, force = false): Promise<void> {
+  if (!supabase || !importTable) return;
+  const res = await supabase.from("ynab_import").select("imported_at, synced_at, undo").eq("plan_id", owner).maybeSingle();
+  if (res.error) {
+    if (missingTable(res.error)) { importTable = false; return; }
+    throw res.error;
+  }
+  const s = useStore.getState();
+  // this device's own change wins until it's saved (unless the plan itself switched)
+  if (s.importDirty && !force) return;
+  const row = res.data as ImportRow | null;
+  if (!row) {
+    // an import from before this was saved to the account: upload this device's record
+    if (s.importedAt && !force) useStore.setState({ importDirty: true });
+    else if (force) useStore.setState({ importedAt: undefined, ynabSyncedAt: undefined, lastImport: undefined, importDirty: false });
+    return;
+  }
+  const importedAt = row.imported_at ?? undefined;
+  let lastImport: ImportSnapshot | undefined;
+  if (importedAt && row.undo && canUndoImport({ at: Number(row.undo.at) }, Date.now())) {
+    const p = PlanStateSchema.safeParse(row.undo.plan);
+    lastImport = p.success ? parseUndo(row.undo, withProperties(p.data)) : undefined;
+  }
+  // an undo copy past its 30 days: clear it on the server too
+  const expired = !!row.undo && !lastImport;
+  useStore.setState({ importedAt, ynabSyncedAt: importedAt ? (row.synced_at ?? importedAt) : undefined, lastImport, importDirty: expired });
+}
+
 let started = false;
 let applyingRemote = false;
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -346,6 +399,7 @@ async function pushInner(depth = 0): Promise<void> {
       if (ci.error) throw ci.error;
     }
     await pushTxns(pid);
+    await pushImport(pid);
     void publishViews();
     setSync({ status: "synced", lastSyncedAt: Date.now(), error: undefined });
   } catch (e) {
@@ -368,11 +422,14 @@ async function syncInner(depth = 0): Promise<void> {
     const before = useStore.getState().syncBase;
     if ((before && before.owner !== pid) || (!before && pid !== userId)) {
       await switchTo(pid, remote, remoteCheckins);
+      // another plan: its import record, not this device's old one
+      await pullImport(pid, true);
       setSync({ status: "synced", lastSyncedAt: Date.now(), error: undefined });
       return;
     }
 
     await pullTxns(pid);
+    await pullImport(pid);
     mergeCheckins(remoteCheckins);
     if (!remote) {
       // a plan this device synced before is gone from the server: the account was deleted elsewhere
@@ -391,15 +448,22 @@ async function syncInner(depth = 0): Promise<void> {
       return;
     }
     // no awaits from here until the store is updated: an edit made meanwhile can't be lost
+    let tookPlan = false;
     const s = useStore.getState();
     const base = baseFor(pid);
     const remoteTodo = remote.todo_done ?? {};
     if (!base) {
       // first sync on this device: the newer copy wins; a finished plan beats an unfinished setup
-      if (remote.client_updated_at > s.updatedAt || (remote.onboarded && !s.onboarded)) take(pid, remote, ok.data);
+      if (remote.client_updated_at > s.updatedAt || (remote.onboarded && !s.onboarded)) {
+        take(pid, remote, ok.data);
+        tookPlan = true;
+      }
     } else if (remote.client_updated_at !== base.at) {
       const localChanged = !deepEqual(base.plan, s.plan) || !deepEqual(base.todoDone, s.todoDone);
-      if (!localChanged || (remote.onboarded && !s.onboarded)) take(pid, remote, ok.data);
+      if (!localChanged || (remote.onboarded && !s.onboarded)) {
+        take(pid, remote, ok.data);
+        tookPlan = !s.onboarded;
+      }
       else {
         // both changed: keep both sets of changes
         const merged = PlanStateSchema.safeParse(merge3(base.plan, s.plan, ok.data));
@@ -416,6 +480,8 @@ async function syncInner(depth = 0): Promise<void> {
         }
       }
     }
+    // a device that just took the account's plan (it had none of its own) takes its import record too
+    if (tookPlan) await pullImport(pid, true);
     await pushInner(depth);
   } catch (e) {
     fail(e);
@@ -539,7 +605,7 @@ export function startSync() {
   // upload changes made on this device
   useStore.subscribe((s, prev) => {
     if (applyingRemote) return;
-    if (s.updatedAt !== prev.updatedAt || s.todoDone !== prev.todoDone || s.checkins !== prev.checkins || s.txns !== prev.txns) schedulePush();
+    if (s.updatedAt !== prev.updatedAt || s.todoDone !== prev.todoDone || s.checkins !== prev.checkins || s.txns !== prev.txns || (s.importDirty && !prev.importDirty)) schedulePush();
   });
   // catch up when the app comes back to the foreground or the network returns
   // coming back to the app: catch up, unless it synced moments ago (live updates cover the rest)
@@ -603,7 +669,11 @@ export async function signOut(forget = false) {
   signingOut = true;
   // this device only: other devices stay signed in (Account has "Sign out other devices" for those)
   await supabase.auth.signOut({ scope: "local" });
-  if (forget) useStore.getState().startFresh();
+  if (forget) {
+    useStore.getState().startFresh();
+    // the account's import record isn't this device's to change
+    useStore.setState({ importDirty: false });
+  }
 }
 
 /** Delete the account and all synced data. The copy on this device is kept unless `forget`. */

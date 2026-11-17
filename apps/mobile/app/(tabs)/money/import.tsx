@@ -15,11 +15,13 @@ import { isCard } from "../../../lib/register";
 import { monthKey, newId, useStore } from "../../../lib/store";
 import { space, type, useTheme } from "../../../lib/theme";
 import { isoDay } from "../../../lib/categories";
-import { buildImport, categoryKey, exportMonths, groupKey, parseYnab, readYnabZip, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabCategory, type YnabData } from "../../../lib/ynab";
+import { readYnabFiles } from "../../../lib/ynabFiles";
+import { buildImport, categoryKey, exportMonths, groupKey, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabCategory, type YnabData } from "../../../lib/ynab";
 import { sticky, stickyBottom } from "../../../lib/sticky";
 import { useLayout } from "../../../lib/layout";
 import { groupOrder } from "../../../lib/budgetOrder";
-import { ImportUndoCard } from "../../../components/ImportUndo";
+import { ImportUndoCard, useImported } from "../../../components/ImportUndo";
+import { YnabUpdateCard } from "../../../components/YnabUpdate";
 import { DragList, useDragZone } from "../../../components/DragList";
 import { ReorderToggle } from "../../../components/ReorderToggle";
 
@@ -47,20 +49,6 @@ const CAT_INFO =
 const KIND_ORDER =["cash", "card", "invest", "loan"] as const;
 const KIND_SECTION = { cash: "Checking & savings", card: "Credit cards", invest: "Investments", loan: "Loans" } as const;
 
-/** Read the picked file: YNAB's zip, or its Register CSV (with its Plan CSV if picked too). */
-async function readFiles(files: FileList): Promise<YnabData> {
-  const list = [...files];
-  const zip = list.find((f) => /\.zip$/i.test(f.name));
-  if (zip) {
-    const { register, plan } = readYnabZip(new Uint8Array(await zip.arrayBuffer()));
-    return parseYnab(register, plan);
-  }
-  const reg = list.find((f) => /register/i.test(f.name)) ?? list.find((f) => /\.csv$/i.test(f.name));
-  if (!reg) throw new Error("Pick the zip YNAB exports (or its Register CSV).");
-  const plan = list.find((f) => f !== reg && /(plan|budget)\.csv$/i.test(f.name));
-  return parseYnab(await reg.text(), plan ? await plan.text() : undefined);
-}
-
 /** `setup`: opened from setup (before there's a budget); it goes back to setup when done. */
 export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const t = useTheme();
@@ -68,7 +56,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const { state, start } = usePlan();
   const saved = useStore((s) => s.plan);
   const importBudget = useStore((s) => s.importBudget);
-  const importedAt = useStore((s) => s.importedAt);
+  // one import per budget (on any device): after it, undo it or start over
+  const imported = useImported();
   const [undone, setUndone] = useState(false);
   const backToSetup = () => router.replace(`/onboarding?step=${useStore.getState().importedAt ? "you" : "start"}`);
   const existing = useStore((s) => s.txns);
@@ -128,7 +117,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
       setError("");
       setDone("");
       try {
-        const d = await readFiles(input.files!);
+        const d = await readYnabFiles(input.files!);
         if (!d.txns.length) throw new Error("No transactions in that file.");
         // YNAB's scheduled ones (dated after today) come in as upcoming: they count on their day
         setFuture(d.txns.filter((x) => x.date > isoDay(start)).length);
@@ -383,11 +372,15 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   ) : null;
   const errorNote = error ? <Text role="alert" style={[type.label, { color: t.bad }]}>{error}</Text> : null;
   // already imported here: no second import; undo it for a while, then start over to bring it in again
-  const importedCard = importedAt && !data ? (
-    <ImportUndoCard onUndone={() => { setDone(""); setUndone(true); }}>
-      {doneNote}
-      {setup && !done ? <Button title="Continue setup" tone="primary" onPress={backToSetup} style={{ alignSelf: "flex-start" }} /> : null}
-    </ImportUndoCard>
+  const importedCard = imported && !data ? (
+    <View style={{ gap: space.md }}>
+      <ImportUndoCard onUndone={() => { setDone(""); setUndone(true); }}>
+        {doneNote}
+        {setup && !done ? <Button title="Continue setup" tone="primary" onPress={backToSetup} style={{ alignSelf: "flex-start" }} /> : null}
+      </ImportUndoCard>
+      {/* after setup: newer transactions from YNAB, for using both apps for a while */}
+      {setup ? null : <YnabUpdateCard />}
+    </View>
   ) : null;
   const headCard = importedCard ?? (!loaded ? (
     <Card style={{ gap: space.sm }}>

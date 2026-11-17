@@ -4,7 +4,7 @@
  * month, and what you assign to savings and debts is what the plan counts as done that month.
  */
 import { ReorderToggle } from "../../components/ReorderToggle";
-import { ImportUndoReminder } from "../../components/ImportUndo";
+import { ImportUndoReminder, useImported } from "../../components/ImportUndo";
 import { BUDGET_ITEM, budgetCategories, budgetView, SAVINGS_GROUP, spendingHistory, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
 import { BudgetAccounts } from "../../components/BudgetAccounts";
@@ -65,6 +65,7 @@ export default function Budget() {
   const [open, setOpen] = useState<string | null>(null);
   const [groupOpen, setGroupOpen] = useState<string | null>(null);
   const [hiddenOpen, setHiddenOpen] = useState(false);
+  const imported = useImported();
   const [groupDraft, setGroupDraft] = useState("");
   const router = useRouter();
   const openPage = useOpenPage();
@@ -880,7 +881,7 @@ export default function Budget() {
             Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement && !x.accountId && !x.hidden).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number.{" "}
             <Text role="link" onPress={() => openPage("/money/retirement")} style={{ color: t.accent, fontWeight: "700" }}>Choose what's included</Text>. Bills come from repeating savings goals and debt payments from Debts; tap one to change it there. Spent and paid come from the transactions you record.
           </Text>
-          <Button title="Import from YNAB" icon="database" tone="ghost" onPress={() => router.push("/money/import")} style={{ alignSelf: "flex-start" }} />
+          {imported ? null : <Button title="Import from YNAB" icon="database" tone="ghost" onPress={() => router.push("/money/import")} style={{ alignSelf: "flex-start" }} />}
           <Button
             title="Start the budget over"
             tone="ghost"

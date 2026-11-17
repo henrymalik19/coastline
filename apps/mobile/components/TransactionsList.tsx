@@ -75,6 +75,11 @@ export function TransactionsList({
   const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? state.accounts.find((a) => a.id === id)?.name ?? state.debts.find((d) => d.id === id)?.name ?? outsideName(id) ?? "Account";
   // only this month's and last month's need a category; older ones are history
   const since = needsCategorySince(start);
+  /** Under a transfer's from → to: what it's for (a card payment, from Unassigned…), and its memo. */
+  const transferNote = (x: Txn) => {
+    const what = categoryText(cats, x, nameOf, since).match(/\(([^)]*)\)$/)?.[1];
+    return [what ?? "Transfer", x.payee && !/^transfer/i.test(x.payee) ? x.payee : "", x.memo ?? ""].filter(Boolean).join(" · ");
+  };
   const uncategorized = (x: Txn) => needsCategory(x, since);
 
   const list = useMemo(() => {
@@ -118,9 +123,12 @@ export function TransactionsList({
     );
   }
 
-  // grouped by day
+  // grouped by day. All accounts: a transfer between two of them shows once (from → to), on its outgoing side
+  const listed = new Set(list.map((x) => x.id));
+  const pairOf = new Map(txns.filter((x) => x.transferId).map((x) => [x.id, x.transferId!]));
+  const shown = acct === "all" ? list.filter((x) => !(x.transferAccountId && x.amount > 0 && pairOf.get(x.id) && listed.has(pairOf.get(x.id)!))) : list;
   const days: { date: string; items: Txn[] }[] = [];
-  for (const x of list) {
+  for (const x of shown) {
     const last = days[days.length - 1];
     if (last && last.date === x.date) last.items.push(x);
     else days.push({ date: x.date, items: [x] });
@@ -246,15 +254,40 @@ export function TransactionsList({
                     style={({ pressed }) => [styles.txn, g.date > today ? { opacity: 0.6 } : null, pressed ? { backgroundColor: t.surface2 } : null]}
                   >
                     <ClearedDot status={x.cleared} onToggle={() => saveTxn({ ...x, cleared: x.cleared === "cleared" ? "uncleared" : "cleared" }, isoDay(start))} />
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text numberOfLines={1} style={[type.body, { color: t.text }]}>{x.payee || (x.transferAccountId ? "Transfer" : "No payee")}</Text>
-                      <Text numberOfLines={1} style={[type.caption, { color: uncategorized(x) ? t.warn : t.text3 }]}>
-                        {categoryText(cats, x, nameOf, since)}{acct === "all" ? ` · ${nameOf(x.accountId)}` : ""}
+                    {x.transferAccountId ? (
+                      // a transfer: from → to, with what it's for underneath
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                          <View style={[styles.transferBadge, { backgroundColor: t.accentSoft }]}>
+                            <Icon name="transfer" size={14} color={t.accent} />
+                          </View>
+                          <Text numberOfLines={1} style={[type.body, { color: t.text, flexShrink: 1 }]}>
+                            {x.amount < 0 ? nameOf(x.accountId) : nameOf(x.transferAccountId)}
+                            <Text style={{ color: t.text3 }}>{"  →  "}</Text>
+                            {x.amount < 0 ? nameOf(x.transferAccountId) : nameOf(x.accountId)}
+                          </Text>
+                        </View>
+                        <Text numberOfLines={1} style={[type.caption, { color: uncategorized(x) ? t.warn : t.text3 }]}>
+                          {transferNote(x)}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text numberOfLines={1} style={[type.body, { color: t.text }]}>{x.payee || "No payee"}</Text>
+                        <Text numberOfLines={1} style={[type.caption, { color: uncategorized(x) ? t.warn : t.text3 }]}>{categoryText(cats, x, nameOf, since)}</Text>
+                      </View>
+                    )}
+                    <View style={{ alignItems: "flex-end", maxWidth: compact ? 120 : 180 }}>
+                      <Text style={[type.body, { color: x.transferAccountId ? t.text2 : x.amount > 0 ? t.good : t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>
+                        {acct === "all" && x.transferAccountId ? "" : x.amount > 0 ? "+" : "−"}{money(Math.abs(x.amount))}
                       </Text>
+                      {/* all accounts: which account it's in, as a small tag under the amount */}
+                      {acct === "all" && !x.transferAccountId ? (
+                        <View style={[styles.acctTag, { backgroundColor: t.surface2 }]}>
+                          <Text numberOfLines={1} style={[type.caption, { color: t.text2, fontWeight: "600" }]}>{nameOf(x.accountId)}</Text>
+                        </View>
+                      ) : null}
                     </View>
-                    <Text style={[type.body, { color: x.amount > 0 ? t.good : t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>
-                      {x.amount > 0 ? "+" : "−"}{money(Math.abs(x.amount))}
-                    </Text>
                   </Pressable>
                 </View>
               ))}
@@ -269,6 +302,12 @@ export function TransactionsList({
           <Text style={[type.caption, { color: t.text3 }]}>Add what you spend and earn here. Each one comes out of (or goes into) a budget category.</Text>
         </Card>
       )}
+      {txns.some((x) => !x.deleted && x.payee) ? (
+        <Pressable role="link" onPress={() => router.push("/money/payees")} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Payees: rename or combine</Text>
+          <Icon name="chevron" size={12} color={t.accent} />
+        </Pressable>
+      ) : null}
       {editing ? <TxnForm txn={editing === "new" ? undefined : editing} accountId={editing === "new" && picked ? picked.id : undefined} onClose={() => setEditing(null)} /> : null}
     </>
   );
@@ -280,5 +319,7 @@ const styles = StyleSheet.create({
   summary: { flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: 10, paddingHorizontal: space.md, paddingVertical: 8 },
   dayHead: { paddingHorizontal: 16, paddingVertical: 6 },
   txn: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: 16, paddingVertical: 12 },
+  transferBadge: { width: 20, height: 20, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  acctTag: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1, marginTop: 2, maxWidth: "100%" },
   dot: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
 });

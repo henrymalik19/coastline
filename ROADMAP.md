@@ -138,6 +138,12 @@ Upcoming transactions already work: anything dated after today shows under "Upco
 - [ ] **Code: transfers to an IRA or loan dated in the future** move that account's balance on their day, not when they're entered (today they move it right away).
 - **When:** if testers ask. For regular bills, repeating bills in Savings goals already set money aside each month.
 
+## 9c. Update transactions from YNAB (done 2026-11-17)
+
+A budget gets one YNAB import (undo it within 30 days, on any device, to redo it). After that, Import from YNAB → "Update transactions from YNAB" takes a newer export: new and changed transactions come in, ones gone from YNAB are removed (a switch, on by default) unless you changed them here, and new YNAB categories come in hidden. Categories, amounts, groups and accounts are left alone.
+
+- [ ] Maybe later: YNAB's API (a token) instead of export files, if someone uses both apps for months.
+
 ## 10. Reports (later)
 
 - [ ] **Code: spending by category over the months.** A chart on the Budget tab of what you really spent in each category, month by month, from your transactions.

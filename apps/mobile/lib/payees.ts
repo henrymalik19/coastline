@@ -32,3 +32,34 @@ export function suggestPayees(payees: Map<string, PayeeInfo>, typed: string, lim
     .slice(0, limit)
     .map(([, info]) => info);
 }
+
+const STOP = new Set(["the", "a", "an"]);
+/** What names that look alike share: the first real word, letters only ("CHICK-FIL-A #123" → "chick"). */
+export function payeeKey(name: string): string {
+  const words = name.toLowerCase().split(/[\s*#/&.,'-]+/).map((w) => w.replace(/[^a-z]/g, "")).filter((w) => w && !STOP.has(w));
+  return words[0] && words[0].length >= 3 ? words[0] : "";
+}
+
+/** Payees that look like the same one written different ways (most used first), for combining. */
+export function similarPayees(payees: Map<string, PayeeInfo>): PayeeInfo[][] {
+  const by = new Map<string, PayeeInfo[]>();
+  for (const p of payees.values()) {
+    const k = payeeKey(p.name);
+    if (k) by.set(k, [...(by.get(k) ?? []), p]);
+  }
+  return [...by.values()].filter((g) => g.length > 1).map((g) => g.sort((a, b) => b.count - a.count || a.name.length - b.name.length || b.last - a.last)).sort((a, b) => b.length - a.length);
+}
+
+/** Every transaction paid to one of `from` (any casing) now says `to`. Returns the same list if nothing changed. */
+export function renamePayeesIn<T extends { payee?: string; deleted?: boolean; updatedAt: number; id: string }>(txns: T[], from: string[], to: string, stamp: number): T[] {
+  const names = new Set(from.map((x) => x.trim().toLowerCase()));
+  const name = to.trim();
+  if (!name) return txns;
+  let changed = false;
+  const out = txns.map((t) => {
+    if (t.deleted || t.id.startsWith("start:") || !t.payee || !names.has(t.payee.trim().toLowerCase()) || t.payee === name) return t;
+    changed = true;
+    return { ...t, payee: name, updatedAt: stamp };
+  });
+  return changed ? out : txns;
+}
