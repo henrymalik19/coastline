@@ -139,6 +139,11 @@ export const hsaTakeHome = (m: MonthRow, marginalTax: number, payroll?: boolean)
 export function monthTodos(m: MonthRow, t: Theme, marginalTax: number, rothShare = 0, hsaPayroll = false, spouseIra = "your spouse's IRA"): Todo[] {
   const a = m.alloc;
   const out: Todo[] = [];
+  // paycheck changes are made once (it can take a paycheck or two to start), then stay the same every check
+  const checks = (m.checks ?? []).reduce((s, n) => s + n, 0);
+  const perCheck = (v: number) => (checks > 0 ? v / checks : v);
+  const onceNote =
+    "Change it once with your employer. Then enter it on your job in Money → Income and this to-do goes away. If it won't start until a later paycheck, use “changing later” there to pick the month.";
   if (m.emergency) {
     // emergency mode: the only job is to hold on to cash
     if (a.leftover > 0.5) out.push({ key: "em", title: "Keep it in cash (emergency mode)", detail: "Investing and extra payments are paused", amount: a.leftover, color: t.series.ef });
@@ -151,7 +156,7 @@ export function monthTodos(m: MonthRow, t: Theme, marginalTax: number, rothShare
   if (a.hsa > 0.5)
     out.push(
       hsaPayroll
-        ? { key: "hsa", title: "Raise your HSA paycheck contribution", detail: `${money(a.hsa)} into your HSA this month, pre-tax`, amount: hsaTakeHome(m, marginalTax, true), color: t.series.hsa }
+        ? { key: "hsa", title: `Add about ${money(perCheck(a.hsa), { whole: true })} per paycheck to your HSA`, detail: onceNote, amount: hsaTakeHome(m, marginalTax, true), color: t.series.hsa }
         : { key: "hsa", title: "Contribute to your HSA", amount: a.hsa, color: t.series.hsa },
     );
   const sp = m.iraSpouse ?? 0;
@@ -159,7 +164,7 @@ export function monthTodos(m: MonthRow, t: Theme, marginalTax: number, rothShare
   if (sp > 0.5) out.push({ key: "iraSpouse", title: `Contribute to ${spouseIra}`, amount: sp, color: t.series.ira });
   if (a.goals > 0.5) out.push({ key: "goals", title: "Save toward your goals", amount: a.goals, color: t.series.goals });
   if (a.k401Step > 0.5)
-    out.push({ key: "k401", title: "Put extra into your 401(k)", detail: `${money(a.k401Step / k401Cost(marginalTax, rothShare))} into your 401(k)`, amount: a.k401Step, color: t.series.k401 });
+    out.push({ key: "k401", title: `Add about ${money(perCheck(a.k401Step / k401Cost(marginalTax, rothShare)), { whole: true })} per paycheck to your 401(k)`, detail: onceNote, amount: a.k401Step, color: t.series.k401 });
   if (a.taxable > 0.5) out.push({ key: "taxable", title: "Invest in your brokerage", amount: a.taxable, color: t.series.taxable });
   return out;
 }
