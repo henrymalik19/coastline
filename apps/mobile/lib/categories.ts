@@ -22,7 +22,13 @@ export function useCategories(month?: string): NamedCategory[] {
 }
 
 /** "Groceries", "Unassigned", "Transfer", or "Split (3)" for a transaction's category. */
-export function categoryText(cats: NamedCategory[], t: { id?: string; categoryId?: string; splits?: unknown[]; transferAccountId?: string; amount: number }, accountName: (id: string) => string): string {
+export function categoryText(
+  cats: NamedCategory[],
+  t: { id?: string; categoryId?: string; splits?: unknown[]; transferAccountId?: string; amount: number; date?: string },
+  accountName: (id: string) => string,
+  /** Older than this, a missing category is just history ("No category"), not a to-do. */
+  since?: string,
+): string {
   if (t.splits?.length) return `Split (${t.splits.length})`;
   if (t.id && isStartTxn({ id: t.id })) return t.amount < 0 && !t.categoryId ? "Starting balance (owed)" : "Starting balance";
   // a withdrawal from an IRA or brokerage account: money in, Unassigned
@@ -34,15 +40,26 @@ export function categoryText(cats: NamedCategory[], t: { id?: string; categoryId
   if (t.categoryId === "ready") return "Unassigned";
   const c = t.categoryId ? cats.find((x) => x.key === t.categoryId)?.label : undefined;
   if (t.transferAccountId) return `Transfer · ${accountName(t.transferAccountId)}${c ? ` (${c})` : ""}`;
-  return c ?? "Needs a category";
+  return c ?? (since && t.date && t.date < since ? "No category" : "Needs a category");
+}
+
+/**
+ * Only recent transactions are asked for a category: this month and last. Older months are closed, so an
+ * old one without a category (from a long import, say) is history, not a to-do.
+ */
+export function needsCategorySince(start: Date): string {
+  const d = new Date(start.getFullYear(), start.getMonth() - 1, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
 /**
  * A transaction that still needs a category: money in or out with none (a transfer between your own
  * accounts and an account's starting balance don't need one), or a split with a line that has none.
+ * With `since`, only transactions on or after that day count.
  */
-export function needsCategory(t: Pick<Txn, "id" | "categoryId" | "transferAccountId" | "splits" | "deleted">): boolean {
+export function needsCategory(t: Pick<Txn, "id" | "categoryId" | "transferAccountId" | "splits" | "deleted" | "date">, since?: string): boolean {
   if (t.deleted || isStartTxn(t)) return false;
+  if (since && t.date < since) return false;
   if (t.splits?.length) return t.splits.some((s) => !s.categoryId);
   return !t.categoryId && !t.transferAccountId;
 }

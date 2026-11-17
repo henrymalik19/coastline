@@ -130,8 +130,17 @@ Not yet. Build for where testers actually struggle, not a guess.
   - Engine work with tests (tax brackets live in the engine, never the app). Update the brackets each year with the contribution limits.
   - **When:** after the first testers, unless they question the 10%.
 
+## 10. Reports (later)
+
+- [ ] **Code: spending by category over the months.** A chart on the Budget tab of what you really spent in each category, month by month, from your transactions.
+  - With a long YNAB import it starts with years of history instead of empty.
+  - **Goes with it: old YNAB categories as hidden categories.** Categories left out of an import (not used lately) come in hidden: not on the budget and no money assigned, but holding their old transactions. Then old spending shows in its real category in the report instead of "No category". Needs a `hidden` flag on categories (a migration).
+- [ ] **Code: net worth over time** from your monthly check-ins.
+- **When:** once testers have a few months of real data, or ask how they're doing over time.
+
 ## Done
 
+- 2026-11-17: YNAB import: only this month's and last month's transactions need a category; transfers to accounts left out stay transfers; a note on long imports. Priority order: custom splits, grouped steps, turn steps off, reasons, kept-as-cash row. What-ifs marked in orange everywhere.
 - 2026-11-17: Retirement spending can be a set yearly amount (compared with the budget); returns and the FIRE number shown before inflation too; Back returns where you came from; Money → Your plan.
 - 2026-11-17: Ready for testers: Send feedback, visit counting (Vercel Web Analytics), `pnpm stats`, Forgot password, a BETA tag and welcome line, and an empty plan that asks for a budget instead of showing nonsense.
 - 2026-11-16: Devices unused for 30 days are signed out; Sign out ends only this device's sign-in.

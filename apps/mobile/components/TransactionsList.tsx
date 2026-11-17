@@ -11,7 +11,8 @@ import { Button, NumberInput, Select, TextField } from "./form";
 import { Icon } from "./Icon";
 import { TxnForm } from "./TxnForm";
 import { Card, Divider } from "./ui";
-import { categoryText, isoDay, useCategories, needsCategory } from "../lib/categories";
+import { categoryText, isoDay, useCategories, needsCategory, needsCategorySince } from "../lib/categories";
+import { outsideName } from "../lib/outside";
 import { money } from "../lib/format";
 import { useLayout } from "../lib/layout";
 import { usePlan } from "../lib/plan";
@@ -58,8 +59,10 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
   }, [account]);
   const [bankSays, setBankSays] = useState(0);
 
-  const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? state.accounts.find((a) => a.id === id)?.name ?? state.debts.find((d) => d.id === id)?.name ?? "Account";
-  const uncategorized = (x: Txn) => needsCategory(x);
+  const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? state.accounts.find((a) => a.id === id)?.name ?? state.debts.find((d) => d.id === id)?.name ?? outsideName(id) ?? "Account";
+  // only this month's and last month's need a category; older ones are history
+  const since = needsCategorySince(start);
+  const uncategorized = (x: Txn) => needsCategory(x, since);
 
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -212,7 +215,7 @@ export function TransactionsList({ month, account, onlyNeedsCategory, stickyTop 
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text numberOfLines={1} style={[type.body, { color: t.text }]}>{x.payee || (x.transferAccountId ? "Transfer" : "No payee")}</Text>
                       <Text numberOfLines={1} style={[type.caption, { color: uncategorized(x) ? t.warn : t.text3 }]}>
-                        {categoryText(cats, x, nameOf)}{acct === "all" ? ` · ${nameOf(x.accountId)}` : ""}
+                        {categoryText(cats, x, nameOf, since)}{acct === "all" ? ` · ${nameOf(x.accountId)}` : ""}
                       </Text>
                     </View>
                     <Text style={[type.body, { color: x.amount > 0 ? t.good : t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>

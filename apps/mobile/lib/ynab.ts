@@ -8,6 +8,7 @@
 import { startTxnId, type BudgetItem, type Debt, type PlanState, type Txn } from "@coastfi/engine";
 import { unzipSync, strFromU8 } from "fflate";
 import { isCard } from "./register";
+import { OUTSIDE } from "./outside";
 
 /* ---------- reading the files ---------- */
 
@@ -358,8 +359,12 @@ export type ImportResult = {
   summary: {
     accountsAdded: number; accountsRemoved: number; categoriesAdded: number; categoriesUpdated: number; categoriesRemoved: number; categoriesSkipped: number;
     transactions: number; transactionsMatched: number; months: number;
-    /** Transactions that will need a category: YNAB had none, or you left their category out. */
+    /** Recent transactions (this month and last) that will need a category: YNAB had none, or you left their category out. */
     needsCategoryFromYnab: number; needsCategoryLeftOut: number;
+    /** Older ones without a category: kept as history, nothing to do. */
+    olderWithoutCategory: number;
+    /** Transfers to accounts you left out: kept as transfers, nothing to do. */
+    transfersOutside: number;
   };
 };
 
@@ -394,7 +399,10 @@ export const recentMonths = (thisMonth: string, n = 3) => Array.from({ length: n
 /** Turn YNAB's data into the plan's categories, assignments, accounts and transactions. */
 export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): ImportResult {
   const plan = structuredClone(input);
-  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0 };
+  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, olderWithoutCategory: 0, transfersOutside: 0 };
+  // only this month's and last month's transactions are asked for a category (older ones are history)
+  const [ty, tm] = o.thisMonth.split("-").map(Number) as [number, number];
+  const recentFrom = tm === 1 ? `${ty - 1}-12-01` : `${ty}-${String(tm - 1).padStart(2, "0")}-01`;
   const accts = ynabAccounts(d);
 
   // accounts: matched, added, or left out
@@ -537,12 +545,18 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     else { const k = catOf(t.group, t.category); if (k) tx.categoryId = k; }
     // needs a category here: YNAB had none, or its category was left out
     const hadCategory = t.splits?.length ? t.splits.every((s) => !!s.category) : !!t.category;
-    const missing = t.splits?.length ? tx.splits!.some((s) => !s.categoryId) : !tx.categoryId && !(to && toBudget);
-    if (missing) {
+    // a transfer to an account you left out (an old or closed one): still a transfer, not spending, so it
+    // needs no category (it points at that account by name, since there's no account here for it)
+    const outside = !!t.transferTo && !to && !tx.categoryId && !t.splits?.length;
+    const missing = t.splits?.length ? tx.splits!.some((s) => !s.categoryId) : !tx.categoryId && !(to && toBudget) && !outside;
+    if (outside) summary.transfersOutside++;
+    if (missing && t.date < recentFrom) summary.olderWithoutCategory++;
+    else if (missing) {
       if (hadCategory) summary.needsCategoryLeftOut++;
       else summary.needsCategoryFromYnab++;
     }
     if (to) tx.transferAccountId = to;
+    else if (outside) tx.transferAccountId = OUTSIDE + t.transferTo;
     // money into a card from a budget account: the card's payment
     if (to && toBudget && kindOf.get(t.account) === "card" && t.amount > 0) delete tx.categoryId;
     // a transfer between two budget accounts has no category

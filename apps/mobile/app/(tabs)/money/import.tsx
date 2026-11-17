@@ -405,6 +405,12 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
       <Text style={[type.caption, { color: t.text3 }]}>
         Each account starts with its balance on the first day{from ? ` (${ymText(from)})` : ""}; transactions and what you assigned come in from then on.
       </Text>
+      {monthCount > 6 ? (
+        <Text style={[type.caption, { color: t.text2 }]}>
+          Bringing in {monthCount} months is fine, but 2 or 3 is usually enough to start: older months mostly add history to scroll through. Only this
+          month's and last month's transactions ever need a category.
+        </Text>
+      ) : null}
       {doneNote}
     </Card>
   ));
@@ -601,12 +607,24 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const notes = preview ? (
     <>
       {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut ? (
-        <Text style={[type.caption, { color: t.warn }]}>
-          {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut} transactions will need a category
+        <Text style={[type.caption, { color: t.text2 }]}>
+          <Text style={{ fontWeight: "700", color: t.text }}>
+            {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut} recent{" "}
+            {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut === 1 ? "transaction" : "transactions"}
+          </Text>{" "}
+          will need a category
           {preview.summary.needsCategoryFromYnab && preview.summary.needsCategoryLeftOut
             ? ` (${preview.summary.needsCategoryFromYnab} had none in YNAB, ${preview.summary.needsCategoryLeftOut} are in categories you left out)`
             : preview.summary.needsCategoryLeftOut ? " (they're in categories you left out)" : " (they had none in YNAB)"}
           . You'll find them under Transactions.
+        </Text>
+      ) : null}
+      {preview.summary.olderWithoutCategory || preview.summary.transfersOutside ? (
+        <Text style={[type.caption, { color: t.text3 }]}>
+          Nothing to do for the rest:
+          {preview.summary.olderWithoutCategory ? ` ${preview.summary.olderWithoutCategory} older ones without a category stay as history` : ""}
+          {preview.summary.olderWithoutCategory && preview.summary.transfersOutside ? ", and" : ""}
+          {preview.summary.transfersOutside ? ` ${preview.summary.transfersOutside} transfers to accounts you left out stay as transfers` : ""}.
         </Text>
       ) : null}
       {preview.summary.categoriesRemoved ? (

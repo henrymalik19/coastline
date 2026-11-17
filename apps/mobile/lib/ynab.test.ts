@@ -244,6 +244,28 @@ describe("choosing where categories go, and matching your own transactions", () 
     expect(skip.summary.needsCategoryFromYnab).toBe(0);
   });
 
+  it("a transfer to an account you left out stays a transfer, needing no category", () => {
+    const { plan, d, opts } = base();
+    const r = buildImport(plan, d, { ...opts, accounts: { Visa: { action: "skip" } } });
+    const pay = r.txns.find((t) => t.transferAccountId === "outside:Visa")!;
+    expect(pay.amount).toBe(-200);
+    expect(pay.categoryId).toBeUndefined();
+    expect(r.summary.transfersOutside).toBe(1);
+    expect(r.summary.needsCategoryFromYnab).toBe(0);
+  });
+
+  it("only this month's and last month's transactions are asked for a category", () => {
+    const { plan, d, opts } = base();
+    // the left-out Household line is from November: recent in December, history by February
+    const skip = { categoryMap: { [categoryKey("Everyday", "Household")]: { action: "skip" as const } } };
+    const dec = buildImport(plan, d, { ...opts, ...skip });
+    expect(dec.summary.needsCategoryLeftOut).toBe(1);
+    expect(dec.summary.olderWithoutCategory).toBe(0);
+    const feb = buildImport(plan, d, { ...opts, ...skip, thisMonth: "2027-02" });
+    expect(feb.summary.needsCategoryLeftOut).toBe(0);
+    expect(feb.summary.olderWithoutCategory).toBe(1);
+  });
+
   it("two of YNAB's categories into one of yours add up", () => {
     const { plan, d, opts } = base();
     const r = buildImport(plan, d, { ...opts, categoryMap: { [categoryKey("Everyday", "Groceries")]: { action: "match", id: "food" }, [categoryKey("Everyday", "Household")]: { action: "match", id: "food" } } });

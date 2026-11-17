@@ -1,5 +1,5 @@
 import { budgetView, DISPLAY_INFLATION, inFutureDollars, isHighInterest, paysExtra } from "@coastfi/engine";
-import { needsCategory } from "../../lib/categories";
+import { needsCategory, needsCategorySince } from "../../lib/categories";
 import { budgetKeyFor } from "../../lib/budgetLinks";
 import { useCategories } from "../../lib/categories";
 import { cardMap, liveBudget } from "../../lib/register";
@@ -48,7 +48,7 @@ export default function Home() {
   const assignedNow = state.budgetPlan?.months?.[mk]?.assigned ?? {};
   const done = useStore((s) => s.todoDone[mk]) ?? [];
   // transactions that still need a category (a to-do until they're done)
-  const needsCount = txns.filter(needsCategory).length;
+  const needsCount = txns.filter((x) => needsCategory(x, needsCategorySince(start))).length;
   const toggleTodo = useStore((s) => s.toggleTodo);
 
   // which plan step a to-do comes from ("Step 3: Pay off high-interest debt")

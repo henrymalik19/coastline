@@ -9,6 +9,7 @@ import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, Vi
 import { CalendarModal } from "./Calendar";
 import { Icon } from "./Icon";
 import { categoryText, isoDay, useCategories } from "../lib/categories";
+import { outsideName } from "../lib/outside";
 import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
 import { budgetAccounts, trackingAccounts } from "../lib/register";
@@ -45,7 +46,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const isTracking = (id: string) => tracking.some((a) => a.id === id);
   // a withdrawal is kept on the budget account's side: money in, from the IRA
   const withdrawal = !!txn?.transferAccountId && txn.amount > 0 && isTracking(txn.transferAccountId);
-  const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? tracking.find((a) => a.id === id)?.name ?? "Account";
+  const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? tracking.find((a) => a.id === id)?.name ?? outsideName(id) ?? "Account";
 
   const [kind, setKind] = useState<Kind>(txn ? (txn.transferAccountId ? "transfer" : txn.amount > 0 ? "in" : "out") : transferFrom ? "transfer" : initialKind ?? "out");
   const [amount, setAmount] = useState(Math.abs(txn?.amount ?? initialAmount ?? 0));

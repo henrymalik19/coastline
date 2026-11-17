@@ -11,7 +11,7 @@ import { BudgetAccounts } from "../../components/BudgetAccounts";
 import { TransactionsList } from "../../components/TransactionsList";
 import { cardMap, liveBudget } from "../../lib/register";
 import { linkableAccounts, suggestedAccount } from "../../lib/budgetDupes";
-import { needsCategory } from "../../lib/categories";
+import { needsCategory, needsCategorySince } from "../../lib/categories";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Segmented, Select } from "../../components/form";
@@ -106,8 +106,8 @@ export default function Budget() {
     io.observe(el);
     return () => io.disconnect();
   }, [barH, tab, view.started]);
-  // transactions that still need a category (any month)
-  const needsCount = txns.filter(needsCategory).length;
+  // transactions that still need a category (this month and last; older ones are history)
+  const needsCount = txns.filter((x) => needsCategory(x, needsCategorySince(start))).length;
   // a display choice (Settings → Appearance), on unless turned off
   const showReal = useAppearance((s) => s.realSpending);
   const setShowReal = useAppearance((s) => s.setRealSpending);
