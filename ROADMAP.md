@@ -144,6 +144,16 @@ A budget gets one YNAB import (undo it within 30 days, on any device, to redo it
 
 - [ ] Maybe later: YNAB's API (a token) instead of export files, if someone uses both apps for months.
 
+## 9d. Approve new transactions (before banks go live)
+
+Transactions that arrive on their own (a connected bank, an update from YNAB) are "new" until you look at them, so nothing changes your budget without you seeing it. Entered by hand: already approved.
+
+- [ ] **Code: a "New" mark and an Approve button** on each row, plus "Approve all" on the list. A new transaction counts in balances and the budget right away (like YNAB), only marked until you approve it.
+- [ ] **Code: Home shows "N new transactions · Review"**, folded together with "Needs a category" into one list: categorize and approve in one pass.
+- [ ] Ways to make it ours: approve a payee's group at once ("6 from Amazon → Shopping ✓"), and say why it's flagged (a new payee, an unusual amount, a possible duplicate).
+- YNAB's export has no "approved" column, so an import can't tell which of yours were still unapproved in YNAB: everything from an import comes in approved (you're bringing in history you've already seen). Only what arrives after the import is new.
+- **When:** with bank linking (section 2), when transactions start arriving without you entering them.
+
 ## 10. Reports (later)
 
 - [ ] **Code: spending by category over the months.** A chart on the Budget tab of what you really spent in each category, month by month, from your transactions.

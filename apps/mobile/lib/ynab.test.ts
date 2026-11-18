@@ -2,7 +2,7 @@ import { budgetStartCash, budgetView, registerBalance, type PlanState } from "@c
 import { describe, expect, it } from "vitest";
 import { freshPlan } from "./presets";
 import { cardMap } from "./register";
-import { balanceConflicts, buildImport, categoryKey, groupKey, exportMonths, dateParser, money, monthOf, parseCsv, parseYnab, suggestChoice, ynabAccounts, ynabCategories } from "./ynab";
+import { balanceConflicts, buildImport, categoryKey, groupKey, exportMonths, dateParser, money, monthOf, nameId, parseCsv, parseYnab, suggestChoice, ynabAccounts, ynabCategories } from "./ynab";
 
 // a small YNAB export, in the shape YNAB writes it (newest first, US dates, $ amounts)
 const REGISTER = `﻿"Account","Flag","Date","Payee","Category Group/Category","Category Group","Category","Memo","Outflow","Inflow","Cleared"
@@ -317,5 +317,30 @@ describe("choosing where categories go, and matching your own transactions", () 
     // each match is shown to confirm; one you say isn't the same stays alongside YNAB's
     expect(r.matches.map((m) => [m.mine.id, m.ynab.payee])).toEqual([["m1", "Target"], ["m3", "Employer"]]);
     expect(buildImport(plan, d, { ...opts, existing, keepBoth: ["m1"] }).replaced).toEqual(["m3"]);
+  });
+});
+
+describe("the same ids on every device", () => {
+  it("two imports of the same export (on two devices) add accounts and categories with the same ids", () => {
+    const plan: PlanState = freshPlan();
+    const d = parseYnab(REG, PLAN);
+    const opts = { from: "2026-11", thisMonth: "2026-12", accounts: {}, categories: {}, removeEmpty: false };
+    const a = buildImport(structuredClone(plan), d, opts);
+    const b = buildImport(structuredClone(plan), d, opts);
+    const ids = (r: typeof a) => [...r.plan.accounts, ...r.plan.debts, ...r.plan.budget].map((x) => x.id);
+    expect(ids(a)).toEqual(ids(b));
+    expect(a.txns.map((t) => [t.id, t.accountId, t.categoryId])).toEqual(b.txns.map((t) => [t.id, t.accountId, t.categoryId]));
+    // every transaction points at an account and category the plan has
+    const accts = new Set([...a.plan.accounts, ...a.plan.debts].map((x) => x.id));
+    const cats = new Set(a.plan.budget.map((x) => x.id));
+    expect(a.txns.every((t) => accts.has(t.accountId))).toBe(true);
+    expect(a.txns.every((t) => !t.categoryId || t.categoryId === "ready" || t.categoryId === "cash" || t.categoryId.startsWith("debt:") || cats.has(t.categoryId))).toBe(true);
+  });
+
+  it("never reuses an id the plan already has", () => {
+    const used = new Set<string>();
+    const first = nameId("acct", "Checking", used);
+    expect(nameId("acct", "checking ", used)).not.toBe(first);
+    expect(nameId("cat", "Checking", new Set())).not.toBe(first);
   });
 });

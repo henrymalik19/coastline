@@ -367,7 +367,8 @@ export type ImportOptions = {
   replaceMatching?: boolean;
   /** Matches you said aren't the same transaction (your transaction's id): both stay. */
   keepBoth?: string[];
-  newId: () => string;
+  /** Ids for what the import adds (tests); without it, ids come from YNAB's names (see nameId). */
+  newId?: () => string;
 };
 export const categoryKey = (group: string, name: string) => norm(group) + "\u0000" + norm(name);
 /** A YNAB group, for `groupMap`. */
@@ -394,14 +395,30 @@ export type ImportResult = {
 
 /** A stable id for a YNAB transaction, so importing it again replaces it instead of adding it twice. */
 function stableId(t: YnabTxn, n: number): string {
-  const text = [t.account, t.date, t.payee, t.transferTo ?? "", t.amount, t.memo, t.category, n].join("|");
+  return "ynab-" + hash([t.account, t.date, t.payee, t.transferTo ?? "", t.amount, t.memo, t.category, n].join("|"));
+}
+
+/**
+ * An id for an account or category the import adds, from its YNAB name: the same on every device,
+ * so if the import runs twice (or another device's copy of it wins a sync) its transactions still
+ * point at it. Never one the plan already uses.
+ */
+export function nameId(kind: "acct" | "cat", name: string, used: Set<string>): string {
+  const base = `ynab-${kind}-${hash(name.trim().toLowerCase())}`;
+  let id = base;
+  for (let n = 2; used.has(id); n++) id = `${base}-${n}`;
+  used.add(id);
+  return id;
+}
+
+function hash(text: string): string {
   let h1 = 0x811c9dc5;
   let h2 = 0;
   for (let i = 0; i < text.length; i++) {
     h1 = Math.imul(h1 ^ text.charCodeAt(i), 16777619) >>> 0;
     h2 = (Math.imul(h2, 31) + text.charCodeAt(i)) >>> 0;
   }
-  return "ynab-" + h1.toString(36) + h2.toString(36);
+  return h1.toString(36) + h2.toString(36);
 }
 
 const addMonthsTo = (ym: string, n: number) => {
@@ -433,6 +450,8 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   const idOf = new Map<string, string>();
   const kindOf = new Map<string, YnabAccountKind>();
   const taken = new Set<string>();
+  const used = new Set<string>([...plan.accounts, ...plan.debts, ...plan.budget, ...(plan.properties ?? [])].map((x) => x.id));
+  const idFor = (kind: "acct" | "cat", name: string) => (o.newId ? o.newId() : nameId(kind, name, used));
   for (const a of accts) {
     let ch = o.accounts[a.name] ?? suggestChoice(plan, a, new Set([...taken, ...Object.values(o.accounts).flatMap((c) => (c.action === "match" ? [c.id] : []))]));
     // one YNAB account per account here: a second one pointed at it is added instead of merged
@@ -441,7 +460,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     if (ch.action === "skip") continue;
     kindOf.set(a.name, a.kind);
     if (ch.action === "match") { idOf.set(a.name, ch.id); continue; }
-    const id = o.newId();
+    const id = idFor("acct", a.name);
     idOf.set(a.name, id);
     summary.accountsAdded++;
     if (a.kind === "cash") plan.accounts.push({ id, name: a.name, type: "cash", balance: a.balance });
@@ -489,7 +508,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     const ch = o.categoryMap?.[k] ?? suggestCategory(plan, c);
     if (ch.action === "skip") { summary.categoriesSkipped++; continue; }
     if (ch.action === "hidden") {
-      const id = o.newId();
+      const id = idFor("cat", k);
       itemOf.set(k, id);
       hiddenItems.push({ id, name: c.name, amount: 0, inRetirement: false, group: (o.categoryGroup?.[k] ?? groupFor(c.group)) || undefined, hidden: true });
       summary.categoriesHidden++;
@@ -512,7 +531,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
       summary.categoriesUpdated++;
       continue;
     }
-    const id = o.newId();
+    const id = idFor("cat", k);
     itemOf.set(k, id);
     const item: BudgetItem = { id, name: c.name, amount: o.amounts?.[k] ?? c.average, inRetirement: opts.inRetirement, group: (o.categoryGroup?.[k] ?? groupFor(c.group)) || undefined, essential: opts.essential };
     plan.budget.push(item);

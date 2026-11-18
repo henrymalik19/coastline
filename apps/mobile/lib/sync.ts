@@ -16,6 +16,7 @@
  *   app focus.
  */
 import type { PlanState, Txn } from "@coastfi/engine";
+import { allPages, batches, changedSince, newestStamp, pushedAfterPull } from "./pages";
 import type { Checkin } from "@coastfi/schema";
 import { CheckinSchema, diffRows, PLAN_TABLES, planToRows, PlanStateSchema, rowsToPlan, TxnSchema, withProperties, type PlanRows, type PlanTable } from "@coastfi/schema";
 import { canUndoImport, parseUndo, type ImportSnapshot } from "./importUndo";
@@ -43,6 +44,8 @@ export const useSync = create<{
   sharedBy?: string;
   lastSyncedAt?: number;
   error?: string;
+  /** A big job under way (loading or saving thousands of transactions), said for the banner. */
+  progress?: string;
   /** Why this device was signed out, when it wasn't the person's choice (the account was deleted elsewhere). */
   notice?: string;
   /** Signed in with the emailed code, but the account also needs the authenticator app's code (this email). */
@@ -126,6 +129,8 @@ type TxnRow = {
   category_id: string | null; transfer_account_id: string | null; transfer_id: string | null; original_category?: string | null;
   cleared: Txn["cleared"]; source: Txn["source"]; import_id: string | null; deleted: boolean; client_updated_at: number | string;
   tracked_amount?: number | string | null;
+  /** When the server last saved it (its clock). */
+  updated_at?: string;
   transaction_split?: SplitRow[];
 };
 /** A transaction for save_transactions, with its split lines. */
@@ -155,28 +160,66 @@ const txnFromRow = (r: TxnRow): Txn | null => {
 };
 /** False once the server says it has no transactions table yet (sync keeps working without it). */
 let txnTable = true;
+/** Transactions per save request (an import is thousands). */
+const TXN_BATCH = 500;
 /** Edit time of the newest transaction already uploaded. */
-let txnPushedThrough = 0;
+/**
+ * Edit time of the newest transaction this device has uploaded to `owner`'s plan. Kept on the device:
+ * without it, every app start uploaded every transaction again (and could put back rows meant to be gone).
+ */
+const pushedThrough = (owner: string) => {
+  const p = useStore.getState().txnPushed;
+  return p?.owner === owner ? p.at : 0;
+};
+const setPushedThrough = (owner: string, at: number) => useStore.setState({ txnPushed: { owner, at: Math.max(pushedThrough(owner), at) } });
+const newestEdit = (txns: Txn[]) => txns.reduce((m, t) => Math.max(m, t.updatedAt), 0);
 const missingTable = (e: unknown) => /PGRST205|42P01|does not exist|Could not find the table/i.test(String((e as { message?: string; code?: string })?.message ?? "") + String((e as { code?: string })?.code ?? ""));
 
 async function pushTxns(owner: string): Promise<void> {
   if (!supabase || !txnTable) return;
-  const changed = useStore.getState().txns.filter((t) => t.updatedAt > txnPushedThrough);
+  const since = pushedThrough(owner);
+  const changed = useStore.getState().txns.filter((t) => t.updatedAt > since);
   if (!changed.length) return;
-  const res = await supabase.rpc("save_transactions", { p: owner, p_rows: changed.map(txnToRow) });
-  if (res.error) {
-    if (missingTable(res.error)) {
-      txnTable = false;
-      return;
+  // in batches: an import is thousands of rows, too much for one request. Saving is safe to repeat, so
+  // if a batch fails the next sync sends them all again (an import's rows share one edit time).
+  const all = batches(changed, TXN_BATCH);
+  try {
+    for (const [i, batch] of all.entries()) {
+      if (all.length > 1) setSync({ progress: `Saving transactions: ${(i * TXN_BATCH).toLocaleString()} of ${changed.length.toLocaleString()}` });
+      const res = await supabase.rpc("save_transactions", { p: owner, p_rows: batch.map(txnToRow) });
+      if (res.error) {
+        if (missingTable(res.error)) {
+          txnTable = false;
+          return;
+        }
+        throw res.error;
+      }
     }
-    throw res.error;
+  } finally {
+    if (all.length > 1) setSync({ progress: undefined });
   }
-  txnPushedThrough = Math.max(txnPushedThrough, ...changed.map((t) => t.updatedAt));
+  setPushedThrough(owner, newestEdit(changed));
 }
 
-async function fetchTxns(owner: string): Promise<Txn[] | null> {
+/**
+ * The plan's transactions saved on the server after `cursor` (all of them without one), and the newest
+ * save stamp among them. Page by page: the server sends at most 1,000 rows per request. Pages go in id
+ * order, which never changes, so a row saved meanwhile can only come twice, never be skipped; and
+ * anything short of every page is an error (a partial list would mean wrong balances).
+ */
+async function fetchTxns(owner: string, cursor?: string): Promise<{ txns: Txn[]; through?: string } | null> {
   if (!supabase || !txnTable) return null;
-  const res = await supabase.from("transaction").select("*, transaction_split(sort, category_id, amount, memo, original_category)").eq("plan_id", owner);
+  const sb = supabase;
+  const after = changedSince(cursor);
+  const res = await allPages<TxnRow>(
+    (from, to) => {
+      let q = sb.from("transaction").select("*, transaction_split(sort, category_id, amount, memo, original_category)").eq("plan_id", owner);
+      if (after) q = q.gt("updated_at", after);
+      return q.order("id").range(from, to);
+    },
+    undefined,
+    (got) => got >= 1000 && setSync({ progress: `Loading transactions: ${got.toLocaleString()} so far` }),
+  ).finally(() => useSync.getState().progress?.startsWith("Loading") && setSync({ progress: undefined }));
   if (res.error) {
     if (missingTable(res.error)) {
       txnTable = false;
@@ -184,14 +227,18 @@ async function fetchTxns(owner: string): Promise<Txn[] | null> {
     }
     throw res.error;
   }
-  return ((res.data ?? []) as TxnRow[]).map(txnFromRow).filter((t): t is Txn => !!t);
+  return { txns: res.data.map(txnFromRow).filter((t): t is Txn => !!t), through: newestStamp(res.data.map((r) => r.updated_at), cursor) };
 }
 
 async function pullTxns(owner: string): Promise<void> {
-  const remote = await fetchTxns(owner);
+  const held = useStore.getState().txnCursor;
+  const remote = await fetchTxns(owner, held?.owner === owner ? held.at : undefined);
   if (!remote) return;
+  // what came from the server needn't go back up (decided before merging: are this device's own edits waiting?)
+  const pushed = pushedAfterPull(useStore.getState().txns, pushedThrough(owner), remote.txns);
   applyingRemote = true;
-  useStore.getState().mergeTxns(remote);
+  if (remote.txns.length) useStore.getState().mergeTxns(remote.txns);
+  useStore.setState({ txnPushed: { owner, at: pushed }, ...(remote.through ? { txnCursor: { owner, at: remote.through } } : {}) });
   applyingRemote = false;
   // a member's new purchase changes what's available: tell them
   void publishViews();
@@ -341,23 +388,25 @@ function mergeCheckins(remote: Checkin[]) {
  * everything on it with this plan. Nothing from the other plan is uploaded here.
  */
 async function switchTo(pid: string, remote: PlanRow | null, checkins: Checkin[]) {
-  const txns = (await fetchTxns(pid)) ?? [];
+  const got = await fetchTxns(pid);
+  const txns = got?.txns ?? [];
+  const txnCursor = got?.through ? { owner: pid, at: got.through } : undefined;
   const ok = remote ? PlanStateSchema.safeParse(remote.state) : null;
   legacyOnServer = !!remote?.legacy;
   applyingRemote = true;
   if (remote && ok?.success) {
     const todoDone = remote.todo_done ?? {};
     useStore.setState({
-      plan: ok.data, todoDone, onboarded: remote.onboarded, updatedAt: remote.client_updated_at, txns,
+      plan: ok.data, todoDone, onboarded: remote.onboarded, updatedAt: remote.client_updated_at, txns, txnCursor,
       checkins: [...checkins].sort((a, b) => a.month.localeCompare(b.month)),
       syncBase: { owner: pid, at: remote.client_updated_at, plan: ok.data, todoDone },
     });
   } else {
     const plan = freshPlan();
-    useStore.setState({ plan, todoDone: {}, onboarded: false, updatedAt: 0, txns, checkins, syncBase: { owner: pid, at: 0, plan, todoDone: {} } });
+    useStore.setState({ plan, todoDone: {}, onboarded: false, updatedAt: 0, txns, txnCursor, checkins, syncBase: { owner: pid, at: 0, plan, todoDone: {} } });
   }
   applyingRemote = false;
-  txnPushedThrough = Math.max(0, ...txns.map((t) => t.updatedAt));
+  useStore.setState({ txnPushed: { owner: pid, at: newestEdit(txns) } });
 }
 
 /** Upload this device's changes: the plan (if it changed), check-ins and transactions. */
@@ -508,6 +557,19 @@ function schedulePush() {
   pushTimer = setTimeout(() => void serial(() => pushInner()), 1500);
 }
 
+/**
+ * A transaction changed somewhere (the live connection only says that something did): fetch what
+ * changed once things go quiet, not once per row (an import changes thousands at once).
+ */
+let ringTimer: ReturnType<typeof setTimeout> | undefined;
+function ring(pid: string) {
+  if (ringTimer) clearTimeout(ringTimer);
+  ringTimer = setTimeout(() => {
+    ringTimer = undefined;
+    if (planId === pid) void serial(() => pullTxns(pid)).catch(() => undefined);
+  }, 1500);
+}
+
 /** Hear about changes to this plan made elsewhere. */
 function listen(userId: string, pid: string) {
   if (!supabase) return;
@@ -520,9 +582,7 @@ function listen(userId: string, pid: string) {
       const row = payload.new as { client_updated_at?: number } | undefined;
       if (row && Number(row.client_updated_at) !== baseFor(pid)?.at) void syncNow();
     })
-    .on("postgres_changes", { event: "*", schema: "public", table: "transaction", filter: `plan_id=eq.${pid}` }, () => {
-      void pullTxns(pid).catch(() => undefined);
-    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "transaction", filter: `plan_id=eq.${pid}` }, () => ring(pid))
     .subscribe();
 }
 
@@ -671,8 +731,9 @@ export async function signOut(forget = false) {
   await supabase.auth.signOut({ scope: "local" });
   if (forget) {
     useStore.getState().startFresh();
-    // the account's import record isn't this device's to change
-    useStore.setState({ importDirty: false });
+    // forgetting clears this device only: the account's import record and transactions aren't this
+    // device's to change (startFresh marks transactions deleted, which signing back in would upload)
+    useStore.setState({ importDirty: false, txns: [], syncBase: undefined, txnCursor: undefined, txnPushed: undefined });
   }
 }
 

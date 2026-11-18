@@ -7,6 +7,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { syncPaycheckLoans } from "./loans";
 import { freshPlan } from "./presets";
+import { stampMs } from "./pages";
 import { canUndoImport, fromOldSnapshot, importSnapshot, parseUndo, undoImportTxns, type ImportSnapshot } from "./importUndo";
 import { applyYnabUpdate, type YnabUpdate } from "./ynabUpdate";
 import { renamePayeesIn } from "./payees";
@@ -32,6 +33,13 @@ export type AppState = {
    * and whose plan it is (the signed-in user, or the owner of a plan shared with them).
    */
   syncBase?: SyncBase;
+  /**
+   * This device has every transaction of `owner`'s plan saved on the server up to `at` (the server's
+   * own clock): the next sync asks only for ones saved after it. Missing: load them all.
+   */
+  txnCursor?: { owner: string; at: string };
+  /** This device has uploaded its transactions edited up to `at` (ms) to `owner`'s plan. Missing: upload them all. */
+  txnPushed?: { owner: string; at: number };
   /** What it takes to undo the import from YNAB (saved with your account too, so Undo works on any device). */
   lastImport?: ImportSnapshot;
   /** When you imported from YNAB (ms), kept after the undo window closes. Synced with the plan. */
@@ -237,14 +245,14 @@ export const useStore = create<AppState>()(
         // transactions too (marked deleted, so it syncs); check-ins are kept
         const stamp = now();
         const txns = get().txns.map((x) => (x.deleted ? x : { ...x, deleted: true, updatedAt: stamp }));
-        set({ plan: freshPlan(), txns, onboarded: false, todoDone: {}, lastImport: undefined, importedAt: undefined, ynabSyncedAt: undefined, importDirty: true, updatedAt: stamp });
+        set({ plan: freshPlan(), txns, txnCursor: undefined, txnPushed: undefined, onboarded: false, todoDone: {}, lastImport: undefined, importedAt: undefined, ynabSyncedAt: undefined, importDirty: true, updatedAt: stamp });
       },
     }),
     {
       name: "coastfi.app",
       version: 1,
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, lastImport, importedAt, ynabSyncedAt, importDirty }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, lastImport, importedAt, ynabSyncedAt, importDirty }),
+      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, lastImport, importedAt, ynabSyncedAt, importDirty }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, lastImport, importedAt, ynabSyncedAt, importDirty }),
       // never trust stored data blindly: validate, and fall back to a blank plan
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState> & { isSampleData?: boolean; seenWelcome?: boolean };
@@ -252,7 +260,11 @@ export const useStore = create<AppState>()(
         // saves from before the sample plan was removed: an untouched sample becomes a blank plan.
         // Only a save marked as the sample: today's saves carry neither flag, and setup in progress must survive a reload
         const wasSample = !p.onboarded && p.isSampleData === true;
-        const storedTxns = (() => { const r = z.array(TxnSchema).safeParse(p.txns ?? []); return r.success ? r.data : []; })();
+        const parsedTxns = z.array(TxnSchema).safeParse(p.txns ?? []);
+        const storedTxns = parsedTxns.success ? parsedTxns.data : [];
+        // the marker only means something with the transactions it was saved with: if those couldn't be read, load them all again
+        const c = p.txnCursor;
+        const txnCursor = parsedTxns.success && c && typeof c.owner === "string" && typeof c.at === "string" && !Number.isNaN(stampMs(c.at)) ? c : undefined;
         const li = p.lastImport as unknown as (ImportSnapshot & { txns?: unknown }) | undefined;
         const oldCopy = !!li && Array.isArray(li.txns) && canUndoImport(li, Date.now());
         const lastImport = (() => {
@@ -271,6 +283,11 @@ export const useStore = create<AppState>()(
           onboarded: !!p.onboarded,
           checkins: Array.isArray(p.checkins) ? p.checkins : [],
           txns: storedTxns,
+          txnCursor,
+          txnPushed: (() => {
+            const x = p.txnPushed;
+            return parsedTxns.success && x && typeof x.owner === "string" && typeof x.at === "number" ? x : undefined;
+          })(),
           todoDone: p.todoDone && typeof p.todoDone === "object" ? p.todoDone : {},
           updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : 0,
           // the undo copy, while it can still be used (it's dropped once the window closes)

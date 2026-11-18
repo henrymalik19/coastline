@@ -13,7 +13,7 @@ import { Card, Divider, Screen } from "../../../components/ui";
 import { money } from "../../../lib/format";
 import { usePlan } from "../../../lib/plan";
 import { isCard } from "../../../lib/register";
-import { monthKey, newId, useStore } from "../../../lib/store";
+import { monthKey, useStore } from "../../../lib/store";
 import { space, type, useTheme } from "../../../lib/theme";
 import { isoDay } from "../../../lib/categories";
 import { readYnabFiles } from "../../../lib/ynabFiles";
@@ -124,6 +124,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         // YNAB's scheduled ones (dated after today) come in as upcoming: they count on their day
         setFuture(d.txns.filter((x) => x.date > isoDay(start)).length);
         setData(d);
+        running.current = false;
         setFileName([...input.files!].find((x) => /\.zip$/i.test(x.name))?.name ?? input.files![0]?.name ?? "");
         const since = recentMonths(thisMonth, 2)[0]!;
         // closed or empty accounts start left out; the open ones match an account here with the same name (each only once)
@@ -169,7 +170,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const [useYnabBalance, setUseYnabBalance] = useState<Record<string, boolean>>({});
   const conflicts = useMemo(() => (data ? balanceConflicts(saved, ynabAccounts(data), choices) : []), [data, saved, choices]);
   const preview = useMemo(
-    () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, newId: () => "preview" }) : null),
+    () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth }) : null),
     [data, saved, from, thisMonth, choices, useYnabBalance, catOpts, catMap, groupMap, catGroup, amounts, removeEmpty, existing, keepBoth],
   );
 
@@ -191,10 +192,13 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const valueOf = (c: AccountChoice | undefined) => (!c ? "add" : c.action === "match" ? "match:" + c.id : c.action);
   const setChoice = (name: string, v: string) => setChoices((s) => ({ ...s, [name]: v.startsWith("match:") ? { action: "match", id: v.slice(6) } : { action: v as "add" | "skip" } }));
 
+  // one import per budget: a second tap (or an import already done on any device) does nothing
+  const running = useRef(false);
   const run = () => {
-    if (!data) return;
+    if (!data || running.current || useStore.getState().importedAt) return;
+    running.current = true;
     setConfirming(false);
-    const r = buildImport(saved, data, { from, thisMonth, accounts: choices, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, newId });
+    const r = buildImport(saved, data, { from, thisMonth, accounts: choices, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth });
     importBudget(r.plan, r.txns, r.replaced);
     setDone(`Imported ${r.summary.transactions} transactions and ${r.summary.categoriesAdded + r.summary.categoriesUpdated} categories.`);
     setDoneNeeds(r.summary.needsCategoryFromYnab + r.summary.needsCategoryLeftOut);

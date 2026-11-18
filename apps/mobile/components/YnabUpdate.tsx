@@ -8,7 +8,7 @@ import { Button, ToggleRow } from "./form";
 import { Card } from "./ui";
 import { dayText } from "./ImportUndo";
 import { usePlan } from "../lib/plan";
-import { monthKey, newId, useStore } from "../lib/store";
+import { monthKey, useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
 import { pickYnabFiles } from "../lib/ynabFiles";
 import { planYnabUpdate, type YnabUpdate } from "../lib/ynabUpdate";
@@ -37,7 +37,7 @@ export function YnabUpdateCard() {
       if (!got.data.txns.length) throw new Error("No transactions in that file.");
       setFile(got.name);
       setRemoveGone(true);
-      setU(planYnabUpdate(plan, got.data, txns, lastSync, monthKey(start), newId));
+      setU(planYnabUpdate(plan, got.data, txns, lastSync, monthKey(start)));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't read that file.");
     }

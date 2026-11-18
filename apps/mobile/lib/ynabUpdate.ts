@@ -31,7 +31,7 @@ const ym = (d: string) => d.slice(0, 7);
  * What an update would do. `lastSync`: when you last imported or updated (anything of YNAB's changed
  * here after that is yours now).
  */
-export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSync: number, thisMonth: string, newId: () => string): YnabUpdate {
+export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSync: number, thisMonth: string, newId?: () => string): YnabUpdate {
   const fromYnab = txns.filter((t) => !t.deleted && t.source === "ynab" && !t.id.startsWith("start:"));
   const from = fromYnab.reduce((m, t) => (ym(t.date) < m ? ym(t.date) : m), thisMonth);
 
