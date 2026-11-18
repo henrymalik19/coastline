@@ -19,7 +19,7 @@ import { space, type, useTheme } from "../lib/theme";
 import { sticky } from "../lib/sticky";
 
 const TRACKING_TIP =
-  "Not in your budget: their balances only change when you move money. Withdraw records money coming out into checking (it goes to Unassigned); a transfer to one from checking adds to it.";
+  "Your retirement and investment accounts. Not in your budget: their balances only change when you move money. Withdraw records money coming out into checking (it goes to Unassigned); a transfer to one from checking adds to it.";
 
 export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (from: string) => void; /** Where its headings stop, under the Budget's toolbar. */ stickyTop?: number }) {
   const t = useTheme();
@@ -118,12 +118,13 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
               aria-expanded={showTracking}
               accessibilityLabel={`Tracking accounts: retirement and investments, ${showTracking ? "hide" : "show"}`}
               onPress={() => setShowTracking((v) => !v)}
-              style={{ flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 36 }}
+              style={{ flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 36, flexShrink: 1, minWidth: 0 }}
             >
               <View style={{ transform: [{ rotate: showTracking ? "90deg" : "0deg" }] }}>
                 <Icon name="chevron" size={14} color={t.text3} />
               </View>
-              <Text style={[type.overline, { color: t.text3 }]}>Tracking · retirement & investments</Text>
+              {/* short, so it fits on a phone with its ⓘ and total (the ⓘ says what's in it) */}
+              <Text numberOfLines={1} style={[type.overline, { color: t.text3, flexShrink: 1 }]}>Tracking accounts</Text>
             </Pressable>
             <InfoTip text={TRACKING_TIP} label="tracking accounts" open={tip} onToggle={setTip} />
             <View style={{ flex: 1 }} />

@@ -1,4 +1,4 @@
-import { Redirect, Tabs } from "expo-router";
+import { Redirect, Tabs, useRouter } from "expo-router";
 import { useMembership } from "../../lib/sharing";
 import { useStore } from "../../lib/store";
 import { Platform, StyleSheet } from "react-native";
@@ -18,6 +18,7 @@ const TABS: { name: string; title: string; icon: IconName }[] = [
 const ICONS = { ...Object.fromEntries(TABS.map((t) => [t.name, t.icon])), settings: "gear" } as Record<string, IconName>;
 
 export default function TabsLayout() {
+  const router = useRouter();
   const t = useTheme();
   const wide = useIsWide();
   const hydrated = useStore((s) => s.hydrated);
@@ -59,6 +60,8 @@ export default function TabsLayout() {
             title: tab.title,
             tabBarIcon: ({ color }) => <Icon name={tab.icon} size={24} color={String(color)} />,
           }}
+          // Money always opens on its list, not the last Money page you had open (like the YNAB import)
+          listeners={tab.name === "money" ? { tabPress: (e) => { e.preventDefault(); router.navigate("/money"); } } : undefined}
         />
       ))}
       {/* Settings: not in the bottom tab bar (gear in the header on phones; sidebar item on desktop) */}

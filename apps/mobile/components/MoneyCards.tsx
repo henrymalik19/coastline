@@ -78,6 +78,19 @@ export function NetWorthCard({ startOpen = false }: { startOpen?: boolean }) {
             ) : (
               <Empty text="No accounts yet" />
             )}
+            {/* homes and rentals: in the total above, so listed too (each one's mortgage is under What you owe) */}
+            {(state.properties ?? []).map((p) => {
+              const mortgage = p.mortgageId ? state.debts.find((x) => x.id === p.mortgageId && x.balance > 0) : undefined;
+              return (
+                <Line
+                  key={p.id}
+                  label={p.name.trim() || (p.kind === "rental" ? "Rental" : "Home")}
+                  hint={`${p.kind === "rental" ? "Rental" : "Home"} · what it would sell for${mortgage ? ` · ${money(Math.max(0, p.value - mortgage.balance))} yours after the mortgage` : ""}`}
+                  value={money(p.value)}
+                  href="/money/properties"
+                />
+              );
+            })}
           </Group>
           <Group title="What you owe" total={debts.length ? money(d.debtTotal) : undefined} manage="/money/debts">
             {debts.length ? (

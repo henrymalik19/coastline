@@ -3,7 +3,8 @@
  * accounts is here (match, add or skip), and which categories you'd still pay after retiring and
  * which are essential. Nothing changes until you press Import.
  */
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { isAppPath } from "../../../lib/nav";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, InfoText, InfoTip, InlineMoney, InlineSwitch, MonthField, Segmented, Select, ToggleRow } from "../../../components/form";
@@ -53,6 +54,7 @@ const KIND_SECTION = { cash: "Checking & savings", card: "Credit cards", invest:
 export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const t = useTheme();
   const router = useRouter();
+  const { back: backTo } = useLocalSearchParams<{ back?: string }>();
   const { state, start } = usePlan();
   const saved = useStore((s) => s.plan);
   const importBudget = useStore((s) => s.importBudget);
@@ -768,7 +770,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const trademark = <Text style={[type.caption, { color: t.text3 }]}>Coastwise isn't affiliated with YNAB. YNAB is a trademark of its owner.</Text>;
 
   return (
-    <Screen title="Import from YNAB" back={setup ? backToSetup : () => router.navigate("/budget")} hideSettings={setup} narrow={!(wide && loaded)}>
+    <Screen title="Import from YNAB" // back where you came from (Budget, say), else the Money list
+      back={setup ? backToSetup : () => router.navigate((isAppPath(backTo) ? backTo : "/money") as never)} hideSettings={setup} narrow={!(wide && loaded)}>
       {headCard}
       {wide && loaded ? (
         <View style={styles.columns}>

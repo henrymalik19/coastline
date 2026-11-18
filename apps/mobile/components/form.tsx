@@ -258,7 +258,7 @@ export function TextField({
  * Date field: type a date the way you normally would (11/20/2026, Nov 20, 2026-11-20…)
  * or pick it from a calendar. Shows "Nov 20, 2026" when not editing; stores ISO.
  */
-export function DateField({ value, onChange, label, width: w }: { value?: string; onChange: (v: string | undefined) => void; label: string; width?: number }) {
+export function DateField({ value, onChange, label, width: w }: { value?: string; onChange: (v: string | undefined) => void; label: string; /** "100%": fill its space. */ width?: number | "100%" }) {
   const width = w ?? (useLayout().contentWidth < 600 ? 160 : 190);
   const t = useTheme();
   const [text, setText] = useState(formatDate(value));
@@ -283,7 +283,7 @@ export function DateField({ value, onChange, label, width: w }: { value?: string
     } else setBad(true);
   };
   return (
-    <View style={{ gap: 2, alignItems: "flex-end" }}>
+    <View style={{ gap: 2, alignItems: "flex-end", ...(width === "100%" ? { alignSelf: "stretch" } : null) }}>
       <View style={[styles.input, { width, borderColor: bad ? t.bad : focused ? t.accent : t.border, backgroundColor: t.surface2, paddingRight: 2 }]}>
         <TextInput
           accessibilityLabel={label}

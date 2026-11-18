@@ -3,7 +3,7 @@
  * button). Shown on the import screen, in Settings → Backup & restore, and as a reminder on the
  * Budget near the end of the window.
  */
-import { useRouter } from "expo-router";
+import { useOpenPage } from "../lib/nav";
 import { useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, ToggleRow } from "./form";
@@ -109,7 +109,7 @@ export function ImportUndoCard({ children, onUndone, plain }: { children?: React
 /** On the Budget, the last week you can undo: a reminder before the window closes. */
 export function ImportUndoReminder() {
   const t = useTheme();
-  const router = useRouter();
+  const openPage = useOpenPage();
   const left = useUndoDaysLeft();
   const keepImport = useStore((s) => s.keepImport);
   const [sure, setSure] = useState(false);
@@ -137,7 +137,7 @@ export function ImportUndoReminder() {
         <Text style={{ fontWeight: "700" }}>{left} day{left === 1 ? "" : "s"} left</Text> to undo your YNAB import. After that it stays as it is.
       </Text>
       <View style={styles.row}>
-        <Pressable role="button" onPress={() => router.push("/money/import")} hitSlop={6}>
+        <Pressable role="button" onPress={() => openPage("/money/import")} hitSlop={6}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Review</Text>
         </Pressable>
         <Pressable role="button" onPress={() => setSure(true)} hitSlop={6}>

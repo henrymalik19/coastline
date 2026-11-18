@@ -7,7 +7,7 @@ import { isStartTxn, isUpcoming, registerBalance, startTxnId, type Txn } from "@
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { Button, NumberInput, Select, TextField } from "./form";
+import { Button, DateField, NumberInput, Select, TextField } from "./form";
 import { Icon } from "./Icon";
 import { TxnForm } from "./TxnForm";
 import { Card, Divider } from "./ui";
@@ -55,7 +55,12 @@ export function TransactionsList({
   const [acct, setAcct] = useState(account && budgetAccounts(state).some((a) => a.id === account) ? account : "all");
   // tell the Budget screen, so its Add a transaction starts in this account
   useEffect(() => { onAccountChange?.(acct); }, [acct]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [allMonths, setAllMonths] = useState(false);
+  // which dates: the month picked above, every date, or a range you pick
+  const [range, setRange] = useState<"month" | "all" | "custom">("month");
+  const [from, setFrom] = useState<string | undefined>(undefined);
+  const [to, setTo] = useState<string | undefined>(undefined);
+  const allMonths = range === "all";
+  const inRange = (d: string) => range === "all" || (range === "month" ? d.slice(0, 7) === month : (!from || d >= from) && (!to || d <= to));
   const [q, setQ] = useState("");
   const [needsCat, setNeedsCat] = useState(!!onlyNeedsCategory);
   const [editing, setEditing] = useState<Txn | "new" | null>(null);
@@ -88,7 +93,7 @@ export function TransactionsList({
       .filter((x) => !x.deleted)
       .filter((x) => acct === "all" || x.accountId === acct || x.transferAccountId === acct)
       // the ones that need a category: from every month (the count beside it is all of them)
-      .filter((x) => allMonths || needsCat || x.date.slice(0, 7) === month)
+      .filter((x) => needsCat || inRange(x.date))
       .filter((x) => !needsCat || uncategorized(x))
       .filter((x) => {
         if (!needle) return true;
@@ -97,7 +102,7 @@ export function TransactionsList({
       })
       .sort((a, b) => (a.date === b.date ? b.updatedAt - a.updatedAt : b.date.localeCompare(a.date)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [txns, acct, month, allMonths, q, needsCat, cats]);
+  }, [txns, acct, month, range, from, to, q, needsCat, cats]);
 
   // dated after today: upcoming, shown greyed at the top and not counted until their day
   const today = isoDay(start);
@@ -191,9 +196,21 @@ export function TransactionsList({
     <>
       <View ref={topRef as never} onLayout={(e) => setFiltersH(Math.round(e.nativeEvent.layout.height))} style={[{ gap: space.sm, paddingVertical: space.xs, marginVertical: -space.xs }, sticky(stickyTop, t.bg)]}>
       <View style={[styles.row, { gap: space.sm }]}>
-        <Pressable role="checkbox" aria-checked={allMonths || needsCat} disabled={needsCat} onPress={() => setAllMonths((v) => !v)} hitSlop={6} style={[styles.chip, { borderColor: allMonths || needsCat ? t.accent : t.border, backgroundColor: allMonths || needsCat ? t.accentSoft : t.surface }]}>
-          <Text style={[type.caption, { color: allMonths || needsCat ? t.accent : t.text2, fontWeight: "700" }]}>All months</Text>
-        </Pressable>
+        {needsCat ? (
+          <Text style={[type.caption, { color: t.text3, fontWeight: "700" }]}>All dates</Text>
+        ) : (
+          <Select
+            plain
+            label="Dates"
+            value={range}
+            options={[{ value: "month", label: ymText(month) }, { value: "all", label: "All dates" }, { value: "custom", label: "Pick dates…" }]}
+            onChange={(v) => {
+              setRange(v as typeof range);
+              // a range starts as this month so far
+              if (v === "custom" && !from && !to) { setFrom(`${month}-01`); setTo(today); }
+            }}
+          />
+        )}
         {missing || needsCat ? (
           <Pressable role="checkbox" aria-checked={needsCat} onPress={() => setNeedsCat((v) => !v)} hitSlop={6} style={[styles.chip, { borderColor: needsCat ? t.warn : t.border, backgroundColor: needsCat ? t.warnSoft : t.surface }]}>
             <Text style={[type.caption, { color: needsCat ? t.text : t.warn, fontWeight: "700" }]}>Needs a category ({missing})</Text>
@@ -205,6 +222,18 @@ export function TransactionsList({
           </Pressable>
         ) : null}
       </View>
+      {range === "custom" && !needsCat ? (
+        // two equal halves, edge to edge like the fields below
+        <View style={[styles.row, { gap: space.sm }]}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <DateField label="From" value={from} onChange={setFrom} width="100%" />
+          </View>
+          <Text style={[type.caption, { color: t.text3 }]}>to</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <DateField label="To" value={to} onChange={setTo} width="100%" />
+          </View>
+        </View>
+      ) : null}
       {/* phones: the account and the search each get their own line */}
       <View style={[styles.row, { gap: space.sm }, compact ? { flexDirection: "column", alignItems: "stretch" } : null]}>
         <View style={compact ? { width: "100%" } : { width: 240 }}>
@@ -297,7 +326,7 @@ export function TransactionsList({
       ) : (
         <Card style={{ gap: space.sm }}>
           <Text style={[type.body, { color: t.text2 }]}>
-            {q || needsCat ? "Nothing matches." : allMonths ? "No transactions yet." : `No transactions in ${ymText(month)}.`}
+            {q || needsCat ? "Nothing matches." : allMonths ? "No transactions yet." : range === "custom" ? "No transactions between those dates." : `No transactions in ${ymText(month)}.`}
           </Text>
           <Text style={[type.caption, { color: t.text3 }]}>Add what you spend and earn here. Each one comes out of (or goes into) a budget category.</Text>
         </Card>

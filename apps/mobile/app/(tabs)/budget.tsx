@@ -212,7 +212,7 @@ export default function Budget() {
           </Text>
           <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
             <Button title={`Start with ${monthLabel(start, 0, true)}`} tone="primary" icon="plus" onPress={startBudget} />
-            <Button title="Import from YNAB" icon="database" onPress={() => router.push("/money/import")} />
+            <Button title="Import from YNAB" icon="database" onPress={() => openPage("/money/import")} />
           </View>
         </Card>
       </Screen>
@@ -881,7 +881,7 @@ export default function Budget() {
             Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement && !x.accountId && !x.hidden).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number.{" "}
             <Text role="link" onPress={() => openPage("/money/retirement")} style={{ color: t.accent, fontWeight: "700" }}>Choose what's included</Text>. Bills come from repeating savings goals and debt payments from Debts; tap one to change it there. Spent and paid come from the transactions you record.
           </Text>
-          {imported ? null : <Button title="Import from YNAB" icon="database" tone="ghost" onPress={() => router.push("/money/import")} style={{ alignSelf: "flex-start" }} />}
+          {imported ? null : <Button title="Import from YNAB" icon="database" tone="ghost" onPress={() => openPage("/money/import")} style={{ alignSelf: "flex-start" }} />}
           <Button
             title="Start the budget over"
             tone="ghost"
