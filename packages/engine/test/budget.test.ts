@@ -203,3 +203,23 @@ describe("real spending", () => {
     expect(spendingHistory(b, cs, "2026-09", { txns, cards: {} }).months).toEqual([]);
   });
 });
+
+describe("a category that pays a loan", () => {
+  it("holds the loan's payment; the loan stays listed, pointing at it and asking for nothing", () => {
+    const s = blank();
+    s.debts = [{ id: "m", name: "House", kind: "mortgage", balance: 200000, apr: 0.06, minPayment: 1500, minimumOnly: true }];
+    s.budget = [{ id: "piti", name: "PITI", group: "Home", amount: 1400, inRetirement: true, paysDebt: "m" }];
+    const d = derive(s, START);
+    const c = budgetCategories(s, d, simulatePlan(s, d), START, "2026-11");
+    expect(c.find((x) => x.key === "piti")).toMatchObject({ paysDebt: "m", target: 1500 });
+    expect(c.find((x) => x.key === "debt:m")).toMatchObject({ paidBy: "piti", target: 0 });
+  });
+  it("what you assign it pays the loan in your plan (beyond the minimum: extra)", () => {
+    const s = blank();
+    s.debts = [{ id: "m", name: "House", kind: "mortgage", balance: 200000, apr: 0.06, minPayment: 1500 }];
+    s.budget = [{ id: "piti", name: "PITI", group: "Home", amount: 1500, inRetirement: true, paysDebt: "m" }];
+    s.budgetPlan = { start: "2026-11", startCash: 0, months: { "2026-11": { assigned: { piti: 2000 } } } };
+    const m = budgetScheduleMonths(s)!;
+    expect(m["debt:m"]?.["2026-11"]).toBe(500); // $2,000 assigned, $1,500 minimum
+  });
+});

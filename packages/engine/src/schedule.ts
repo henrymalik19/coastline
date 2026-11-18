@@ -248,8 +248,10 @@ export function budgetScheduleMonths(s: Pick<PlanState, "debts" | "goals" | "bud
       // a budget item linked to an account: what you assign is that account's contribution
       const item = s.plan ? (s.budget ?? []).find((x) => x.id === rawKey) : undefined;
       const linked = item && s.plan ? linkedAccount({ plan: s.plan, accounts: s.accounts ?? [], spouse: s.spouse }, item) : undefined;
-      if (item && !linked) continue;
-      const key = linked ? ACCOUNT_KEY + linked.id : rawKey;
+      // a category that pays one of your loans: what you assign it pays that loan (beyond the minimum: extra)
+      const loan = item?.paysDebt && (s.debts ?? []).some((x) => x.id === item.paysDebt) ? item.paysDebt : undefined;
+      if (item && !linked && !loan) continue;
+      const key = linked ? ACCOUNT_KEY + linked.id : loan ? "debt:" + loan : rawKey;
       let amount: number | undefined;
       if (key.startsWith(ACCOUNT_KEY)) {
         const a = (s.accounts ?? []).find((x) => ACCOUNT_KEY + x.id === key);

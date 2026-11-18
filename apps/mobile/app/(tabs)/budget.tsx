@@ -11,7 +11,7 @@ import { BUDGET_ITEM, budgetCategories, budgetView, SAVINGS_GROUP, spendingHisto
 import { TxnForm } from "../../components/TxnForm";
 import { BudgetAccounts } from "../../components/BudgetAccounts";
 import { TransactionsList } from "../../components/TransactionsList";
-import { cardMap, liveBudget } from "../../lib/register";
+import { cardMap, isCard, liveBudget } from "../../lib/register";
 import { linkableAccounts, suggestedAccount } from "../../lib/budgetDupes";
 import { isoDay, needsCategory, needsCategorySince } from "../../lib/categories";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -26,7 +26,7 @@ import { Icon } from "../../components/Icon";
 import { Card, Divider, Pill, Screen, SectionLabel } from "../../components/ui";
 import { useAppearance } from "../../lib/appearance";
 import { confirm } from "../../lib/confirm";
-import { debtLabel } from "../../lib/debts";
+import { debtKind, debtLabel } from "../../lib/debts";
 import { money, monthLabel } from "../../lib/format";
 import { useLayout } from "../../lib/layout";
 import { usePlan } from "../../lib/plan";
@@ -441,6 +441,20 @@ export default function Budget() {
                 onChange={(v) => linkItem(it.id, v)}
               />
             </FormRow>
+            {linkedTo ? null : (
+              <FormRow
+                label="Pays a loan?"
+                hint={it.paysDebt ? "Counted from Debts, not as spending" : "Pick the loan it pays, so it isn't counted twice"}
+              >
+                <Select
+                  plain
+                  label="Pays a loan"
+                  value={it.paysDebt ?? ""}
+                  options={[{ value: "", label: "No" }, ...state.debts.filter((x) => !isCard(x) && !x.payroll).map((x) => ({ value: x.id, label: `${debtLabel(x)} · ${debtKind(x.kind).label}` }))]}
+                  onChange={(v) => editItem(it.id, v ? { paysDebt: v } : { paysDebt: undefined, noSuggest: true })}
+                />
+              </FormRow>
+            )}
             <FormRow label="Each month" hint={linkedTo ? `What you put into ${linkedTo.name.trim() || "the account"} each month` : "What your plan expects"}>
               <InlineMoney label={`${it.name || "Item"} planned each month`} value={it.amount} onChange={(v) => editItem(it.id, { amount: v })} />
             </FormRow>
@@ -561,6 +575,33 @@ export default function Budget() {
 
   const line = (c: BudgetCategory, grip?: ReactNode) => {
     const l = view.lines[c.key]!;
+    const debtOf = c.kind === "debt" ? state.debts.find((y) => "debt:" + y.id === c.key) : undefined;
+    // a loan paid from one of your categories: listed here, but its money is in that category
+    if (c.paidBy) {
+      const by = cats.find((x) => x.key === c.paidBy);
+      return (
+        <View key={c.key} nativeID={"cat-" + c.key}>
+          <Pressable
+            role="link"
+            accessibilityLabel={`${label(c)}: paid from ${by?.name ?? "a category"}. Open it`}
+            onPress={() => { setOpen(c.paidBy!); if (Platform.OS === "web" && typeof document !== "undefined") setTimeout(() => document.getElementById("cat-" + c.paidBy)?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }}
+            style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, pressed ? { backgroundColor: t.surface2 } : null]}
+          >
+            <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
+              {grip}
+              <View style={{ flexShrink: 1, minWidth: 0 }}>
+                <Text style={[type.body, { color: t.text2 }]} numberOfLines={1}>{label(c)}</Text>
+                <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>
+                  {debtOf ? `${debtKind(debtOf.kind).label} · ` : ""}paid from <Text style={{ color: t.accent, fontWeight: "700" }}>{by?.name ?? "a category"}</Text>{by && by.group !== c.group ? ` (${by.group})` : ""}
+                </Text>
+              </View>
+            </View>
+            <Icon name="chevron" size={14} color={t.accent} />
+          </Pressable>
+        </View>
+      );
+    }
+    const paysLoanLine = c.paysDebt ? state.debts.find((y) => y.id === c.paysDebt) : undefined;
     const isOpen = open === c.key;
     const dupItem = c.kind === "spending" && !c.account ? state.budget.find((x) => x.id === c.key) : undefined;
     const dup = dupItem && !dupItem.noSuggest ? suggestedAccount(state, c.name) : undefined;
@@ -578,6 +619,8 @@ export default function Budget() {
               {overLast.has(c.key) && compact ? (
                 <Text style={[type.caption, { color: t.bad, fontWeight: "700", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>−{money(overLast.get(c.key)!)} over last month</Text>
               ) : null}
+              {debtOf ? <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{debtKind(debtOf.kind).label}</Text> : null}
+              {paysLoanLine ? <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>Pays {debtLabel(paysLoanLine)} {debtKind(paysLoanLine.kind).label.toLowerCase()}</Text> : null}
               {(l.toDebt ?? 0) > 0.005 ? (
                 <Text style={[type.caption, { color: t.bad, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>{money(l.toDebt!)} left as card debt</Text>
               ) : null}

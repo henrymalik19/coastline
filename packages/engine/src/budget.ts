@@ -38,6 +38,10 @@ export type BudgetCategory = {
   moves: boolean;
   /** A category you made for money moved to this account (an IRA, a brokerage): investing, not spending. */
   account?: string;
+  /** A category that pays one of your loans (its debt id): it holds that loan's payment on the budget. */
+  paysDebt?: string;
+  /** A loan paid from one of your categories (that category's key): listed, but its money is there. */
+  paidBy?: string;
   /** Hidden: off the budget list unless it's overspent; no plan amount. */
   hidden?: boolean;
 };
@@ -91,6 +95,9 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
     const f = fc.find((a) => a.key === key);
     return f ? (f.months[Math.min(i, f.months.length - 1)]?.plan ?? 0) : 0;
   };
+  // a loan's whole payment this month: its minimum, plus the extra your plan puts toward it
+  const debtTarget = (x: NonNullable<PlanState["debts"]>[number]) =>
+    Math.max(0, num(x.minPayment)) + Math.max(0, paysExtra(x) ? (scheduleAmount(s.plan, "debt:" + x.id, month) ?? planned("debt:" + x.id)) : 0);
   // spending: the budget (and categories you made for money moved to an account, like "Roth IRA")
   for (const b of s.budget ?? []) {
     const linked = linkedAccount(s, b);
@@ -98,16 +105,21 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
       out.push({ key: b.id, group: b.group?.trim() || "Other", name: b.name || "Budget item", kind: "spending", target: 0, moves: false, hidden: true });
       continue;
     }
-    out.push({ key: b.id, group: b.group?.trim() || "Other", name: b.name || "Budget item", kind: "spending", target: Math.max(0, valueIn(s.plan, BUDGET_ITEM + b.id, month, num(b.amount))), moves: false, ...(linked ? { account: linked.id } : {}) });
+    // a category that pays one of your loans: it's that loan's line (its target is the loan's payment)
+    const loan = b.paysDebt ? (s.debts ?? []).find((x) => x.id === b.paysDebt && !x.payroll && num(x.balance) > 0) : undefined;
+    const target = loan ? debtTarget(loan) : Math.max(0, valueIn(s.plan, BUDGET_ITEM + b.id, month, num(b.amount)));
+    out.push({ key: b.id, group: b.group?.trim() || "Other", name: b.name || "Budget item", kind: "spending", target, moves: false, ...(linked ? { account: linked.id } : {}), ...(loan ? { paysDebt: loan.id } : {}) });
   }
   // bills: repeating goals
   for (const g of s.goals ?? [])
     if (g.recurring) out.push({ key: "goal:" + g.id, group: g.budgetGroup?.trim() || "Bills", name: g.name || "Bill", kind: "bill", target: setAsideFor(g, month), moves: false });
-  // debts you pay yourself: the whole payment (minimum + extra)
+  // debts you pay yourself: the whole payment (minimum + extra). One a category pays (a mortgage's PITI)
+  // stays listed, pointing at that category (it holds the money, so this line asks for nothing)
+  const paidBy = new Map((s.budget ?? []).flatMap((b) => (b.paysDebt && !b.hidden ? [[b.paysDebt, b.id] as const] : [])));
   for (const x of s.debts ?? []) {
     if (x.payroll || !(num(x.balance) > 0)) continue;
-    const extra = paysExtra(x) ? (scheduleAmount(s.plan, "debt:" + x.id, month) ?? planned("debt:" + x.id)) : 0;
-    out.push({ key: "debt:" + x.id, group: x.budgetGroup?.trim() || "Debt payments", name: x.name || "Debt", kind: "debt", target: Math.max(0, num(x.minPayment)) + Math.max(0, extra), moves: true });
+    const by = paidBy.get(x.id);
+    out.push({ key: "debt:" + x.id, group: x.budgetGroup?.trim() || "Debt payments", name: x.name || "Debt", kind: "debt", target: by ? 0 : debtTarget(x), moves: true, ...(by ? { paidBy: by } : {}) });
   }
   // savings: one emergency fund line for your cash (it stays in your budget accounts)
   const steps = s.plan?.steps ?? [];
