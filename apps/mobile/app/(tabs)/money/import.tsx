@@ -39,13 +39,20 @@ const ymText = (ym: string) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0,
 const quietAccount = (d: YnabData, name: string, balance: number, since: string | null) =>
   Math.abs(balance) < 0.005 && !d.txns.some((t) => t.account === name && (!since || t.date.slice(0, 7) >= since));
 /** A YNAB category you haven't used lately: nothing assigned and nothing spent since `since`. */
-const unusedCategory = (d: YnabData, c: { group: string; name: string; average: number }, since: string | null) => {
-  const same = (g: string, n: string) => categoryKey(g, n) === categoryKey(c.group, c.name);
+/** The categories YNAB used since a month (assigned to, or a transaction in): one pass over the data. */
+const usedSince = (d: YnabData, since: string | null): Set<string> => {
+  const used = new Set<string>();
   const recent = (m: string) => !since || m >= since;
-  return c.average === 0 &&
-    !d.assigned.some((a) => same(a.group, a.category) && recent(a.month) && a.assigned > 0) &&
-    !d.txns.some((t) => recent(t.date.slice(0, 7)) && (same(t.group, t.category) || (t.splits ?? []).some((x) => same(x.group, x.category))));
+  for (const a of d.assigned) if (a.assigned > 0 && recent(a.month)) used.add(categoryKey(a.group, a.category));
+  for (const t of d.txns) {
+    if (!recent(t.date.slice(0, 7))) continue;
+    used.add(categoryKey(t.group, t.category));
+    for (const x of t.splits ?? []) used.add(categoryKey(x.group, x.category));
+  }
+  return used;
 };
+/** Not used lately: nothing assigned and no transactions since then. */
+const unusedIn = (used: Set<string>, c: { group: string; name: string; average: number }) => c.average === 0 && !used.has(categoryKey(c.group, c.name));
 /** Left out, or kept as a hidden category: either way it has no monthly amount or retirement switches. */
 const offBudget = (c?: CategoryChoice) => c?.action === "skip" || c?.action === "hidden" || c?.action === "combine" || c?.action === "invest" || c?.action === "sub";
 /** The YNAB category a combined or sub category goes with. */
@@ -140,10 +147,11 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         })));
         const cats0 = ynabCategories(d, recentMonths(thisMonth));
         const sugs = suggestCategories(state, d, cats0, isoDay(start));
+        const used0 = usedSince(d, since);
         setCatMap(Object.fromEntries(cats0.map((c) => {
           const k = categoryKey(c.group, c.name);
           const sug = sugs[k] ?? suggestCategory(state, c);
-          return [k, sug.action === "new" && unusedCategory(d, c, since) ? { action: "hidden" } : sug];
+          return [k, sug.action === "new" && unusedIn(used0, c) ? { action: "hidden" } : sug];
         })));
         setTab("accounts");
   };
@@ -168,6 +176,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   };
 
   const accounts = useMemo(() => (data ? ynabAccounts(data, isoDay(start)) : []), [data, start]);
+  const accountNames = useMemo(() => new Set(accounts.map((a) => a.name.trim().toLowerCase())), [accounts]);
   const categories = useMemo(() => (data ? ynabCategories(data, recentMonths(thisMonth)) : []), [data, thisMonth]);
   // how many of YNAB's transactions each category has (a split line counts for its own category)
   const txnCount = useMemo(() => {
@@ -235,7 +244,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   // your own cash accounts with money that no YNAB account is matched to: their money counts on top of YNAB's
   const matchedIds = new Set(Object.values(choices).flatMap((c) => (c.action === "match" ? [c.id] : [])));
   const unmatchedMine = preview ? saved.accounts.filter((x) => x.type === "cash" && Math.abs(x.balance) >= 0.01 && !matchedIds.has(x.id) && preview.plan.accounts.some((y) => y.id === x.id)) : [];
-  const leftOutUsed = data ? ynabAccounts(data, isoDay(start)).filter((a) => choices[a.name]?.action === "skip" && usedThisMonth(a.name) > 0).map((a) => a.name) : [];
+  const leftOutUsed = data ? accounts.filter((a) => choices[a.name]?.action === "skip" && usedThisMonth(a.name) > 0).map((a) => a.name) : [];
 
   const options = (a: YnabAccount) => {
     // an account here takes one YNAB account: the ones another already took aren't offered
@@ -273,6 +282,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   };
 
   const since = from;
+  // the categories used lately, worked out once (not per category, per dropdown choice, per tap)
+  const usedRecently = useMemo(() => (data ? usedSince(data, since) : new Set<string>()), [data, since]);
   const quietAccounts = data ? accounts.filter((a) => quietAccount(data, a.name, a.balance, since)) : [];
   // accounts you're leaving out (closed, empty, or set to "Nothing") are tucked away under one link. Decided when
   // the list opens, so a row you just changed doesn't jump away; it moves the next time you come back.
@@ -289,8 +300,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const isCombined = (c: { group: string; name: string }) => !!joinsTo(catMap[categoryKey(c.group, c.name)]);
   const combinedInto = (k: string) => categories.filter((c) => joinsTo(catMap[categoryKey(c.group, c.name)]) === k);
   // old cards' payment lines left out (empty): a section of their own
-  const oldCards = data ? categories.filter((c) => catMap[categoryKey(c.group, c.name)]?.action === "skip" && /^hidden categories$/i.test(c.group) && ynabAccounts(data).some((a) => a.name.trim().toLowerCase() === c.name.trim().toLowerCase())) : [];
-  const unusedCats = data ? categories.filter((c) => !isCombined(c) && !oldCards.includes(c) && !combinedInto(categoryKey(c.group, c.name)).length && unusedCategory(data, c, since)) : [];
+  const oldCards = data ? categories.filter((c) => catMap[categoryKey(c.group, c.name)]?.action === "skip" && /^hidden categories$/i.test(c.group) && accountNames.has(c.name.trim().toLowerCase())) : [];
+  const unusedCats = data ? categories.filter((c) => !isCombined(c) && !oldCards.includes(c) && !combinedInto(categoryKey(c.group, c.name)).length && unusedIn(usedRecently, c)) : [];
   const activeCats = categories.filter((c) => !isCombined(c) && !oldCards.includes(c) && !unusedCats.includes(c));
   const accountRow = (a: YnabAccount, i: number, showKind = false) => (
     <View key={a.name} style={{ gap: 4 }}>
@@ -439,12 +450,12 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const joinable = (k: string) =>
     categories.filter((c) => { const k2 = categoryKey(c.group, c.name); const ch2 = catMap[k2]; return k2 !== k && !joinsTo(ch2) && ch2?.action !== "skip" && ch2?.action !== "invest"; });
   // not used lately: as a sub category it comes in archived (history only)
-  const unusedOf = (k: string) => { const c = categories.find((x) => categoryKey(x.group, x.name) === k); return !!(data && c && unusedCategory(data, c, since)); };
+  const unusedOf = (k: string) => { const c = categories.find((x) => categoryKey(x.group, x.name) === k); return !!(c && unusedIn(usedRecently, c)); };
   const rowOptions = (k: string) => [
     ...catOptions(k),
     ...loanTargets(k),
     ...investTargets.map((x) => ({ ...x, section: "Money moved into an account" })),
-    ...joinable(k).map((c) => ({ value: "sub:" + categoryKey(c.group, c.name), label: `Under ${c.name}`, hint: `Keeps its name and transactions${unusedOf(k) ? " · archived (not used lately)" : ""}`, section: "As a sub category" })),
+    ...(() => { const hint = `Keeps its name and transactions${unusedOf(k) ? " · archived (not used lately)" : ""}`; return joinable(k).map((c) => ({ value: "sub:" + categoryKey(c.group, c.name), label: `Under ${c.name}`, hint, section: "As a sub category" })); })(),
     ...joinable(k).map((c) => ({ value: "combine:" + categoryKey(c.group, c.name), label: `Combine into ${c.name}`, hint: c.group, section: "Combine with another YNAB category: its name goes" })),
   ];
   const offNote = (ch?: CategoryChoice) =>
