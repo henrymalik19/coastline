@@ -166,6 +166,16 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
 
   const accounts = useMemo(() => (data ? ynabAccounts(data, isoDay(start)) : []), [data, start]);
   const categories = useMemo(() => (data ? ynabCategories(data, recentMonths(thisMonth)) : []), [data, thisMonth]);
+  // how many of YNAB's transactions each category has (a split line counts for its own category)
+  const txnCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const tx of data?.txns ?? []) for (const x of tx.splits?.length ? tx.splits : [tx]) if (x.category) { const k = categoryKey(x.group, x.category); m.set(k, (m.get(k) ?? 0) + 1); }
+    return m;
+  }, [data]);
+  const countOf = (c: { group: string; name: string }) => {
+    const n = txnCount.get(categoryKey(c.group, c.name)) ?? 0;
+    return <Text style={[type.caption, { color: t.text3, fontWeight: "400" }]}>{"  "}{n.toLocaleString()} {n === 1 ? "transaction" : "transactions"}</Text>;
+  };
   const months = useMemo(() => (data ? exportMonths(data, thisMonth) : []), [data, thisMonth]);
   // default: the last 3 months, or all the export has if that is less
   const startPick = range || (months.includes(recentMonths(thisMonth, 2)[0]!) ? recentMonths(thisMonth, 2)[0]! : "all");
@@ -385,7 +395,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     const body = (
       <>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[type.body, { color: t.text, fontWeight: "600" }]} numberOfLines={1}>{c2.name}</Text>
+          <Text style={[type.body, { color: t.text, fontWeight: "600" }]} numberOfLines={1}>{c2.name}{countOf(c2)}</Text>
           <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{c2.group !== into.group ? `From ${c2.group}` : "Combined"}</Text>
         </View>
         <View style={{ flexShrink: 0 }}>
@@ -448,7 +458,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         <View key={k} style={[styles.phoneRow, { backgroundColor: t.surface, borderColor: t.border }]}>
           <View style={[styles.row, { alignItems: "flex-start" }]}>
             {grip}
-            <Text style={[type.body, { flex: 1, minWidth: 0, color: ch?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]}>{c.name}</Text>
+            <Text style={[type.body, { flex: 1, minWidth: 0, color: ch?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]}>{c.name}{countOf(c)}</Text>
             {perMonth}
           </View>
           {reset}
@@ -491,7 +501,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         <View style={styles.row}>
           {grip}
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[type.body, { color: ch?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]} numberOfLines={1}>{c.name}</Text>
+            <Text style={[type.body, { color: ch?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]} numberOfLines={1}>{c.name}{countOf(c)}</Text>
             {inGroup}
             {reset}
           </View>
