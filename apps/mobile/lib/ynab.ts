@@ -11,7 +11,7 @@ import { isCard } from "./register";
 import { fullName } from "./company";
 import { OUTSIDE } from "./outside";
 import { CLOSED_ACCOUNTS_GROUP } from "./budgetOrder";
-import { linkDebtCategories } from "./debtLink";
+import { linkDebtCategories, PAYS } from "./debtLink";
 
 /* ---------- reading the files ---------- */
 
@@ -319,7 +319,9 @@ export type CategoryChoice =
   /** Into another of YNAB's categories (its categoryKey): one category here, with both's transactions and amounts. */
   | { action: "combine"; into: string }
   /** Money moved into an account (an IRA, an HSA): "plan:<id>" for one of yours, "ynab:<name>" for one the import adds. */
-  | { action: "invest"; account: string };
+  | { action: "invest"; account: string }
+  /** A new category that pays a loan (each home's PITI its own mortgage): "plan:<id>" for one of yours, "ynab:<name>" for one the import adds. */
+  | { action: "loan"; debt: string };
 
 /** The plan's category a YNAB category most likely is: the same name, or the Emergency fund for an emergency fund. */
 export function suggestCategory(plan: PlanState, c: Pick<YnabCategory, "name"> & { group?: string }): CategoryChoice {
@@ -366,6 +368,21 @@ export function suggestCategories(plan: PlanState, d: YnabData, cats: YnabCatego
     }
     out[k] = ch;
   }
+  // pays one of your loans (a home's PITI, under a group named like the home): its own category, linked to it
+  const loans = [
+    ...plan.debts.filter((x) => x.kind !== "credit_card" && !x.payroll).map((x) => ({ debt: "plan:" + x.id, names: [x.name, fullName(x)] })),
+    ...ynabAccounts(d, today).filter((a) => a.kind === "loan" && !plan.debts.some((x) => norm(fullName(x)) === norm(a.name) || norm(x.name) === norm(a.name))).map((a) => ({ debt: "ynab:" + a.name, names: [a.name] })),
+  ];
+  const loanKey = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const loanTaken = new Set<string>();
+  for (const c of cats) {
+    const k = categoryKey(c.group, c.name);
+    if (out[k]!.action !== "new" || !PAYS.test(c.name)) continue;
+    const g = loanKey(c.group);
+    const n = loanKey(c.name);
+    const hits = loans.filter((l) => !loanTaken.has(l.debt) && l.names.map(loanKey).some((m) => m.length >= 4 && (m === g || (g.length >= 4 && m.includes(g)) || n.includes(m))));
+    if (hits.length === 1) { out[k] = { action: "loan", debt: hits[0]!.debt }; loanTaken.add(hits[0]!.debt); }
+  }
   // the same category twice (a note in brackets apart): one, the other combined into it
   const byName = new Map<string, YnabCategory[]>();
   for (const c of cats) {
@@ -386,7 +403,7 @@ export function suggestCategories(plan: PlanState, d: YnabData, cats: YnabCatego
   // an old or hidden one whose transactions went to the same places as one you use: combined into it
   const isOld = (k: string) => out[k]!.action === "hidden" || (out[k]!.action === "new" && !used.has(k));
   const from = cats.map((c) => categoryKey(c.group, c.name)).filter(isOld);
-  const into = cats.map((c) => categoryKey(c.group, c.name)).filter((k) => (out[k]!.action === "new" || out[k]!.action === "match") && used.has(k));
+  const into = cats.map((c) => categoryKey(c.group, c.name)).filter((k) => (out[k]!.action === "new" || out[k]!.action === "match" || out[k]!.action === "loan") && used.has(k));
   for (const [k, m] of Object.entries(payeeMatches(d, from, into))) out[k] = { action: "combine", into: m.into };
   return out;
 }
@@ -852,6 +869,16 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     const id = idFor("cat", k);
     itemOf.set(k, id);
     const item: BudgetItem = { id, name: c.name, amount: o.amounts?.[k] ?? c.average, inRetirement: opts.inRetirement, group: (o.categoryGroup?.[k] ?? groupFor(c.group)) || undefined, essential: opts.essential };
+    if (ch.action === "loan") {
+      const debtId = ch.debt.startsWith("plan:") ? ch.debt.slice(5) : idOf.get(ch.debt.slice(5));
+      const debt = plan.debts.find((x) => x.id === debtId);
+      if (debt && !plan.budget.some((b) => b.paysDebt === debt.id)) {
+        item.paysDebt = debt.id;
+        // a loan the import adds has no payment yet: what you assigned to its category is it
+        if (!(debt.minPayment > 0)) debt.minPayment = item.amount;
+        summary.debtCategoriesLinked++;
+      }
+    }
     plan.budget.push(item);
     summary.categoriesAdded++;
   }
@@ -877,7 +904,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     summary.categoriesCombined++;
   }
   // a category that pays one of your loans (a mortgage's PITI): linked to it, so it isn't counted twice
-  summary.debtCategoriesLinked = linkDebtCategories(plan);
+  summary.debtCategoriesLinked += linkDebtCategories(plan);
   if (o.removeEmpty) {
     const keep = new Set(itemOf.values());
     const before = plan.budget.length;

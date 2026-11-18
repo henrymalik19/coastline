@@ -415,7 +415,8 @@ export function Segmented<T extends string>({
 export function Select<T extends string>({
   options, value, onChange, label, plain, placeholder,
 }: {
-  options: { value: T; label: string; hint?: string }[]; value: T; onChange: (v: T) => void; label: string;
+  /** `section`: a heading over this option and the ones after it with the same section. */
+  options: { value: T; label: string; hint?: string; section?: string }[]; value: T; onChange: (v: T) => void; label: string;
   /** No box: right-aligned text and a chevron, for list rows. */
   plain?: boolean;
   placeholder?: string;
@@ -440,11 +441,13 @@ export function Select<T extends string>({
           <Pressable onPress={() => {}} aria-label={label} style={[styles.sheet, { backgroundColor: t.surface, borderColor: t.border }]}>
             <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.md, paddingBottom: 4 }]}>{label}</Text>
             <ScrollView style={{ maxHeight: 440 }}>
-              {options.map((o) => {
+              {options.map((o, i) => {
                 const on = o.value === value;
+                const heading = o.section && o.section !== options[i - 1]?.section ? o.section : undefined;
                 return (
+                  <View key={o.value}>
+                  {heading ? <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.md, paddingTop: i ? space.md : 0, paddingBottom: 2 }]}>{heading}</Text> : null}
                   <Pressable
-                    key={o.value}
                     role="option"
                     aria-selected={on}
                     onPress={() => { onChange(o.value); setOpen(false); }}
@@ -456,6 +459,7 @@ export function Select<T extends string>({
                     </View>
                     {on ? <Icon name="check" size={16} color={t.accent} /> : null}
                   </Pressable>
+                  </View>
                 );
               })}
             </ScrollView>

@@ -8,7 +8,7 @@ import { fullName } from "./company";
 import { isCard } from "./register";
 
 const key = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, "");
-const PAYS = /piti|mortgage|loan|payment|principal|p&i/i;
+export const PAYS = /piti|mortgage|loan|payment|principal|p&i/i;
 
 /**
  * The loan a category looks like it pays (not a card, not paid from your paycheck), or undefined. Sure:
