@@ -5,7 +5,7 @@
  */
 import { ReorderToggle } from "../../components/ReorderToggle";
 import { fullName } from "../../lib/company";
-import { debtItPays } from "../../lib/debtLink";
+import { debtItPays, newLoanPayment, paidLastTwoMonths, setLoanPayment } from "../../lib/debtLink";
 import { ImportUndoReminder, useImported } from "../../components/ImportUndo";
 import { BUDGET_ITEM, budgetCategories, budgetView, SAVINGS_GROUP, spendingHistory, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
@@ -455,9 +455,22 @@ export default function Budget() {
                 />
               </FormRow>
             )}
-            <FormRow label="Each month" hint={linkedTo ? `What you put into ${linkedTo.name.trim() || "the account"} each month` : "What your plan expects"}>
-              <InlineMoney label={`${it.name || "Item"} planned each month`} value={it.amount} onChange={(v) => editItem(it.id, { amount: v })} />
-            </FormRow>
+            {(() => {
+              const loan = it.paysDebt ? state.debts.find((x) => x.id === it.paysDebt) : undefined;
+              return loan ? (
+                <FormRow label="Payment" hint={`From your ${debtLabel(loan)} ${debtKind(loan.kind).label.toLowerCase()}${loan.escrow ? ` (${money(loan.escrow)} of it taxes and insurance)` : ""}`}>
+                  <Pressable role="link" onPress={() => openPage("/money/debts")} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(loan.minPayment)}</Text>
+                    <Text style={[type.body, { color: t.accent, fontWeight: "600" }]}>Change</Text>
+                    <Icon name="chevron" size={14} color={t.accent} />
+                  </Pressable>
+                </FormRow>
+              ) : (
+                <FormRow label="Each month" hint={linkedTo ? `What you put into ${linkedTo.name.trim() || "the account"} each month` : "What your plan expects"}>
+                  <InlineMoney label={`${it.name || "Item"} planned each month`} value={it.amount} onChange={(v) => editItem(it.id, { amount: v })} />
+                </FormRow>
+              );
+            })()}
             {linkedTo ? null : (
               <FormRow
                 label="Retirement & essentials"
@@ -608,6 +621,7 @@ export default function Budget() {
     // a category that pays one of your loans (a mortgage's PITI): linked, or likely to be
     const paysLoan = dupItem?.paysDebt ? state.debts.find((x) => x.id === dupItem.paysDebt) : undefined;
     const loan = !dup && dupItem ? debtItPays(state, dupItem) : undefined;
+    const newPay = paysLoan && dupItem ? newLoanPayment(paysLoan, dupItem, paidLastTwoMonths(txns, dupItem.id, thisMonth)) : undefined;
     return (
       <View key={c.key} nativeID={"cat-" + c.key}>
         <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, pressed ? { backgroundColor: t.surface2 } : null]}>
@@ -628,7 +642,7 @@ export default function Budget() {
                 <Text style={[type.caption, { color: t.bad, fontWeight: "700", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>{money(cardShort(c, l))} short of the balance</Text>
               ) : null}
             </View>
-            {dup || loan ? <Icon name="info" size={14} color={t.warn} /> : null}
+            {dup || loan || newPay !== undefined ? <Icon name="info" size={14} color={t.warn} /> : null}
             {realBy.has(c.key) ? (
               <View style={[styles.realTag, { backgroundColor: t.warnSoft }]} accessibilityLabel={`You really spend about ${money(realBy.get(c.key)!.avg, { whole: true })} a month`}>
                 <Text style={[type.caption, { color: t.warn, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>~{money(realBy.get(c.key)!.avg, { whole: true })}</Text>
@@ -667,6 +681,19 @@ export default function Budget() {
                 <View style={styles.chips}>
                   <Chip title="Yes, link it" tone="accent" icon="check" onPress={() => editItem(c.key, { paysDebt: loan.id })} />
                   <Chip title="It's something else" icon="close" onPress={() => editItem(c.key, { noSuggest: true })} />
+                </View>
+              </View>
+            ) : null}
+            {paysLoan && newPay !== undefined ? (
+              <View style={[styles.dupBox, { backgroundColor: t.warnSoft, borderColor: t.warn }]}>
+                <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Your payment changed?</Text>
+                <Text style={[type.caption, { color: t.text2 }]}>
+                  You've paid {money(newPay)} the last two months; your {debtLabel(paysLoan)} {debtKind(paysLoan.kind).label.toLowerCase()} says {money(paysLoan.minPayment)}.
+                  {paysLoan.kind === "mortgage" && (paysLoan.escrow ?? 0) > 0 ? " Usually that's taxes or insurance going up or down, so the escrow part changes with it." : ""}
+                </Text>
+                <View style={styles.chips}>
+                  <Chip title={`Update to ${money(newPay)}`} tone="accent" icon="check" onPress={() => update((p) => { const x = p.debts.find((y) => y.id === paysLoan.id); if (x) setLoanPayment(x, newPay); })} />
+                  <Chip title={`Keep ${money(paysLoan.minPayment)}`} icon="close" onPress={() => editItem(c.key, { keptAt: newPay })} />
                 </View>
               </View>
             ) : null}

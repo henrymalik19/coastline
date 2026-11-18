@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlanState } from "@coastfi/engine";
-import { debtItPays, linkDebtCategories } from "./debtLink";
+import { debtItPays, linkDebtCategories, newLoanPayment, paidLastTwoMonths, setLoanPayment } from "./debtLink";
 
 describe("categories that pay a loan", () => {
   const plan = (): Pick<PlanState, "debts" | "budget"> => ({
@@ -46,5 +46,23 @@ describe("a category with any name", () => {
     expect(debtItPays(p, p.budget[0]!)?.id).toBe("m1");
     expect(debtItPays(p, p.budget[0]!, true)).toBeUndefined();
     expect(linkDebtCategories(p)).toBe(0);
+  });
+});
+
+describe("real payments that moved away from the loan's", () => {
+  const tx = (id: string, date: string, amount: number) => ({ id, accountId: "chk", date, amount, categoryId: "piti", cleared: "cleared" as const, source: "manual" as const, updatedAt: 0 });
+  it("two steady months at a new amount: suggest it; not when kept, unsteady or close", () => {
+    const paid = paidLastTwoMonths([tx("a", "2026-09-01", -3650), tx("b", "2026-10-01", -3650), tx("c", "2026-11-01", -3650)], "piti", "2026-11");
+    expect(paid).toEqual([3650, 3650]);
+    expect(newLoanPayment({ minPayment: 3572.77 }, {}, paid)).toBe(3650);
+    expect(newLoanPayment({ minPayment: 3572.77 }, { keptAt: 3650 }, paid)).toBeUndefined();
+    expect(newLoanPayment({ minPayment: 3572.77 }, {}, [3500, 3650])).toBeUndefined();
+    expect(newLoanPayment({ minPayment: 3572.77 }, {}, [3575, 3575])).toBeUndefined();
+    expect(paidLastTwoMonths([tx("b", "2026-10-01", -3650)], "piti", "2026-11")).toBeUndefined();
+  });
+  it("updating a mortgage moves its escrow by the difference (taxes and insurance changed)", () => {
+    const d = { id: "m", name: "House", kind: "mortgage" as const, balance: 300000, apr: 0.06, minPayment: 3572.77, escrow: 1234.99 };
+    setLoanPayment(d, 3650);
+    expect(d).toMatchObject({ minPayment: 3650, escrow: 1312.22 });
   });
 });
