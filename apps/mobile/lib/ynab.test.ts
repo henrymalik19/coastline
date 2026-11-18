@@ -518,4 +518,19 @@ describe("categories you hid in YNAB", () => {
     expect(r.plan.budgetPlan!.months["2026-11"]!.assigned![tutoring.id]).toBe(100);
     expect(r.txns.find((t) => t.payee === "Language school")!.categoryId).toBe(tutoring.id);
   });
+  it("a hidden one named like an account (an old card's payment line) goes under Closed accounts", () => {
+    const reg = REG + `"Old Card","","10/02/2026","Shop","Everyday: Groceries","Everyday","Groceries","","$5.00","$0.00","Reconciled"
+`;
+    const plan = PLAN + `"Nov 2026","Hidden Categories: Old Card","Hidden Categories","Old Card","$0.00","$0.00","$0.00"
+"Nov 2026","Hidden Categories: Gym","Hidden Categories","Gym","$10.00","-$10.00","$0.00"
+`;
+    const p: PlanState = freshPlan();
+    let n = 0;
+    const d = parseYnab(reg, plan);
+    const cats = ynabCategories(d, ["2026-10", "2026-11"]);
+    const categoryMap = Object.fromEntries(cats.filter((c) => /hidden/i.test(c.group)).map((c) => [categoryKey(c.group, c.name), { action: "hidden" as const }]));
+    const r = buildImport(p, d, { from: "2026-11", thisMonth: "2026-11", accounts: {}, categories: {}, categoryMap, removeEmpty: false, newId: () => `n${++n}` });
+    expect(r.plan.budget.find((b) => b.name === "Old Card")).toMatchObject({ hidden: true, group: "Closed accounts" });
+    expect(r.plan.budget.find((b) => b.name === "Gym")).toMatchObject({ hidden: true, group: "Hidden Categories" });
+  });
 });

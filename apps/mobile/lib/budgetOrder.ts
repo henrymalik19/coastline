@@ -7,6 +7,8 @@ export const groupOf = (b: BudgetItem) => b.group?.trim() || UNGROUPED;
 /** Where a repeating bill / a debt payment is listed in the budget unless you pick a group. */
 export const BILLS_GROUP = "Bills";
 export const DEBTS_GROUP = "Debt payments";
+/** Hidden payment lines of accounts you've closed (YNAB keeps one per old card): listed apart from hidden categories. */
+export const CLOSED_ACCOUNTS_GROUP = "Closed accounts";
 
 /** The groups a bill or debt payment can be listed under: its default, then your groups (and its current one). */
 export function linkedGroupChoices(items: BudgetItem[], fallback: string, current?: string): string[] {

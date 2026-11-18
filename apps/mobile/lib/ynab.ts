@@ -10,6 +10,7 @@ import { unzipSync, strFromU8 } from "fflate";
 import { isCard } from "./register";
 import { fullName } from "./company";
 import { OUTSIDE } from "./outside";
+import { CLOSED_ACCOUNTS_GROUP } from "./budgetOrder";
 
 /* ---------- reading the files ---------- */
 
@@ -665,6 +666,9 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   const groupFor = (g: string) => o.groupMap?.[groupKey(g)] ?? g;
   // hidden ones go after everything shown (that's where hidden categories live)
   const hiddenItems: BudgetItem[] = [];
+  // YNAB keeps a payment line for every card, and hides the ones for cards you've closed: those are
+  // named like the account, so they go together under Closed accounts (not among your categories)
+  const accountNames = new Set(d.txns.map((t) => norm(t.account)));
   for (const c of cats) {
     const k = categoryKey(c.group, c.name);
     const opts = o.categories[k] ?? { inRetirement: true, essential: true };
@@ -673,7 +677,8 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     if (ch.action === "hidden") {
       const id = idFor("cat", k);
       itemOf.set(k, id);
-      hiddenItems.push({ id, name: c.name, amount: 0, inRetirement: false, group: (o.categoryGroup?.[k] ?? groupFor(c.group)) || undefined, hidden: true });
+      const closedAccount = YNAB_HIDDEN.test(c.group) && accountNames.has(norm(c.name));
+      hiddenItems.push({ id, name: c.name, amount: 0, inRetirement: false, group: (o.categoryGroup?.[k] ?? (closedAccount ? CLOSED_ACCOUNTS_GROUP : groupFor(c.group))) || undefined, hidden: true });
       summary.categoriesHidden++;
       continue;
     }

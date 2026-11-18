@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Segmented, Select } from "../../components/form";
 import { ChangesLater, MonthlyAmount } from "../../components/ScheduleEditor";
-import { BILLS_GROUP, DEBTS_GROUP, groupOf, groupOrder, linkedGroupChoices, moveGroup, moveToGroup, setHidden, UNGROUPED } from "../../lib/budgetOrder";
+import { BILLS_GROUP, CLOSED_ACCOUNTS_GROUP, DEBTS_GROUP, groupOf, groupOrder, linkedGroupChoices, moveGroup, moveToGroup, setHidden, UNGROUPED } from "../../lib/budgetOrder";
 import { DragList, reorderAmong, useDragZone } from "../../components/DragList";
 import { newId } from "../../lib/store";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -925,12 +925,32 @@ export default function Budget() {
                   Off your budget and out of your plan, but they keep their transactions. One that's overspent shows here until you cover it.
                 </Text>
               ) : null}
-              {(hiddenOpen ? hiddenCats : overHidden).map((c, n) => (
-                <View key={c.key}>
-                  {n > 0 ? <Divider /> : null}
-                  {line(c)}
-                </View>
-              ))}
+              {hiddenOpen ? (
+                // two lists: your hidden categories, and the payment lines of accounts you've closed
+                [
+                  { title: "Categories", list: hiddenCats.filter((c) => c.group !== CLOSED_ACCOUNTS_GROUP) },
+                  { title: CLOSED_ACCOUNTS_GROUP, list: hiddenCats.filter((c) => c.group === CLOSED_ACCOUNTS_GROUP) },
+                ].filter((x) => x.list.length).map((x) => (
+                  <View key={x.title}>
+                    <Text style={[type.overline, { color: t.text3, paddingHorizontal: compact ? space.md : space.lg, paddingTop: space.md, paddingBottom: space.xs }]}>
+                      {x.title} ({x.list.length})
+                    </Text>
+                    {x.list.map((c, n) => (
+                      <View key={c.key}>
+                        {n > 0 ? <Divider /> : null}
+                        {line(c)}
+                      </View>
+                    ))}
+                  </View>
+                ))
+              ) : (
+                overHidden.map((c, n) => (
+                  <View key={c.key}>
+                    {n > 0 ? <Divider /> : null}
+                    {line(c)}
+                  </View>
+                ))
+              )}
             </Card>
           ) : null}
           <Pressable role="link" onPress={() => router.push("/settings")} hitSlop={6} style={styles.link}>
