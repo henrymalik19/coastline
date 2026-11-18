@@ -30,7 +30,7 @@ export function txnActivity(txns: Txn[], month: string, cards: Record<string, st
   const out: TxnActivity = { income: 0, spent: {}, cardFunded: {}, cardSpent: {} };
   const add = (rec: Record<string, number>, k: string, v: number) => { rec[k] = (rec[k] ?? 0) + v; };
   for (const t of txns) {
-    if (t.deleted || ymOf(t.date) !== month || isUpcoming(t, asOf)) continue;
+    if (t.deleted || t.review || ymOf(t.date) !== month || isUpcoming(t, asOf)) continue;
     const amt = num(t.amount);
     const card = cards[t.accountId];
     // a payment to a card: spends from its payment category (counted once, on the card's side)
@@ -69,7 +69,7 @@ export const isUpcoming = (t: Pick<Txn, "date">, asOf?: string): boolean => !!as
 export function registerBalance(opening: number, txns: Txn[], accountId: string, clearedOnly = false, asOf?: string): number {
   let b = num(opening);
   for (const t of txns) {
-    if (t.deleted || t.accountId !== accountId || isUpcoming(t, asOf)) continue;
+    if (t.deleted || t.review || t.accountId !== accountId || isUpcoming(t, asOf)) continue;
     if (clearedOnly && t.cleared === "uncleared") continue;
     b += num(t.amount);
   }

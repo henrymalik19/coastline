@@ -226,8 +226,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     const c = unassignedCheck(r);
     const said = !c ? "" : Math.abs(c.mine - c.ynab) < 0.01 ? ` Unassigned is ${money(c.mine)}, the same as YNAB's Ready to Assign.` : ` Unassigned is ${money(c.mine)}; YNAB's Ready to Assign is ${money(c.ynab)}.`;
     importBudget(r.plan, r.txns, r.replaced);
-    setDone(`Imported ${r.summary.transactions} transactions and ${r.summary.categoriesAdded + r.summary.categoriesUpdated} categories.${said}`);
-    setDoneNeeds(r.summary.needsCategoryFromYnab + r.summary.needsCategoryLeftOut + r.summary.notApprovedInYnab);
+    setDone(`Imported ${r.summary.transactions} transactions and ${r.summary.categoriesAdded + r.summary.categoriesUpdated} categories.${said}${r.summary.notApprovedInYnab ? ` ${r.summary.notApprovedInYnab} to review under Transactions.` : ""}`);
+    setDoneNeeds(r.summary.needsCategoryFromYnab + r.summary.needsCategoryLeftOut);
     setData(null);
   };
 
@@ -270,7 +270,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
             <Text style={[type.caption, { color: t.text3 }]}>Company and name here</Text>
             <View style={[styles.row, { gap: space.sm }]}>
               <View style={{ flex: 2, minWidth: 0 }}>
-                <TextField label={`${a.name}: company`} placeholder="Company (optional)" value={names[a.name]?.company ?? ""} onChange={(v) => setName(a.name, { company: v })} />
+                <TextField label={`${a.name}: company`} placeholder="Company" value={names[a.name]?.company ?? ""} onChange={(v) => setName(a.name, { company: v })} />
               </View>
               <View style={{ flex: 3, minWidth: 0 }}>
                 <TextField label={`${a.name}: name here`} placeholder="Name" value={names[a.name]?.name ?? a.name} onChange={(v) => setName(a.name, { name: v })} />
@@ -712,7 +712,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   ] : [];
   // what happens besides the numbers: one line each, with an icon (to do, nothing to do, removed, undo)
   const s = preview?.summary;
-  const toSort = s ? s.needsCategoryFromYnab + s.needsCategoryLeftOut + s.notApprovedInYnab : 0;
+  const toSort = s ? s.needsCategoryFromYnab + s.needsCategoryLeftOut : 0;
   const noteRow = (key: string, icon: IconName, color: string, title: string, detail?: string) => (
     <View key={key} style={{ flexDirection: "row", gap: space.sm, alignItems: "flex-start" }}>
       <View style={{ paddingTop: 1 }}>
@@ -748,8 +748,16 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
             [
               s.needsCategoryFromYnab ? `${s.needsCategoryFromYnab} had none in YNAB` : "",
               s.needsCategoryLeftOut ? `${s.needsCategoryLeftOut} ${s.needsCategoryLeftOut === 1 ? "is" : "are"} in categories you left out` : "",
-              s.notApprovedInYnab ? `${s.notApprovedInYnab} ${s.notApprovedInYnab === 1 ? "isn't" : "aren't"} approved in YNAB yet` : "",
             ].filter(Boolean).join(", ") + ". You'll find them under Transactions.",
+          )
+        : null}
+      {s.notApprovedInYnab
+        ? noteRow(
+            "review",
+            "check",
+            t.accent,
+            `${s.notApprovedInYnab} ${s.notApprovedInYnab === 1 ? "transaction" : "transactions"} to review`,
+            "Not approved in YNAB yet, so like YNAB they don't count in balances or your budget until you accept them. You'll find them under Transactions → To review.",
           )
         : null}
       {s.olderWithoutCategory || s.transfersOutside

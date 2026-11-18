@@ -44,6 +44,13 @@ describe("starting amounts and taking money back", () => {
     expect(view(most).readyToAssign).toBe(1000 + 500);
   });
 
+  it("a transaction held for review doesn't count in the budget until it's accepted", () => {
+    const shop: Txn = { id: "shop", accountId: "chk", date: "2026-11-05", amount: -40, categoryId: "food", cleared: "uncleared", source: "ynab", updatedAt: 0, review: true };
+    const b = base({ opening: { food: 100 } });
+    expect(budgetView(b, cats, "2026-11", { txns: [...txns, shop], cards }).lines.food!.spent).toBe(0);
+    expect(budgetView(b, cats, "2026-11", { txns: [...txns, { ...shop, review: undefined }], cards }).lines.food!.spent).toBe(40);
+  });
+
   it("the starting amounts only start the first month; later months carry on as usual", () => {
     const dec = view(base({ opening: { food: 100 } }), "2026-12");
     expect(dec.lines.food!.carried).toBe(100);

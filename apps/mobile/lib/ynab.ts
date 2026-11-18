@@ -259,12 +259,15 @@ const YNAB_HIDDEN = /^hidden categories$/i;
 
 /** YNAB's accounts, from the register: what kind each looks like and its balance today. */
 export function ynabAccounts(d: YnabData, today?: string): YnabAccount[] {
+  // what YNAB hasn't approved yet doesn't count in its balances
+  const held = today ? heldInYnab(d, today.slice(0, 7), today) : new Set<YnabTxn>();
   const cards = new Set(d.assigned.filter((a) => CARD_GROUP.test(a.group)).map((a) => norm(a.category)));
   for (const t of d.txns) if (CARD_GROUP.test(t.group)) cards.add(norm(t.category));
   const by = new Map<string, YnabAccount>();
   for (const t of d.txns) {
     const a = by.get(t.account) ?? { name: t.account, kind: "cash" as YnabAccountKind, balance: 0, upcoming: 0, onBudget: false, txnCount: 0 };
     if (today && t.date > today) a.upcoming = Math.round((a.upcoming + t.amount) * 100) / 100;
+    else if (held.has(t)) { /* not approved in YNAB yet */ }
     else a.balance = Math.round((a.balance + t.amount) * 100) / 100;
     a.txnCount++;
     if (t.category || t.splits?.length) a.onBudget = true;
@@ -399,8 +402,8 @@ export type ImportResult = {
     /** Recent transactions (this month and last) that will need a category: YNAB had none, or you left their category out. */
     needsCategoryFromYnab: number; needsCategoryLeftOut: number;
     /**
-     * Recent transactions YNAB has but doesn't count in its budget yet (not approved there): they come in
-     * with no category, for you to categorize here, so the budget starts where YNAB's is.
+     * Recent transactions YNAB hasn't approved yet: they come in held for you to review (review), not
+     * counted in balances or the budget until you accept them, as in YNAB.
      */
     notApprovedInYnab: number;
     /** Older ones without a category: kept as history, nothing to do. */
@@ -501,6 +504,24 @@ export function notCounted(d: YnabData, from: string, thisMonth: string, today?:
 }
 
 /**
+ * The transactions YNAB hasn't approved yet, last month and this one (through `today`): YNAB leaves them
+ * out of its balances and its budget. The export doesn't say which they are, so: the ones its category
+ * totals leave out (notCounted), and uncleared ones with no category in a budget account (an imported
+ * charge nobody has looked at yet).
+ */
+export function heldInYnab(d: YnabData, thisMonth: string, today?: string): Set<YnabTxn> {
+  const from = addMonthsTo(thisMonth, -1);
+  const held = new Set(notCounted(d, from, thisMonth, today));
+  const budget = new Set(d.txns.filter((t) => t.category || t.splits?.length).map((t) => t.account));
+  for (const t of d.txns) {
+    const m = t.date.slice(0, 7);
+    if (m < from || m > thisMonth || (today && t.date > today)) continue;
+    if (budget.has(t.account) && t.cleared === "uncleared" && !t.category && !t.splits?.length && !t.transferTo && !/^starting balance$/i.test(t.payee)) held.add(t);
+  }
+  return held;
+}
+
+/**
  * An account's transactions this month that count in the budget (filed under a category or Ready to
  * Assign, not transfers), through `today`: what leaving the account out takes out of the budget.
  */
@@ -518,6 +539,7 @@ export function ynabReadyToAssign(d: YnabData, thisMonth: string, today: string,
   const rows = d.assigned.filter((a) => a.month === thisMonth && !isReady(a.group, a.category) && !/^internal master category$/i.test(a.group));
   if (!rows.length || rows.every((a) => a.available === undefined)) return null;
   const accts = ynabAccounts(d, today);
+  const pending = heldInYnab(d, thisMonth, today);
   const cash = accts.filter((a) => a.kind === "cash" && include(a.name)).reduce((t, a) => t + a.balance, 0);
   const cards = new Set(accts.filter((a) => a.kind === "card").map((a) => a.name));
   let held = 0;
@@ -529,7 +551,7 @@ export function ynabReadyToAssign(d: YnabData, thisMonth: string, today: string,
     // what of it went on cards (that's card debt, not cash)
     let onCards = 0;
     for (const t of d.txns) {
-      if (t.date.slice(0, 7) !== thisMonth || t.date > today || !cards.has(t.account)) continue;
+      if (t.date.slice(0, 7) !== thisMonth || t.date > today || !cards.has(t.account) || pending.has(t)) continue;
       for (const p of t.splits?.length ? t.splits : [t]) if (p.group === a.group && p.category === a.category) onCards -= p.amount;
     }
     cashOver += Math.max(0, -av - Math.max(0, onCards));
@@ -752,6 +774,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   const before = new Map<string, number>();
   const seen = new Map<string, number>();
   const madeFrom = new Map<YnabTxn, Txn>();
+  const held = heldInYnab(d, o.thisMonth, o.today);
   for (const t of d.txns) {
     if (!budgetAccount(t.account)) continue;
     if (!inRange(t.date)) { before.set(t.account, Math.round(((before.get(t.account) ?? 0) + t.amount) * 100) / 100); continue; }
@@ -780,6 +803,12 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
       if (k) tx.categoryId = k;
       else { const orig = original(t.group, t.category); if (orig) tx.originalCategory = orig; }
     }
+    // not approved in YNAB yet: held for you to review (with YNAB's category, if it had one), not counted
+    // until you accept it, as YNAB doesn't count it until it's approved
+    if (held.has(t)) {
+      tx.review = true;
+      summary.notApprovedInYnab++;
+    }
     // needs a category here: YNAB had none, or its category was left out
     const hadCategory = t.splits?.length ? t.splits.every((s) => !!s.category) : !!t.category;
     // a transfer to an account you left out (an old or closed one): still a transfer, not spending, so it
@@ -788,7 +817,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     const missing = t.splits?.length ? tx.splits!.some((s) => !s.categoryId) : !tx.categoryId && !(to && toBudget) && !outside;
     if (outside) summary.transfersOutside++;
     if (missing && t.date < recentFrom) summary.olderWithoutCategory++;
-    else if (missing) {
+    else if (missing && !tx.review) {
       if (hadCategory) summary.needsCategoryLeftOut++;
       else summary.needsCategoryFromYnab++;
     }
@@ -808,16 +837,6 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     const y = open.find((z) => !z.transferId && z !== x && z.accountId === x.transferAccountId && z.transferAccountId === x.accountId && z.date === x.date && Math.abs(z.amount + x.amount) < 0.005);
     if (y) { x.transferId = y.id; y.transferId = x.id; }
   }
-  // transactions YNAB has but doesn't count yet (not approved there): its Plan file's spending for a category
-  // leaves them out. They're the newest uncleared ones of that category that add up to the difference; they
-  // come in with no category (for you to categorize here), so each category starts where YNAB's is.
-  for (const t of notCounted(d, budgetFrom, o.thisMonth, o.today)) {
-    const tx = madeFrom.get(t);
-    if (!tx?.categoryId) continue;
-    delete tx.categoryId;
-    tx.originalCategory = [t.group, t.category].filter(Boolean).join(": ");
-    summary.notApprovedInYnab++;
-  }
   // YNAB lets overspending on a credit card turn into card debt: the card's payment category only gets
   // what the category could cover. Bring that in as it was, as overspending left on the card (it shows
   // short on the card's line here, and isn't taken from Unassigned), so the budget starts where YNAB's is.
@@ -833,7 +852,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
       done.add(key);
       const spending = txns
         .map((t, i) => ({ t, i }))
-        .filter(({ t }) => t.date.slice(0, 7) === m && !(o.today && t.date > o.today))
+        .filter(({ t }) => t.date.slice(0, 7) === m && !t.review && !(o.today && t.date > o.today))
         .flatMap(({ t, i }) => (t.splits?.length ? t.splits : [{ categoryId: t.categoryId ?? "", amount: t.amount }]).filter((p) => p.categoryId === key).map((p) => ({ date: t.date, i, account: t.accountId, amount: p.amount })));
       const spent = spending.reduce((x, p) => x - p.amount, 0);
       const over = overspentBy(a.available! - (a.activity ?? -spent), spending);

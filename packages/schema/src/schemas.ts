@@ -234,6 +234,7 @@ export const TxnSchema = z.object({
   categoryId: z.string().optional(),
   splits: z.array(z.object({ categoryId: z.string(), amount: z.number().finite(), memo: z.string().optional(), originalCategory: z.string().optional() })).optional(),
   originalCategory: z.string().optional(),
+  review: z.boolean().optional(),
   transferAccountId: z.string().optional(),
   transferId: z.string().optional(),
   cleared: z.enum(["uncleared", "cleared", "reconciled"]),

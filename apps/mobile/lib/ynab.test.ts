@@ -2,7 +2,7 @@ import { budgetStartCash, budgetView, registerBalance, type PlanState } from "@c
 import { describe, expect, it } from "vitest";
 import { freshPlan } from "./presets";
 import { cardMap } from "./register";
-import { balanceConflicts, buildImport, categoryKey, groupKey, exportMonths, dateParser, money, monthOf, nameId, notCounted, budgetTxnsThisMonth, parseCsv, parseYnab, suggestChoice, ynabAccounts, ynabCategories, ynabReadyToAssign } from "./ynab";
+import { balanceConflicts, buildImport, categoryKey, groupKey, exportMonths, dateParser, money, monthOf, nameId, notCounted, budgetTxnsThisMonth, heldInYnab, parseCsv, parseYnab, suggestChoice, ynabAccounts, ynabCategories, ynabReadyToAssign } from "./ynab";
 
 // a small YNAB export, in the shape YNAB writes it (newest first, US dates, $ amounts)
 const REGISTER = `﻿"Account","Flag","Date","Payee","Category Group/Category","Category Group","Category","Memo","Outflow","Inflow","Cleared"
@@ -442,15 +442,31 @@ describe("transactions YNAB doesn't count yet (not approved there)", () => {
     // nothing to find when YNAB counts everything
     expect(notCounted(parseYnab(REG, PLAN), "2026-10", "2026-11")).toEqual([]);
   });
-  it("come in with no category, to categorize here, keeping YNAB's as a note", () => {
+  it("come in held for review with YNAB's category: not in balances or the budget until accepted", () => {
     const p: PlanState = freshPlan();
     p.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 1 }];
     let n = 0;
     const r = buildImport(p, parseYnab(REG, plan), { from: "2026-11", thisMonth: "2026-11", today: "2026-11-30", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
     const kroger = r.txns.find((t) => t.payee === "Kroger")!;
-    expect(kroger.categoryId).toBeUndefined();
-    expect(kroger.originalCategory).toBe("Everyday: Groceries");
+    const groceries = r.plan.budget.find((b) => b.name === "Groceries")!;
+    expect(kroger).toMatchObject({ review: true, categoryId: groceries.id });
     expect(r.summary.notApprovedInYnab).toBe(1);
+    expect(r.summary.needsCategoryFromYnab).toBe(0);
+    // the Visa's balance leaves it out, as YNAB's does ($300 at the start, $200 paid: $100 owed)
+    const visa = r.plan.debts.find((d) => d.name === "Visa")!;
+    expect(registerBalance(0, r.txns, visa.id)).toBe(-100);
+    expect(ynabAccounts(parseYnab(REG, plan), "2026-11-30").find((a) => a.name === "Visa")!.balance).toBe(-100);
+    // accepted, it counts
+    expect(registerBalance(0, r.txns.map((t) => (t === kroger ? { ...t, review: undefined } : t)), visa.id)).toBe(-220);
+  });
+  it("an uncleared charge with no category this month is held too (YNAB hasn't approved it)", () => {
+    const reg = REG.replace(`"Visa","","11/01/2026","Kroger"`, `"Visa","","11/04/2026","Clinic","","","","","$15.00","$0.00","Uncleared"
+"Visa","","11/01/2026","Kroger"`);
+    const d = parseYnab(reg, PLAN);
+    expect(heldInYnab(d, "2026-11", "2026-11-30").size).toBe(1);
+    expect([...heldInYnab(d, "2026-11", "2026-11-30")][0]!.payee).toBe("Clinic");
+    // a transfer, or one in an account that isn't in the budget (an IRA), isn't
+    expect([...heldInYnab(parseYnab(REG, PLAN), "2026-11", "2026-11-30")]).toEqual([]);
   });
 });
 

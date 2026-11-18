@@ -63,6 +63,8 @@ export function TransactionsList({
   const inRange = (d: string) => range === "all" || (range === "month" ? d.slice(0, 7) === month : (!from || d >= from) && (!to || d <= to));
   const [q, setQ] = useState("");
   const [needsCat, setNeedsCat] = useState(!!onlyNeedsCategory);
+  // held for review (not approved in YNAB yet): listed apart, counted once you accept them
+  const [reviewOnly, setReviewOnly] = useState(false);
   const [editing, setEditing] = useState<Txn | "new" | null>(null);
   // the filters' height, so each day's heading sticks just under them
   const [filtersH, setFiltersH] = useState(96);
@@ -93,8 +95,9 @@ export function TransactionsList({
       .filter((x) => !x.deleted)
       .filter((x) => acct === "all" || x.accountId === acct || x.transferAccountId === acct)
       // the ones that need a category: from every month (the count beside it is all of them)
-      .filter((x) => needsCat || inRange(x.date))
+      .filter((x) => needsCat || reviewOnly || inRange(x.date))
       .filter((x) => !needsCat || uncategorized(x))
+      .filter((x) => !reviewOnly || x.review)
       .filter((x) => {
         if (!needle) return true;
         const hay = `${x.payee ?? ""} ${x.memo ?? ""} ${categoryText(cats, x, nameOf)} ${nameOf(x.accountId)} ${Math.abs(x.amount).toFixed(2)}`.toLowerCase();
@@ -102,11 +105,11 @@ export function TransactionsList({
       })
       .sort((a, b) => (a.date === b.date ? b.updatedAt - a.updatedAt : b.date.localeCompare(a.date)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [txns, acct, month, range, from, to, q, needsCat, cats]);
+  }, [txns, acct, month, range, from, to, q, needsCat, reviewOnly, cats]);
 
   // dated after today: upcoming, shown greyed at the top and not counted until their day
   const today = isoDay(start);
-  const happened = list.filter((x) => !isUpcoming(x, today));
+  const happened = list.filter((x) => !isUpcoming(x, today) && !x.review);
   const inTotal = happened.reduce((a, x) => a + (x.amount > 0 && !x.transferAccountId ? x.amount : 0), 0);
   const outTotal = happened.reduce((a, x) => a + (x.amount < 0 && !x.transferAccountId ? -x.amount : 0), 0);
   // the count follows the account picker, like everything else here; ones in other accounts get a link instead
@@ -114,6 +117,9 @@ export function TransactionsList({
   const missingAll = txns.filter((x) => !x.deleted && uncategorized(x));
   const missing = missingAll.filter(inView).length;
   const missingElsewhere = missingAll.length - missing;
+  const toReview = txns.filter((x) => !x.deleted && x.review && inView(x));
+  const accept = (x: Txn) => { const { review: _r, ...rest } = x; saveTxn(rest, isoDay(start)); };
+  const acceptAll = () => { for (const x of toReview) accept(x); setReviewOnly(false); };
 
   if (!state.budgetPlan || !accounts.length) {
     return (
@@ -196,7 +202,7 @@ export function TransactionsList({
     <>
       <View ref={topRef as never} onLayout={(e) => setFiltersH(Math.round(e.nativeEvent.layout.height))} style={[{ gap: space.sm, paddingVertical: space.xs, marginVertical: -space.xs }, sticky(stickyTop, t.bg)]}>
       <View style={[styles.row, { gap: space.sm }]}>
-        {needsCat ? (
+        {needsCat || reviewOnly ? (
           <Text style={[type.caption, { color: t.text3, fontWeight: "700" }]}>All dates</Text>
         ) : (
           <Select
@@ -211,8 +217,13 @@ export function TransactionsList({
             }}
           />
         )}
+        {toReview.length || reviewOnly ? (
+          <Pressable role="checkbox" aria-checked={reviewOnly} onPress={() => { setReviewOnly((v) => !v); setNeedsCat(false); }} hitSlop={6} style={[styles.chip, { borderColor: t.accent, backgroundColor: reviewOnly ? t.accentSoft : t.surface }]}>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>To review ({toReview.length})</Text>
+          </Pressable>
+        ) : null}
         {missing || needsCat ? (
-          <Pressable role="checkbox" aria-checked={needsCat} onPress={() => setNeedsCat((v) => !v)} hitSlop={6} style={[styles.chip, { borderColor: needsCat ? t.warn : t.border, backgroundColor: needsCat ? t.warnSoft : t.surface }]}>
+          <Pressable role="checkbox" aria-checked={needsCat} onPress={() => { setNeedsCat((v) => !v); setReviewOnly(false); }} hitSlop={6} style={[styles.chip, { borderColor: needsCat ? t.warn : t.border, backgroundColor: needsCat ? t.warnSoft : t.surface }]}>
             <Text style={[type.caption, { color: needsCat ? t.text : t.warn, fontWeight: "700" }]}>Needs a category ({missing})</Text>
           </Pressable>
         ) : missingElsewhere ? (
@@ -250,6 +261,14 @@ export function TransactionsList({
       </View>
       </View>
 
+      {reviewOnly ? (
+        <Card style={{ gap: space.sm }}>
+          <Text style={[type.body, { color: t.text2 }]}>
+            Not approved in YNAB yet. They don't count in your balances or budget until you accept them. Tap one to change it first.
+          </Text>
+          {toReview.length ? <Button title={`Accept all ${toReview.length}`} tone="primary" icon="check" onPress={acceptAll} style={{ alignSelf: "flex-start", minHeight: 36 }} /> : null}
+        </Card>
+      ) : null}
       {accountCard}
       <View style={[styles.summary, { backgroundColor: t.surface2 }]}>
         {[
@@ -303,7 +322,9 @@ export function TransactionsList({
                     ) : (
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text numberOfLines={1} style={[type.body, { color: t.text }]}>{x.payee || "No payee"}</Text>
-                        <Text numberOfLines={1} style={[type.caption, { color: uncategorized(x) ? t.warn : t.text3 }]}>{categoryText(cats, x, nameOf, since)}</Text>
+                        <Text numberOfLines={1} style={[type.caption, { color: x.review ? t.accent : uncategorized(x) ? t.warn : t.text3 }]}>
+                          {x.review ? `To review · ${x.categoryId || x.splits?.length ? categoryText(cats, x, nameOf, since) : "no category"}` : categoryText(cats, x, nameOf, since)}
+                        </Text>
                       </View>
                     )}
                     <View style={{ alignItems: "flex-end", maxWidth: compact ? 120 : 180 }}>
@@ -318,6 +339,14 @@ export function TransactionsList({
                       ) : null}
                     </View>
                   </Pressable>
+                  {x.review ? (
+                    // held for review: accept it here (outside the row's own button)
+                    <View style={styles.reviewBar}>
+                      <Pressable role="button" accessibilityLabel={`Accept ${x.payee || "transaction"}`} onPress={() => accept(x)} hitSlop={6} style={[styles.acctTag, { backgroundColor: t.accentSoft, paddingHorizontal: 12, paddingVertical: 4 }]}>
+                        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Accept</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
                 </View>
               ))}
             </View>
@@ -326,7 +355,7 @@ export function TransactionsList({
       ) : (
         <Card style={{ gap: space.sm }}>
           <Text style={[type.body, { color: t.text2 }]}>
-            {q || needsCat ? "Nothing matches." : allMonths ? "No transactions yet." : range === "custom" ? "No transactions between those dates." : `No transactions in ${ymText(month)}.`}
+            {q || needsCat || reviewOnly ? "Nothing matches." : allMonths ? "No transactions yet." : range === "custom" ? "No transactions between those dates." : `No transactions in ${ymText(month)}.`}
           </Text>
           <Text style={[type.caption, { color: t.text3 }]}>Add what you spend and earn here. Each one comes out of (or goes into) a budget category.</Text>
         </Card>
@@ -349,6 +378,7 @@ const styles = StyleSheet.create({
   dayHead: { paddingHorizontal: 16, paddingVertical: 6 },
   txn: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: 16, paddingVertical: 12 },
   transferBadge: { width: 20, height: 20, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  reviewBar: { flexDirection: "row", justifyContent: "flex-end", paddingHorizontal: 16, paddingBottom: 10, marginTop: -6 },
   acctTag: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1, marginTop: 2, maxWidth: "100%" },
   dot: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
 });

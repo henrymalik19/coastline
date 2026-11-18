@@ -401,6 +401,11 @@ export type Txn = {
    * brought in. Not shown or editable; there so old spending can be sorted into it later.
    */
   originalCategory?: string;
+  /**
+   * Held for you to review (one an import brought in that wasn't approved where it came from): listed,
+   * but not counted in balances or the budget until you accept it.
+   */
+  review?: boolean;
   /** The other account of a transfer (each side is its own transaction). */
   transferAccountId?: string;
   /** The id of the other side of a transfer. */

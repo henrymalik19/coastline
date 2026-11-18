@@ -58,7 +58,8 @@ export function needsCategorySince(start: Date): string {
  * With `since`, only transactions on or after that day count.
  */
 export function needsCategory(t: Pick<Txn, "id" | "categoryId" | "transferAccountId" | "splits" | "deleted" | "date">, since?: string): boolean {
-  if (t.deleted || isStartTxn(t)) return false;
+  // one held for review isn't asked for a category until it's accepted
+  if (t.deleted || isStartTxn(t) || (t as { review?: boolean }).review) return false;
   if (since && t.date < since) return false;
   if (t.splits?.length) return t.splits.some((s) => !s.categoryId);
   return !t.categoryId && !t.transferAccountId;
