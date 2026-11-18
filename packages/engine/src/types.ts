@@ -421,6 +421,12 @@ export type BudgetState = {
   start: string;
   /** Cash in your budget accounts when you started (your first money to assign). */
   startCash: number;
+  /**
+   * What each category (key) had when the budget started, brought in from YNAB: the first month starts
+   * with it, like money carried in from a month before. Negative: overspending paid in cash the month
+   * before, which comes out of the first month's ready to assign (as overspending does).
+   */
+  opening?: Record<string, number>;
   months: Record<string, BudgetMonthEntry>;
   /** Your name and group for the Emergency fund category (it's a category like any other). */
   efLine?: { name?: string; group?: string };

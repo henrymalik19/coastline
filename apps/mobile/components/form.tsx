@@ -527,8 +527,8 @@ export function InlineText({ value, onChange, label, placeholder, commitOnBlur }
 }
 
 /** A dollar amount typed straight into a row (right-aligned, saved when you finish). */
-/** `compact`: a narrower box, for phone rows. */
-export function InlineMoney({ value, onChange, label, compact }: { value: number; onChange: (v: number) => void; label: string; compact?: boolean }) {
+/** `compact`: a narrower box, for phone rows. `allowNegative`: a leading minus is kept (taking money back). */
+export function InlineMoney({ value, onChange, label, compact, allowNegative }: { value: number; onChange: (v: number) => void; label: string; compact?: boolean; allowNegative?: boolean }) {
   const t = useTheme();
   const show = (v: number) => (Number.isFinite(v) ? v.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "");
   const [text, setText] = useState(show(value));
@@ -538,7 +538,7 @@ export function InlineMoney({ value, onChange, label, compact }: { value: number
   }, [value, focused]);
   const commit = () => {
     setFocused(false);
-    const v = Number(text.replace(/[^0-9.]/g, ""));
+    const v = (allowNegative && text.trim().startsWith("-") ? -1 : 1) * Number(text.replace(/[^0-9.]/g, ""));
     if (Number.isFinite(v) && Math.abs(v - value) > 0.004) onChange(Math.round(v * 100) / 100);
     else setText(show(value));
   };
@@ -552,7 +552,7 @@ export function InlineMoney({ value, onChange, label, compact }: { value: number
         onFocus={() => { setFocused(true); setText(value ? String(+value.toFixed(2)) : ""); }}
         onBlur={commit}
         onSubmitEditing={commit}
-        keyboardType="decimal-pad"
+        keyboardType={allowNegative ? "numbers-and-punctuation" : "decimal-pad"}
         placeholder="0"
         placeholderTextColor={t.text3}
         selectTextOnFocus

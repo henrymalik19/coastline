@@ -11,13 +11,14 @@ import { Button, InfoText, InfoTip, InlineMoney, InlineSwitch, MonthField, Segme
 import { Icon, type IconName } from "../../../components/Icon";
 import { Card, Divider, Screen } from "../../../components/ui";
 import { money } from "../../../lib/format";
-import { usePlan } from "../../../lib/plan";
-import { isCard } from "../../../lib/register";
+import { effectivePlan, usePlan } from "../../../lib/plan";
+import { useLimits } from "../../../lib/limits";
+import { applyRegisterBalances, isCard, readyToAssignFor } from "../../../lib/register";
 import { monthKey, useStore } from "../../../lib/store";
 import { space, type, useTheme } from "../../../lib/theme";
 import { isoDay } from "../../../lib/categories";
 import { readYnabFiles } from "../../../lib/ynabFiles";
-import { balanceConflicts, buildImport, categoryKey, exportMonths, groupKey, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabCategory, type YnabData } from "../../../lib/ynab";
+import { balanceConflicts, buildImport, categoryKey, exportMonths, groupKey, recentMonths, suggestCategory, suggestChoice, budgetTxnsThisMonth, ynabAccounts, ynabCategories, ynabReadyToAssign, type ImportResult, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabCategory, type YnabData } from "../../../lib/ynab";
 import { sticky, stickyBottom } from "../../../lib/sticky";
 import { useLayout } from "../../../lib/layout";
 import { groupOrder } from "../../../lib/budgetOrder";
@@ -174,6 +175,23 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     [data, saved, from, thisMonth, choices, useYnabBalance, catOpts, catMap, groupMap, catGroup, amounts, removeEmpty, existing, keepBoth],
   );
 
+  // Unassigned after this import, next to YNAB's Ready to Assign (only the accounts you bring in count on
+  // either side), so a difference shows before you import, not after
+  const unassignedCheck = (r: ImportResult) => {
+    if (!data || !r.plan.budgetPlan) return null;
+    const ynab = ynabReadyToAssign(data, thisMonth, isoDay(start), (name) => choices[name]?.action !== "skip");
+    if (ynab === null) return null;
+    const ids = new Set(r.txns.map((x) => x.id));
+    const all = [...existing.filter((x) => !ids.has(x.id) && !r.replaced.includes(x.id)), ...r.txns];
+    const p = structuredClone(r.plan);
+    applyRegisterBalances(p, all, isoDay(start));
+    return { mine: readyToAssignFor(effectivePlan(p, useLimits.getState().rows), all, start, thisMonth), ynab };
+  };
+  const check = useMemo(() => (preview ? unassignedCheck(preview) : null), [preview]); // eslint-disable-line react-hooks/exhaustive-deps
+  // accounts you're leaving out that have budget transactions this month: the budget won't match YNAB's
+  const usedThisMonth = (name: string) => (data ? budgetTxnsThisMonth(data, name, thisMonth, isoDay(start)) : 0);
+  const leftOutUsed = data ? ynabAccounts(data, isoDay(start)).filter((a) => choices[a.name]?.action === "skip" && usedThisMonth(a.name) > 0).map((a) => a.name) : [];
+
   const options = (a: YnabAccount) => {
     // an account here takes one YNAB account: the ones another already took aren't offered
     const takenByOthers = new Set(Object.entries(choices).flatMap(([n, c]) => (n !== a.name && c.action === "match" ? [c.id] : [])));
@@ -199,9 +217,12 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     running.current = true;
     setConfirming(false);
     const r = buildImport(saved, data, { from, thisMonth, accounts: choices, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, today: isoDay(start) });
+    // check Unassigned against YNAB's Ready to Assign, and say plainly if it's off
+    const c = unassignedCheck(r);
+    const said = !c ? "" : Math.abs(c.mine - c.ynab) < 0.01 ? ` Unassigned is ${money(c.mine)}, the same as YNAB's Ready to Assign.` : ` Unassigned is ${money(c.mine)}; YNAB's Ready to Assign is ${money(c.ynab)}.`;
     importBudget(r.plan, r.txns, r.replaced);
-    setDone(`Imported ${r.summary.transactions} transactions and ${r.summary.categoriesAdded + r.summary.categoriesUpdated} categories.`);
-    setDoneNeeds(r.summary.needsCategoryFromYnab + r.summary.needsCategoryLeftOut);
+    setDone(`Imported ${r.summary.transactions} transactions and ${r.summary.categoriesAdded + r.summary.categoriesUpdated} categories.${said}`);
+    setDoneNeeds(r.summary.needsCategoryFromYnab + r.summary.needsCategoryLeftOut + r.summary.notApprovedInYnab);
     setData(null);
   };
 
@@ -239,6 +260,11 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         ) : null}
         <Select label={`${a.name}: what it is here`} value={valueOf(choices[a.name])} options={options(a)} onChange={(v) => setChoice(a.name, v)} />
       </View>
+      {choices[a.name]?.action === "skip" && usedThisMonth(a.name) > 0 ? (
+        <Text style={[type.caption, { color: t.bad }]}>
+          Has {usedThisMonth(a.name)} budget {usedThisMonth(a.name) === 1 ? "transaction" : "transactions"} this month. Left out, your budget won't match YNAB's.
+        </Text>
+      ) : null}
       {(() => {
         // matched to one of yours with a different balance: which one to keep
         const c = conflicts.find((x) => x.name === a.name);
@@ -420,6 +446,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
       <Text style={[type.body, { color: t.text2 }]}>
         In YNAB, open your budget's menu and choose Export budget. It downloads a zip; pick it here. You'll choose what comes in before anything changes{setup ? ", and check it all in the rest of setup" : ""}.
       </Text>
+      <Text style={[type.caption, { color: t.text3 }]}>Coastwise isn't affiliated with YNAB.</Text>
       {Platform.OS === "web" ? (
         <Button title="Choose YNAB export" tone="primary" icon="plus" onPress={pick} style={{ alignSelf: "flex-start" }} />
       ) : (
@@ -667,7 +694,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   ] : [];
   // what happens besides the numbers: one line each, with an icon (to do, nothing to do, removed, undo)
   const s = preview?.summary;
-  const toSort = s ? s.needsCategoryFromYnab + s.needsCategoryLeftOut : 0;
+  const toSort = s ? s.needsCategoryFromYnab + s.needsCategoryLeftOut + s.notApprovedInYnab : 0;
   const noteRow = (key: string, icon: IconName, color: string, title: string, detail?: string) => (
     <View key={key} style={{ flexDirection: "row", gap: space.sm, alignItems: "flex-start" }}>
       <View style={{ paddingTop: 1 }}>
@@ -681,6 +708,19 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   );
   const notes = s ? (
     <View style={{ gap: space.md, padding: space.md, borderRadius: 12, backgroundColor: t.surface2 }}>
+      {check
+        ? Math.abs(check.mine - check.ynab) < 0.01
+          ? noteRow("ynab", "check", t.good, `Unassigned will match YNAB: ${money(check.mine)}`, "The same as YNAB's Ready to Assign this month.")
+          : noteRow(
+              "ynab",
+              "info",
+              t.bad,
+              `Unassigned will be ${money(check.mine)}. YNAB shows ${money(check.ynab)}`,
+              leftOutUsed.length
+                ? `You're leaving out ${leftOutUsed.join(", ")}, which ${leftOutUsed.length === 1 ? "has" : "have"} budget transactions this month. Bring ${leftOutUsed.length === 1 ? "it" : "them"} in to match.`
+                : "YNAB counts a few things differently from Coastwise.",
+            )
+        : null}
       {toSort
         ? noteRow(
             "sort",
@@ -690,6 +730,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
             [
               s.needsCategoryFromYnab ? `${s.needsCategoryFromYnab} had none in YNAB` : "",
               s.needsCategoryLeftOut ? `${s.needsCategoryLeftOut} ${s.needsCategoryLeftOut === 1 ? "is" : "are"} in categories you left out` : "",
+              s.notApprovedInYnab ? `${s.notApprovedInYnab} ${s.notApprovedInYnab === 1 ? "isn't" : "aren't"} approved in YNAB yet` : "",
             ].filter(Boolean).join(", ") + ". You'll find them under Transactions.",
           )
         : null}
@@ -790,7 +831,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         <>
           <Text style={[type.caption, { color: t.text2, flex: 1, minWidth: 0 }]} numberOfLines={2}>
             {preview.summary.transactions} transactions · {preview.summary.categoriesAdded + preview.summary.categoriesUpdated} categories · {preview.summary.accountsAdded} new account{preview.summary.accountsAdded === 1 ? "" : "s"}
-            {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut ? <Text style={{ color: t.warn }}> · {preview.summary.needsCategoryFromYnab + preview.summary.needsCategoryLeftOut} need a category</Text> : null}
+            {toSort ? <Text style={{ color: t.warn }}> · {toSort} need a category</Text> : null}
           </Text>
           {actions}
         </>

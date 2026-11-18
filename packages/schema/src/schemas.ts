@@ -208,10 +208,11 @@ export const PlanStateSchema = z.object({
     .object({
       start: z.string().regex(/^\d{4}-\d{2}$/),
       startCash: z.number(),
+      opening: z.record(z.string(), z.number()).optional(),
       months: z.record(
         z.string().regex(/^\d{4}-\d{2}$/),
         z.object({
-          assigned: z.record(z.string(), z.number().min(0)).optional(),
+          assigned: z.record(z.string(), z.number()).optional(),
           cardDebt: z.array(z.object({ cat: z.string(), card: z.string(), amount: z.number().min(0) })).optional(),
         }),
       ),

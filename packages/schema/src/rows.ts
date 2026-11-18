@@ -30,6 +30,7 @@ export const PLAN_TABLES = {
   month_amount: ["source", "key", "month"],
   budget_assignment: ["month", "key"],
   budget_card_debt: ["month", "category_key", "card_key"],
+  budget_opening: ["key"],
   todo_done: ["month", "item"],
 } as const;
 export type PlanTable = keyof typeof PLAN_TABLES;
@@ -151,6 +152,7 @@ export function planToRows(input: Engine.PlanState, todoDone: Record<string, str
       ...entries(p.amountsBy).flatMap(([key, m]) => entries(m).map(([month, amount]) => ({ source: "step", key, month, amount }))),
     ],
     budget_assignment: entries(b?.months).flatMap(([month, e]) => entries(e.assigned).map(([key, assigned]) => ({ month, key, assigned }))),
+    budget_opening: entries(b?.opening).map(([key, amount]) => ({ key, amount })),
     budget_card_debt: entries(b?.months).flatMap(([month, e]) => (e.cardDebt ?? []).map((d) => ({ month, category_key: d.cat, card_key: d.card, amount: d.amount }))),
     todo_done: entries(todoDone).flatMap(([month, items]) => items.map((item, i) => ({ month, item, sort: i }))),
   };
@@ -226,6 +228,9 @@ export function rowsToPlan(rows: PlanRows): { plan: Engine.PlanState; todoDone: 
     const debt = [...(t.budget_card_debt ?? [])].sort((a, b) => `${a.month}|${a.category_key}|${a.card_key}`.localeCompare(`${b.month}|${b.category_key}|${b.card_key}`));
     for (const x of debt) ((m[x.month as string] ??= { assigned: {} }).cardDebt ??= []).push({ cat: x.category_key as string, card: x.card_key as string, amount: Number(x.amount) });
     bp.months = m;
+    // what each category had when the budget started (in a steady order)
+    const opening = [...(t.budget_opening ?? [])].sort((a, b) => String(a.key).localeCompare(String(b.key)));
+    if (opening.length) bp.opening = Object.fromEntries(opening.map((x) => [x.key as string, Number(x.amount)]));
     if (r.ef_line) bp.efLine = back(r, EF_LINE);
     plan.budgetPlan = bp;
   }

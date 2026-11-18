@@ -2,7 +2,7 @@ import { budgetStartCash, budgetView, registerBalance, type PlanState } from "@c
 import { describe, expect, it } from "vitest";
 import { freshPlan } from "./presets";
 import { cardMap } from "./register";
-import { balanceConflicts, buildImport, categoryKey, groupKey, exportMonths, dateParser, money, monthOf, nameId, parseCsv, parseYnab, suggestChoice, ynabAccounts, ynabCategories } from "./ynab";
+import { balanceConflicts, buildImport, categoryKey, groupKey, exportMonths, dateParser, money, monthOf, nameId, notCounted, budgetTxnsThisMonth, parseCsv, parseYnab, suggestChoice, ynabAccounts, ynabCategories, ynabReadyToAssign } from "./ynab";
 
 // a small YNAB export, in the shape YNAB writes it (newest first, US dates, $ amounts)
 const REGISTER = `﻿"Account","Flag","Date","Payee","Category Group/Category","Category Group","Category","Memo","Outflow","Inflow","Cleared"
@@ -148,11 +148,12 @@ describe("importing into the plan", () => {
     expect(r.plan.budget.map((b) => [b.name, b.group, b.amount])).toEqual([["Groceries", "Everyday", 625], ["Roth IRA", "Savings", 500], ["Household", "Everyday", 25]]);
     expect(r.plan.budget.find((b) => b.name === "Household")).toMatchObject({ inRetirement: false, essential: false });
     expect(r.summary).toMatchObject({ accountsAdded: 2, categoriesAdded: 2, categoriesUpdated: 1, categoriesRemoved: 1 });
-    // November's assignments, including the card payment, plus what each had left in October (Groceries
-    // $200, the Roth IRA $500; the card's payment was short, so nothing carries)
+    // the budget starts this month (December), with what each category had left in YNAB at the end of
+    // November (Groceries $660, Household $20, the Roth IRA $500; the card's payment line was short, so nothing)
     const visa = r.plan.debts[0]!.id;
-    expect(r.plan.budgetPlan!.months["2026-11"]!.assigned).toEqual({ food: 850, [r.plan.budget[2]!.id]: 50, [r.plan.budget[1]!.id]: 1000, ["debt:" + visa]: 100 });
-    expect(r.plan.budgetPlan!.start).toBe("2026-11");
+    expect(r.plan.budgetPlan!.start).toBe("2026-12");
+    expect(r.plan.budgetPlan!.opening).toEqual({ food: 660, [r.plan.budget[2]!.id]: 20, [r.plan.budget[1]!.id]: 500 });
+    expect(r.plan.budgetPlan!.months["2026-11"]).toBeUndefined();
     // each budget account starts with its balance on Nov 1; October's transactions aren't brought in
     const start = r.txns.filter((t) => t.id.startsWith("start:"));
     expect(start.map((t) => [t.accountId, t.amount, t.categoryId]).sort()).toEqual([["chk", 2600, "ready"], [visa, -300, undefined]]);
@@ -174,13 +175,11 @@ describe("importing into the plan", () => {
     expect(ira.categoryId).toBe(r.plan.budget[1]!.id);
     const target = r.txns.find((t) => t.payee === "Target")!;
     expect(target.splits!.map((s) => [s.categoryId, s.amount])).toEqual([["food", -70], [r.plan.budget[2]!.id, -30]]);
-    // the November budget: groceries got 650 (+200 left from October), spent 120 on the Visa + 70 at Target:
-    // 660 available, as in YNAB
+    // the December budget: groceries start with the $660 YNAB had left at the end of November
     const cats = r.plan.budget.map((b) => ({ key: b.id, moves: false, target: b.amount })).concat([{ key: "debt:" + visa, moves: true, target: 0 }]);
-    const v = budgetView({ ...r.plan.budgetPlan!, startCash: 0 }, cats, "2026-11", { txns: r.txns, cards: cardMap(r.plan) });
-    expect(v.lines.food!.spent).toBeCloseTo(190, 6);
+    const v = budgetView({ ...r.plan.budgetPlan!, startCash: 0 }, cats, "2026-12", { txns: r.txns, cards: cardMap(r.plan) });
+    expect(v.lines.food!.carried).toBeCloseTo(660, 6);
     expect(v.lines.food!.available).toBeCloseTo(660, 6);
-    expect(v.income).toBeCloseTo(4000 + 2600, 6); // pay + checking's starting balance
   });
 
   it("an investment account or loan matched to yours keeps your balance unless you pick YNAB's", () => {
@@ -199,12 +198,12 @@ describe("importing into the plan", () => {
     expect(starts.map((x) => [x.accountId === "chk" ? "chk" : "visa", x.amount, x.date]).sort()).toEqual([["chk", 3000, "2026-10-01"], ["visa", -300, "2026-10-01"]]);
     expect(r.txns.filter((x) => /starting balance/i.test(x.payee ?? ""))).toHaveLength(2);
     expect(registerBalance(0, r.txns, "chk")).toBe(5800);
-    // every transaction comes in, but the budget starts last month (older months are history), with
-    // Groceries' $200 left from October and checking's $2,600 on Nov 1 as its starting money
-    expect(r.plan.budgetPlan!.start).toBe("2026-11");
+    // every transaction comes in, but the budget starts this month (older months are history), with
+    // Groceries' $660 left from November and checking's $5,800 on Dec 1 as its starting money
+    expect(r.plan.budgetPlan!.start).toBe("2026-12");
     expect(r.plan.budgetPlan!.months["2026-10"]).toBeUndefined();
-    expect(r.plan.budgetPlan!.months["2026-11"]!.assigned!.food).toBe(850);
-    expect(budgetStartCash(r.plan, r.txns, "2026-11")).toBe(2600);
+    expect(r.plan.budgetPlan!.opening!.food).toBe(660);
+    expect(budgetStartCash(r.plan, r.txns, "2026-12")).toBe(5800);
   });
 
   it("two YNAB accounts never land in one account here", () => {
@@ -249,7 +248,7 @@ describe("choosing where categories go, and matching your own transactions", () 
       },
     });
     expect(r.plan.budget.map((b) => b.id)).toEqual(["food", "home"]); // nothing new
-    expect(r.plan.budgetPlan!.months["2026-11"]!.assigned).toMatchObject({ food: 850, home: 50, cash: 1000 }); // with what each had left in October
+    expect(r.plan.budgetPlan!.opening).toMatchObject({ food: 660, home: 20, cash: 500 }); // what each had left in November
     expect(r.txns.find((t) => t.payee === "Target")!.splits!.map((s) => s.categoryId)).toEqual(["food", "home"]);
     const skip = buildImport(plan, d, { ...opts, categoryMap: { [categoryKey("Everyday", "Household")]: { action: "skip" } } });
     expect(skip.summary.categoriesSkipped).toBe(1);
@@ -303,7 +302,7 @@ describe("choosing where categories go, and matching your own transactions", () 
   it("two of YNAB's categories into one of yours add up", () => {
     const { plan, d, opts } = base();
     const r = buildImport(plan, d, { ...opts, categoryMap: { [categoryKey("Everyday", "Groceries")]: { action: "match", id: "food" }, [categoryKey("Everyday", "Household")]: { action: "match", id: "food" } } });
-    expect(r.plan.budgetPlan!.months["2026-11"]!.assigned!.food).toBe(900); // 650 + 50, and Groceries' 200 left from October
+    expect(r.plan.budgetPlan!.opening!.food).toBe(680); // the $660 and $20 they had left in November
   });
 
   it("your own transactions that YNAB also has give way to YNAB's", () => {
@@ -365,46 +364,108 @@ describe("YNAB's budget replaces the months it brings in", () => {
     // budgeted here before the import: the mortgage payment line (YNAB pays it from its own category)
     plan.budgetPlan = { start: "2026-11", startCash: 0, months: { "2026-11": { assigned: { "debt:house": 2000 } }, "2027-01": { assigned: { "debt:house": 2000 } } } };
     let n = 0;
-    const r = buildImport(plan, parseYnab(REG, PLAN), { from: "2026-11", thisMonth: "2026-12", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
+    const r = buildImport(plan, parseYnab(REG, PLAN), { from: "2026-11", thisMonth: "2026-11", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
     const months = r.plan.budgetPlan!.months;
-    for (const m of ["2026-11", "2026-12"]) expect(months[m]?.assigned?.["debt:house"]).toBeUndefined();
+    expect(months["2026-11"]?.assigned?.["debt:house"]).toBeUndefined();
     expect(Object.values(months["2026-11"]?.assigned ?? {}).length).toBeGreaterThan(0);
     expect(months["2027-01"]?.assigned?.["debt:house"]).toBe(2000);
   });
 });
 
 describe("money moved out of a category in YNAB", () => {
-  it("a negative amount nets against what was carried in, never below zero", () => {
+  it("a negative amount comes in as it is: money taken back out of the category", () => {
     // October left $500 in Roth IRA; in November it was moved back out (a negative amount in YNAB)
     const plan = PLAN.replace(`"Nov 2026","Savings: Roth IRA","Savings","Roth IRA","$500.00","-$500.00","$500.00"`, `"Nov 2026","Savings: Roth IRA","Savings","Roth IRA","-$500.00","$0.00","$0.00"`);
     expect(plan).not.toBe(PLAN);
     const p: PlanState = freshPlan();
     p.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 1 }];
     let n = 0;
-    const r = buildImport(p, parseYnab(REG, plan), { from: "2026-11", thisMonth: "2026-12", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
+    const r = buildImport(p, parseYnab(REG, plan), { from: "2026-11", thisMonth: "2026-11", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
     const roth = r.plan.budget.find((b) => b.name === "Roth IRA")!;
     const groceries = r.plan.budget.find((b) => b.name === "Groceries")!;
     const nov = r.plan.budgetPlan!.months["2026-11"]!.assigned!;
-    expect(nov[roth.id] ?? 0).toBe(0);
-    // Groceries: October's $200 left over carries in, plus November's $650
-    expect(nov[groceries.id]).toBe(850);
+    expect(nov[roth.id]).toBe(-500);
+    expect(r.plan.budgetPlan!.opening![roth.id]).toBe(500);
+    // Groceries: November's $650, starting with October's $200 left over
+    expect(nov[groceries.id]).toBe(650);
+    expect(r.plan.budgetPlan!.opening![groceries.id]).toBe(200);
+    const cats = r.plan.budget.map((b) => ({ key: b.id, moves: false, target: 0 }));
+    const v = budgetView(r.plan.budgetPlan!, cats, "2026-11", { txns: r.txns, cards: cardMap(r.plan) });
+    // all $500 it had comes back out (to Unassigned)
+    expect(v.lines[roth.id]!.carried).toBe(500);
+    expect(v.lines[roth.id]!.assigned).toBe(-500);
   });
 });
 
 describe("YNAB's card overspending comes in as card debt", () => {
-  it("a category YNAB shows overspent, spent on a card, is left on that card as debt (not taken from Unassigned)", () => {
-    // November: Groceries went $40 over in YNAB, and $120 of its spending was on the Visa
-    const plan = PLAN.replace(`"Nov 2026","Everyday: Groceries","Everyday","Groceries","$650.00","-$190.00","$660.00"`, `"Nov 2026","Everyday: Groceries","Everyday","Groceries","$650.00","-$190.00","-$40.00"`);
+  // November: Groceries went $40 over in YNAB ($150 to spend, then $120 on the Visa and $70 from Checking)
+  const plan = PLAN.replace(`"Nov 2026","Everyday: Groceries","Everyday","Groceries","$650.00","-$190.00","$660.00"`, `"Nov 2026","Everyday: Groceries","Everyday","Groceries","$650.00","-$190.00","-$40.00"`);
+  it("the purchase that took a category past $0 holds the overspending: on a card it's left as debt (not taken from Unassigned)", () => {
     expect(plan).not.toBe(PLAN);
+    // the Visa purchase came last (Nov 6), so it's the one that went over
+    const reg = REG.replace(`"Visa","","11/01/2026","Kroger"`, `"Visa","","11/06/2026","Kroger"`);
+    expect(reg).not.toBe(REG);
     const p: PlanState = freshPlan();
     p.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 1 }];
     let n = 0;
-    const r = buildImport(p, parseYnab(REG, plan), { from: "2026-11", thisMonth: "2026-12", today: "2026-12-01", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
+    const r = buildImport(p, parseYnab(reg, plan), { from: "2026-11", thisMonth: "2026-11", today: "2026-11-30", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
     const groceries = r.plan.budget.find((b) => b.name === "Groceries")!;
     const visa = r.plan.debts.find((d) => d.name === "Visa")!;
     expect(r.plan.budgetPlan!.months["2026-11"]!.cardDebt).toEqual([{ cat: groceries.id, card: "debt:" + visa.id, amount: 40 }]);
-    // a category that wasn't overspent, or overspent with cash only, has none
-    expect(r.plan.budgetPlan!.months["2026-12"]?.cardDebt).toBeUndefined();
+  });
+  it("overspending from a cash purchase isn't card debt, even with card purchases earlier in the month", () => {
+    // the Visa purchase (Nov 1) came first and was covered; Checking's (Nov 5) went over
+    const p: PlanState = freshPlan();
+    p.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 1 }];
+    let n = 0;
+    const r = buildImport(p, parseYnab(REG, plan), { from: "2026-11", thisMonth: "2026-11", today: "2026-11-30", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
+    expect(r.plan.budgetPlan!.months["2026-11"]?.cardDebt).toBeUndefined();
+  });
+});
+
+describe("transactions YNAB doesn't count yet (not approved there)", () => {
+  // YNAB's November Groceries leaves out the $120 Kroger purchase (uncleared): $70 spent, not $190
+  const plan = PLAN.replace(`"Nov 2026","Everyday: Groceries","Everyday","Groceries","$650.00","-$190.00","$660.00"`, `"Nov 2026","Everyday: Groceries","Everyday","Groceries","$650.00","-$70.00","$780.00"`);
+  it("are found: the newest uncleared ones of the category that make up the difference", () => {
+    expect(plan).not.toBe(PLAN);
+    const d = parseYnab(REG, plan);
+    expect(notCounted(d, "2026-10", "2026-11").map((t) => t.payee)).toEqual(["Kroger"]);
+    // nothing to find when YNAB counts everything
+    expect(notCounted(parseYnab(REG, PLAN), "2026-10", "2026-11")).toEqual([]);
+  });
+  it("come in with no category, to categorize here, keeping YNAB's as a note", () => {
+    const p: PlanState = freshPlan();
+    p.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 1 }];
+    let n = 0;
+    const r = buildImport(p, parseYnab(REG, plan), { from: "2026-11", thisMonth: "2026-11", today: "2026-11-30", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
+    const kroger = r.txns.find((t) => t.payee === "Kroger")!;
+    expect(kroger.categoryId).toBeUndefined();
+    expect(kroger.originalCategory).toBe("Everyday: Groceries");
+    expect(r.summary.notApprovedInYnab).toBe(1);
+  });
+});
+
+describe("an account left out that the budget uses this month", () => {
+  it("counts its transactions filed under a category or Ready to Assign, not transfers", () => {
+    const d = parseYnab(REG, PLAN);
+    // Checking in November: the split at Target and the pay (the IRA transfer and the card payment are transfers)
+    expect(budgetTxnsThisMonth(d, "Checking", "2026-11")).toBe(2);
+    expect(budgetTxnsThisMonth(d, "Visa", "2026-11")).toBe(1);
+    // through today only, and nothing in a month it wasn't used
+    expect(budgetTxnsThisMonth(d, "Visa", "2026-11", "2026-10-31")).toBe(0);
+    expect(budgetTxnsThisMonth(d, "Roth IRA", "2026-11")).toBe(0);
+  });
+});
+
+describe("YNAB's Ready to Assign", () => {
+  it("is the cash in budget accounts, less what's left in categories and later months", () => {
+    // Checking has $5,800; $660 + $20 + $500 is left in categories (the Visa's payment line is short, so nothing)
+    const d = parseYnab(REG, PLAN);
+    expect(ynabReadyToAssign(d, "2026-11", "2026-11-30")).toBe(4620);
+    // only accounts you brought in count
+    expect(ynabReadyToAssign(d, "2026-11", "2026-11-30", (a) => a !== "Checking")).toBe(-1180);
+    // without the Plan file there's nothing to go by
+    expect(ynabReadyToAssign(parseYnab(REG), "2026-11", "2026-11-30")).toBeNull();
   });
 });
 
@@ -417,7 +478,7 @@ describe("categories you hid in YNAB", () => {
     let n = 0;
     const d = parseYnab(reg, plan);
     expect(ynabCategories(d, ["2026-10", "2026-11"]).some((c) => c.name === "Tutoring")).toBe(true);
-    const r = buildImport(p, d, { from: "2026-11", thisMonth: "2026-12", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
+    const r = buildImport(p, d, { from: "2026-11", thisMonth: "2026-11", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
     const tutoring = r.plan.budget.find((b) => b.name === "Tutoring")!;
     expect(tutoring.hidden).toBe(true);
     expect(r.plan.budgetPlan!.months["2026-11"]!.assigned![tutoring.id]).toBe(100);

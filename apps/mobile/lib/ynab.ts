@@ -113,8 +113,8 @@ export type YnabTxn = {
   /** Split lines (one YNAB transaction split across categories). */
   splits?: { group: string; category: string; amount: number; memo: string }[];
 };
-/** A category's month in YNAB's Plan file: what you assigned, and what was available at the month's end. */
-export type YnabAssigned = { month: string; group: string; category: string; assigned: number; available?: number };
+/** A category's month in YNAB's Plan file: what you assigned, what it spent (activity), and what was available at the month's end. */
+export type YnabAssigned = { month: string; group: string; category: string; assigned: number; activity?: number; available?: number };
 export type YnabData = { txns: YnabTxn[]; assigned: YnabAssigned[] };
 
 const col = (header: string[], ...names: string[]) => {
@@ -214,6 +214,7 @@ export function parseYnab(registerCsv: string, planCsv?: string): YnabData {
       category: col(ph, "Category"),
       assigned: col(ph, "Assigned", "Budgeted"),
       available: col(ph, "Available", "Balance"),
+      activity: col(ph, "Activity"),
     };
     if (p.month >= 0 && p.assigned >= 0) {
       for (const r of plan.slice(1)) {
@@ -226,7 +227,7 @@ export function parseYnab(registerCsv: string, planCsv?: string): YnabData {
           const at = both.indexOf(":");
           if (at > 0) { group ||= both.slice(0, at).trim(); category ||= both.slice(at + 1).trim(); }
         }
-        assigned.push({ month, group: group.trim(), category: category.trim(), assigned: money(r[p.assigned] ?? ""), ...(p.available >= 0 ? { available: money(r[p.available] ?? "") } : {}) });
+        assigned.push({ month, group: group.trim(), category: category.trim(), assigned: money(r[p.assigned] ?? ""), ...(p.activity >= 0 ? { activity: money(r[p.activity] ?? "") } : {}), ...(p.available >= 0 ? { available: money(r[p.available] ?? "") } : {}) });
       }
     }
   }
@@ -395,6 +396,11 @@ export type ImportResult = {
     transactions: number; transactionsMatched: number; months: number;
     /** Recent transactions (this month and last) that will need a category: YNAB had none, or you left their category out. */
     needsCategoryFromYnab: number; needsCategoryLeftOut: number;
+    /**
+     * Recent transactions YNAB has but doesn't count in its budget yet (not approved there): they come in
+     * with no category, for you to categorize here, so the budget starts where YNAB's is.
+     */
+    notApprovedInYnab: number;
     /** Older ones without a category: kept as history, nothing to do. */
     olderWithoutCategory: number;
     /** Transfers to accounts you left out: kept as transfers, nothing to do. */
@@ -446,10 +452,120 @@ export function exportMonths(d: YnabData, thisMonth: string): string[] {
 /** The full months before this one, newest last (for the averages). */
 export const recentMonths = (thisMonth: string, n = 3) => Array.from({ length: n }, (_, i) => addMonthsTo(thisMonth, i - n));
 
+/**
+ * The transactions YNAB's budget doesn't count yet (ones not approved in YNAB), from `from` through
+ * `thisMonth`: for each category whose spending in the Register differs from the Plan file's, the newest
+ * uncleared transactions (not split) that make up the difference exactly. None when nothing adds up.
+ */
+export function notCounted(d: YnabData, from: string, thisMonth: string, today?: string): YnabTxn[] {
+  const out: YnabTxn[] = [];
+  const cents = (n: number) => Math.round(n * 100);
+  for (let m = from; m <= thisMonth; m = addMonthsTo(m, 1)) {
+    const planned = new Map<string, number>();
+    for (const a of d.assigned) if (a.month === m && a.activity !== undefined) planned.set(categoryKey(a.group, a.category), (planned.get(categoryKey(a.group, a.category)) ?? 0) + cents(a.activity));
+    if (!planned.size) continue;
+    const reg = new Map<string, number>();
+    const single = new Map<string, YnabTxn[]>();
+    for (const t of d.txns) {
+      if (t.date.slice(0, 7) !== m || (today && t.date > today)) continue;
+      for (const p of t.splits?.length ? t.splits : [t]) {
+        if (!p.category) continue;
+        const k = categoryKey(p.group, p.category);
+        reg.set(k, (reg.get(k) ?? 0) + cents(p.amount));
+      }
+      if (!t.splits?.length && t.category && t.cleared === "uncleared") {
+        const k = categoryKey(t.group, t.category);
+        single.set(k, [...(single.get(k) ?? []), t]);
+      }
+    }
+    for (const [k, want] of planned) {
+      const diff = (reg.get(k) ?? 0) - want;
+      if (!diff) continue;
+      // newest first; a handful is plenty (these are the last few days' transactions), and keeps the search small
+      const pool = (single.get(k) ?? []).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, 16);
+      // which of them add up to the difference: every reachable total, and how it was reached
+      const reach = new Map<number, number[]>([[0, []]]);
+      for (let i = 0; i < pool.length && !reach.has(diff); i++) {
+        for (const [sum, used] of [...reach]) {
+          const next = sum + cents(pool[i]!.amount);
+          if (!reach.has(next)) reach.set(next, [...used, i]);
+        }
+      }
+      const hit = reach.get(diff);
+      if (hit?.length) out.push(...hit.map((i) => pool[i]!));
+    }
+  }
+  return out;
+}
+
+/**
+ * An account's transactions this month that count in the budget (filed under a category or Ready to
+ * Assign, not transfers), through `today`: what leaving the account out takes out of the budget.
+ */
+export function budgetTxnsThisMonth(d: YnabData, account: string, thisMonth: string, today?: string): number {
+  return d.txns.filter((t) => t.account === account && t.date.slice(0, 7) === thisMonth && !(today && t.date > today) && !t.transferTo && (t.splits?.length ? t.splits.some((s) => !!s.category) : !!t.category)).length;
+}
+
+/**
+ * YNAB's Ready to Assign for `thisMonth`, worked out from its export: the money in your budget's cash
+ * accounts today, less what's left in every category (card payments too), less what later months have,
+ * plus this month's overspending paid in cash (YNAB takes that from next month). `include`: which YNAB
+ * accounts count (the ones you brought in). Null without YNAB's Plan file.
+ */
+export function ynabReadyToAssign(d: YnabData, thisMonth: string, today: string, include: (account: string) => boolean = () => true): number | null {
+  const rows = d.assigned.filter((a) => a.month === thisMonth && !isReady(a.group, a.category) && !/^internal master category$/i.test(a.group));
+  if (!rows.length || rows.every((a) => a.available === undefined)) return null;
+  const accts = ynabAccounts(d, today);
+  const cash = accts.filter((a) => a.kind === "cash" && include(a.name)).reduce((t, a) => t + a.balance, 0);
+  const cards = new Set(accts.filter((a) => a.kind === "card").map((a) => a.name));
+  let held = 0;
+  let cashOver = 0;
+  for (const a of rows) {
+    const av = a.available ?? 0;
+    if (av > 0) { held += av; continue; }
+    if (av > -0.005 || CARD_GROUP.test(a.group)) continue;
+    // what of it went on cards (that's card debt, not cash)
+    let onCards = 0;
+    for (const t of d.txns) {
+      if (t.date.slice(0, 7) !== thisMonth || t.date > today || !cards.has(t.account)) continue;
+      for (const p of t.splits?.length ? t.splits : [t]) if (p.group === a.group && p.category === a.category) onCards -= p.amount;
+    }
+    cashOver += Math.max(0, -av - Math.max(0, onCards));
+  }
+  const later = d.assigned.filter((a) => a.month > thisMonth && !isReady(a.group, a.category)).reduce((t, a) => t + a.assigned, 0);
+  return Math.round((cash - held - later + cashOver) * 100) / 100;
+}
+
+/**
+ * Like YNAB: a category's money for the month (`start`, what it had before any of it) goes to its
+ * spending in date order, and what each purchase spent past $0 is overspending on that purchase's
+ * account. A refund after that takes back the latest of it. `i`: the export's order (each day newest first).
+ */
+function overspentBy(start: number, spending: { date: string; i: number; account: string; amount: number }[]): { account: string; amount: number }[] {
+  const sorted = [...spending].sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : y.i - x.i));
+  let left = start;
+  const over: { account: string; amount: number }[] = [];
+  for (const p of sorted) {
+    left += p.amount;
+    if (p.amount < 0) {
+      if (left < 0) over.push({ account: p.account, amount: Math.min(-p.amount, -left) });
+    } else
+      for (let back = p.amount; back > 0 && over.length; ) {
+        const last = over[over.length - 1]!;
+        const n = Math.min(back, last.amount);
+        last.amount -= n;
+        back -= n;
+        if (last.amount < 0.005) over.pop();
+      }
+    if (left > 0) over.length = 0;
+  }
+  return over;
+}
+
 /** Turn YNAB's data into the plan's categories, assignments, accounts and transactions. */
 export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): ImportResult {
   const plan = structuredClone(input);
-  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, olderWithoutCategory: 0, transfersOutside: 0 };
+  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, notApprovedInYnab: 0, olderWithoutCategory: 0, transfersOutside: 0 };
   // only this month's and last month's transactions are asked for a category (older ones are history)
   const [ty, tm] = o.thisMonth.split("-").map(Number) as [number, number];
   const recentFrom = tm === 1 ? `${ty - 1}-12-01` : `${ty}-${String(tm - 1).padStart(2, "0")}-01`;
@@ -568,17 +684,17 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   const from = o.from && o.from > first ? o.from : first;
   const inRange = (date: string) => date.slice(0, 7) >= from;
 
-  // the budget starts last month at the earliest, from YNAB's own numbers: older months are history (their
-  // transactions come in, but closed accounts and gaps in old history can't throw the budget off). Its
-  // first month starts with what each category had available in YNAB the month before.
-  const lastMonth = recentFrom.slice(0, 7);
-  const budgetFrom = from > lastMonth ? from : lastMonth;
+  // the budget starts this month, from YNAB's own numbers: each category starts with what it had left in
+  // YNAB at the end of last month, and earlier months are history (their transactions come in, but YNAB's
+  // own results for them are taken as they are, not worked out again here)
+  const budgetFrom = o.thisMonth;
   if (!plan.budgetPlan) plan.budgetPlan = { start: budgetFrom, startCash: 0, months: {} };
-  if (plan.budgetPlan.start > budgetFrom) plan.budgetPlan.start = budgetFrom;
-  // YNAB's budget replaces these months whole: an amount left on a line YNAB doesn't have (say a loan
-  // payment line budgeted here before the import, while YNAB pays it from its own category) would
-  // count the same money twice. Later months are left alone.
-  for (let m = budgetFrom; m <= o.thisMonth; m = addMonthsTo(m, 1)) {
+  plan.budgetPlan.start = budgetFrom;
+  // YNAB's budget replaces these months whole (this month, and later ones YNAB has amounts for): an amount
+  // left on a line YNAB doesn't have (say a loan payment line budgeted here before the import, while YNAB
+  // pays it from its own category) would count the same money twice.
+  const lastYnab = d.assigned.reduce((m, a) => (a.assigned && a.month > m ? a.month : m), budgetFrom);
+  for (let m = budgetFrom; m <= lastYnab; m = addMonthsTo(m, 1)) {
     const e = plan.budgetPlan.months[m];
     if (e?.assigned || e?.cardDebt) {
       const { assigned: _old, cardDebt: _oldDebt, ...rest } = e;
@@ -587,26 +703,41 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   }
   const monthsTouched = new Set<string>();
   const setHere = new Set<string>();
-  const carryMonth = addMonthsTo(budgetFrom, -1);
-  const carried = d.assigned.filter((a) => a.month === carryMonth && (a.available ?? 0) > 0).map((a) => ({ ...a, month: budgetFrom, assigned: a.available! }));
-  for (const a of [...d.assigned, ...carried]) {
-    if (a.month < budgetFrom || a.month > o.thisMonth || !a.assigned) continue;
+  for (const a of d.assigned) {
+    if (a.month < budgetFrom || !a.assigned) continue;
     const key = catOf(a.group, a.category);
     if (!key || key === "ready") continue;
     const e = (plan.budgetPlan.months[a.month] ??= {});
-    // YNAB's amount replaces what was here; two of YNAB's into one category add up
-    // (the month before's available, carried into the first month, adds to that month's own)
+    // YNAB's amount replaces what was here; two of YNAB's into one category add up. A negative one is
+    // money taken back out of the category, as in YNAB.
     const prev = setHere.has(a.month + "|" + key) ? (e.assigned?.[key] ?? 0) : 0;
     setHere.add(a.month + "|" + key);
-    // a negative amount is money moved out of the category in YNAB: it nets against the rest (the month
-    // before's money carried in, say), and only the total can't go below zero (as a budget amount here can't)
     e.assigned = { ...(e.assigned ?? {}), [key]: Math.round((prev + a.assigned) * 100) / 100 };
     monthsTouched.add(a.month);
   }
-  for (const m of monthsTouched) {
-    const e = plan.budgetPlan.months[m]!;
-    e.assigned = Object.fromEntries(Object.entries(e.assigned ?? {}).map(([k, v]) => [k, Math.max(0, v)]));
+  // what each category had left at the end of last month in YNAB. One that went over there: what went
+  // over in cash comes out of this month's ready to assign (as in YNAB); what went over on a card stays
+  // on the card (YNAB's payment line for it already shows that).
+  const lastMonth = addMonthsTo(budgetFrom, -1);
+  const opening: Record<string, number> = {};
+  for (const a of d.assigned) {
+    if (a.month !== lastMonth) continue;
+    const key = catOf(a.group, a.category);
+    if (!key || key === "ready") continue;
+    const av = a.available ?? 0;
+    if (av > 0.005) opening[key] = Math.round(((opening[key] ?? 0) + av) * 100) / 100;
+    else if (av < -0.005 && !CARD_GROUP.test(a.group)) {
+      const spending = d.txns
+        .map((t, i) => ({ t, i }))
+        .filter(({ t }) => t.date.slice(0, 7) === lastMonth)
+        .flatMap(({ t, i }) => (t.splits?.length ? t.splits : [t]).filter((x) => x.group === a.group && x.category === a.category).map((x) => ({ date: t.date, i, account: t.account, amount: x.amount })));
+      const spent = spending.reduce((x, y) => x - y.amount, 0);
+      const cash = overspentBy(av - (a.activity ?? -spent), spending).filter((x) => kindOf.get(x.account) !== "card").reduce((x, y) => x + y.amount, 0);
+      if (cash >= 0.005) opening[key] = Math.round(((opening[key] ?? 0) - cash) * 100) / 100;
+    }
   }
+  if (Object.keys(opening).length) plan.budgetPlan.opening = opening;
+  else delete plan.budgetPlan.opening;
   summary.months = monthsTouched.size;
 
   // transactions in budget accounts (cash and cards), each account starting with its balance then
@@ -615,6 +746,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   const budgetAccount = (name: string) => !!idOf.get(name) && (kindOf.get(name) === "cash" || kindOf.get(name) === "card");
   const before = new Map<string, number>();
   const seen = new Map<string, number>();
+  const madeFrom = new Map<YnabTxn, Txn>();
   for (const t of d.txns) {
     if (!budgetAccount(t.account)) continue;
     if (!inRange(t.date)) { before.set(t.account, Math.round(((before.get(t.account) ?? 0) + t.amount) * 100) / 100); continue; }
@@ -655,6 +787,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
       if (hadCategory) summary.needsCategoryLeftOut++;
       else summary.needsCategoryFromYnab++;
     }
+    madeFrom.set(t, tx);
     if (to) tx.transferAccountId = to;
     else if (outside) tx.transferAccountId = OUTSIDE + t.transferTo;
     // money into a card from a budget account: the card's payment
@@ -670,10 +803,20 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     const y = open.find((z) => !z.transferId && z !== x && z.accountId === x.transferAccountId && z.transferAccountId === x.accountId && z.date === x.date && Math.abs(z.amount + x.amount) < 0.005);
     if (y) { x.transferId = y.id; y.transferId = x.id; }
   }
+  // transactions YNAB has but doesn't count yet (not approved there): its Plan file's spending for a category
+  // leaves them out. They're the newest uncleared ones of that category that add up to the difference; they
+  // come in with no category (for you to categorize here), so each category starts where YNAB's is.
+  for (const t of notCounted(d, budgetFrom, o.thisMonth, o.today)) {
+    const tx = madeFrom.get(t);
+    if (!tx?.categoryId) continue;
+    delete tx.categoryId;
+    tx.originalCategory = [t.group, t.category].filter(Boolean).join(": ");
+    summary.notApprovedInYnab++;
+  }
   // YNAB lets overspending on a credit card turn into card debt: the card's payment category only gets
   // what the category could cover. Bring that in as it was, as overspending left on the card (it shows
   // short on the card's line here, and isn't taken from Unassigned), so the budget starts where YNAB's is.
-  // A category that went over is counted as overspent on its cards first, up to what it spent on them.
+  // The purchase that took the category past $0 holds the overspending (overspentBy).
   const cardIds = new Set([...idOf].filter(([n]) => kindOf.get(n) === "card").map(([, id]) => id));
   for (let m = budgetFrom; m <= o.thisMonth; m = addMonthsTo(m, 1)) {
     const debt: CardDebt[] = [];
@@ -683,16 +826,15 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
       const key = catOf(a.group, a.category);
       if (!key || key === "ready" || key.startsWith("debt:") || done.has(key)) continue;
       done.add(key);
+      const spending = txns
+        .map((t, i) => ({ t, i }))
+        .filter(({ t }) => t.date.slice(0, 7) === m && !(o.today && t.date > o.today))
+        .flatMap(({ t, i }) => (t.splits?.length ? t.splits : [{ categoryId: t.categoryId ?? "", amount: t.amount }]).filter((p) => p.categoryId === key).map((p) => ({ date: t.date, i, account: t.accountId, amount: p.amount })));
+      const spent = spending.reduce((x, p) => x - p.amount, 0);
+      const over = overspentBy(a.available! - (a.activity ?? -spent), spending);
       const byCard = new Map<string, number>();
-      for (const t of txns) {
-        if (t.date.slice(0, 7) !== m || !cardIds.has(t.accountId) || (o.today && t.date > o.today)) continue;
-        const parts = t.splits?.length ? t.splits : [{ categoryId: t.categoryId ?? "", amount: t.amount }];
-        for (const p of parts) if (p.categoryId === key) byCard.set("debt:" + t.accountId, (byCard.get("debt:" + t.accountId) ?? 0) - p.amount);
-      }
-      const total = [...byCard.values()].reduce((x, v) => x + Math.max(0, v), 0);
-      const onCards = Math.min(-a.available!, total);
-      if (onCards < 0.005) continue;
-      for (const [card, spent] of byCard) if (spent > 0) debt.push({ cat: key, card, amount: Math.round((onCards * spent) / total * 100) / 100 });
+      for (const x of over) if (cardIds.has(x.account)) byCard.set("debt:" + x.account, (byCard.get("debt:" + x.account) ?? 0) + x.amount);
+      for (const [card, amount] of byCard) if (amount >= 0.005) debt.push({ cat: key, card, amount: Math.round(amount * 100) / 100 });
     }
     if (debt.length) plan.budgetPlan.months[m] = { ...(plan.budgetPlan.months[m] ?? {}), cardDebt: debt };
   }

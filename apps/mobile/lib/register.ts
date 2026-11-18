@@ -2,7 +2,7 @@
  * Registers: the budget accounts that hold transactions (cash accounts and credit cards), each one
  * starting with a "Starting balance" transaction, and keeping the plan's balances in step with them.
  */
-import { budgetStartCash, isStartTxn, registerBalance, startTxnId, type BudgetState, type PlanState, type Txn } from "@coastfi/engine";
+import { budgetCategories, budgetStartCash, budgetView, isStartTxn, registerBalance, run, startTxnId, type BudgetState, type PlanState, type Txn } from "@coastfi/engine";
 
 export type BudgetAccount = { id: string; name: string; kind: "cash" | "card"; balance: number };
 
@@ -144,4 +144,14 @@ export function applyTracked(p: PlanState, prev: Txn | undefined, next: Txn | nu
   const amount = round2(-next.amount);
   moveTracking(p, to, amount);
   return amount;
+}
+
+/**
+ * Ready to assign in `month`, as the Budget tab works it out. `state`: the plan as the engine sees it
+ * (effectivePlan), with balances counted from `txns` (applyRegisterBalances).
+ */
+export function readyToAssignFor(state: PlanState, txns: Txn[], start: Date, month: string): number {
+  const r = run(state, start);
+  const cats = budgetCategories(state, r.d, r.plan, start, month);
+  return budgetView(liveBudget(state, txns), cats, month, { txns, cards: cardMap(state), asOf: todayIso(start) }).readyToAssign;
 }

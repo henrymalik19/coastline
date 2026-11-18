@@ -138,7 +138,8 @@ export default function Budget() {
       fn(e);
       p.budgetPlan.months = { ...p.budgetPlan.months, [month]: e };
     });
-  const setAssigned = (k: string, v: number) => edit((e) => { e.assigned = { ...(e.assigned ?? {}), [k]: Math.max(0, v) }; });
+  // a negative amount takes money back out of the category: never more than it had coming into the month
+  const setAssigned = (k: string, v: number) => edit((e) => { e.assigned = { ...(e.assigned ?? {}), [k]: Math.max(-Math.max(0, view.lines[k]?.carried ?? 0), v) }; });
   /**
    * A category that went over on a credit card: leave that overspending on the card as debt (`on`), or
    * let it come out of next month's Unassigned (the default). Split across the cards it was spent on.
@@ -612,8 +613,9 @@ export default function Budget() {
                 <FormRow
                   label="Assigned"
                   hint={
-                    c.target > 0.5 || l.available < -0.005 ? (
+                    c.target > 0.5 || l.available < -0.005 || l.assigned < -0.005 ? (
                       <>
+                        {l.assigned < -0.005 ? `Took back ${money(-l.assigned)}${c.target > 0.5 || l.available < -0.005 ? " · " : ""}` : ""}
                         {c.target > 0.5 ? `Plan: ${money(c.target, { whole: true })}` : ""}
                         {c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5 ? (
                           <>
@@ -631,7 +633,7 @@ export default function Budget() {
                     ) : undefined
                   }
                 >
-                  <InlineMoney label={`${label(c)} assigned in ${nameOf(month)}`} value={l.assigned} onChange={(v) => setAssigned(c.key, v)} />
+                  <InlineMoney label={`${label(c)} assigned in ${nameOf(month)}`} value={l.assigned} onChange={(v) => setAssigned(c.key, v)} allowNegative={(l.carried ?? 0) > 0.005 || l.assigned < 0} />
                 </FormRow>
               </FormList>
               {overOnCards(l) > 0.005 ? (

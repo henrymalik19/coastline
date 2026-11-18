@@ -68,6 +68,7 @@ export function fullPlan(): PlanState {
     budgetPlan: {
       start: "2026-09",
       startCash: 13000.5,
+      opening: { food: 120.5, "debt:visa": 300, fun: -15.25 },
       months: {
         "2026-09": { assigned: { food: 900, cash: 500 } },
         "2026-10": { assigned: { food: 900.5 }, cardDebt: [{ cat: "food", card: "debt:visa", amount: 42.5 }] },

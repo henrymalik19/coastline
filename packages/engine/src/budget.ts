@@ -160,6 +160,13 @@ export function budgetView(
   let income = 0;
   let assigned = 0;
   let overspent = 0;
+  // what categories already had when the budget started (an import): it's in them, not ready to assign
+  let held = 0;
+  for (const [k, v] of Object.entries(b.opening ?? {})) {
+    const x = num(v);
+    if (x > 0) { carry[k] = x; held += x; }
+    else overspent += -x;
+  }
   let view: BudgetView | null = null;
   for (let m = b.start; m <= month; m = addMonths(m, 1)) {
     const e = b.months?.[m] ?? {};
@@ -169,12 +176,14 @@ export function budgetView(
     let monthSpent = 0;
     let monthOver = 0;
     for (const c of cats) {
-      const a = Math.max(0, num(e.assigned?.[c.key]));
+      const carried = carry[c.key] ?? 0;
+      // a negative amount takes money back out (to ready to assign): never more than the category had
+      const raw = num(e.assigned?.[c.key]);
+      const a = raw < 0 ? Math.max(raw, -Math.max(0, carried)) + 0 : raw;
       // what went out: from transactions (a payment, a transfer to the account). Assigned money stays
       // available until it actually goes.
       const sp = act?.spent[c.key] ?? 0;
       const funded = act?.cardFunded[c.key] ?? 0;
-      const carried = carry[c.key] ?? 0;
       const available = carried + a + funded - sp;
       const onCards = act?.cardSpent[c.key];
       lines[c.key] = { key: c.key, assigned: a, spent: sp, available, carried, target: c.target, funded, ...(onCards ? { onCards } : {}) };
@@ -207,7 +216,7 @@ export function budgetView(
         month,
         started: true,
         income: act?.income ?? 0,
-        readyToAssign: num(b.startCash) + income - assigned - overspent - later,
+        readyToAssign: num(b.startCash) - held + income - assigned - overspent - later,
         assigned: monthAssigned,
         spent: monthSpent,
         overspentBefore: overspent,
