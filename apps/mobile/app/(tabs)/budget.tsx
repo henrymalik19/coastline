@@ -776,12 +776,12 @@ export default function Budget() {
     const newPay = paysLoan && dupItem ? newLoanPayment(paysLoan, dupItem, paidLastTwoMonths(txns, dupItem.id, thisMonth)) : undefined;
     return (
       <View key={c.key} nativeID={"cat-" + c.key}>
-        <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${shownName}: ${money((opts.total ?? l).available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, opts.indent ? { paddingLeft: (compact ? space.md : space.lg) + space.lg } : null, isOpen || pressed ? { backgroundColor: t.surface2 } : null]}>
+        <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${shownName}: ${money((opts.total ?? l).available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, opts.indent ? { paddingLeft: (compact ? space.md : space.lg) + space.lg } : null, pressed ? { backgroundColor: t.surface2 } : null]}>
           <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
             {grip}
             {isOpen ? <Icon name="up" size={12} color={t.accent} /> : null}
             <View style={{ flexShrink: 1, minWidth: 0 }}>
-              <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{shownName}</Text>
+              <Text style={[type.body, { color: isOpen ? t.accent : t.text, fontWeight: isOpen ? "600" : "400" }]} numberOfLines={1}>{shownName}</Text>
               {opts.total ? <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>Available incl. its subs</Text> : null}
               {/* phones: under the name, so the name keeps its line */}
               {overLast.has(c.key) && compact ? (
