@@ -18,7 +18,8 @@ import { useOpenPage } from "../lib/nav";
 
 const SWRS = [0.03, 0.0325, 0.035, 0.0375, 0.04, 0.045];
 
-export function NumberBreakdown() {
+/** `onView`: switch the Forecast view (Your number is one of them); without it, links open Forecast at that view. */
+export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whatif") => void } = {}) {
   const t = useTheme();
   const router = useRouter();
   const openPage = useOpenPage();
@@ -33,6 +34,7 @@ export function NumberBreakdown() {
   // one step open at a time; the other kinds of FI start folded
   const [openStep, setOpenStep] = useState<number | null>(null);
   const [levelsOpen, setLevelsOpen] = useState(false);
+  const toView = (v: "retirement" | "whatif") => (onView ? onView(v) : router.navigate(`/plan?view=${v}` as never));
 
   const whole = (v: number) => money(v, { whole: true });
   const rate = (v: number) => percent(v, 2).replace(/0%$/, "%").replace(/\.0%$/, "%");
@@ -157,8 +159,8 @@ export function NumberBreakdown() {
           {b.spending.map((x) => <View key={x.key}>{row(x.label, `${x.monthly < 0 ? "−" : ""}${whole(Math.abs(x.monthly))}/mo`, x.key === "whatif" ? { sub: "From the what-ifs on Forecast", tone: t.warn } : {})}</View>)}
           <Divider />
           {row("Retirement spending", per(b.retireAnnual), { strong: true, sub: d.retireSpendingSet ? `Your budget's retirement items add up to ${whole(d.retireMonthlyBudget * 12)}/yr` : undefined })}
-          {link(d.retireSpendingSet ? "Change your set amount" : "Choose categories and amounts", () => openPage("/money/retirement"))}
-          {link("Change healthcare", () => openPage("/money/healthcare"))}
+          {link(d.retireSpendingSet ? "Change your set amount" : "Choose categories and amounts", () => toView("retirement"))}
+          {link("Change healthcare", () => toView("retirement"))}
         </>)}
       {step(2, "From your savings", `${whole(b.need / 12)}/mo`,
         "What's left after Social Security, pensions and rent you'll keep getting.",
@@ -168,7 +170,7 @@ export function NumberBreakdown() {
           {Math.abs(b.rentalIncome) > 0.5 ? row("Rent you keep getting", `${b.rentalIncome >= 0 ? "−" : "+"} ${per(Math.abs(b.rentalIncome))}`, { sub: "Less a cushion for empty months" }) : null}
           <Divider />
           {row("From your savings", per(b.need), { strong: true })}
-          {link(b.income - b.rentalIncome > 0.5 ? "Change Social Security and pensions" : "Add Social Security or a pension", () => openPage("/money/retirementIncome"))}
+          {link(b.income - b.rentalIncome > 0.5 ? "Change Social Security and pensions" : "Add Social Security or a pension", () => toView("retirement"))}
         </>)}
       {step(3, "Your FIRE number", whole(b.fire),
         `Enough that taking out ${rate(b.swr)} a year covers it for life, plus what you need before other income starts and to finish any mortgage.`,
@@ -202,10 +204,10 @@ export function NumberBreakdown() {
         </>)}
       <View style={{ marginTop: space.xs }}>
         {whatIf ? (
-          <Pressable role="link" onPress={() => router.push("/plan")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
-            <Text style={[type.caption, { color: t.warn, fontWeight: "700" }]}>A what-if is on: change it on Forecast →</Text>
+          <Pressable role="link" onPress={() => toView("whatif")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+            <Text style={[type.caption, { color: t.warn, fontWeight: "700" }]}>A what-if is on: change it →</Text>
           </Pressable>
-        ) : link("Try what-ifs on Forecast", () => router.push("/plan"))}
+        ) : link("Try what-ifs", () => toView("whatif"))}
       </View>
     </Card>
   );

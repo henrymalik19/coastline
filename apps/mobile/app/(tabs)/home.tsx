@@ -131,7 +131,7 @@ export default function Home() {
             </Text>
           </Pressable>
         ) : null}
-        <Pressable role="link" onPress={() => router.push("/number")} hitSlop={6} style={{ alignSelf: "flex-end" }}>
+        <Pressable role="link" onPress={() => router.push("/plan?view=number")} hitSlop={6} style={{ alignSelf: "flex-end" }}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>How is my number worked out? →</Text>
         </Pressable>
         <Pressable role="link" onPress={() => router.push("/plan?view=whatif")} hitSlop={6} style={{ alignSelf: "flex-end" }}>

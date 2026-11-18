@@ -65,9 +65,9 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
   {
     title: "In retirement",
     items: [
-      { key: "retirement", title: "What you'll spend", subtitle: "Which categories you'd still pay after retiring, and which are essential", icon: "shield" },
-      { key: "retirementIncome", title: "Income in retirement", subtitle: "Social Security, pensions and other income after you stop working", icon: "calendar" },
-      { key: "healthcare", title: "Healthcare", subtitle: "Health insurance until Medicare at 65, and after", icon: "plus" },
+      { key: "retirement", title: "What you'll spend", subtitle: "Now on Forecast → Retirement", icon: "shield", hidden: true },
+      { key: "retirementIncome", title: "Income in retirement", subtitle: "Now on Forecast → Retirement", icon: "calendar", hidden: true },
+      { key: "healthcare", title: "Healthcare", subtitle: "Now on Forecast → Retirement", icon: "plus", hidden: true },
     ],
   },
   {
@@ -143,7 +143,7 @@ async function removeItem(what: string, name: string, doIt: () => void) {
 /* ---------- You ---------- */
 
 /** Healthcare in retirement: your own insurance until Medicare at 65, then Medicare's cost. */
-function HealthcareSection() {
+export function HealthcareSection() {
   const t = useTheme();
   const { state } = usePlan();
   const update = useStore((s) => s.update);
@@ -340,7 +340,7 @@ function AppearanceSection() {
 
 /* ---------- Income in retirement ---------- */
 
-function RetirementIncomeSection() {
+export function RetirementIncomeSection() {
   const t = useTheme();
   return (
     <>
@@ -655,9 +655,10 @@ export const SECTION_SCREENS: Record<SectionKey, ComponentType> = {
   sharing: () => <SharingEditor />,
   appearance: AppearanceSection,
   profile: Profile,
-  retirementIncome: () => <RetirementIncomeSection />,
-  retirement: () => <RetirementEssentials />,
-  healthcare: HealthcareSection,
+  // moved to Forecast → Retirement
+  retirementIncome: () => <Redirect href="/plan?view=retirement" />,
+  retirement: () => <Redirect href="/plan?view=retirement" />,
+  healthcare: () => <Redirect href="/plan?view=retirement" />,
   income: IncomeSection,
   // moved to the Budget tab
   budget: () => <Redirect href="/budget" />,

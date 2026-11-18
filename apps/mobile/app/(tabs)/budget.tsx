@@ -476,7 +476,7 @@ export default function Budget() {
                 label="Retirement & essentials"
                 hint={`${it.inRetirement ? "Still paid after you retire" : "Not paid after you retire"} · ${it.essential !== false ? "Essential" : "Not essential"}`}
               >
-                <Pressable role="link" onPress={() => openPage("/money/retirement")} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                <Pressable role="link" onPress={() => router.navigate("/plan?view=retirement")} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
                   <Text style={[type.body, { color: t.accent, fontWeight: "600" }]}>Change</Text>
                   <Icon name="chevron" size={14} color={t.accent} />
                 </Pressable>
@@ -1057,7 +1057,7 @@ export default function Budget() {
           </View>
           <Text style={[type.caption, { color: t.text3 }]}>
             Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement && !x.accountId && !x.hidden).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number.{" "}
-            <Text role="link" onPress={() => openPage("/money/retirement")} style={{ color: t.accent, fontWeight: "700" }}>Choose what's included</Text>. Bills come from repeating savings goals and debt payments from Debts; tap one to change it there. Spent and paid come from the transactions you record.
+            <Text role="link" onPress={() => router.navigate("/plan?view=retirement")} style={{ color: t.accent, fontWeight: "700" }}>Choose what's included</Text>. Bills come from repeating savings goals and debt payments from Debts; tap one to change it there. Spent and paid come from the transactions you record.
           </Text>
           {imported ? null : <Button title="Import from YNAB" icon="database" tone="ghost" onPress={() => openPage("/money/import")} style={{ alignSelf: "flex-start" }} />}
           <Button

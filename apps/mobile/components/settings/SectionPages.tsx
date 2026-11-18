@@ -105,78 +105,42 @@ function PrivacyLink() {
   );
 }
 
-/** Pages that live outside Money and Settings but belong in a menu too (they're also linked from Home). */
-function PlanToolLinks() {
-  const t = useTheme();
-  const router = useRouter();
-  const { state, result } = usePlan();
-  const links: { key: string; title: string; summary: string; icon: IconName; href: string }[] = [
-    {
-      key: "number",
-      title: "Your number",
-      summary: result.fire > 0 ? `How your FIRE number (${money(result.fire, { whole: true })}) and Coast number are worked out` : "How your FIRE and Coast numbers are worked out",
-      icon: "target",
-      href: "/number",
-    },
-    {
-      key: "emergency",
-      title: "Emergency mode",
-      summary: state.emergency?.active ? "On: investing is paused" : "Pause investing during a money emergency",
-      icon: "shield",
-      href: "/emergency",
-    },
-  ];
-  return (
-    <View style={{ gap: space.sm }}>
-      <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.xs }]}>Your plan</Text>
-      <Card padded={false}>
-        {links.map((l, i) => (
-          <View key={l.key}>
-            <Pressable
-              role="link"
-              accessibilityLabel={`${l.title}: ${l.summary}`}
-              onPress={() => router.push(l.href as never)}
-              style={(st) => {
-                const hovered = (st as typeof st & { hovered?: boolean }).hovered;
-                return [styles.row, { backgroundColor: st.pressed || hovered ? t.surface2 : "transparent" }];
-              }}
-            >
-              <View style={[styles.icon, { backgroundColor: t.accentSoft }]}>
-                <Icon name={l.icon} size={18} color={t.accent} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[type.body, { color: t.text, fontWeight: "500" }]}>{l.title}</Text>
-                <Text style={[type.caption, { color: t.text3 }]}>{l.summary}</Text>
-              </View>
-              <Icon name="chevron" size={18} color={t.text3} />
-            </Pressable>
-            {i < links.length - 1 ? <View style={{ marginLeft: 64 }}><Divider /></View> : null}
-          </View>
-        ))}
-      </Card>
-      <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.xs }]}>What if you save more or returns change? Try it on Forecast → What if.</Text>
-    </View>
-  );
+/** Emergency mode: a page outside Money that belongs in its list (it's also linked from Home). */
+function useEmergencyRow() {
+  const { state } = usePlan();
+  return {
+    title: "Emergency mode",
+    summary: state.emergency?.active ? "On: investing is paused" : "Pause investing during a money emergency",
+    icon: "shield" as IconName,
+    href: "/emergency",
+  };
 }
 
-/** The page rows on their own (the Money tab puts its accounts above them). */
 export function SectionGroups({ base, heading }: { base: SectionBase; heading?: string }) {
   const t = useTheme();
   const router = useRouter();
   const summary = useSummaries();
-  const groups = groupsFor(base);
+  const emergency = useEmergencyRow();
+  // a group whose pages all moved elsewhere (the retirement ones to Forecast) isn't listed
+  const groups = groupsFor(base).filter((g) => g.items.some((s) => !s.hidden));
   return (
     <>
-      {groups.map((group) => (
+      {groups.map((group, gi) => {
+        const rows = [
+          ...group.items.filter((s) => !s.hidden).map((s) => ({ key: s.key, title: s.title, summary: summary[s.key], icon: s.icon, href: `${base}/${s.key}` })),
+          // Money: Emergency mode closes its list
+          ...(base === "/money" && gi === groups.length - 1 ? [{ key: "emergency", ...emergency }] : []),
+        ];
+        return (
         <View key={group.title} style={{ gap: space.sm }}>
           {groups.length > 1 || heading ? <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.xs }]}>{groups.length > 1 ? group.title : heading ?? group.title}</Text> : null}
           <Card padded={false}>
-            {group.items.filter((s) => !s.hidden).map((s, i) => (
+            {rows.map((s, i) => (
               <View key={s.key}>
                 <Pressable
                   role="link"
-                  accessibilityLabel={`${s.title}: ${summary[s.key]}`}
-                  onPress={() => router.push(`${base}/${s.key}`)}
+                  accessibilityLabel={`${s.title}: ${s.summary}`}
+                  onPress={() => router.push(s.href as never)}
                   style={(st) => {
                     const hovered = (st as typeof st & { hovered?: boolean }).hovered;
                     return [styles.row, { backgroundColor: st.pressed || hovered ? t.surface2 : "transparent" }];
@@ -187,17 +151,20 @@ export function SectionGroups({ base, heading }: { base: SectionBase; heading?: 
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[type.body, { color: t.text, fontWeight: "500" }]}>{s.title}</Text>
-                    <Text style={[type.caption, { color: t.text3 }]}>{summary[s.key]}</Text>
+                    <Text style={[type.caption, { color: t.text3 }]}>{s.summary}</Text>
                   </View>
                   <Icon name="chevron" size={18} color={t.text3} />
                 </Pressable>
-                {i < group.items.length - 1 ? <View style={{ marginLeft: 64 }}><Divider /></View> : null}
+                {i < rows.length - 1 ? <View style={{ marginLeft: 64 }}><Divider /></View> : null}
               </View>
             ))}
           </Card>
         </View>
-      ))}
-      {base === "/money" ? <PlanToolLinks /> : null}
+        );
+      })}
+      {base === "/money" ? (
+        <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.xs }]}>What if you save more or returns change? Try it on Forecast → What if.</Text>
+      ) : null}
     </>
   );
 }

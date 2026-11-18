@@ -1,5 +1,5 @@
 import { coastNumberAt, investFromTakeHome, type AccountKey } from "@coastfi/engine";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { AccountsForecast } from "../../components/AccountsForecast";
@@ -10,6 +10,9 @@ import { BalanceChart } from "../../components/BalanceChart";
 import { InfoText, InfoTip, Segmented, Select } from "../../components/form";
 import { Icon } from "../../components/Icon";
 import { WhatIf } from "../../components/WhatIf";
+import { NumberBreakdown } from "../../components/NumberBreakdown";
+import { RetirementEssentials } from "../../components/RetirementEssentials";
+import { HealthcareSection, RetirementIncomeSection } from "../../components/settings/sections";
 import { ProgressBar } from "../../components/ProgressRing";
 import { Card, Screen, SectionLabel } from "../../components/ui";
 import { money, monthLabel } from "../../lib/format";
@@ -19,12 +22,15 @@ import { useLayout } from "../../lib/layout";
 import { usePlan } from "../../lib/plan";
 import { radius, space, type, useTheme } from "../../lib/theme";
 
-type ViewKey = "overview" | "table" | "whatif";
+// the flow: where you're headed, what sets your retirement, what-ifs to try, then your number
+type ViewKey = "overview" | "retirement" | "whatif" | "number";
 const VIEWS: { value: ViewKey; label: string }[] = [
   { value: "overview", label: "Overview" },
-  { value: "table", label: "Table" },
+  { value: "retirement", label: "Retirement" },
   { value: "whatif", label: "What if" },
+  { value: "number", label: "Your number" },
 ];
+const viewOf = (v?: string): ViewKey => (v === "retirement" || v === "whatif" || v === "number" ? v : "overview");
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const keyLabel = (k: string) => `${MON[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
 
@@ -42,7 +48,15 @@ export default function Forecast() {
   // the table: what you've set, with your what-ifs (what they change shows in orange)
   const real = { ...o, plan: forecast };
   const { view } = useLocalSearchParams<{ view?: string }>();
-  const [tab, setTab] = useState<ViewKey>(view === "forecast" || view === "table" ? "table" : view === "whatif" ? "whatif" : "overview");
+  const [tab, setTab] = useState<ViewKey>(viewOf(view));
+  // the month-by-month table: a way to look at the overview
+  const [asTable, setAsTable] = useState(view === "forecast" || view === "table");
+  // a link to another view while already here (Your number → Retirement)
+  useEffect(() => {
+    if (!view) return;
+    setTab(viewOf(view));
+    if (view === "forecast" || view === "table") setAsTable(true);
+  }, [view]);
   const router = useRouter();
   const checkins = useStore((s) => s.checkins);
   const vs = vsPlan(checkins, start);
@@ -54,8 +68,10 @@ export default function Forecast() {
   const [pick, setPick] = useState<string | undefined>(undefined);
   const openAccount = (key: AccountKey) => {
     setPick(key);
-    setTab("table");
+    setTab("overview");
+    setAsTable(true);
   };
+  const go = (v: ViewKey) => { setTab(v); router.setParams({ view: v }); };
 
   // the finish line: when growth alone can carry you, so saving more becomes optional
   const coastM = o.crossing === null ? null : Math.round(o.crossing * 12);
@@ -85,7 +101,7 @@ export default function Forecast() {
           <Text style={[type.title, { color: t.text }]}>Not reached by {o.d.retireAge} yet</Text>
           {why ? <Text style={[type.body, { color: t.text2 }]}>
             At this pace your savings won't grow to your retirement number ({money(o.fire, { whole: true })}) on their own by age {o.d.retireAge}. Saving more each month, a later
-            retirement age, or Social Security or a pension (Money → Income in retirement) would get you there.
+            retirement age, or Social Security or a pension (Forecast → Retirement) would get you there.
           </Text> : null}
           {whyToggle}
         </>
@@ -143,7 +159,7 @@ export default function Forecast() {
         ) : (
           <Text style={[type.caption, { color: t.text3, paddingTop: space.xs }]}>Ahead of or behind plan shows here after your first full month.</Text>
         )}
-        <Pressable role="link" onPress={() => router.push("/number")} hitSlop={6} style={{ alignSelf: "flex-start", paddingTop: space.xs }}>
+        <Pressable role="link" onPress={() => go("number")} hitSlop={6} style={{ alignSelf: "flex-start", paddingTop: space.xs }}>
           <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>How is my number worked out? →</Text>
         </Pressable>
       </View> : null}
@@ -189,22 +205,58 @@ export default function Forecast() {
     <Screen title="Forecast" subtitle={compact ? undefined : "Where you're headed"} fill>
       <View style={{ maxWidth: compact ? undefined : 480 }}>
         {compact ? (
-          <Select label="Forecast view" options={VIEWS} value={tab} onChange={(v) => { setTab(v); if (v !== "table") setPick(undefined); }} />
+          <Select label="Forecast view" options={VIEWS} value={tab} onChange={(v) => { go(v); setPick(undefined); }} />
         ) : (
-          <Segmented label="Forecast view" options={VIEWS} value={tab} onChange={(v) => { setTab(v); if (v !== "table") setPick(undefined); }} />
+          <Segmented label="Forecast view" options={VIEWS} value={tab} onChange={(v) => { go(v); setPick(undefined); }} />
         )}
       </View>
-      {tab === "table" ? (
+      {tab === "overview" ? (
+        <View style={{ flexDirection: "row", gap: space.sm }}>
+          {[{ v: false, label: "Chart" }, { v: true, label: "Table" }].map((x) => (
+            <Pressable key={x.label} role="radio" aria-checked={asTable === x.v} onPress={() => { setAsTable(x.v); if (!x.v) setPick(undefined); }} hitSlop={4} style={[styles.chip, { borderColor: asTable === x.v ? t.accent : t.border, backgroundColor: asTable === x.v ? t.accentSoft : t.surface }]}>
+              <Text style={[type.caption, { color: asTable === x.v ? t.accent : t.text2, fontWeight: "700" }]}>{x.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+      {tab === "overview" && asTable ? (
         <Text style={[type.caption, { color: t.text3 }]}>
           Only what you've set: your paychecks, your employer's match, debt payments, and what you assign in Budget. Money you haven't assigned isn't added anywhere.
         </Text>
       ) : null}
-      {tab === "table" ? <WhatIfBanner /> : null}
-      {tab === "table" ? (
+      {tab === "overview" && asTable ? <WhatIfBanner /> : null}
+      {tab === "overview" && asTable ? (
         <AccountsForecast key={pick ?? "all"} state={state} o={real} start={start} fill initialPick={pick} compare={whatIfOn ? { plan: forecastReal, d: realD } : undefined} />
       ) : tab === "whatif" ? (
         <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
           <WhatIf />
+          <Pressable role="link" onPress={() => go("number")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>See your number →</Text>
+          </Pressable>
+        </ScrollView>
+      ) : tab === "retirement" ? (
+        // everything that sets your retirement number, with the number up top so a change shows right away
+        <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
+          <Card style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[type.caption, { color: t.text3 }]}>Your FIRE number</Text>
+              <Text style={[type.title, { color: whatIfOn ? t.warn : t.text, fontVariant: ["tabular-nums"] }]}>{money(o.fire, { whole: true })}</Text>
+              <Text style={[type.caption, { color: t.text3 }]}>Changes below update it right away</Text>
+            </View>
+            <Pressable role="link" onPress={() => go("number")} hitSlop={6}>
+              <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>How it's worked out →</Text>
+            </Pressable>
+          </Card>
+          <SectionLabel>What you'll spend</SectionLabel>
+          <RetirementEssentials />
+          <SectionLabel>Income in retirement</SectionLabel>
+          <RetirementIncomeSection />
+          <SectionLabel>Healthcare</SectionLabel>
+          <HealthcareSection />
+        </ScrollView>
+      ) : tab === "number" ? (
+        <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
+          <NumberBreakdown onView={go} />
         </ScrollView>
       ) : (
         <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>

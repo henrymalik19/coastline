@@ -111,7 +111,7 @@ export default function Emergency() {
         <View style={[styles.essentials, { backgroundColor: t.surface2 }]}>
           <Text style={[type.caption, { color: t.text3 }]}>
             Ticked = you'd keep paying it.{" "}
-            <Text role="link" onPress={() => openPage("/money/retirement")} style={{ color: t.accent, fontWeight: "700" }}>See them with retirement</Text>
+            <Text role="link" onPress={() => router.navigate("/plan?view=retirement")} style={{ color: t.accent, fontWeight: "700" }}>See them with retirement</Text>
           </Text>
           {state.budget.map((b, i) => {
             if (b.accountId || b.hidden) return null; // money moved to an account (not spending), or a hidden category

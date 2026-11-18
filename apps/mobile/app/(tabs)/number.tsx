@@ -1,11 +1,6 @@
-import { NumberBreakdown } from "../../components/NumberBreakdown";
-import { Screen } from "../../components/ui";
+import { Redirect } from "expo-router";
 
-/** How your FIRE and Coast numbers are worked out (opened from Home and Forecast). */
+/** Your number lives on Forecast now (its last view); old links and bookmarks land there. */
 export default function YourNumber() {
-  return (
-    <Screen title="Your number" subtitle="How it's worked out" back="/plan">
-      <NumberBreakdown />
-    </Screen>
-  );
+  return <Redirect href="/plan?view=number" />;
 }
