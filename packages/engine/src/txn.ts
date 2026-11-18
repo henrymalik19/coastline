@@ -14,6 +14,8 @@ export type TxnActivity = {
   spent: Record<string, number>;
   /** Card spending that moves into each card's payment category (`debt:<id>`). */
   cardFunded: Record<string, number>;
+  /** Each category's spending on each card (category → card payment key → amount; refunds lower it). */
+  cardSpent: Record<string, Record<string, number>>;
 };
 
 const ymOf = (date: string) => date.slice(0, 7);
@@ -25,7 +27,7 @@ const ymOf = (date: string) => date.slice(0, 7);
  * spends from the category on it.
  */
 export function txnActivity(txns: Txn[], month: string, cards: Record<string, string>, asOf?: string): TxnActivity {
-  const out: TxnActivity = { income: 0, spent: {}, cardFunded: {} };
+  const out: TxnActivity = { income: 0, spent: {}, cardFunded: {}, cardSpent: {} };
   const add = (rec: Record<string, number>, k: string, v: number) => { rec[k] = (rec[k] ?? 0) + v; };
   for (const t of txns) {
     if (t.deleted || ymOf(t.date) !== month || isUpcoming(t, asOf)) continue;
@@ -48,7 +50,10 @@ export function txnActivity(txns: Txn[], month: string, cards: Record<string, st
       }
       add(out.spent, p.cat, -p.amt);
       // spending on a card moves that money to the card's payment
-      if (card && p.cat !== card) add(out.cardFunded, card, -p.amt);
+      if (card && p.cat !== card) {
+        add(out.cardFunded, card, -p.amt);
+        add((out.cardSpent[p.cat] ??= {}), card, -p.amt);
+      }
     }
   }
   return out;

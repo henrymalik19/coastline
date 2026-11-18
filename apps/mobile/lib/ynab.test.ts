@@ -390,3 +390,20 @@ describe("money moved out of a category in YNAB", () => {
     expect(nov[groceries.id]).toBe(850);
   });
 });
+
+describe("YNAB's card overspending comes in as card debt", () => {
+  it("a category YNAB shows overspent, spent on a card, is left on that card as debt (not taken from Unassigned)", () => {
+    // November: Groceries went $40 over in YNAB, and $120 of its spending was on the Visa
+    const plan = PLAN.replace(`"Nov 2026","Everyday: Groceries","Everyday","Groceries","$650.00","-$190.00","$660.00"`, `"Nov 2026","Everyday: Groceries","Everyday","Groceries","$650.00","-$190.00","-$40.00"`);
+    expect(plan).not.toBe(PLAN);
+    const p: PlanState = freshPlan();
+    p.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 1 }];
+    let n = 0;
+    const r = buildImport(p, parseYnab(REG, plan), { from: "2026-11", thisMonth: "2026-12", today: "2026-12-01", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
+    const groceries = r.plan.budget.find((b) => b.name === "Groceries")!;
+    const visa = r.plan.debts.find((d) => d.name === "Visa")!;
+    expect(r.plan.budgetPlan!.months["2026-11"]!.cardDebt).toEqual([{ cat: groceries.id, card: "debt:" + visa.id, amount: 40 }]);
+    // a category that wasn't overspent, or overspent with cash only, has none
+    expect(r.plan.budgetPlan!.months["2026-12"]?.cardDebt).toBeUndefined();
+  });
+});

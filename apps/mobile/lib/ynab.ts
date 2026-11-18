@@ -5,7 +5,7 @@
  *
  * Re-importing is safe: each transaction gets the same id every time, so it replaces itself.
  */
-import { startTxnId, type BudgetItem, type Debt, type PlanState, type Txn } from "@coastfi/engine";
+import { startTxnId, type BudgetItem, type CardDebt, type Debt, type PlanState, type Txn } from "@coastfi/engine";
 import { unzipSync, strFromU8 } from "fflate";
 import { isCard } from "./register";
 import { OUTSIDE } from "./outside";
@@ -576,8 +576,8 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   // count the same money twice. Later months are left alone.
   for (let m = budgetFrom; m <= o.thisMonth; m = addMonthsTo(m, 1)) {
     const e = plan.budgetPlan.months[m];
-    if (e?.assigned) {
-      const { assigned: _old, ...rest } = e;
+    if (e?.assigned || e?.cardDebt) {
+      const { assigned: _old, cardDebt: _oldDebt, ...rest } = e;
       plan.budgetPlan.months[m] = rest;
     }
   }
@@ -665,6 +665,32 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     if (x.transferId) continue;
     const y = open.find((z) => !z.transferId && z !== x && z.accountId === x.transferAccountId && z.transferAccountId === x.accountId && z.date === x.date && Math.abs(z.amount + x.amount) < 0.005);
     if (y) { x.transferId = y.id; y.transferId = x.id; }
+  }
+  // YNAB lets overspending on a credit card turn into card debt: the card's payment category only gets
+  // what the category could cover. Bring that in as it was, as overspending left on the card (it shows
+  // short on the card's line here, and isn't taken from Unassigned), so the budget starts where YNAB's is.
+  // A category that went over is counted as overspent on its cards first, up to what it spent on them.
+  const cardIds = new Set([...idOf].filter(([n]) => kindOf.get(n) === "card").map(([, id]) => id));
+  for (let m = budgetFrom; m <= o.thisMonth; m = addMonthsTo(m, 1)) {
+    const debt: CardDebt[] = [];
+    const done = new Set<string>();
+    for (const a of d.assigned) {
+      if (a.month !== m || (a.available ?? 0) > -0.005 || CARD_GROUP.test(a.group)) continue;
+      const key = catOf(a.group, a.category);
+      if (!key || key === "ready" || key.startsWith("debt:") || done.has(key)) continue;
+      done.add(key);
+      const byCard = new Map<string, number>();
+      for (const t of txns) {
+        if (t.date.slice(0, 7) !== m || !cardIds.has(t.accountId) || (o.today && t.date > o.today)) continue;
+        const parts = t.splits?.length ? t.splits : [{ categoryId: t.categoryId ?? "", amount: t.amount }];
+        for (const p of parts) if (p.categoryId === key) byCard.set("debt:" + t.accountId, (byCard.get("debt:" + t.accountId) ?? 0) - p.amount);
+      }
+      const total = [...byCard.values()].reduce((x, v) => x + Math.max(0, v), 0);
+      const onCards = Math.min(-a.available!, total);
+      if (onCards < 0.005) continue;
+      for (const [card, spent] of byCard) if (spent > 0) debt.push({ cat: key, card, amount: Math.round((onCards * spent) / total * 100) / 100 });
+    }
+    if (debt.length) plan.budgetPlan.months[m] = { ...(plan.budgetPlan.months[m] ?? {}), cardDebt: debt };
   }
   // each budget account starts with its balance at the first imported day. Bringing in everything,
   // that's YNAB's own "Starting Balance" transaction.

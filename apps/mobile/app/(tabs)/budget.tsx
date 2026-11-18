@@ -139,6 +139,32 @@ export default function Budget() {
       p.budgetPlan.months = { ...p.budgetPlan.months, [month]: e };
     });
   const setAssigned = (k: string, v: number) => edit((e) => { e.assigned = { ...(e.assigned ?? {}), [k]: Math.max(0, v) }; });
+  /**
+   * A category that went over on a credit card: leave that overspending on the card as debt (`on`), or
+   * let it come out of next month's Unassigned (the default). Split across the cards it was spent on.
+   */
+  const setCardDebt = (k: string, l: BudgetLine, on: boolean) =>
+    edit((e) => {
+      const rest = (e.cardDebt ?? []).filter((d) => d.cat !== k);
+      if (on) {
+        const spent = Object.entries(l.onCards ?? {}).filter(([, v]) => v > 0.005);
+        const total = spent.reduce((a, [, v]) => a + v, 0);
+        const amount = Math.min(Math.max(0, -l.available), total);
+        for (const [card, v] of spent) rest.push({ cat: k, card, amount: Math.round(((amount * v) / total) * 100) / 100 });
+      }
+      if (rest.length) e.cardDebt = rest;
+      else delete e.cardDebt;
+    });
+  /** A card's name from its payment key (debt:<id>). */
+  const cardName = (key: string) => state.debts.find((x) => "debt:" + x.id === key)?.name?.trim() || "the card";
+  /** How much a category went over on cards this month (what it could leave on them as debt). */
+  const overOnCards = (l: BudgetLine) => Math.min(Math.max(0, -l.available), Object.values(l.onCards ?? {}).reduce((a, v) => a + Math.max(0, v), 0));
+  /** A card's payment line, this month: what you owe beyond what's set aside to pay it. */
+  const cardShort = (c: BudgetCategory, l: BudgetLine) => {
+    if (c.kind !== "debt" || cards[c.key.slice(5)] === undefined || month !== thisMonth) return 0;
+    const owed = state.debts.find((x) => "debt:" + x.id === c.key)?.balance ?? 0;
+    return Math.max(0, Math.round((owed - Math.max(0, l.available)) * 100) / 100);
+  };
   const itemIndex = (id: string) => state.budget.findIndex((x) => x.id === id);
   const editItem = (id: string, patch: Partial<(typeof state.budget)[number]>) =>
     update((p) => {
@@ -243,11 +269,14 @@ export default function Budget() {
   const rta = view.readyToAssign;
   // overspent categories (red): Unassigned doesn't count them, so they come first
   const red = cats.filter((c) => view.lines[c.key]!.available < -0.005);
-  const redTotal = red.reduce((a, c) => a - view.lines[c.key]!.available, 0);
+  // what's left on cards as debt doesn't come out of next month
+  const onCardsTotal = red.reduce((a, c) => a + (view.lines[c.key]!.toDebt ?? 0), 0);
+  const redTotal = red.reduce((a, c) => a - view.lines[c.key]!.available, 0) - onCardsTotal;
   // went over last month: it reset to $0 and came out of this month's Unassigned, so it's tagged here
   const prevMonth = shift(month, -1);
   const prevView = month > b.start ? budgetView(b, cats, prevMonth, { txns, cards, asOf: isoDay(start) }) : null;
-  const lastOver = prevView ? cats.flatMap((c) => { const a = prevView.lines[c.key]?.available ?? 0; return a < -0.005 ? [{ c, amount: -a }] : []; }) : [];
+  // (overspending you left on a card as debt didn't come out of this month, so it isn't counted)
+  const lastOver = prevView ? cats.flatMap((c) => { const l = prevView.lines[c.key]; const over = l ? -l.available - (l.toDebt ?? 0) : 0; return over > 0.005 ? [{ c, amount: over }] : []; }) : [];
   const lastOverTotal = lastOver.reduce((a, x) => a + x.amount, 0);
   const overLast = new Map(lastOver.map((x) => [x.c.key, x.amount]));
   // your real spending: categories whose recent average is well off the plan amount
@@ -310,7 +339,8 @@ export default function Budget() {
             {lastOver.length
               ? ` ${lastOver.length === 1 ? label(lastOver[0]!.c) : `${lastOver.length} categories`} went ${money(lastOverTotal)} over in ${MON[Number(prevMonth.slice(5, 7)) - 1]}; it came out of this month.${view.overspentBefore - lastOverTotal > 0.5 ? ` (${money(view.overspentBefore - lastOverTotal)} more from earlier months.)` : ""}`
               : view.overspentBefore > 0.5 ? ` ${money(view.overspentBefore)} went to overspending in earlier months.` : ""}
-            {red.length ? ` ${red.length === 1 ? `${label(red[0]!)} is` : `${red.length} categories are`} overspent by ${money(redTotal)}: cover ${red.length === 1 ? "it" : "them"}, or it comes out of next month.` : ""}
+            {red.length && redTotal > 0.005 ? ` ${red.length === 1 ? `${label(red[0]!)} is` : `${red.length} categories are`} overspent by ${money(redTotal)}: cover ${red.length === 1 ? "it" : "them"}, or it comes out of next month.` : ""}
+            {onCardsTotal > 0.005 ? ` ${money(onCardsTotal)} of overspending is left on your cards as debt.` : ""}
           </Text>
         </View>
       </View>
@@ -538,6 +568,12 @@ export default function Budget() {
               {overLast.has(c.key) && compact ? (
                 <Text style={[type.caption, { color: t.bad, fontWeight: "700", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>−{money(overLast.get(c.key)!)} over last month</Text>
               ) : null}
+              {(l.toDebt ?? 0) > 0.005 ? (
+                <Text style={[type.caption, { color: t.bad, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>{money(l.toDebt!)} left as card debt</Text>
+              ) : null}
+              {cardShort(c, l) > 0.5 ? (
+                <Text style={[type.caption, { color: t.bad, fontWeight: "700", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>{money(cardShort(c, l))} short of the balance</Text>
+              ) : null}
             </View>
             {dup ? <Icon name="info" size={14} color={t.warn} /> : null}
             {realBy.has(c.key) ? (
@@ -598,6 +634,23 @@ export default function Budget() {
                   <InlineMoney label={`${label(c)} assigned in ${nameOf(month)}`} value={l.assigned} onChange={(v) => setAssigned(c.key, v)} />
                 </FormRow>
               </FormList>
+              {overOnCards(l) > 0.005 ? (
+                <View style={[styles.dupBox, { backgroundColor: t.badSoft, borderColor: t.bad }]}>
+                  <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>
+                    Went {money(-l.available)} over{Object.keys(l.onCards ?? {}).length === 1 ? ` on ${cardName(Object.keys(l.onCards!)[0]!)}` : " on your cards"}
+                  </Text>
+                  <Text style={[type.caption, { color: t.text2 }]}>
+                    {(l.toDebt ?? 0) > 0.005
+                      ? `${money(l.toDebt!)} stays on the card as debt: the card's payment line shows it short until you set money aside for it. Next month's Unassigned isn't touched.`
+                      : "Cover it from another category, or it comes out of next month's Unassigned. Or leave it on the card as debt: the card's payment line then shows it short."}
+                  </Text>
+                  <View style={styles.chips}>
+                    <Chip title={`Cover ${money(-l.available)}`} onPress={() => { setCardDebt(c.key, l, false); setAssigned(c.key, l.assigned - l.available); }} />
+                    <Chip title="Take from next month" tone={(l.toDebt ?? 0) > 0.005 ? "neutral" : "accent"} icon={(l.toDebt ?? 0) > 0.005 ? undefined : "check"} onPress={() => setCardDebt(c.key, l, false)} />
+                    <Chip title="Leave on card as debt" tone={(l.toDebt ?? 0) > 0.005 ? "accent" : "neutral"} icon={(l.toDebt ?? 0) > 0.005 ? "check" : undefined} onPress={() => setCardDebt(c.key, l, true)} />
+                  </View>
+                </View>
+              ) : null}
               {/* what went out, and what you really spend (with links to change or keep the plan amount) */}
               <FormList>
                 <FormRow label={c.moves ? "Paid" : "Spent"} hint={c.moves ? "From the payment or transfer you record" : "From transactions"}>
@@ -653,7 +706,7 @@ export default function Budget() {
                 : c.kind === "saving"
                   ? "Stays here and builds up. Your plan uses what you assign here."
                   : c.kind === "debt" && cards[c.key.slice(5)] !== undefined
-                    ? `Spending on this card moves money here from its categories${(l.funded ?? 0) > 0.5 ? ` (${money(l.funded ?? 0)} this month)` : ""}, so the payment is covered. Assign more to pay down what you already owe. A payment (a transfer from checking) spends it.`
+                    ? `Spending on this card moves money here from its categories${(l.funded ?? 0) > 0.5 ? ` (${money(l.funded ?? 0)} this month)` : ""}, so the payment is covered.${(l.uncovered ?? 0) > 0.5 ? ` ${money(l.uncovered!)} of overspending was left on this card as debt this month, so it holds that much less.` : ""}${cardShort(c, l) > 0.5 ? ` You owe ${money(cardShort(c, l))} more than is set aside: assign it here to pay the card in full.` : " Assign more to pay down what you already owe."} A payment (a transfer from checking) spends it.`
                     : c.kind === "debt"
                     ? "Minimum plus any extra. Stays available until you record the payment (a transaction with this category). What you assign beyond the minimum is your extra payment in the plan."
                     : c.kind === "bill"

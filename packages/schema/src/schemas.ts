@@ -212,6 +212,7 @@ export const PlanStateSchema = z.object({
         z.string().regex(/^\d{4}-\d{2}$/),
         z.object({
           assigned: z.record(z.string(), z.number().min(0)).optional(),
+          cardDebt: z.array(z.object({ cat: z.string(), card: z.string(), amount: z.number().min(0) })).optional(),
         }),
       ),
       efLine: z.object({ name: z.string().optional(), group: z.string().optional() }).optional(),

@@ -70,7 +70,7 @@ export function fullPlan(): PlanState {
       startCash: 13000.5,
       months: {
         "2026-09": { assigned: { food: 900, cash: 500 } },
-        "2026-10": { assigned: { food: 900.5 } },
+        "2026-10": { assigned: { food: 900.5 }, cardDebt: [{ cat: "food", card: "debt:visa", amount: 42.5 }] },
       },
       efLine: { name: "Rainy day", group: "Savings" },
     },

@@ -369,7 +369,14 @@ export type PlanState = {
 export type BudgetMonthEntry = {
   /** What you gave each category this month. What came in and went out comes from transactions. */
   assigned?: Record<string, number>;
+  /**
+   * Overspending you chose to leave on a credit card as debt: category `cat` went over this month on
+   * card `card` (its payment key, `debt:<id>`), and `amount` of that stays owed on the card instead of
+   * coming out of next month's Unassigned. The card's payment line holds that much less (it shows short).
+   */
+  cardDebt?: CardDebt[];
 };
+export type CardDebt = { cat: string; card: string; amount: number };
 /**
  * A transaction in a budget account (checking, savings, a credit card). Amount: + money in, − money out.
  * Category: a budget key, "ready" for income to assign, or none for a transfer between budget accounts.

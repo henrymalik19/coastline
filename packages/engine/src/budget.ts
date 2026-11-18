@@ -53,6 +53,12 @@ export type BudgetLine = {
   target: number;
   /** Credit-card spending moved into this card's payment category this month. */
   funded?: number;
+  /** A category: how much of its overspending this month you left on a card as debt (not taken from Unassigned). */
+  toDebt?: number;
+  /** A card's payment line: overspending left on this card as debt this month (the line holds that much less). */
+  uncovered?: number;
+  /** A category: what it spent on each card this month (card payment key → amount). */
+  onCards?: Record<string, number>;
 };
 
 export type BudgetView = {
@@ -170,11 +176,27 @@ export function budgetView(
       const funded = act?.cardFunded[c.key] ?? 0;
       const carried = carry[c.key] ?? 0;
       const available = carried + a + funded - sp;
-      lines[c.key] = { key: c.key, assigned: a, spent: sp, available, carried, target: c.target, funded };
-      monthAssigned += a;
-      monthSpent += sp;
-      if (available < 0) monthOver += -available;
-      carry[c.key] = Math.max(0, available);
+      const onCards = act?.cardSpent[c.key];
+      lines[c.key] = { key: c.key, assigned: a, spent: sp, available, carried, target: c.target, funded, ...(onCards ? { onCards } : {}) };
+    }
+    // overspending you chose to leave on a card as debt: it isn't taken from Unassigned, and the card's
+    // payment line holds that much less. Never more than the category went over, nor more than the line has.
+    for (const d of e.cardDebt ?? []) {
+      const cl = lines[d.cat];
+      const card = lines[d.card];
+      if (!cl || !card || d.cat === d.card) continue;
+      const amount = Math.min(Math.max(0, num(d.amount)), Math.max(0, -cl.available - (cl.toDebt ?? 0)), Math.max(0, card.available));
+      if (amount <= 0) continue;
+      cl.toDebt = (cl.toDebt ?? 0) + amount;
+      card.available -= amount;
+      card.uncovered = (card.uncovered ?? 0) + amount;
+    }
+    for (const c of cats) {
+      const l = lines[c.key]!;
+      monthAssigned += l.assigned;
+      monthSpent += l.spent;
+      if (l.available < 0) monthOver += -l.available - (l.toDebt ?? 0);
+      carry[c.key] = Math.max(0, l.available);
     }
     income += act?.income ?? 0;
     assigned += monthAssigned;
