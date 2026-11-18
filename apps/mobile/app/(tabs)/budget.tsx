@@ -872,7 +872,7 @@ export default function Budget() {
                       ) : l.available < -0.005 ? (
                         "Overspent: it comes out of next month's Unassigned"
                       ) : (
-                        "Hidden: history only, no money goes in"
+                        "Archived: history only, no money goes in"
                       )
                     }
                   >

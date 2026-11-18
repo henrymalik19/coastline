@@ -64,6 +64,22 @@ export function TransactionsList({
   const allMonths = range === "all";
   const inRange = (d: string) => range === "all" || (range === "month" ? d.slice(0, 7) === month : (!from || d >= from) && (!to || d <= to));
   const [q, setQ] = useState("");
+  // one category (and its sub categories), or all of them
+  const [catF, setCatF] = useState("all");
+  const catKeys = useMemo(() => (catF === "all" ? null : new Set([catF, ...cats.filter((c) => c.parent === catF).map((c) => c.key)])), [catF, cats]);
+  const catOptions = useMemo(() => {
+    const name = (k: string) => cats.find((c) => c.key === k)?.label ?? "Category";
+    const shown = cats.filter((c) => !c.hidden);
+    return [
+      { value: "all", label: "All categories" },
+      // each category, then its sub categories (picking a category takes its sub categories too)
+      ...shown.filter((c) => !c.parent).flatMap((c) => [
+        { value: c.key, label: c.label, hint: c.group, section: "Categories" },
+        ...shown.filter((s) => s.parent === c.key).map((s) => ({ value: s.key, label: `${c.label} › ${s.label}`, hint: c.group, section: "Categories" })),
+      ]),
+      ...cats.filter((c) => c.hidden).map((c) => ({ value: c.key, label: c.parent ? `${name(c.parent)} › ${c.label}` : c.label, section: "Archived" })),
+    ];
+  }, [cats]);
   const [needsCat, setNeedsCat] = useState(!!onlyNeedsCategory);
   // held for review (not approved in YNAB yet): listed apart, counted once you accept them
   const [reviewOnly, setReviewOnly] = useState(!!onlyReview);
@@ -100,6 +116,7 @@ export function TransactionsList({
       .filter((x) => needsCat || reviewOnly || inRange(x.date))
       .filter((x) => !needsCat || uncategorized(x))
       .filter((x) => !reviewOnly || x.review)
+      .filter((x) => !catKeys || (!!x.categoryId && catKeys.has(x.categoryId)) || !!x.splits?.some((s) => !!s.categoryId && catKeys.has(s.categoryId)))
       .filter((x) => {
         if (!needle) return true;
         const hay = `${x.payee ?? ""} ${x.memo ?? ""} ${categoryText(cats, x, nameOf)} ${nameOf(x.accountId)} ${Math.abs(x.amount).toFixed(2)}`.toLowerCase();
@@ -107,7 +124,7 @@ export function TransactionsList({
       })
       .sort((a, b) => (a.date === b.date ? b.updatedAt - a.updatedAt : b.date.localeCompare(a.date)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [txns, acct, month, range, from, to, q, needsCat, reviewOnly, cats]);
+  }, [txns, acct, month, range, from, to, q, needsCat, reviewOnly, cats, catKeys]);
 
   // dated after today: upcoming, shown greyed at the top and not counted until their day
   const today = isoDay(start);
@@ -247,15 +264,20 @@ export function TransactionsList({
           </View>
         </View>
       ) : null}
-      {/* phones: the account and the search each get their own line */}
+      {/* phones: the account and the category side by side, the search on its own line */}
       <View style={[styles.row, { gap: space.sm }, compact ? { flexDirection: "column", alignItems: "stretch" } : null]}>
-        <View style={compact ? { width: "100%" } : { width: 240 }}>
-          <Select
-            label="Account"
-            value={acct}
-            onChange={setAcct}
-            options={[{ value: "all", label: `All accounts (${accounts.length})` }, ...accounts.map((a) => ({ value: a.id, label: a.name, hint: a.kind === "card" ? "Credit card" : "Cash account" }))]}
-          />
+        <View style={[styles.row, { gap: space.sm }, compact ? { width: "100%" } : null]}>
+          <View style={compact ? { flex: 1, minWidth: 0 } : { width: 220 }}>
+            <Select
+              label="Account"
+              value={acct}
+              onChange={setAcct}
+              options={[{ value: "all", label: `All accounts (${accounts.length})` }, ...accounts.map((a) => ({ value: a.id, label: a.name, hint: a.kind === "card" ? "Credit card" : "Cash account" }))]}
+            />
+          </View>
+          <View style={compact ? { flex: 1, minWidth: 0 } : { width: 220 }}>
+            <Select label="Category" value={catF} onChange={setCatF} options={catOptions} />
+          </View>
         </View>
         <View style={compact ? { width: "100%" } : { flex: 1, minWidth: 200 }}>
           <TextField label="Search transactions" placeholder={compact ? "Search" : "Search payee, category, amount"} value={q} onChange={setQ} />

@@ -82,7 +82,7 @@ export function YnabUpdateCard() {
             />
           ) : null}
           {u.keptEdited.length ? line(`${n(u.keptEdited.length, "transaction")} gone from YNAB that you changed here stay${u.keptEdited.length === 1 ? "s" : ""}, as yours.`, t.text2) : null}
-          {u.hiddenAdded.length ? line(`New in YNAB, coming in hidden: ${u.hiddenAdded.map((b) => b.name).join(", ")}.`, t.text2) : null}
+          {u.hiddenAdded.length ? line(`New in YNAB, coming in archived: ${u.hiddenAdded.map((b) => b.name).join(", ")}.`, t.text2) : null}
           {u.skippedAccounts.length ? (
             <Text style={[type.caption, { color: t.text3 }]}>Not in your budget, so skipped: {u.skippedAccounts.join(", ")}.</Text>
           ) : null}

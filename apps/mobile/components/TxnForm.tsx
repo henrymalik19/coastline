@@ -157,7 +157,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
       ...cats.filter((s) => !s.hidden && s.parent === c.key).map((s) => ({ value: s.key, label: `${c.label} › ${s.label}`, hint: c.group })),
     ]),
     // hidden categories are history only: listed just when this transaction is already in one (so it still shows)
-    ...cats.filter((c) => c.hidden && wasIn.has(c.key)).map((c) => ({ value: c.key, label: c.label, hint: "Hidden: history only" })),
+    ...cats.filter((c) => c.hidden && wasIn.has(c.key)).map((c) => ({ value: c.key, label: c.label, hint: "Archived: history only" })),
   ];
 
   return (

@@ -375,7 +375,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     categories.filter((c) => { const k2 = categoryKey(c.group, c.name); const ch2 = catMap[k2]; return k2 !== but && ch2?.action === "match" && ch2.id === id; });
   const catOptions = (k?: string) => [
     { value: "new", label: "A new category", section: "Bring it in" },
-    { value: "hidden", label: "A hidden category", hint: "Keeps its transactions, not on your budget", section: "Bring it in" },
+    { value: "hidden", label: "An archived category", hint: "Keeps its transactions as history, not on your budget", section: "Bring it in" },
     { value: "skip", label: "Nothing (left out)", section: "Bring it in" },
     ...mine.map((b) => {
       const also = matchedBy(b.id, k);
@@ -459,7 +459,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     ...joinable(k).map((c) => ({ value: "combine:" + categoryKey(c.group, c.name), label: `Combine into ${c.name}`, hint: c.group, section: "Combine with another YNAB category: its name goes" })),
   ];
   const offNote = (ch?: CategoryChoice) =>
-    ch?.action === "skip" ? "Not brought in" : ch?.action === "hidden" ? "Comes in hidden: keeps its transactions, not on your budget or plan" : ch?.action === "invest" ? "Money moved into the account: investing, not spending" : ch?.action === "loan" ? "Pays the loan: counted from Debts, not as spending" : "Savings, not spending";
+    ch?.action === "skip" ? "Not brought in" : ch?.action === "hidden" ? "Comes in archived: its transactions as history, not on your budget or plan" : ch?.action === "invest" ? "Money moved into the account: investing, not spending" : ch?.action === "loan" ? "Pays the loan: counted from Debts, not as spending" : "Savings, not spending";
   /** A category combined into another: its own row in that one's section (no amount or switches: it joins that one's). */
   const combinedRow = (c2: (typeof categories)[number], into: (typeof categories)[number]) => {
     const k2 = categoryKey(c2.group, c2.name);
@@ -852,7 +852,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
                   </Pressable>
                   {showOldCards ? (
                     <>
-                      <Text style={[type.caption, { color: t.text3 }]}>YNAB keeps a payment category for every card, even closed ones. These never held money or a transaction, so they're left out. Bring one in as hidden if you want it.</Text>
+                      <Text style={[type.caption, { color: t.text3 }]}>YNAB keeps a payment category for every card, even closed ones. These never held money or a transaction, so they're left out. Bring one in as archived if you want it.</Text>
                       {oldCards.map(categoryRow)}
                     </>
                   ) : null}
@@ -863,7 +863,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
                   <Divider />
                   <Pressable role="button" aria-expanded={showUnused} onPress={() => setShowUnused((v) => !v)} hitSlop={6}>
                     <Text style={[type.label, { color: t.accent, fontWeight: "700" }]}>
-                      {showUnused ? "Hide" : "Show"} {unusedCats.length} {unusedCats.length === 1 ? "category" : "categories"} you haven't used lately (they come in hidden)
+                      {showUnused ? "Hide" : "Show"} {unusedCats.length} {unusedCats.length === 1 ? "category" : "categories"} you haven't used lately (they come in archived)
                     </Text>
                   </Pressable>
                   {showUnused ? unusedCats.map(categoryRow) : null}
@@ -906,7 +906,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   ) : null;
   const stats = preview ? [
     { n: preview.summary.transactions, label: "Transactions", sub: preview.summary.transactionsMatched ? `replacing ${preview.summary.transactionsMatched} of yours` : "with starting balances" },
-    { n: preview.summary.categoriesAdded + preview.summary.categoriesUpdated, label: "Categories", sub: `${preview.summary.categoriesAdded} new · ${preview.summary.categoriesUpdated} matched${preview.summary.categoriesAsSub ? ` · ${preview.summary.categoriesAsSub} sub` : ""}${preview.summary.categoriesCombined ? ` · ${preview.summary.categoriesCombined} combined` : ""}${preview.summary.categoriesHidden ? ` · ${preview.summary.categoriesHidden} hidden` : ""}${preview.summary.categoriesSkipped ? ` · ${preview.summary.categoriesSkipped} left out` : ""}` },
+    { n: preview.summary.categoriesAdded + preview.summary.categoriesUpdated, label: "Categories", sub: `${preview.summary.categoriesAdded} new · ${preview.summary.categoriesUpdated} matched${preview.summary.categoriesAsSub ? ` · ${preview.summary.categoriesAsSub} sub` : ""}${preview.summary.categoriesCombined ? ` · ${preview.summary.categoriesCombined} combined` : ""}${preview.summary.categoriesHidden ? ` · ${preview.summary.categoriesHidden} archived` : ""}${preview.summary.categoriesSkipped ? ` · ${preview.summary.categoriesSkipped} left out` : ""}` },
     { n: preview.summary.accountsAdded, label: "New accounts", sub: "the rest matched or left out" },
     { n: preview.summary.months, label: preview.summary.months === 1 ? "Month assigned" : "Months assigned", sub: "what you gave each category" },
   ] : [];
