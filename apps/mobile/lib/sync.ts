@@ -16,7 +16,7 @@
  *   app focus.
  */
 import type { PlanState, Txn } from "@coastfi/engine";
-import { allPages, batches, changedSince, newestStamp, pushedAfterPull } from "./pages";
+import { allPages, batches, changedSince, newestStamp, pushedAfterPull, stampMs } from "./pages";
 import type { Checkin } from "@coastfi/schema";
 import { CheckinSchema, diffRows, PLAN_TABLES, planToRows, PlanStateSchema, rowsToPlan, TxnSchema, withProperties, type PlanRows, type PlanTable } from "@coastfi/schema";
 import { canUndoImport, parseUndo, type ImportSnapshot } from "./importUndo";
@@ -66,6 +66,65 @@ type PlanRow = {
 };
 
 /** Read a plan in one snapshot, as the app's objects. Null when there's no plan yet. */
+/**
+ * The plan's latest "reload all my devices" request (the server's time), or null. Null too while the
+ * server doesn't have the column yet (the app can ship before the migration).
+ */
+async function fetchReloadAt(pid: string): Promise<string | null> {
+  if (!supabase) return null;
+  const res = await supabase.from("plan").select("reload_at").eq("id", pid).maybeSingle();
+  if (res.error) {
+    if (/42703|reload_at/.test(String(res.error.code) + res.error.message)) return null;
+    throw res.error;
+  }
+  return (res.data as { reload_at: string | null } | null)?.reload_at ?? null;
+}
+
+/** A reload request this device hasn't acted on yet. */
+const newReload = (pid: string, at: string | null | undefined) => {
+  if (!at) return false;
+  const seen = useStore.getState().reloadSeen;
+  return !(seen?.owner === pid && stampMs(seen.at) === stampMs(at));
+};
+
+/**
+ * Throw away this device's copy of the plan, its transactions and check-ins, so the next sync loads
+ * them fresh from the account (as a device signing in for the first time would). Stays signed in.
+ * Anything not synced yet is lost: that's the point of reloading.
+ */
+function dropLocalCopy() {
+  applyingRemote = true;
+  useStore.setState({
+    txns: [], checkins: [], syncBase: undefined, txnCursor: undefined, txnPushed: undefined,
+    // the account's plan is the newer one now (a plan saved at 0 never wins)
+    updatedAt: 0,
+    lastImport: undefined, importedAt: undefined, ynabSyncedAt: undefined, importDirty: false,
+  });
+  applyingRemote = false;
+}
+
+/** This device: drop its copy and load everything fresh from the account. */
+export function reloadFromAccount(): Promise<void> {
+  lastSyncStart = Date.now();
+  return serial(async () => {
+    dropLocalCopy();
+    await syncInner();
+  });
+}
+
+/**
+ * Every device signed in to this plan reloads from the account (an open one right away, others when
+ * they next open). This device saves its own changes first, then asks; it doesn't reload itself.
+ */
+export async function reloadAllDevices(): Promise<void> {
+  if (!supabase || !planId) throw new Error("Sign in first.");
+  await syncNow();
+  const pid = planId;
+  const res = await supabase.rpc("reload_devices", { p: pid });
+  if (res.error) throw new Error(/reload_devices/.test(res.error.message) ? "This needs an update on the server first. Try again later." : res.error.message);
+  useStore.setState({ reloadSeen: { owner: pid, at: res.data as string } });
+}
+
 async function fetchPlan(pid: string): Promise<PlanRow | null> {
   if (!supabase) return null;
   const res = await supabase.rpc("get_plan", { p: pid });
@@ -463,8 +522,14 @@ async function syncInner(depth = 0): Promise<void> {
   setSync({ status: "syncing" });
   try {
     const pid = await resolvePlanId(userId);
-    const [remote, ciRes] = await Promise.all([fetchPlan(pid), supabase.from("checkin").select("*").eq("plan_id", pid)]);
+    const [remote, ciRes, reloadAt] = await Promise.all([fetchPlan(pid), supabase.from("checkin").select("*").eq("plan_id", pid), fetchReloadAt(pid)]);
     if (ciRes.error) throw ciRes.error;
+    // "reload all my devices" was asked for since this device last looked: a device that has synced this
+    // plan drops its copy and loads it fresh below (one that hasn't has nothing to drop)
+    if (newReload(pid, reloadAt)) {
+      if (baseFor(pid)) dropLocalCopy();
+      useStore.setState({ reloadSeen: { owner: pid, at: reloadAt! } });
+    }
     legacyOnServer = !!remote?.legacy;
     const remoteCheckins = ((ciRes.data ?? []) as CheckinRow[]).map(fromRow).filter((c): c is Checkin => !!c);
 
@@ -579,8 +644,8 @@ function listen(userId: string, pid: string) {
   channel = supabase
     .channel(`plan-${userId}-${pid}`)
     .on("postgres_changes", { event: "*", schema: "public", table: "plan", filter: `id=eq.${pid}` }, (payload) => {
-      const row = payload.new as { client_updated_at?: number } | undefined;
-      if (row && Number(row.client_updated_at) !== baseFor(pid)?.at) void syncNow();
+      const row = payload.new as { client_updated_at?: number; reload_at?: string | null } | undefined;
+      if (row && (Number(row.client_updated_at) !== baseFor(pid)?.at || newReload(pid, row.reload_at))) void syncNow();
     })
     .on("postgres_changes", { event: "*", schema: "public", table: "transaction", filter: `plan_id=eq.${pid}` }, () => ring(pid))
     .subscribe();
@@ -733,7 +798,7 @@ export async function signOut(forget = false) {
     useStore.getState().startFresh();
     // forgetting clears this device only: the account's import record and transactions aren't this
     // device's to change (startFresh marks transactions deleted, which signing back in would upload)
-    useStore.setState({ importDirty: false, txns: [], syncBase: undefined, txnCursor: undefined, txnPushed: undefined });
+    useStore.setState({ importDirty: false, txns: [], checkins: [], syncBase: undefined, txnCursor: undefined, txnPushed: undefined });
   }
 }
 

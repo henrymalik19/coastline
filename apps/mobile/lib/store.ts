@@ -40,6 +40,8 @@ export type AppState = {
   txnCursor?: { owner: string; at: string };
   /** This device has uploaded its transactions edited up to `at` (ms) to `owner`'s plan. Missing: upload them all. */
   txnPushed?: { owner: string; at: number };
+  /** The last "reload all my devices" request for `owner`'s plan this device acted on (the server's time). */
+  reloadSeen?: { owner: string; at: string };
   /** What it takes to undo the import from YNAB (saved with your account too, so Undo works on any device). */
   lastImport?: ImportSnapshot;
   /** When you imported from YNAB (ms), kept after the undo window closes. Synced with the plan. */
@@ -252,7 +254,7 @@ export const useStore = create<AppState>()(
       name: "coastfi.app",
       version: 1,
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, lastImport, importedAt, ynabSyncedAt, importDirty }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, lastImport, importedAt, ynabSyncedAt, importDirty }),
+      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty }),
       // never trust stored data blindly: validate, and fall back to a blank plan
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState> & { isSampleData?: boolean; seenWelcome?: boolean };
@@ -284,6 +286,7 @@ export const useStore = create<AppState>()(
           checkins: Array.isArray(p.checkins) ? p.checkins : [],
           txns: storedTxns,
           txnCursor,
+          reloadSeen: p.reloadSeen && typeof p.reloadSeen.owner === "string" && typeof p.reloadSeen.at === "string" ? p.reloadSeen : undefined,
           txnPushed: (() => {
             const x = p.txnPushed;
             return parsedTxns.success && x && typeof x.owner === "string" && typeof x.at === "number" ? x : undefined;

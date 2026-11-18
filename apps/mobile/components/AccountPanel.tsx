@@ -2,7 +2,7 @@ import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { confirm } from "../lib/confirm";
 import {
-  deleteAccount, MIN_PASSWORD, sendCode, setPassword, signInWithPassword, signOut, signOutOthers, syncNow, useSync, verifyCode, type SyncStatus,
+  deleteAccount, MIN_PASSWORD, reloadAllDevices, reloadFromAccount, sendCode, setPassword, signInWithPassword, signOut, signOutOthers, syncNow, useSync, verifyCode, type SyncStatus,
 } from "../lib/sync";
 import { verifySecondStep } from "../lib/mfa";
 import { syncConfigured } from "../lib/supabase";
@@ -90,10 +90,47 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
         <PasswordSettings />
         <TwoStepSettings />
         <View style={[styles.danger, { borderColor: t.border }]}>
+          <Text style={[type.label, { color: t.text }]}>This device</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>
+            Something here doesn't match your other devices? Reload throws away this device's copy and loads a fresh one from your account. Leaving a
+            shared computer? Sign out and clear it.
+          </Text>
+          <Button
+            title="Reload from your account"
+            disabled={busy || status === "syncing"}
+            style={{ alignSelf: "flex-start" }}
+            onPress={async () => {
+              const unsynced = status !== "synced";
+              const body = `This device's copy is replaced with the one in your account.${unsynced ? " This device hasn't finished syncing, so changes made here since the last sync would be lost." : ""}`;
+              if (await confirm("Reload from your account?", body, "Reload")) void run(reloadFromAccount, "Reloaded from your account.");
+            }}
+          />
+          <Button
+            title="Sign out and clear this device"
+            disabled={busy}
+            onPress={async () => {
+              const unsynced = status !== "synced";
+              const body = `Your budget is removed from this device only; sign in again to load it from your account.${unsynced ? " This device hasn't finished syncing, so changes made here since the last sync would be lost." : ""}`;
+              if (await confirm("Clear this device?", body, "Sign out and clear")) void run(() => signOut(true));
+            }}
+            style={{ alignSelf: "flex-start" }}
+          />
+        </View>
+        <View style={[styles.danger, { borderColor: t.border }]}>
           <Text style={[type.label, { color: t.text }]}>Other devices</Text>
           <Text style={[type.caption, { color: t.text3 }]}>
-            Signed in somewhere you don't use anymore, or don't recognize? Sign out everywhere except here.
+            Another device out of step? Reload them all from your account: open ones right away, the rest when they next open. Signed in
+            somewhere you don't use anymore, or don't recognize? Sign out everywhere except here.
           </Text>
+          <Button
+            title="Reload all my devices"
+            disabled={busy || status === "syncing"}
+            style={{ alignSelf: "flex-start" }}
+            onPress={async () => {
+              const body = "This device saves its changes first. Every other device then throws away its copy and loads the one in your account, so changes made on one of them that haven't synced yet are lost.";
+              if (await confirm("Reload all your devices?", body, "Reload all")) void run(reloadAllDevices, "Your other devices will reload from your account.");
+            }}
+          />
           <Button
             title="Sign out other devices"
             disabled={busy}

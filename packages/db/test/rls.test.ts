@@ -139,6 +139,21 @@ describe.skipIf(!env)("plans as rows, and who can see them (local Supabase)", ()
     expect(mine.plan.debts).toHaveLength(3);
   });
 
+  it("only you can ask your devices to reload, and saving the plan leaves that request alone", async () => {
+    const other = await b.client.rpc("reload_devices", { p: a.id });
+    expect(other.error).not.toBeNull();
+    const mine = await a.client.rpc("reload_devices", { p: a.id });
+    expect(mine.error).toBeNull();
+    const at = mine.data as string;
+    const read = async () => ((await a.client.from("plan").select("reload_at").eq("id", a.id).single()).data as { reload_at: string }).reload_at;
+    expect(Date.parse(await read())).toBe(Date.parse(at));
+    // a plan save (which sends every column the app knows) doesn't touch it
+    const snap = (await load(a.client, a.id))!;
+    const cur = (snap.plan as { client_updated_at: number }).client_updated_at;
+    expect(await save(a.client, a.id, planToRows(rowsToPlan(toRows(snap)).plan, todo), { at: cur, rows: toRows(snap) }, cur + 1)).toBe(cur + 1);
+    expect(Date.parse(await read())).toBe(Date.parse(at));
+  });
+
   it("someone you share the whole plan with reads and saves it like you do", async () => {
     const m = await admin.from("plan_member").insert({ plan_id: a.id, email: b.email, member_id: b.id, role: "full", accounts: [] });
     expect(m.error).toBeNull();
