@@ -383,6 +383,8 @@ export default function Budget() {
   );
 
   const COLW = compact ? 80 : 108;
+  /** A small tappable chip inside a row's hint (Assign, Cover, the transaction count). */
+  const hintChip = { color: t.accent, fontWeight: "700" as const, backgroundColor: t.accentSoft, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1 };
   /** PILL_IN: the Available pill's inner padding, so header and group totals line up with its text. */
   const PILL_IN = 8;
   const num = (v: number, color: string, bold = false, inset = 0) => (
@@ -402,6 +404,56 @@ export default function Budget() {
     );
   };
 
+  /** What you do to a spending category: add sub categories, archive, delete. Shown with its money. */
+  const spendingActions = (c: BudgetCategory) => {
+    if (c.kind !== "spending" || c.hidden) return null;
+    const it = state.budget.find((x) => x.id === c.key);
+    if (!it) return null;
+    const parentItem = it.parentId ? state.budget.find((x) => x.id === it.parentId) : undefined;
+    const kids = subsOf(state.budget, it.id);
+    const linkedTo = linkableAccounts(state).find((a) => a.id === it.accountId);
+    return (
+      // one line: the everyday ones on the left, Delete on its own at the right (harder to tap by mistake)
+      <View style={[styles.chips, { flexWrap: "nowrap" }]}>
+        {parentItem || linkedTo || it.paysDebt ? null : <Chip title={compact ? "Add subs" : "Add sub categories"} icon="plus" onPress={() => setAddReq({ kind: "category", to: "under:" + it.id })} />}
+        {linkedTo ? null : (
+          <Chip
+            title="Archive"
+            icon="close"
+            onPress={async () => {
+              const ids = archiveSet(state.budget, it.id);
+              const left = ids.reduce((a, k) => a + Math.max(0, view.lines[k]?.available ?? 0), 0);
+              const to = parentItem ? parentItem.name || "its category" : "Unassigned";
+              const also = kids.length ? ` Its ${kids.length} sub categor${kids.length === 1 ? "y goes" : "ies go"} with it.` : "";
+              if (!(await confirm(`Archive "${it.name || "this category"}"?`, `It keeps its past transactions as history, but leaves your budget and plan: no new transactions or money go in.${also}${left > 0.005 ? ` The ${money(left)} left moves to ${to}.` : ""} Restore it any time from Archived at the bottom of the budget.`, "Archive"))) return;
+              setOpen(parentItem ? parentItem.id : null);
+              // what's left: to its category (a sub category), or to Unassigned
+              if (left > 0.005)
+                edit((e) => {
+                  const a = { ...(e.assigned ?? {}) };
+                  for (const k of ids) { const v = Math.max(0, view.lines[k]?.available ?? 0); if (v > 0.005) a[k] = Math.round(((a[k] ?? 0) - v) * 100) / 100; }
+                  if (parentItem) a[parentItem.id] = Math.round(((a[parentItem.id] ?? 0) + left) * 100) / 100;
+                  e.assigned = a;
+                });
+              update((p) => { p.budget = archive(p.budget, ids); });
+            }}
+          />
+        )}
+        <View style={{ flex: 1 }} />
+        <Chip
+          title="Delete"
+          icon="trash"
+          tone="danger"
+          onPress={async () => {
+            if (await confirm(`Delete "${it.name || "this category"}"?`, `It comes off your budget and your plan.${kids.length ? " Its sub categories become categories of their own." : ""} This can't be undone.`, "Delete")) {
+              setOpen(null);
+              update((p) => { p.budget = p.budget.filter((x) => x.id !== it.id).map((x) => { if (x.parentId !== it.id) return x; const { parentId: _, ...own } = x; return own; }); });
+            }
+          }}
+        />
+      </View>
+    );
+  };
   /** Change the category itself: name, plan amount, group, order (spending); target (savings); links (bills, debts). */
   const categoryEditor = (c: BudgetCategory) => {
     if (c.kind === "spending") {
@@ -593,41 +645,6 @@ export default function Budget() {
           />
           <View style={[styles.chips, { justifyContent: "space-between" }]}>
             <Text style={[type.caption, { color: t.text3, flex: 1 }]}>{compact ? "Tap Reorder above the categories, then drag a grip to move one." : "Drag a category's grip to reorder it or move it to another group."}</Text>
-            {parentItem || linkedTo || it.paysDebt ? null : <Chip title="Add sub categories" icon="plus" onPress={() => setAddReq({ kind: "category", to: "under:" + it.id })} />}
-            {linkedTo ? null : (
-              <Chip
-                title="Archive"
-                icon="close"
-                onPress={async () => {
-                  const ids = archiveSet(state.budget, it.id);
-                  const left = ids.reduce((a, k) => a + Math.max(0, view.lines[k]?.available ?? 0), 0);
-                  const to = parentItem ? parentItem.name || "its category" : "Unassigned";
-                  const also = kids.length ? ` Its ${kids.length} sub categor${kids.length === 1 ? "y goes" : "ies go"} with it.` : "";
-                  if (!(await confirm(`Archive "${it.name || "this category"}"?`, `It keeps its past transactions as history, but leaves your budget and plan: no new transactions or money go in.${also}${left > 0.005 ? ` The ${money(left)} left moves to ${to}.` : ""} Restore it any time from Archived at the bottom of the budget.`, "Archive"))) return;
-                  setOpen(parentItem ? parentItem.id : null);
-                  // what's left: to its category (a sub category), or to Unassigned
-                  if (left > 0.005)
-                    edit((e) => {
-                      const a = { ...(e.assigned ?? {}) };
-                      for (const k of ids) { const v = Math.max(0, view.lines[k]?.available ?? 0); if (v > 0.005) a[k] = Math.round(((a[k] ?? 0) - v) * 100) / 100; }
-                      if (parentItem) a[parentItem.id] = Math.round(((a[parentItem.id] ?? 0) + left) * 100) / 100;
-                      e.assigned = a;
-                    });
-                  update((p) => { p.budget = archive(p.budget, ids); });
-                }}
-              />
-            )}
-            <Chip
-              title="Delete"
-              icon="trash"
-              tone="danger"
-              onPress={async () => {
-                if (await confirm(`Delete "${it.name || "this category"}"?`, `It comes off your budget and your plan.${kids.length ? " Its sub categories become categories of their own." : ""} This can't be undone.`, "Delete")) {
-                  setOpen(null);
-                  update((p) => { p.budget = p.budget.filter((x) => x.id !== it.id).map((x) => { if (x.parentId !== it.id) return x; const { parentId: _, ...own } = x; return own; }); });
-                }
-              }}
-            />
           </View>
         </View>
       );
@@ -759,9 +776,10 @@ export default function Budget() {
     const newPay = paysLoan && dupItem ? newLoanPayment(paysLoan, dupItem, paidLastTwoMonths(txns, dupItem.id, thisMonth)) : undefined;
     return (
       <View key={c.key} nativeID={"cat-" + c.key}>
-        <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${shownName}: ${money((opts.total ?? l).available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, opts.indent ? { paddingLeft: (compact ? space.md : space.lg) + space.lg } : null, pressed ? { backgroundColor: t.surface2 } : null]}>
+        <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${shownName}: ${money((opts.total ?? l).available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, opts.indent ? { paddingLeft: (compact ? space.md : space.lg) + space.lg } : null, isOpen || pressed ? { backgroundColor: t.surface2 } : null]}>
           <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
             {grip}
+            {isOpen ? <Icon name="up" size={12} color={t.accent} /> : null}
             <View style={{ flexShrink: 1, minWidth: 0 }}>
               <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{shownName}</Text>
               {opts.total ? <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>Available incl. its subs</Text> : null}
@@ -869,24 +887,22 @@ export default function Budget() {
                     c.target > 0.5 || l.available < -0.005 || l.assigned < -0.005 ? (
                       <>
                         {l.assigned < -0.005 ? `Took back ${money(-l.assigned)}${c.target > 0.5 || l.available < -0.005 ? " · " : ""}` : ""}
-                        {c.target > 0.5 ? `Plan: ${money(c.target, { whole: true })}` : ""}
+                        {c.target > 0.5 ? `Plan ${money(c.target, { whole: true })} ` : ""}
+                        {/* a chip, like the transaction count: short, and plainly something to tap */}
                         {c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5 ? (
-                          <>
-                            {" · "}
-                            <Text role="button" onPress={() => setAssigned(c.key, Math.round(c.target * 100) / 100)} style={{ color: t.accent, fontWeight: "700" }}>Assign it</Text>
-                          </>
+                          <Text role="button" accessibilityLabel={`Assign the plan's ${money(c.target)}`} onPress={() => setAssigned(c.key, Math.round(c.target * 100) / 100)} style={hintChip}>Assign</Text>
                         ) : null}
                         {l.available < -0.005 ? (
                           <>
-                            {c.target > 0.5 ? " · " : ""}
-                            <Text role="button" onPress={() => setAssigned(c.key, l.assigned - l.available)} style={{ color: t.accent, fontWeight: "700" }}>Cover {money(-l.available)}</Text>
+                            {c.target > 0.5 && Math.abs(l.assigned - c.target) > 0.5 ? " " : ""}
+                            <Text role="button" onPress={() => setAssigned(c.key, l.assigned - l.available)} style={hintChip}>Cover {money(-l.available)}</Text>
                           </>
                         ) : null}
                       </>
                     ) : undefined
                   }
                 >
-                  <InlineMoney label={`${label(c)} assigned in ${nameOf(month)}`} value={l.assigned} onChange={(v) => setAssigned(c.key, v)} allowNegative={(l.carried ?? 0) > 0.005 || l.assigned < 0} />
+                  <InlineMoney compact={compact} label={`${label(c)} assigned in ${nameOf(month)}`} value={l.assigned} onChange={(v) => setAssigned(c.key, v)} allowNegative={(l.carried ?? 0) > 0.005 || l.assigned < 0} />
                 </FormRow>
               </FormList>
               )}
@@ -909,7 +925,25 @@ export default function Budget() {
               ) : null}
               {/* what went out, and what you really spend (with links to change or keep the plan amount) */}
               <FormList>
-                <FormRow label={c.moves ? "Paid" : "Spent"} hint={c.moves ? "From the payment or transfer you record" : "From transactions"}>
+                <FormRow
+                  label={c.moves ? "Paid" : "Spent"}
+                  hint={(() => {
+                    // this month's transactions in it: a chip that opens Activity (no list here, it made the panel long)
+                    const n = monthTxns.filter((x) => x.categoryId === c.key || x.splits?.some((y) => y.categoryId === c.key) || (c.kind === "debt" && x.accountId === c.key.slice(5) && !!x.transferAccountId)).length;
+                    if (!n) return c.moves ? "From the payment or transfer you record" : "No transactions this month";
+                    // (text, not a button: the hint is a line of text)
+                    return (
+                      <Text
+                        role="link"
+                        accessibilityLabel={`${n} transaction${n === 1 ? "" : "s"} this month: see them in Activity`}
+                        onPress={() => { setOpen(null); setTab("transactions"); router.setParams({ view: "transactions" }); }}
+                        style={hintChip}
+                      >
+                        {n} transaction{n === 1 ? "" : "s"} ›
+                      </Text>
+                    );
+                  })()}
+                >
                   <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(l.spent)}</Text>
                 </FormRow>
                 {realBy.has(c.key) ? (
@@ -934,18 +968,7 @@ export default function Budget() {
                 </FormRow>
               </FormList>
             </View>
-            {(() => {
-              const list = monthTxns.filter((x) => x.categoryId === c.key || x.splits?.some((y) => y.categoryId === c.key) || (c.kind === "debt" && x.accountId === c.key.slice(5) && !!x.transferAccountId));
-              if (!list.length) return null;
-              // just how many, with a way to them (the list itself made the panel long)
-              return (
-                <Pressable role="link" onPress={() => { setOpen(null); setTab("transactions"); router.setParams({ view: "transactions" }); }} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                  <Text style={[type.caption, { color: t.text3 }]}>{list.length} transaction{list.length === 1 ? "" : "s"} this month ·</Text>
-                  <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>See in Activity</Text>
-                  <Icon name="chevron" size={12} color={t.accent} />
-                </Pressable>
-              );
-            })()}
+            {spendingActions(c)}
             {(() => {
               // shown open for an archived one (restoring is what it's for) and right after combining (Undo)
               const shown = settingsFor === c.key || c.hidden || combined?.into === c.key;
@@ -962,7 +985,7 @@ export default function Budget() {
                       <Icon name="gear" size={16} color={t.text2} />
                       <View style={{ flex: 1 }}>
                         <Text style={[type.label, { color: t.text, fontWeight: "600" }]}>Settings</Text>
-                        <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{c.kind === "spending" ? "Name, plan amount, group, combine, archive" : "What it's for, and where it's set"}</Text>
+                        <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{c.kind === "spending" ? "Name, plan amount, group, combine" : "What it's for, and where it's set"}</Text>
                       </View>
                       <Icon name={shown ? "up" : "down"} size={14} color={t.text3} />
                     </Pressable>
@@ -986,6 +1009,9 @@ export default function Budget() {
                       ? "Builds up each month until the bill is due."
                       : "What you don't spend carries over to next month."}
             </Text>
+            <View style={{ alignItems: "flex-end" }}>
+              <Chip title="Done" icon="up" onPress={() => { setOpen(null); setSettingsFor(null); }} />
+            </View>
           </View>
         ) : null}
       </View>
@@ -1115,7 +1141,7 @@ export default function Budget() {
                 >
                   <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
                     <Text style={[type.overline, { color: t.text2, flexShrink: 1 }]} numberOfLines={2}>{g.name}</Text>
-                    <Icon name="edit" size={12} color={t.text3} />
+                    <Icon name={groupOpen === g.name ? "up" : "edit"} size={12} color={groupOpen === g.name ? t.accent : t.text3} />
                   </View>
                   {num(assigned, t.text3, true)}
                   {compact ? null : num(spent, t.text3, true)}
@@ -1136,6 +1162,8 @@ export default function Budget() {
                           <Chip title="Later" icon="down" disabled={groupOrder(state.budget).at(-1) === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, 1); })} />
                         </>
                       ) : null}
+                      <View style={{ flex: 1 }} />
+                      <Chip title="Done" icon="up" onPress={() => setGroupOpen(null)} />
                     </View>
                   </View>
                 ) : null}
