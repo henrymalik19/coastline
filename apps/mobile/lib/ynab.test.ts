@@ -407,3 +407,20 @@ describe("YNAB's card overspending comes in as card debt", () => {
     expect(r.plan.budgetPlan!.months["2026-12"]?.cardDebt).toBeUndefined();
   });
 });
+
+describe("categories you hid in YNAB", () => {
+  it("come in as hidden categories, keeping what was assigned and spent (YNAB still counts them)", () => {
+    const reg = REG.replace(`"Checking","","11/01/2026","Employer"`, `"Checking","","11/02/2026","Language school","Hidden Categories: Tutoring","Hidden Categories","Tutoring","","$100.00","$0.00","Cleared"\n"Checking","","11/01/2026","Employer"`);
+    const plan = PLAN + `"Nov 2026","Hidden Categories: Tutoring","Hidden Categories","Tutoring","$100.00","-$100.00","$0.00"\n`;
+    const p: PlanState = freshPlan();
+    p.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 1 }];
+    let n = 0;
+    const d = parseYnab(reg, plan);
+    expect(ynabCategories(d, ["2026-10", "2026-11"]).some((c) => c.name === "Tutoring")).toBe(true);
+    const r = buildImport(p, d, { from: "2026-11", thisMonth: "2026-12", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
+    const tutoring = r.plan.budget.find((b) => b.name === "Tutoring")!;
+    expect(tutoring.hidden).toBe(true);
+    expect(r.plan.budgetPlan!.months["2026-11"]!.assigned![tutoring.id]).toBe(100);
+    expect(r.txns.find((t) => t.payee === "Language school")!.categoryId).toBe(tutoring.id);
+  });
+});

@@ -252,7 +252,9 @@ export type AccountChoice = { action: "match"; id: string } | { action: "add" } 
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 const CARD_GROUP = /^credit card payments$/i;
-const SPECIAL_GROUP = /^(inflow|credit card payments|hidden categories|internal master category)$/i;
+const SPECIAL_GROUP = /^(inflow|credit card payments|internal master category)$/i;
+/** YNAB's group for categories you hid there: real categories (money is assigned and spent in them), just out of sight. */
+const YNAB_HIDDEN = /^hidden categories$/i;
 
 /** YNAB's accounts, from the register: what kind each looks like and its balance today. */
 export function ynabAccounts(d: YnabData, today?: string): YnabAccount[] {
@@ -295,10 +297,12 @@ export type YnabCategory = { group: string; name: string; average: number };
 export type CategoryChoice = { action: "new" } | { action: "match"; id: string } | { action: "hidden" } | { action: "skip" };
 
 /** The plan's category a YNAB category most likely is: the same name, or the Emergency fund for an emergency fund. */
-export function suggestCategory(plan: PlanState, c: Pick<YnabCategory, "name">): CategoryChoice {
+export function suggestCategory(plan: PlanState, c: Pick<YnabCategory, "name"> & { group?: string }): CategoryChoice {
   const hit = plan.budget.find((b) => !b.accountId && norm(b.name) === norm(c.name));
   if (hit) return { action: "match", id: hit.id };
   if (/emergency/i.test(c.name)) return { action: "match", id: "cash" };
+  // hidden in YNAB: hidden here too (its money and spending still count, as they do in YNAB)
+  if (c.group && YNAB_HIDDEN.test(c.group)) return { action: "hidden" };
   return { action: "new" };
 }
 
