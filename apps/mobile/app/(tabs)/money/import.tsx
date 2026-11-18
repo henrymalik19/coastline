@@ -17,7 +17,7 @@ import { monthKey, newId, useStore } from "../../../lib/store";
 import { space, type, useTheme } from "../../../lib/theme";
 import { isoDay } from "../../../lib/categories";
 import { readYnabFiles } from "../../../lib/ynabFiles";
-import { buildImport, categoryKey, exportMonths, groupKey, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabCategory, type YnabData } from "../../../lib/ynab";
+import { balanceConflicts, buildImport, categoryKey, exportMonths, groupKey, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabCategory, type YnabData } from "../../../lib/ynab";
 import { sticky, stickyBottom } from "../../../lib/sticky";
 import { useLayout } from "../../../lib/layout";
 import { groupOrder } from "../../../lib/budgetOrder";
@@ -165,9 +165,12 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
       for (const c of list) { const k = categoryKey(c.group, c.name); if (isSpending(k)) next[k] = { ...opts(k), [key]: v }; }
       return next;
     });
+  // investment accounts and loans matched to yours: keep your balance unless you pick YNAB's
+  const [useYnabBalance, setUseYnabBalance] = useState<Record<string, boolean>>({});
+  const conflicts = useMemo(() => (data ? balanceConflicts(saved, ynabAccounts(data), choices) : []), [data, saved, choices]);
   const preview = useMemo(
-    () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, newId: () => "preview" }) : null),
-    [data, saved, from, thisMonth, choices, catOpts, catMap, groupMap, catGroup, amounts, removeEmpty, existing, keepBoth],
+    () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, newId: () => "preview" }) : null),
+    [data, saved, from, thisMonth, choices, useYnabBalance, catOpts, catMap, groupMap, catGroup, amounts, removeEmpty, existing, keepBoth],
   );
 
   const options = (a: YnabAccount) => {
@@ -191,7 +194,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const run = () => {
     if (!data) return;
     setConfirming(false);
-    const r = buildImport(saved, data, { from, thisMonth, accounts: choices, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, newId });
+    const r = buildImport(saved, data, { from, thisMonth, accounts: choices, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, newId });
     importBudget(r.plan, r.txns, r.replaced);
     setDone(`Imported ${r.summary.transactions} transactions and ${r.summary.categoriesAdded + r.summary.categoriesUpdated} categories.`);
     setDoneNeeds(r.summary.needsCategoryFromYnab + r.summary.needsCategoryLeftOut);
@@ -227,6 +230,24 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         </View>
         <Select label={`${a.name}: what it is here`} value={valueOf(choices[a.name])} options={options(a)} onChange={(v) => setChoice(a.name, v)} />
       </View>
+      {(() => {
+        // matched to one of yours with a different balance: which one to keep
+        const c = conflicts.find((x) => x.name === a.name);
+        if (!c) return null;
+        const show = (v: number) => (c.owed ? `owe ${money(v)}` : money(v));
+        return (
+          <View style={[styles.row, { gap: 4, flexWrap: "wrap", paddingHorizontal: wide ? 0 : space.sm }]}>
+            <Text style={[type.caption, { color: t.text3 }]}>Balance</Text>
+            <Select
+              plain
+              label={`${a.name}: balance to keep`}
+              value={useYnabBalance[a.name] ? "ynab" : "yours"}
+              options={[{ value: "yours", label: `Keep yours: ${show(c.yours)}` }, { value: "ynab", label: `Use YNAB's: ${show(c.ynab)}` }]}
+              onChange={(v) => setUseYnabBalance((m) => ({ ...m, [a.name]: v === "ynab" }))}
+            />
+          </View>
+        );
+      })()}
     </View>
   );
   const acctName = (id: string) => saved.accounts.find((a) => a.id === id)?.name ?? saved.debts.find((d) => d.id === id)?.name ?? "Account";

@@ -124,9 +124,14 @@ export const isStartTxn = (t: Pick<Txn, "id">) => t.id.startsWith(START_TXN);
  * yet. An account with transactions starts with a "Starting balance" transaction, which comes in
  * as money to assign like any other, so ready to assign follows your cash.
  */
-export function budgetStartCash(s: Pick<PlanState, "accounts">, txns: Pick<Txn, "id" | "deleted">[] = []): number {
+export function budgetStartCash(s: Pick<PlanState, "accounts">, txns: (Pick<Txn, "id" | "deleted"> & Partial<Pick<Txn, "accountId" | "date" | "amount">>)[] = [], start?: string): number {
   const started = new Set(txns.filter((t) => !t.deleted && isStartTxn(t)).map((t) => t.id));
-  return (s.accounts ?? []).filter((a) => a.type === "cash" && !started.has(startTxnId(a.id))).reduce((t, a) => t + num(a.balance), 0);
+  const cash = (s.accounts ?? []).filter((a) => a.type === "cash");
+  const ids = new Set(cash.map((a) => a.id));
+  // an account whose transactions go back before the budget's first month (a long import): what it held
+  // when the budget started (those older ones are history, not money that came in during the budget)
+  const before = start ? txns.filter((t) => !t.deleted && !!t.accountId && ids.has(t.accountId) && !!t.date && t.date < `${start}-01`).reduce((a, t) => a + num(t.amount), 0) : 0;
+  return cash.filter((a) => !started.has(startTxnId(a.id))).reduce((t, a) => t + num(a.balance), 0) + before;
 }
 
 /**

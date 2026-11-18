@@ -9,7 +9,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { debtLabel } from "../lib/debts";
 import { money, percent } from "../lib/format";
 import { paycheckFor } from "../lib/loans";
-import { netWorth } from "../lib/networth";
+import { netWorth, owedForNetWorth } from "../lib/networth";
 import { usePlan } from "../lib/plan";
 import { budgetAccounts } from "../lib/register";
 import { monthKey } from "../lib/store";
@@ -35,6 +35,7 @@ export function NetWorthCard({ startOpen = false }: { startOpen?: boolean }) {
   const cash = d.bal.cash;
   const property = d.bal.property ?? 0;
   const worth = netWorth(d, state);
+  const owed = owedForNetWorth(state);
   const debts = state.debts.filter((x) => x.balance > 0);
   const budgetIds = new Set(budgetAccounts(state).map((a) => a.id));
 
@@ -53,7 +54,7 @@ export function NetWorthCard({ startOpen = false }: { startOpen?: boolean }) {
           <Mini label="Invested" value={money(d.invested)} />
           <Mini label="Cash" value={money(cash)} />
           {property > 0 ? <Mini label="Property" value={money(property)} /> : null}
-          <Mini label="Debts" value={money(d.debtTotal)} />
+          <Mini label="Debts" value={money(owed)} />
         </View>
       </Pressable>
       {open ? (
@@ -92,13 +93,13 @@ export function NetWorthCard({ startOpen = false }: { startOpen?: boolean }) {
               );
             })}
           </Group>
-          <Group title="What you owe" total={debts.length ? money(d.debtTotal) : undefined} manage="/money/debts">
+          <Group title="What you owe" total={debts.length ? money(owed) : undefined} manage="/money/debts">
             {debts.length ? (
               debts.map((x) => {
                 const link = paycheckFor(state, x.id);
                 const pay = link ? `${money(link.deduction.amount)}/paycheck` : `${money(x.minPayment)}/mo`;
                 const rate = x.promoUntil ? `${pct(x.promoApr ?? 0)} intro` : pct(x.apr);
-                return <Line key={x.id} label={debtLabel(x)} hint={`${rate} · ${pay}`} value={money(x.balance)} href={budgetIds.has(x.id) ? `/budget?view=transactions&account=${x.id}` : "/money/debts"} />;
+                return <Line key={x.id} label={debtLabel(x)} hint={x.payroll ? `${pay} · already out of your 401(k) balance, so not subtracted again` : `${rate} · ${pay}`} value={money(x.balance)} href={budgetIds.has(x.id) ? `/budget?view=transactions&account=${x.id}` : "/money/debts"} />;
               })
             ) : (
               <Empty text="No debts" />

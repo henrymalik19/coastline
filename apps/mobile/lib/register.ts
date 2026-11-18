@@ -58,7 +58,7 @@ export function foldSavingsLines(p: PlanState): void {
  * the budget began (not only what was there on day one).
  */
 export function liveBudget(p: PlanState, txns: Txn[] = []): BudgetState | undefined {
-  return p.budgetPlan ? { ...p.budgetPlan, startCash: Math.round(budgetStartCash(p, txns) * 100) / 100 } : undefined;
+  return p.budgetPlan ? { ...p.budgetPlan, startCash: Math.round(budgetStartCash(p, txns, p.budgetPlan.start) * 100) / 100 } : undefined;
 }
 
 /** An account's register has started: it has a "Starting balance" transaction. */

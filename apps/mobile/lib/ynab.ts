@@ -113,7 +113,8 @@ export type YnabTxn = {
   /** Split lines (one YNAB transaction split across categories). */
   splits?: { group: string; category: string; amount: number; memo: string }[];
 };
-export type YnabAssigned = { month: string; group: string; category: string; assigned: number };
+/** A category's month in YNAB's Plan file: what you assigned, and what was available at the month's end. */
+export type YnabAssigned = { month: string; group: string; category: string; assigned: number; available?: number };
 export type YnabData = { txns: YnabTxn[]; assigned: YnabAssigned[] };
 
 const col = (header: string[], ...names: string[]) => {
@@ -212,6 +213,7 @@ export function parseYnab(registerCsv: string, planCsv?: string): YnabData {
       group: col(ph, "Category Group"),
       category: col(ph, "Category"),
       assigned: col(ph, "Assigned", "Budgeted"),
+      available: col(ph, "Available", "Balance"),
     };
     if (p.month >= 0 && p.assigned >= 0) {
       for (const r of plan.slice(1)) {
@@ -224,7 +226,7 @@ export function parseYnab(registerCsv: string, planCsv?: string): YnabData {
           const at = both.indexOf(":");
           if (at > 0) { group ||= both.slice(0, at).trim(); category ||= both.slice(at + 1).trim(); }
         }
-        assigned.push({ month, group: group.trim(), category: category.trim(), assigned: money(r[p.assigned] ?? "") });
+        assigned.push({ month, group: group.trim(), category: category.trim(), assigned: money(r[p.assigned] ?? ""), ...(p.available >= 0 ? { available: money(r[p.available] ?? "") } : {}) });
       }
     }
   }
@@ -319,6 +321,22 @@ export function ynabCategories(d: YnabData, months: string[]): YnabCategory[] {
   return [...seen.values()];
 }
 
+/**
+ * YNAB accounts (investments, loans) matched to one of yours with a different balance: you pick which
+ * balance to keep. Cash accounts and cards follow their transactions, so they aren't here.
+ */
+export function balanceConflicts(plan: PlanState, accts: YnabAccount[], choices: Record<string, AccountChoice>): { name: string; yours: number; ynab: number; owed: boolean }[] {
+  return accts.flatMap((a) => {
+    const ch = choices[a.name];
+    if (ch?.action !== "match" || a.kind === "cash" || a.kind === "card") return [];
+    const acct = plan.accounts.find((x) => x.id === ch.id);
+    const debt = plan.debts.find((x) => x.id === ch.id);
+    const yours = acct ? acct.balance : debt ? debt.balance : undefined;
+    const ynab = debt ? Math.max(0, -a.balance) : a.balance;
+    return yours !== undefined && Math.abs(yours - ynab) >= 0.005 ? [{ name: a.name, yours, ynab, owed: !!debt }] : [];
+  });
+}
+
 /* ---------- what the import does ---------- */
 
 export type ImportOptions = {
@@ -327,6 +345,11 @@ export type ImportOptions = {
   /** This month, "YYYY-MM". */
   thisMonth: string;
   accounts: Record<string, AccountChoice>;
+  /**
+   * Per YNAB account matched to an investment account or loan of yours: take YNAB's balance (true) instead
+   * of keeping yours (the default: YNAB's tracking balances are often out of date, or $0).
+   */
+  useYnabBalance?: Record<string, boolean>;
   /** Per YNAB category ("group\u0000name"): still paid after you retire, and essential. */
   categories: Record<string, { inRetirement: boolean; essential: boolean }>;
   /** Per YNAB category: add it, put it into one of the plan's, or leave it out (default: suggestCategory). */
@@ -428,10 +451,12 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
       plan.debts.push(debt);
     }
   }
-  // tracking accounts (investments, loans) keep YNAB's balance; their transactions aren't budget transactions
+  // tracking accounts (investments, loans): their transactions aren't budget transactions. One that's new
+  // here starts at YNAB's balance; one matched to yours keeps your balance unless you picked YNAB's
   for (const a of accts) {
     const id = idOf.get(a.name);
     if (!id || a.kind === "cash" || a.kind === "card") continue;
+    if (o.accounts[a.name]?.action === "match" && !o.useYnabBalance?.[a.name]) continue;
     const acct = plan.accounts.find((x) => x.id === id);
     if (acct) acct.balance = a.balance;
     const debt = plan.debts.find((x) => x.id === id);
@@ -515,17 +540,24 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   const from = o.from && o.from > first ? o.from : first;
   const inRange = (date: string) => date.slice(0, 7) >= from;
 
-  // assignments
-  if (!plan.budgetPlan) plan.budgetPlan = { start: from, startCash: 0, months: {} };
-  if (plan.budgetPlan.start > from) plan.budgetPlan.start = from;
+  // the budget starts last month at the earliest, from YNAB's own numbers: older months are history (their
+  // transactions come in, but closed accounts and gaps in old history can't throw the budget off). Its
+  // first month starts with what each category had available in YNAB the month before.
+  const lastMonth = recentFrom.slice(0, 7);
+  const budgetFrom = from > lastMonth ? from : lastMonth;
+  if (!plan.budgetPlan) plan.budgetPlan = { start: budgetFrom, startCash: 0, months: {} };
+  if (plan.budgetPlan.start > budgetFrom) plan.budgetPlan.start = budgetFrom;
   const monthsTouched = new Set<string>();
   const setHere = new Set<string>();
-  for (const a of d.assigned) {
-    if (a.month < from || a.month > o.thisMonth || !a.assigned) continue;
+  const carryMonth = addMonthsTo(budgetFrom, -1);
+  const carried = d.assigned.filter((a) => a.month === carryMonth && (a.available ?? 0) > 0).map((a) => ({ ...a, month: budgetFrom, assigned: a.available! }));
+  for (const a of [...d.assigned, ...carried]) {
+    if (a.month < budgetFrom || a.month > o.thisMonth || !a.assigned) continue;
     const key = catOf(a.group, a.category);
     if (!key || key === "ready") continue;
     const e = (plan.budgetPlan.months[a.month] ??= {});
     // YNAB's amount replaces what was here; two of YNAB's into one category add up
+    // (the month before's available, carried into the first month, adds to that month's own)
     const prev = setHere.has(a.month + "|" + key) ? (e.assigned?.[key] ?? 0) : 0;
     setHere.add(a.month + "|" + key);
     e.assigned = { ...(e.assigned ?? {}), [key]: Math.round((prev + Math.max(0, a.assigned)) * 100) / 100 };
