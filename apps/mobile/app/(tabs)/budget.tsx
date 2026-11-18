@@ -21,6 +21,7 @@ import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText,
 import { ChangesLater, MonthlyAmount } from "../../components/ScheduleEditor";
 import { BILLS_GROUP, CLOSED_ACCOUNTS_GROUP, DEBTS_GROUP, groupOf, groupOrder, linkedGroupChoices, moveGroup, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
 import { archive, archiveSet, canBeSub, makeOwn, moveUnder, parentChoices, restore, subsOf } from "../../lib/subcats";
+import { foldSuggestions } from "../../lib/foldSuggest";
 import { DragList, reorderAmong, useDragZone } from "../../components/DragList";
 import { newId } from "../../lib/store";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -101,6 +102,8 @@ export default function Budget() {
   const txns = useStore((s) => s.txns);
   const b = liveBudget(state, txns);
   const cats = useMemo(() => budgetCategories(state, result.d, actual, start, month), [state, result, actual, start, month]);
+  // archived ones whose transactions went to the same places as a category you use: put them under it
+  const folds = useMemo(() => foldSuggestions(state.budget, txns), [state.budget, txns]);
   const cards = useMemo(() => cardMap(state), [state]);
   // upcoming transactions (dated after today) don't count until their day
   const view = budgetView(b, cats, month, { txns, cards, asOf: isoDay(start) });
@@ -282,6 +285,8 @@ export default function Budget() {
   const rank = (c: BudgetCategory) => (own.includes(c.group) ? ORDER.spending * 1000 + own.indexOf(c.group) : ORDER[c.kind] * 1000);
   // hidden categories aren't in the groups: they're listed at the end (an overspent one always shows)
   const hiddenCats = cats.filter((c) => c.hidden);
+  const putUnder = (pairs: { id: string; under: string }[]) =>
+    update((p) => { for (const { id, under } of pairs) { const x = p.budget.find((b) => b.id === id); if (x?.hidden) x.parentId = under; } });
   const overHidden = hiddenCats.filter((c) => view.lines[c.key]!.available < -0.005);
   for (const c of [...cats].filter((x) => !x.hidden).sort((x, y) => rank(x) - rank(y))) {
     let g = groups.find((x) => x.name === c.group);
@@ -428,6 +433,20 @@ export default function Budget() {
                   }}
                 />
               </FormRow>
+            </FormList>
+            <FormList>
+              {it.parentId ? (
+                <FormRow label="Sub category of" hint="Its history counts under that category">
+                  <Pressable role="button" onPress={() => editItem(it.id, { parentId: undefined })} hitSlop={6} style={{ alignItems: "flex-end" }}>
+                    <Text style={[type.body, { color: t.text }]}>{state.budget.find((x) => x.id === it.parentId)?.name || "A category"}</Text>
+                    <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Take it out</Text>
+                  </Pressable>
+                </FormRow>
+              ) : (
+                <FormRow label="Put under a category" hint="Stays archived; its history is filed under that one, still with its own name">
+                  <Select plain label="Put under" value="" placeholder="Choose" options={parentChoices(state.budget, it.id).map((x) => ({ value: x.id, label: x.name || "Unnamed", hint: groupOf(x) }))} onChange={(v) => editItem(it.id, { parentId: v })} />
+                </FormRow>
+              )}
             </FormList>
             <Text style={[type.caption, { color: t.text3 }]}>History only: its past transactions stay in it, but new ones can't go in and no money can be assigned.</Text>
             <View style={styles.chips}>
@@ -1147,8 +1166,28 @@ export default function Budget() {
               </Pressable>
               {hiddenOpen ? (
                 <Text style={[type.caption, { color: t.text3, paddingHorizontal: compact ? space.md : space.lg, paddingTop: space.sm }]}>
-                  History only: they keep their past transactions, but new ones can't go in and no money can be assigned. Open one to restore it. One that's overspent shows here; it comes out of next month's Unassigned.
+                  History only: they keep their past transactions, but new ones can't go in and no money can be assigned. Open one to restore it or put it under a category. One that's overspent shows here; it comes out of next month's Unassigned.
                 </Text>
+              ) : null}
+              {hiddenOpen && folds.length ? (
+                <View style={[styles.dupBox, { backgroundColor: t.accentSoft, borderColor: t.accent, marginHorizontal: compact ? space.md : space.lg, marginTop: space.sm }]}>
+                  <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Belong under a category?</Text>
+                  <Text style={[type.caption, { color: t.text2 }]}>Their transactions went to the same places. Put under it, each stays archived with its own name, and its history counts in that category.</Text>
+                  {folds.map((f) => {
+                    const from = state.budget.find((b) => b.id === f.id);
+                    const to = state.budget.find((b) => b.id === f.under);
+                    return (
+                      <View key={f.id} style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{from?.name || "Category"} → {to?.name || "Category"}</Text>
+                          <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>Same places: {f.why.payees.slice(0, 2).join(", ")} · {f.why.matched} of {f.why.of}</Text>
+                        </View>
+                        <Chip title="Put under" onPress={() => putUnder([f])} />
+                      </View>
+                    );
+                  })}
+                  {folds.length > 1 ? <Chip title={`Put all ${folds.length} under`} tone="accent" icon="check" onPress={() => putUnder(folds)} /> : null}
+                </View>
               ) : null}
               {hiddenOpen ? (
                 // two lists: your hidden categories, and the payment lines of accounts you've closed

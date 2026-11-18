@@ -309,6 +309,22 @@ describe("choosing where categories go, and matching your own transactions", () 
     expect(out.plan.budget.some((b) => b.name === "Groceries" || b.name === "Household")).toBe(false);
   });
 
+  it("a category can come in as a sub category of another: its own name, transactions and amounts", () => {
+    const { plan, d, opts } = base();
+    const groceries = categoryKey("Everyday", "Groceries");
+    const r = buildImport(plan, d, { ...opts, categoryMap: { [categoryKey("Everyday", "Household")]: { action: "sub", under: groceries } } });
+    expect(r.summary.categoriesAsSub).toBe(1);
+    const g = r.plan.budget.find((b) => b.name === "Groceries")!;
+    const h = r.plan.budget.find((b) => b.name === "Household")!;
+    expect(h).toMatchObject({ parentId: g.id, group: g.group });
+    expect(h.hidden).toBeUndefined();
+    expect(r.plan.budgetPlan!.opening).toMatchObject({ [g.id]: 660, [h.id]: 20 });
+    expect(r.txns.find((t) => t.payee === "Target")!.splits!.map((x) => x.categoryId)).toEqual([g.id, h.id]);
+    // archived: history only, still under it
+    const old = buildImport(plan, d, { ...opts, categoryMap: { [categoryKey("Everyday", "Household")]: { action: "sub", under: groceries, archived: true } } });
+    expect(old.plan.budget.find((b) => b.name === "Household")).toMatchObject({ hidden: true, amount: 0, parentId: old.plan.budget.find((b) => b.name === "Groceries")!.id });
+  });
+
   it("a category can be money moved into an investment account (not spending)", () => {
     const { plan, d, opts } = base();
     const r = buildImport(plan, d, { ...opts, categoryMap: { [categoryKey("Savings", "Roth IRA")]: { action: "invest", account: "ynab:Roth IRA" } } });

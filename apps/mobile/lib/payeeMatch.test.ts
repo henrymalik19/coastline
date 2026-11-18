@@ -47,7 +47,7 @@ describe("matching categories by where the money went", () => {
     };
     const cats = [{ group: "Everyday", name: "Groceries", average: 400 }, { group: "Everyday", name: "Food (old)", average: 0 }];
     const s = suggestCategories(freshPlan(), d, cats, "2026-11-18");
-    expect(s[K("Everyday", "Food (old)")]).toEqual({ action: "combine", into: K("Everyday", "Groceries") });
+    expect(s[K("Everyday", "Food (old)")]).toEqual({ action: "sub", under: K("Everyday", "Groceries"), archived: true });
   });
 });
 

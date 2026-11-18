@@ -12,6 +12,7 @@ import { fullName } from "./company";
 import { OUTSIDE } from "./outside";
 import { CLOSED_ACCOUNTS_GROUP } from "./budgetOrder";
 import { linkDebtCategories, PAYS } from "./debtLink";
+import { moveUnder } from "./subcats";
 
 /* ---------- reading the files ---------- */
 
@@ -321,7 +322,12 @@ export type CategoryChoice =
   /** Money moved into an account (an IRA, an HSA): "plan:<id>" for one of yours, "ynab:<name>" for one the import adds. */
   | { action: "invest"; account: string }
   /** A new category that pays a loan (each home's PITI its own mortgage): "plan:<id>" for one of yours, "ynab:<name>" for one the import adds. */
-  | { action: "loan"; debt: string };
+  | { action: "loan"; debt: string }
+  /**
+   * A sub category of another of YNAB's (its categoryKey): keeps its own name, transactions and amounts,
+   * under that one. `archived`: history only (an old category), no amount, not on the budget.
+   */
+  | { action: "sub"; under: string; archived?: boolean };
 
 /** The plan's category a YNAB category most likely is: the same name, or the Emergency fund for an emergency fund. */
 export function suggestCategory(plan: PlanState, c: Pick<YnabCategory, "name"> & { group?: string }): CategoryChoice {
@@ -400,11 +406,12 @@ export function suggestCategories(plan: PlanState, d: YnabData, cats: YnabCatego
     if (!main) continue;
     for (const c of list) if (c !== main && !noNote(c)) out[categoryKey(c.group, c.name)] = { action: "combine", into: categoryKey(main.group, main.name) };
   }
-  // an old or hidden one whose transactions went to the same places as one you use: combined into it
+  // an old or hidden one whose transactions went to the same places as one you use: kept under it, as an
+  // archived sub category (its name and history stay, filed under the right category)
   const isOld = (k: string) => out[k]!.action === "hidden" || (out[k]!.action === "new" && !used.has(k));
   const from = cats.map((c) => categoryKey(c.group, c.name)).filter(isOld);
   const into = cats.map((c) => categoryKey(c.group, c.name)).filter((k) => (out[k]!.action === "new" || out[k]!.action === "match" || out[k]!.action === "loan") && used.has(k));
-  for (const [k, m] of Object.entries(payeeMatches(d, from, into))) out[k] = { action: "combine", into: m.into };
+  for (const [k, m] of Object.entries(payeeMatches(d, from, into))) out[k] = { action: "sub", under: m.into, archived: true };
   return out;
 }
 
@@ -572,6 +579,8 @@ export type ImportResult = {
     debtCategoriesLinked: number;
     /** YNAB categories combined into another one (one category here for both). */
     categoriesCombined: number;
+    /** YNAB categories brought in as a sub category of another. */
+    categoriesAsSub: number;
     /** Older ones without a category: kept as history, nothing to do. */
     olderWithoutCategory: number;
     /** Transfers to accounts you left out: kept as transfers, nothing to do. */
@@ -756,7 +765,7 @@ function overspentBy(start: number, spending: { date: string; i: number; account
 /** Turn YNAB's data into the plan's categories, assignments, accounts and transactions. */
 export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): ImportResult {
   const plan = structuredClone(input);
-  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, notApprovedInYnab: 0, debtCategoriesLinked: 0, categoriesCombined: 0, olderWithoutCategory: 0, transfersOutside: 0 };
+  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, notApprovedInYnab: 0, debtCategoriesLinked: 0, categoriesCombined: 0, categoriesAsSub: 0, olderWithoutCategory: 0, transfersOutside: 0 };
   // only this month's and last month's transactions are asked for a category (older ones are history)
   const [ty, tm] = o.thisMonth.split("-").map(Number) as [number, number];
   const recentFrom = tm === 1 ? `${ty - 1}-12-01` : `${ty}-${String(tm - 1).padStart(2, "0")}-01`;
@@ -825,12 +834,14 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   // named like the account, so they go together under Closed accounts (not among your categories)
   const accountNames = new Set(d.txns.map((t) => norm(t.account)));
   const combined: YnabCategory[] = [];
+  const asSub: YnabCategory[] = [];
   for (const c of cats) {
     const k = categoryKey(c.group, c.name);
     const opts = o.categories[k] ?? { inRetirement: true, essential: true };
     const ch = o.categoryMap?.[k] ?? suggestCategory(plan, c);
     if (ch.action === "skip") { summary.categoriesSkipped++; continue; }
     if (ch.action === "combine") { combined.push(c); continue; }
+    if (ch.action === "sub") { asSub.push(c); continue; }
     if (ch.action === "invest") {
       // money moved into an account: an investing category for it (not spending)
       const accountId = ch.account.startsWith("plan:") ? ch.account.slice(5) : idOf.get(ch.account.slice(5));
@@ -902,6 +913,38 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     const item = plan.budget.find((b) => b.id === id);
     if (item && !item.hidden) item.amount = Math.round((item.amount + (o.amounts?.[k] ?? c.average)) * 100) / 100;
     summary.categoriesCombined++;
+  }
+  // sub categories: under the category their target became (one level: under a sub category's own category)
+  for (const c of asSub) {
+    const k = categoryKey(c.group, c.name);
+    const ch = o.categoryMap?.[k];
+    if (ch?.action !== "sub") continue;
+    // under another one going in as a sub category: under that one's category instead
+    const t = o.categoryMap?.[ch.under];
+    const root = rootOf(t?.action === "sub" ? t.under : ch.under);
+    let parent = root ? plan.budget.find((b) => b.id === itemOf.get(root)) : undefined;
+    if (parent?.parentId) parent = plan.budget.find((b) => b.id === parent!.parentId);
+    const id = idFor("cat", k);
+    itemOf.set(k, id);
+    const archived = !!ch.archived || !!parent?.hidden;
+    if (!parent || parent.accountId || parent.id === "cash") {
+      // nowhere to go under: on its own (hidden when it was to be history only)
+      const item: BudgetItem = { id, name: c.name, amount: archived ? 0 : o.amounts?.[k] ?? c.average, inRetirement: true, group: groupFor(c.group) || undefined, ...(archived ? { hidden: true } : {}) };
+      plan.budget.push(item);
+      if (archived) summary.categoriesHidden++;
+      else summary.categoriesAdded++;
+      continue;
+    }
+    const opts = o.categories[k] ?? { inRetirement: parent.inRetirement, essential: parent.essential !== false };
+    const item: BudgetItem = {
+      id, name: c.name, parentId: parent.id, group: parent.group,
+      amount: archived ? 0 : o.amounts?.[k] ?? c.average,
+      inRetirement: opts.inRetirement, ...(opts.essential === false ? { essential: false } : {}),
+      ...(archived ? { hidden: true } : {}),
+    };
+    // a shown one sits with its category's family; an archived one goes last, with the other hidden ones
+    plan.budget = archived ? [...plan.budget, item] : moveUnder([...plan.budget, item], id, parent.id);
+    summary.categoriesAsSub++;
   }
   // a category that pays one of your loans (a mortgage's PITI): linked to it, so it isn't counted twice
   summary.debtCategoriesLinked += linkDebtCategories(plan);

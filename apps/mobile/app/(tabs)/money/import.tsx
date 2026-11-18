@@ -47,7 +47,9 @@ const unusedCategory = (d: YnabData, c: { group: string; name: string; average: 
     !d.txns.some((t) => recent(t.date.slice(0, 7)) && (same(t.group, t.category) || (t.splits ?? []).some((x) => same(x.group, x.category))));
 };
 /** Left out, or kept as a hidden category: either way it has no monthly amount or retirement switches. */
-const offBudget = (c?: CategoryChoice) => c?.action === "skip" || c?.action === "hidden" || c?.action === "combine" || c?.action === "invest";
+const offBudget = (c?: CategoryChoice) => c?.action === "skip" || c?.action === "hidden" || c?.action === "combine" || c?.action === "invest" || c?.action === "sub";
+/** The YNAB category a combined or sub category goes with. */
+const joinsTo = (c?: CategoryChoice) => (c?.action === "combine" ? c.into : c?.action === "sub" ? c.under : undefined);
 const KIND_LABEL = { cash: "Checking or savings", card: "Credit card", invest: "Investment (tracking)", loan: "Loan (tracking)" } as const;
 const ACCT_INFO =
   "Same as one you already have (its balance and transactions join it), a new account, or left out. Closed and empty accounts start left out.";
@@ -178,8 +180,9 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     const m: Record<string, { payees: string[]; matched: number; of: number }> = {};
     if (!data) return m;
     for (const [k, ch] of Object.entries(catMap)) {
-      if (ch.action !== "combine") continue;
-      const hit = payeeMatches(data, [k], [ch.into], { minTxns: 1, minShare: 0 })[k];
+      const to = joinsTo(ch);
+      if (!to) continue;
+      const hit = payeeMatches(data, [k], [to], { minTxns: 1, minShare: 0 })[k];
       if (hit) m[k] = hit;
     }
     return m;
@@ -282,8 +285,9 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     // only when the list opens (a new file, or coming back to Accounts): not on every change you make in it
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, tab]);
-  const isCombined = (c: { group: string; name: string }) => catMap[categoryKey(c.group, c.name)]?.action === "combine";
-  const combinedInto = (k: string) => categories.filter((c) => { const ch = catMap[categoryKey(c.group, c.name)]; return ch?.action === "combine" && ch.into === k; });
+  // combined into another, or a sub category of another: listed with that one, not on its own
+  const isCombined = (c: { group: string; name: string }) => !!joinsTo(catMap[categoryKey(c.group, c.name)]);
+  const combinedInto = (k: string) => categories.filter((c) => joinsTo(catMap[categoryKey(c.group, c.name)]) === k);
   // old cards' payment lines left out (empty): a section of their own
   const oldCards = data ? categories.filter((c) => catMap[categoryKey(c.group, c.name)]?.action === "skip" && /^hidden categories$/i.test(c.group) && ynabAccounts(data).some((a) => a.name.trim().toLowerCase() === c.name.trim().toLowerCase())) : [];
   const unusedCats = data ? categories.filter((c) => !isCombined(c) && !oldCards.includes(c) && !combinedInto(categoryKey(c.group, c.name)).length && unusedCategory(data, c, since)) : [];
@@ -399,14 +403,19 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   };
   const setRowGroup = (k: string, g: string, v: string) =>
     setCatGroup(({ [k]: _, ...m }) => (v === groupTarget(g) ? m : { ...m, [k]: v }));
-  const catValue = (c: CategoryChoice | undefined) => (!c ? "new" : c.action === "match" ? "match:" + c.id : c.action === "combine" ? "combine:" + c.into : c.action === "invest" ? "invest:" + c.account : c.action === "loan" ? "loan:" + c.debt : c.action);
+  const catValue = (c: CategoryChoice | undefined) => (!c ? "new" : c.action === "match" ? "match:" + c.id : c.action === "combine" ? "combine:" + c.into : c.action === "sub" ? "sub:" + c.under : c.action === "invest" ? "invest:" + c.account : c.action === "loan" ? "loan:" + c.debt : c.action);
   const setCat = (k: string, v: string) =>
     setCatMap((m) => {
-      const ch: CategoryChoice = v.startsWith("match:") ? { action: "match", id: v.slice(6) } : v.startsWith("combine:") ? { action: "combine", into: v.slice(8) } : v.startsWith("invest:") ? { action: "invest", account: v.slice(7) } : v.startsWith("loan:") ? { action: "loan", debt: v.slice(5) } : { action: v as "new" | "hidden" | "skip" };
+      const ch: CategoryChoice = v.startsWith("match:") ? { action: "match", id: v.slice(6) } : v.startsWith("combine:") ? { action: "combine", into: v.slice(8) } : v.startsWith("sub:") ? { action: "sub", under: v.slice(4), ...(data && unusedOf(k) ? { archived: true } : {}) } : v.startsWith("invest:") ? { action: "invest", account: v.slice(7) } : v.startsWith("loan:") ? { action: "loan", debt: v.slice(5) } : { action: v as "new" | "hidden" | "skip" };
       const next = { ...m, [k]: ch };
       // ones combined into this one go with it: left out together, or into the same one
       if (ch.action !== "new" && ch.action !== "hidden" && ch.action !== "match" && ch.action !== "loan")
-        for (const [x, c2] of Object.entries(m)) if (c2.action === "combine" && c2.into === k) next[x] = ch.action === "combine" ? { action: "combine", into: ch.into } : ch.action === "skip" ? { action: "skip" } : { action: "new" };
+        for (const [x, c2] of Object.entries(m)) {
+          if (joinsTo(c2) !== k) continue;
+          // the ones with it go along: into the same one, under its new category, left out, or on their own
+          const to = joinsTo(ch);
+          next[x] = to ? (c2.action === "sub" ? { ...c2, under: to } : { action: "combine", into: to }) : ch.action === "skip" ? { action: "skip" } : { action: "new" };
+        }
       return next;
     });
   // investment accounts money can be moved into: yours, and the ones this import adds
@@ -426,13 +435,17 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
       ...accounts.filter((a) => a.kind === "loan" && (choices[a.name]?.action ?? "add") === "add").map((a) => one("loan:ynab:" + a.name, `Pays ${a.name}`, "Added by this import")),
     ];
   };
+  // the YNAB categories one can go with (not itself, nor one that's combined, a sub category, left out or investing)
+  const joinable = (k: string) =>
+    categories.filter((c) => { const k2 = categoryKey(c.group, c.name); const ch2 = catMap[k2]; return k2 !== k && !joinsTo(ch2) && ch2?.action !== "skip" && ch2?.action !== "invest"; });
+  // not used lately: as a sub category it comes in archived (history only)
+  const unusedOf = (k: string) => { const c = categories.find((x) => categoryKey(x.group, x.name) === k); return !!(data && c && unusedCategory(data, c, since)); };
   const rowOptions = (k: string) => [
     ...catOptions(k),
     ...loanTargets(k),
     ...investTargets.map((x) => ({ ...x, section: "Money moved into an account" })),
-    ...categories
-      .filter((c) => { const k2 = categoryKey(c.group, c.name); const ch2 = catMap[k2]; return k2 !== k && ch2?.action !== "combine" && ch2?.action !== "skip" && ch2?.action !== "invest"; })
-      .map((c) => ({ value: "combine:" + categoryKey(c.group, c.name), label: `Combine into ${c.name}`, hint: c.group, section: "Combine with another YNAB category" })),
+    ...joinable(k).map((c) => ({ value: "sub:" + categoryKey(c.group, c.name), label: `Under ${c.name}`, hint: `Keeps its name and transactions${unusedOf(k) ? " · archived (not used lately)" : ""}`, section: "As a sub category" })),
+    ...joinable(k).map((c) => ({ value: "combine:" + categoryKey(c.group, c.name), label: `Combine into ${c.name}`, hint: c.group, section: "Combine with another YNAB category: its name goes" })),
   ];
   const offNote = (ch?: CategoryChoice) =>
     ch?.action === "skip" ? "Not brought in" : ch?.action === "hidden" ? "Comes in hidden: keeps its transactions, not on your budget or plan" : ch?.action === "invest" ? "Money moved into the account: investing, not spending" : ch?.action === "loan" ? "Pays the loan: counted from Debts, not as spending" : "Savings, not spending";
@@ -443,7 +456,10 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
       <>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[type.body, { color: t.text, fontWeight: "600" }]} numberOfLines={1}>{c2.name}{countOf(c2)}</Text>
-          <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{sharedPayees[k2] ? `Same places: ${sharedPayees[k2]!.payees.join(", ")} · ${sharedPayees[k2]!.matched} of ${sharedPayees[k2]!.of}` : c2.group !== into.group ? `From ${c2.group}` : "Combined"}</Text>
+          <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{[
+            catMap[k2]?.action === "sub" ? ((catMap[k2] as { archived?: boolean }).archived ? "Sub category, archived" : "Sub category") : "Combined",
+            sharedPayees[k2] ? `same places: ${sharedPayees[k2]!.payees.slice(0, 2).join(", ")} · ${sharedPayees[k2]!.matched} of ${sharedPayees[k2]!.of}` : c2.group !== into.group && catMap[k2]?.action !== "sub" ? `from ${c2.group}` : "",
+          ].filter(Boolean).join(" · ")}</Text>
         </View>
         <View style={{ flexShrink: 0 }}>
           <Select plain label={`${c2.name}: becomes`} value="" placeholder="Change" options={rowOptions(k2)} onChange={(v) => setCat(k2, v)} />
@@ -465,7 +481,14 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
       <View key={k} style={{ gap: wide ? 0 : space.sm, padding: space.sm, borderRadius: radius.md, borderWidth: 1, borderColor: t.accent }}>
         <View style={[styles.row, { gap: space.sm, paddingHorizontal: space.xs }]}>
           <Text style={[type.label, { color: t.text, fontWeight: "700", flexShrink: 1 }]} numberOfLines={1}>{c.name}</Text>
-          <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{joined.length + 1} combined{offBudget(catMap[k]) ? "" : ` · ${money([c, ...joined].reduce((sum, x) => sum + (amounts[categoryKey(x.group, x.name)] ?? x.average), 0))}/mo`}</Text>
+          <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>
+            {(() => {
+              const subs = joined.filter((x) => catMap[categoryKey(x.group, x.name)]?.action === "sub");
+              const comb = joined.length - subs.length;
+              const live = [c, ...joined].filter((x) => { const ch2 = catMap[categoryKey(x.group, x.name)]; return !(ch2?.action === "sub" && ch2.archived); });
+              return [comb ? `${comb + 1} combined` : "", subs.length ? `${subs.length} sub` : "", offBudget(catMap[k]) ? "" : `${money(live.reduce((sum, x) => sum + (amounts[categoryKey(x.group, x.name)] ?? x.average), 0))}/mo`].filter(Boolean).join(" · ");
+            })()}
+          </Text>
         </View>
         {oneCategoryRow(c, grip)}
         {joined.map((c2) => combinedRow(c2, c))}
@@ -872,7 +895,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   ) : null;
   const stats = preview ? [
     { n: preview.summary.transactions, label: "Transactions", sub: preview.summary.transactionsMatched ? `replacing ${preview.summary.transactionsMatched} of yours` : "with starting balances" },
-    { n: preview.summary.categoriesAdded + preview.summary.categoriesUpdated, label: "Categories", sub: `${preview.summary.categoriesAdded} new · ${preview.summary.categoriesUpdated} matched${preview.summary.categoriesHidden ? ` · ${preview.summary.categoriesHidden} hidden` : ""}${preview.summary.categoriesSkipped ? ` · ${preview.summary.categoriesSkipped} left out` : ""}` },
+    { n: preview.summary.categoriesAdded + preview.summary.categoriesUpdated, label: "Categories", sub: `${preview.summary.categoriesAdded} new · ${preview.summary.categoriesUpdated} matched${preview.summary.categoriesAsSub ? ` · ${preview.summary.categoriesAsSub} sub` : ""}${preview.summary.categoriesCombined ? ` · ${preview.summary.categoriesCombined} combined` : ""}${preview.summary.categoriesHidden ? ` · ${preview.summary.categoriesHidden} hidden` : ""}${preview.summary.categoriesSkipped ? ` · ${preview.summary.categoriesSkipped} left out` : ""}` },
     { n: preview.summary.accountsAdded, label: "New accounts", sub: "the rest matched or left out" },
     { n: preview.summary.months, label: preview.summary.months === 1 ? "Month assigned" : "Months assigned", sub: "what you gave each category" },
   ] : [];
