@@ -22,6 +22,7 @@ import { ChangesLater, MonthlyAmount } from "../../components/ScheduleEditor";
 import { BILLS_GROUP, CLOSED_ACCOUNTS_GROUP, DEBTS_GROUP, groupOf, groupOrder, linkedGroupChoices, moveGroup, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
 import { archive, archiveSet, canBeSub, makeOwn, moveUnder, parentChoices, restore, subsOf } from "../../lib/subcats";
 import { foldSuggestions } from "../../lib/foldSuggest";
+import { AddCategories, type AddLine, type AddRequest } from "../../components/AddCategories";
 import { DragList, reorderAmong, useDragZone } from "../../components/DragList";
 import { newId } from "../../lib/store";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -76,6 +77,8 @@ export default function Budget() {
   const thisMonth = monthKey(start);
   const [month, setMonth] = useState(thisMonth);
   const [open, setOpen] = useState<string | null>(null);
+  // an open category shows its money; its settings (name, plan amount, group, combine, archive) fold away
+  const [settingsFor, setSettingsFor] = useState<string | null>(null);
   const [groupOpen, setGroupOpen] = useState<string | null>(null);
   const [hiddenOpen, setHiddenOpen] = useState(false);
   const imported = useImported();
@@ -200,35 +203,30 @@ export default function Budget() {
         p.budget[i] = next;
       }
     });
-  const addItem = (group: string) => {
-    const id = newId();
-    // a category added next to your savings is saving up, not spending you keep after you retire
-    const saving = cats.some((c) => c.group === group && c.kind === "saving");
+  /**
+   * Add what the add dialog asked for: each category in its group (after the group's last one) or under a
+   * category, as a sub category (same group and retirement switches). Nothing opens: set amounts after.
+   */
+  const addCategories = ({ lines }: { group?: string; lines: AddLine[] }) =>
     update((p) => {
-      // after the group's last shown category; a new group goes before the hidden ones (they stay at the end)
-      const firstHidden = p.budget.findIndex((x) => x.hidden);
-      const last = p.budget.map((x, i) => (!x.hidden && groupOf(x) === group ? i : -1)).filter((i) => i >= 0).at(-1) ?? (firstHidden < 0 ? p.budget.length : firstHidden) - 1;
-      p.budget.splice(last + 1, 0, { id, name: "", amount: 0, inRetirement: !saving, group, ...(saving ? { essential: false } : {}) });
+      for (const l of lines) {
+        const id = newId();
+        if (l.to.startsWith("under:")) {
+          const parent = p.budget.find((x) => x.id === l.to.slice(6));
+          if (!parent) continue;
+          p.budget = moveUnder([...p.budget, { id, name: l.name, amount: 0, inRetirement: parent.inRetirement, group: parent.group, ...(parent.essential === false ? { essential: false } : {}) }], id, parent.id);
+          continue;
+        }
+        const group = l.to.slice(6) || UNGROUPED;
+        // a category added next to your savings is saving up, not spending you keep after you retire
+        const saving = cats.some((c) => c.group === group && c.kind === "saving");
+        // after the group's last shown category; a new group goes before the hidden ones (they stay at the end)
+        const firstHidden = p.budget.findIndex((x) => x.hidden);
+        const last = p.budget.map((x, i) => (!x.hidden && groupOf(x) === group ? i : -1)).filter((i) => i >= 0).at(-1) ?? (firstHidden < 0 ? p.budget.length : firstHidden) - 1;
+        p.budget.splice(last + 1, 0, { id, name: l.name, amount: 0, inRetirement: !saving, group, ...(saving ? { essential: false } : {}) });
+      }
     });
-    setOpen(id);
-  };
-  /** A new sub category under a category: same group and retirement switches, listed after its others. */
-  const addSub = (parentId: string) => {
-    const parent = state.budget.find((x) => x.id === parentId);
-    if (!parent) return;
-    const id = newId();
-    update((p) => { p.budget = moveUnder([...p.budget, { id, name: "", amount: 0, inRetirement: parent.inRetirement, group: parent.group, ...(parent.essential === false ? { essential: false } : {}) }], id, parentId); });
-    setOpen(id);
-  };
-  const addGroup = () => {
-    // (the new group opens with its name ready to change)
-    const names = new Set(groupOrder(state.budget));
-    let name = "New group";
-    for (let n = 2; names.has(name); n++) name = `New group ${n}`;
-    addItem(name);
-    setGroupOpen(name);
-    setGroupDraft(name);
-  };
+  const [addReq, setAddReq] = useState<AddRequest | null>(null);
   const renameGroup = (from: string, to: string) =>
     update((p) => {
       const name = to.trim();
@@ -595,7 +593,7 @@ export default function Budget() {
           />
           <View style={[styles.chips, { justifyContent: "space-between" }]}>
             <Text style={[type.caption, { color: t.text3, flex: 1 }]}>{compact ? "Tap Reorder above the categories, then drag a grip to move one." : "Drag a category's grip to reorder it or move it to another group."}</Text>
-            {parentItem || linkedTo || it.paysDebt ? null : <Chip title="Add a sub category" icon="plus" onPress={() => addSub(it.id)} />}
+            {parentItem || linkedTo || it.paysDebt ? null : <Chip title="Add sub categories" icon="plus" onPress={() => setAddReq({ kind: "category", to: "under:" + it.id })} />}
             {linkedTo ? null : (
               <Chip
                 title="Archive"
@@ -766,7 +764,7 @@ export default function Budget() {
             {grip}
             <View style={{ flexShrink: 1, minWidth: 0 }}>
               <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{shownName}</Text>
-              {opts.total ? <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>Available includes its sub categories</Text> : null}
+              {opts.total ? <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>Available incl. its subs</Text> : null}
               {/* phones: under the name, so the name keeps its line */}
               {overLast.has(c.key) && compact ? (
                 <Text style={[type.caption, { color: t.bad, fontWeight: "700", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>−{money(overLast.get(c.key)!)} over last month</Text>
@@ -948,7 +946,31 @@ export default function Budget() {
                 </Pressable>
               );
             })()}
-            {categoryEditor(c)}
+            {(() => {
+              // shown open for an archived one (restoring is what it's for) and right after combining (Undo)
+              const shown = settingsFor === c.key || c.hidden || combined?.into === c.key;
+              return (
+                <>
+                  {c.hidden || combined?.into === c.key ? null : (
+                    <Pressable
+                      role="button"
+                      aria-expanded={shown}
+                      onPress={() => setSettingsFor(shown ? null : c.key)}
+                      hitSlop={6}
+                      style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.border }, pressed ? { opacity: 0.7 } : null]}
+                    >
+                      <Icon name="gear" size={16} color={t.text2} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[type.label, { color: t.text, fontWeight: "600" }]}>Settings</Text>
+                        <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{c.kind === "spending" ? "Name, plan amount, group, combine, archive" : "What it's for, and where it's set"}</Text>
+                      </View>
+                      <Icon name={shown ? "up" : "down"} size={14} color={t.text3} />
+                    </Pressable>
+                  )}
+                  {shown ? categoryEditor(c) : null}
+                </>
+              );
+            })()}
             <Text style={[type.caption, { color: t.text3 }]}>
               {l.carried > 0.5 ? `${money(l.carried)} carried over from last month. ` : ""}
               {overLast.has(c.key) ? `It went ${money(overLast.get(c.key)!)} over last month: that came out of this month's Unassigned. Assign a little more if it keeps happening. ` : ""}
@@ -1107,7 +1129,7 @@ export default function Budget() {
                       </FormRow>
                     </FormList>
                     <View style={styles.chips}>
-                      <Chip title="Add category" icon="plus" tone="accent" onPress={() => addItem(g.name)} />
+                      <Chip title="Add categories" icon="plus" tone="accent" onPress={() => setAddReq({ kind: "category", to: "group:" + g.name })} />
                       {ownGroup(g) ? (
                         <>
                           <Chip title="Earlier" icon="up" disabled={groupOrder(state.budget)[0] === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, -1); })} />
@@ -1222,8 +1244,8 @@ export default function Budget() {
             <Icon name="chevron" size={12} color={t.accent} />
           </Pressable>
           <View style={styles.editRow}>
-            <Button title="Add a group" icon="plus" onPress={addGroup} style={{ minHeight: 36 }} />
-            <Button title={`Add to ${groupOrder(state.budget)[0] ?? UNGROUPED}`} icon="plus" tone="ghost" onPress={() => addItem(groupOrder(state.budget)[0] ?? UNGROUPED)} style={{ minHeight: 36 }} />
+            <Button title="Add a group" icon="plus" onPress={() => setAddReq({ kind: "group" })} style={{ minHeight: 36 }} />
+            <Button title="Add categories" icon="plus" tone="ghost" onPress={() => setAddReq({ kind: "category", to: "group:" + (groupOrder(state.budget)[0] ?? UNGROUPED) })} style={{ minHeight: 36 }} />
           </View>
           <Text style={[type.caption, { color: t.text3 }]}>
             Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement && !x.accountId && !x.hidden).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number.{" "}
@@ -1248,6 +1270,13 @@ export default function Budget() {
           <Text style={[type.body, { color: t.text2 }]}>Your budget starts in {nameOf(b.start)}.</Text>
         </Card>
       )}
+      <AddCategories
+        request={addReq}
+        groups={groupNames}
+        parents={state.budget.filter((x) => !x.hidden && !x.parentId && !x.accountId && !x.paysDebt).map((x) => ({ id: x.id, name: x.name, group: groupOf(x) }))}
+        onClose={() => setAddReq(null)}
+        onSave={addCategories}
+      />
       {adding ? (
         <TxnForm
           txn={adding.txn}
