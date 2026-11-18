@@ -19,6 +19,8 @@ import { ensureSpouseStep, spouseName } from "../lib/spouse";
 import { sticky } from "../lib/sticky";
 import { fullName } from "../lib/company";
 import { CompanyField, NameWithCompany } from "./CompanyField";
+import { useLayout } from "../lib/layout";
+import { ReorderToggle } from "./ReorderToggle";
 
 export const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: "pretax", label: "Pre-tax" },
@@ -68,6 +70,10 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
   const txns = useStore((s) => s.txns);
   const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
+  // phones: the drag grips only while reordering (so a scroll doesn't move an account by accident)
+  const compact = useLayout().contentWidth < 600;
+  const [reorder, setReorder] = useState(false);
+  const grips = !compact || reorder;
   const thisMonth = monthKey(start);
   const accounts = state.accounts;
 
@@ -86,6 +92,11 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
 
   return (
     <View style={{ gap: space.md }}>
+      {compact && accounts.length + cards.length > 1 ? (
+        <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+          <ReorderToggle on={reorder} onChange={setReorder} what="accounts" />
+        </View>
+      ) : null}
       {accounts.length || cards.length ? (
         ACCOUNT_GROUPS.map((g) => {
           const inGroup = (x: Account) => groupKeyOf(x) === g.key;
@@ -104,6 +115,7 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
                   count={list.length}
                   keyOf={(n) => list[n]!.id}
                   nameOf={(n) => fullName(list[n]!, "Unnamed account")}
+                  grips={grips}
                   onMove={(from, to) => update((p) => { p.accounts = reorderAmong(p.accounts, inGroup, from, to); })}
                   renderItem={(n, grip) => {
                     const a = list[n]!;
@@ -228,6 +240,7 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
               count={cards.length}
               keyOf={(n) => cards[n]!.id}
               nameOf={(n) => fullName(cards[n]!, "Credit card")}
+              grips={grips}
               onMove={(from, to) => update((p) => { p.debts = reorderAmong(p.debts, isCard, from, to); })}
               renderItem={(n, grip) => {
                 const d = cards[n]!;

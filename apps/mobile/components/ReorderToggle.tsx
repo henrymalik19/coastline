@@ -3,13 +3,13 @@ import { Pressable, Text } from "react-native";
 import { Icon } from "./Icon";
 import { type, useTheme } from "../lib/theme";
 
-export function ReorderToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+export function ReorderToggle({ on, onChange, what = "categories" }: { on: boolean; onChange: (on: boolean) => void; /** What's being reordered, for screen readers. */ what?: string }) {
   const t = useTheme();
   return (
     <Pressable
       role="button"
       aria-pressed={on}
-      accessibilityLabel={on ? "Done reordering" : "Reorder categories"}
+      accessibilityLabel={on ? "Done reordering" : `Reorder ${what}`}
       onPress={() => onChange(!on)}
       hitSlop={8}
       style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 2, opacity: pressed ? 0.6 : 1 }]}

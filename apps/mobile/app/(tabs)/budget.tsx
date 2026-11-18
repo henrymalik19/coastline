@@ -5,6 +5,7 @@
  */
 import { ReorderToggle } from "../../components/ReorderToggle";
 import { fullName } from "../../lib/company";
+import { debtItPays } from "../../lib/debtLink";
 import { ImportUndoReminder, useImported } from "../../components/ImportUndo";
 import { BUDGET_ITEM, budgetCategories, budgetView, SAVINGS_GROUP, spendingHistory, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
@@ -563,6 +564,9 @@ export default function Budget() {
     const isOpen = open === c.key;
     const dupItem = c.kind === "spending" && !c.account ? state.budget.find((x) => x.id === c.key) : undefined;
     const dup = dupItem && !dupItem.noSuggest ? suggestedAccount(state, c.name) : undefined;
+    // a category that pays one of your loans (a mortgage's PITI): linked, or likely to be
+    const paysLoan = dupItem?.paysDebt ? state.debts.find((x) => x.id === dupItem.paysDebt) : undefined;
+    const loan = !dup && dupItem ? debtItPays(state, dupItem) : undefined;
     return (
       <View key={c.key} nativeID={"cat-" + c.key}>
         <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, pressed ? { backgroundColor: t.surface2 } : null]}>
@@ -581,7 +585,7 @@ export default function Budget() {
                 <Text style={[type.caption, { color: t.bad, fontWeight: "700", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>{money(cardShort(c, l))} short of the balance</Text>
               ) : null}
             </View>
-            {dup ? <Icon name="info" size={14} color={t.warn} /> : null}
+            {dup || loan ? <Icon name="info" size={14} color={t.warn} /> : null}
             {realBy.has(c.key) ? (
               <View style={[styles.realTag, { backgroundColor: t.warnSoft }]} accessibilityLabel={`You really spend about ${money(realBy.get(c.key)!.avg, { whole: true })} a month`}>
                 <Text style={[type.caption, { color: t.warn, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>~{money(realBy.get(c.key)!.avg, { whole: true })}</Text>
@@ -609,6 +613,26 @@ export default function Budget() {
                   <Chip title={`Link to ${dup.name}`} tone="accent" icon="check" onPress={() => linkItem(c.key, dup.id)} />
                   <Chip title="It's spending" icon="close" onPress={() => editItem(c.key, { noSuggest: true })} />
                 </View>
+              </View>
+            ) : null}
+            {loan ? (
+              <View style={[styles.dupBox, { backgroundColor: t.warnSoft, borderColor: t.warn }]}>
+                <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Does this pay your {debtLabel(loan)} {loan.kind === "mortgage" ? "mortgage" : "loan"}?</Text>
+                <Text style={[type.caption, { color: t.text2 }]}>
+                  Its payment is {money(loan.minPayment)} a month, already in your plan from Debts. Right now this category counts too, so the payment is counted twice (in your retirement number too). Link it and it's counted once.
+                </Text>
+                <View style={styles.chips}>
+                  <Chip title="Yes, link it" tone="accent" icon="check" onPress={() => editItem(c.key, { paysDebt: loan.id })} />
+                  <Chip title="It's something else" icon="close" onPress={() => editItem(c.key, { noSuggest: true })} />
+                </View>
+              </View>
+            ) : null}
+            {paysLoan ? (
+              <View style={{ gap: 4 }}>
+                <Text style={[type.caption, { color: t.text2 }]}>
+                  Pays your {debtLabel(paysLoan)} {paysLoan.kind === "mortgage" ? "mortgage" : "loan"}. Your plan counts it from Debts: the payment until it's paid off{paysLoan.kind === "mortgage" ? ", then the home's taxes and insurance" : ""}. So this category isn't counted again in your spending or retirement number.
+                </Text>
+                <Text role="button" onPress={() => editItem(c.key, { paysDebt: undefined, noSuggest: true })} style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Unlink</Text>
               </View>
             ) : null}
             <View style={styles.section}>

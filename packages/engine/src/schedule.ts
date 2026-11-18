@@ -88,7 +88,8 @@ export function valueIn(p: Pick<PlanSettings, "schedule" | "scheduleMonths"> | u
 }
 
 /** A budget item that's spending in your plan (not money moved to one of your accounts, and not hidden). */
-export const isSpendingItem = (b: { accountId?: string; hidden?: boolean }): boolean => !b.accountId && !b.hidden;
+/** Spending: not money moved to an account, not hidden, and not a category that pays one of your debts (that's counted from Debts). */
+export const isSpendingItem = (b: { accountId?: string; hidden?: boolean; paysDebt?: string }): boolean => !b.accountId && !b.hidden && !b.paysDebt;
 
 /**
  * The account a budget item moves money to, when it's one the plan adds to (an IRA, a brokerage, an

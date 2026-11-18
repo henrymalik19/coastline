@@ -11,6 +11,7 @@ export function fullPlan(): PlanState {
     healthcare: 3500,
     medicare: 800,
     retireSpending: 96000,
+    retireAmountsFrom: "assigned",
     currentInvestMonthly: 250,
     filingStatus: "mfj",
     spouse: { name: "Sam", age: 33 },
@@ -28,6 +29,7 @@ export function fullPlan(): PlanState {
       { id: "food", name: "Groceries", amount: 900, inRetirement: true, group: "Food", essential: true, keptAt: 1050 },
       { id: "roth", name: "Roth IRA", amount: 500, inRetirement: false, group: "Savings", essential: false, noSuggest: true, accountId: "ira" },
       { id: "moving", name: "Moving", amount: 0, inRetirement: false, group: "Life", hidden: true },
+      { id: "piti", name: "PITI", amount: 3572.77, inRetirement: true, group: "840 Madison", paysDebt: "m", retireAmount: 1235.5 },
     ],
     accounts: [
       { id: "ira", name: "Roth IRA", type: "roth", balance: 12000.12, counts: "ira", owner: "spouse", plaidAccountId: "p1" },

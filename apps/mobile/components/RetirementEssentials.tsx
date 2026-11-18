@@ -4,7 +4,9 @@
  * emergency). One list, so you can answer it all at once.
  */
 import { StyleSheet, Text, View } from "react-native";
-import { FieldRow, InlineSwitch, NumberInput, Select } from "./form";
+import { Chip, FieldRow, InlineMoney, InlineSwitch, NumberInput, Select } from "./form";
+import { debtItPays } from "../lib/debtLink";
+import { debtLabel } from "../lib/debts";
 import { Card, Divider } from "./ui";
 import { groupOf, groupOrder } from "../lib/budgetOrder";
 import { money } from "../lib/format";
@@ -14,17 +16,24 @@ import { space, type, useTheme } from "../lib/theme";
 
 export function RetirementEssentials() {
   const t = useTheme();
-  const { state, result } = usePlan();
+  const { state, result, start } = usePlan();
   const update = useStore((s) => s.update);
   const d = result.d;
   // investing categories (money moved into an account) aren't spending, so they aren't here
   const items = state.budget.filter((b) => !b.accountId && !b.hidden);
-  const set = (id: string, patch: { inRetirement?: boolean; essential?: boolean }) =>
+  const set = (id: string, patch: { inRetirement?: boolean; essential?: boolean; retireAmount?: number; paysDebt?: string; noSuggest?: boolean }) =>
     update((p) => {
       const it = p.budget.find((x) => x.id === id);
       if (it) Object.assign(it, patch);
     });
-  const afterRetiring = items.filter((b) => b.inRetirement).reduce((a, b) => a + b.amount, 0);
+  // what each costs in retirement: its own amount, else (by your choice) its plan amount or this month's assigned
+  const fromAssigned = state.retireAmountsFrom === "assigned";
+  const assignedNow = state.budgetPlan?.months?.[`${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`]?.assigned ?? {};
+  const usual = (b: (typeof items)[number]) => (fromAssigned ? Math.max(0, assignedNow[b.id] ?? 0) : b.amount);
+  const retireOf = (b: (typeof items)[number]) => (b.retireAmount !== undefined ? b.retireAmount : usual(b));
+  const clearOwn = (id: string) => update((p) => { const it = p.budget.find((x) => x.id === id); if (it) delete it.retireAmount; });
+  const setOwn = (b: (typeof items)[number], v: number) => update((p) => { const it = p.budget.find((x) => x.id === b.id); if (!it) return; if (Math.abs(v - usual(b)) < 0.005) delete it.retireAmount; else it.retireAmount = v; });
+  const afterRetiring = items.filter((b) => b.inRetirement && !b.paysDebt).reduce((a, b) => a + retireOf(b), 0);
   const essential = items.filter((b) => b.essential !== false).reduce((a, b) => a + b.amount, 0);
   const groups = groupOrder(items);
 
@@ -70,8 +79,16 @@ export function RetirementEssentials() {
       </Card>
       <Card style={{ gap: space.sm }}>
         <Text style={[type.body, { color: t.text2 }]}>
-          For each category: would you still pay it after you retire, and is it essential (what you'd keep paying in a money emergency)?
+          For each category: would you still pay it after you retire, and what would it cost then? And is it essential (what you'd keep paying in a money emergency)?
         </Text>
+        <FieldRow label="Amounts from" info="What a category costs in retirement unless you type its own amount: its plan amount (from YNAB, the average you assigned lately), or what you assigned it this month on the Budget.">
+          <Select
+            label="Retirement amounts from"
+            value={fromAssigned ? "assigned" : "plan"}
+            options={[{ value: "plan", label: "Plan amounts" }, { value: "assigned", label: "This month's assigned" }]}
+            onChange={(v) => update((p) => { if (v === "assigned") p.retireAmountsFrom = "assigned"; else delete p.retireAmountsFrom; })}
+          />
+        </FieldRow>
         <View style={styles.totals}>
           <View style={[styles.total, { backgroundColor: t.surface2 }]}>
             <Text style={[type.title, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(afterRetiring, { whole: true })}<Text style={[type.caption, { color: t.text3 }]}>/mo</Text></Text>
@@ -98,7 +115,7 @@ export function RetirementEssentials() {
         </View>
         {groups.map((g, gi) => {
           const list = items.filter((b) => groupOf(b) === g);
-          const sum = list.filter((b) => b.inRetirement).reduce((a, b) => a + b.amount, 0);
+          const sum = list.filter((b) => b.inRetirement && !b.paysDebt).reduce((a, b) => a + retireOf(b), 0);
           return (
             <View key={g} style={{ gap: 2 }}>
               {gi > 0 ? <Divider /> : null}
@@ -106,20 +123,65 @@ export function RetirementEssentials() {
                 <Text style={[type.overline, { color: t.text2, flex: 1 }]}>{g}</Text>
                 <Text style={[type.caption, { color: t.text3 }]}>{money(sum, { whole: true })}/mo after retiring</Text>
               </View>
-              {list.map((b) => (
-                <View key={b.id} style={styles.row}>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{b.name || "Category"}</Text>
-                    <Text style={[type.caption, { color: t.text3 }]}>{money(b.amount, { whole: true })}/mo</Text>
+              {list.map((b) => {
+                const name = b.name || "Category";
+                const linked = b.paysDebt ? state.debts.find((x) => x.id === b.paysDebt) : undefined;
+                const loan = linked ? undefined : debtItPays(state, b);
+                const what = (d: { kind?: string }) => (d.kind === "mortgage" ? "mortgage" : "loan");
+                // a category that pays a loan: counted from Debts (until it's paid off), so not here
+                if (linked)
+                  return (
+                    <View key={b.id} style={styles.row}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[type.body, { color: t.text3 }]} numberOfLines={1}>{name}</Text>
+                        <Text style={[type.caption, { color: t.text3 }]}>
+                          Pays your {debtLabel(linked)} {what(linked)}: counted from Debts until it's paid off{linked.kind === "mortgage" ? ", then the home's taxes and insurance" : ""}.
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                const own = b.retireAmount !== undefined;
+                return (
+                  <View key={b.id} style={{ gap: 2 }}>
+                    <View style={styles.row}>
+                      {/* the name on its own line, the amount under it (so the name isn't cut short on a phone) */}
+                      <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                        <Text style={[type.body, { color: b.inRetirement ? t.text : t.text3 }]} numberOfLines={1}>{name}</Text>
+                        {b.inRetirement ? (
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" }}>
+                            <InlineMoney compact label={`${name}: a month in retirement`} value={retireOf(b)} onChange={(v) => setOwn(b, v)} />
+                            {own ? (
+                              <Text style={[type.caption, { color: t.text3 }]}>
+                                now {money(usual(b), { whole: true })} ·{" "}
+                                <Text role="button" onPress={() => clearOwn(b.id)} style={{ color: t.accent, fontWeight: "700" }}>Same</Text>
+                              </Text>
+                            ) : null}
+                          </View>
+                        ) : (
+                          <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]}>{money(usual(b), { whole: true })}/mo now</Text>
+                        )}
+                      </View>
+                      <View style={styles.col}>
+                        <InlineSwitch label={`${name}: still paid after you retire`} value={b.inRetirement} onChange={(v) => set(b.id, { inRetirement: v })} />
+                      </View>
+                      <View style={styles.col}>
+                        <InlineSwitch label={`${name}: essential`} value={b.essential !== false} onChange={(v) => set(b.id, { essential: v })} />
+                      </View>
+                    </View>
+                    {loan ? (
+                      <View style={[styles.loanBox, { backgroundColor: t.warnSoft }]}>
+                        <Text style={[type.caption, { color: t.text }]}>
+                          Pays your {debtLabel(loan)} {what(loan)}? Its payment is already in your plan from Debts, so right now it's counted twice.
+                        </Text>
+                        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs }}>
+                          <Chip title="Yes, link it" tone="accent" icon="check" onPress={() => set(b.id, { paysDebt: loan.id })} />
+                          <Chip title="It's something else" icon="close" onPress={() => set(b.id, { noSuggest: true })} />
+                        </View>
+                      </View>
+                    ) : null}
                   </View>
-                  <View style={styles.col}>
-                    <InlineSwitch label={`${b.name || "Category"}: still paid after you retire`} value={b.inRetirement} onChange={(v) => set(b.id, { inRetirement: v })} />
-                  </View>
-                  <View style={styles.col}>
-                    <InlineSwitch label={`${b.name || "Category"}: essential`} value={b.essential !== false} onChange={(v) => set(b.id, { essential: v })} />
-                  </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           );
         })}
@@ -135,6 +197,7 @@ export function RetirementEssentials() {
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: 4 },
   col: { width: 84, alignItems: "center", textAlign: "center" },
+  loanBox: { gap: 6, borderRadius: 10, padding: space.sm, marginBottom: space.xs },
   totals: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   total: { flexGrow: 1, flexBasis: 200, borderRadius: 10, padding: space.md, gap: 2 },
 });

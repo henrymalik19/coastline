@@ -63,7 +63,7 @@ const INCOME = auto(
 );
 const TAXES: Field[] = [["federal", "tax_federal"], ["state", "tax_state"], ["socialSecurity", "tax_social_security"], ["medicare", "tax_medicare"]];
 const DEDUCTION = auto("id", "kind", "amount", "debtId");
-const CATEGORY: Field[] = [...auto("id", "name", "amount", "inRetirement"), ["group", "group_name"], ...auto("essential", "noSuggest", "accountId", "keptAt", "hidden")];
+const CATEGORY: Field[] = [...auto("id", "name", "amount", "inRetirement"), ["group", "group_name"], ...auto("essential", "noSuggest", "accountId", "keptAt", "hidden", "retireAmount", "paysDebt")];
 const GOAL = auto("id", "name", "target", "saved", "budgetGroup");
 const RECURRING: Field[] = [["every", "every_months"], ["due", "due"], ["inRetirement", "in_retirement"], ["paidThrough", "paid_through"]];
 const RETIREMENT_INCOME = auto("id", "name", "kind", "monthly", "startAge");
@@ -71,7 +71,7 @@ const ADJUSTMENT = auto("id", "month", "kind", "amount", "note");
 const PROPERTY = auto("id", "name", "kind", "value", "mortgageId", "incomeId", "taxInsurance", "upkeep", "inRetirement", "vacancy");
 
 /* ---------- the plan row's columns ---------- */
-const TOP = auto("version", "age", "retireAge", "healthcare", "medicare", "retireSpending", "currentInvestMonthly", "ret", "vol", "fee", "swr", "taxRate", "contribGrowth", "filingStatus");
+const TOP = auto("version", "age", "retireAge", "healthcare", "medicare", "retireSpending", "retireAmountsFrom", "currentInvestMonthly", "ret", "vol", "fee", "swr", "taxRate", "contribGrowth", "filingStatus");
 const SETTINGS: Field[] = [
   ["steps", "steps"], ["starterEF", "starter_ef"], ["starterEFMonths", "starter_ef_months"], ["efMonths", "ef_months"], ["highApr", "high_apr"],
   ["marginalTax", "marginal_tax"], ["marginalTaxManual", "marginal_tax_manual"], ["hsaEligible", "hsa_eligible"], ["hsaFamily", "hsa_family"],

@@ -43,7 +43,15 @@ export function derive(s: PlanState, startDate: Date): Derived {
   // healthcare: your own insurance until Medicare at 65, then Medicare's cost; the difference until 65 is a bridge
   const healthRetired = s.medicare === undefined ? num(s.healthcare) : Math.max(0, num(s.medicare));
   const healthBridge = s.medicare === undefined ? 0 : Math.max(0, num(s.healthcare) - healthRetired) * 12 * Math.max(0, 65 - s.retireAge);
-  const retireMonthlyBudget = sum(budget.filter((b) => b.inRetirement).map((b) => b.amount)) + healthRetired + setAsideRetired + escrowMonthly + homeMonthly;
+  // each category you'd still pay: its own retirement amount, else this month's assigned (if you chose that), else its plan amount
+  const month = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, "0")}`;
+  const assignedNow = s.budgetPlan?.months?.[month]?.assigned ?? {};
+  const retireItems: Record<string, number> = {};
+  for (const b of budget) {
+    if (!b.inRetirement) continue;
+    retireItems[b.id] = Math.max(0, b.retireAmount !== undefined ? num(b.retireAmount) : s.retireAmountsFrom === "assigned" ? num(assignedNow[b.id]) : num(b.amount));
+  }
+  const retireMonthlyBudget = sum(Object.values(retireItems)) + healthRetired + setAsideRetired + escrowMonthly + homeMonthly;
   // a set yearly amount replaces the budget's total (it already covers healthcare from 65 and home costs)
   const retireSpendingSet = num(s.retireSpending) > 0;
   const retireMonthly = (retireSpendingSet ? num(s.retireSpending) / 12 : retireMonthlyBudget) * (1 + (w.spendDelta || 0));
@@ -100,6 +108,7 @@ export function derive(s: PlanState, startDate: Date): Derived {
     retireMonthly,
     retireAnnual: retireMonthly * 12,
     retireMonthlyBudget,
+    retireItems,
     retireSpendingSet,
     emergencyMonths: monthlyExpenses > 0 ? bal.cash / monthlyExpenses : Infinity,
     essentialExpenses,

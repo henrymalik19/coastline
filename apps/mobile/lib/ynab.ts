@@ -11,6 +11,7 @@ import { isCard } from "./register";
 import { fullName } from "./company";
 import { OUTSIDE } from "./outside";
 import { CLOSED_ACCOUNTS_GROUP } from "./budgetOrder";
+import { linkDebtCategories } from "./debtLink";
 
 /* ---------- reading the files ---------- */
 
@@ -418,6 +419,8 @@ export type ImportResult = {
      * counted in balances or the budget until you accept them, as in YNAB.
      */
     notApprovedInYnab: number;
+    /** Categories that pay one of your loans (a mortgage's "PITI"), linked to it: counted from Debts, not again as spending. */
+    debtCategoriesLinked: number;
     /** Older ones without a category: kept as history, nothing to do. */
     olderWithoutCategory: number;
     /** Transfers to accounts you left out: kept as transfers, nothing to do. */
@@ -602,7 +605,7 @@ function overspentBy(start: number, spending: { date: string; i: number; account
 /** Turn YNAB's data into the plan's categories, assignments, accounts and transactions. */
 export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): ImportResult {
   const plan = structuredClone(input);
-  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, notApprovedInYnab: 0, olderWithoutCategory: 0, transfersOutside: 0 };
+  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, notApprovedInYnab: 0, debtCategoriesLinked: 0, olderWithoutCategory: 0, transfersOutside: 0 };
   // only this month's and last month's transactions are asked for a category (older ones are history)
   const [ty, tm] = o.thisMonth.split("-").map(Number) as [number, number];
   const recentFrom = tm === 1 ? `${ty - 1}-12-01` : `${ty}-${String(tm - 1).padStart(2, "0")}-01`;
@@ -707,6 +710,8 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     summary.categoriesAdded++;
   }
   plan.budget.push(...hiddenItems);
+  // a category that pays one of your loans (a mortgage's PITI): linked to it, so it isn't counted twice
+  summary.debtCategoriesLinked = linkDebtCategories(plan);
   if (o.removeEmpty) {
     const keep = new Set(itemOf.values());
     const before = plan.budget.length;

@@ -57,6 +57,8 @@ export const BudgetItemSchema = z.object({
   accountId: z.string().optional(),
   keptAt: nonNeg.optional(),
   hidden: z.boolean().optional(),
+  retireAmount: nonNeg.optional(),
+  paysDebt: z.string().optional(),
 });
 export const AccountTypeSchema = z.enum(["pretax", "roth", "taxable", "hsa", "cash", "property"]);
 export const AccountSchema = z.object({
@@ -184,6 +186,7 @@ export const PlanStateSchema = z.object({
   healthcare: nonNeg,
   medicare: nonNeg.optional(),
   retireSpending: nonNeg.optional(),
+  retireAmountsFrom: z.literal("assigned").optional(),
   currentInvestMonthly: nonNeg,
   incomes: z.array(IncomeSchema),
   budget: z.array(BudgetItemSchema),

@@ -787,6 +787,15 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
             "Not approved in YNAB yet, so like YNAB they don't count in balances or your budget until you accept them. You'll find them under Transactions → To review.",
           )
         : null}
+      {s.debtCategoriesLinked
+        ? noteRow(
+            "debtlink",
+            "check",
+            t.good,
+            `${s.debtCategoriesLinked} ${s.debtCategoriesLinked === 1 ? "category pays a loan" : "categories pay your loans"}, linked to ${s.debtCategoriesLinked === 1 ? "it" : "them"}`,
+            "Like a mortgage's PITI. The plan already counts the loan from Debts (until it's paid off), so the category isn't counted again in your spending or retirement number.",
+          )
+        : null}
       {s.olderWithoutCategory || s.transfersOutside
         ? noteRow(
             "rest",

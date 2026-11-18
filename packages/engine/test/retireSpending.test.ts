@@ -60,3 +60,33 @@ describe("retirement spending: budget or a set amount", () => {
     expect(lean.monthly).toBe(2000);
   });
 });
+
+describe("what each category costs in retirement", () => {
+  it("its own retirement amount, else its plan amount", () => {
+    const p = plan();
+    p.budget[1]!.retireAmount = 600; // food for two instead of four
+    const d = derive(p, START);
+    expect(d.retireItems).toEqual({ rent: 2000, food: 600, fun: 500 });
+    expect(d.retireMonthlyBudget).toBe(3100);
+  });
+
+  it("or what you assigned it this month on the Budget, when you choose that", () => {
+    const ym = `${START.getFullYear()}-${String(START.getMonth() + 1).padStart(2, "0")}`;
+    const p = plan({ retireAmountsFrom: "assigned", budgetPlan: { start: ym, startCash: 0, months: { [ym]: { assigned: { rent: 1800, food: 900 } } } } });
+    p.budget[2]!.retireAmount = 400;
+    expect(derive(p, START).retireItems).toEqual({ rent: 1800, food: 900, fun: 400 });
+  });
+});
+
+describe("a category that pays a debt", () => {
+  it("isn't counted again as spending: the debt counts from Debts, now and in retirement", () => {
+    const debts = [{ id: "m", name: "Mortgage", kind: "mortgage" as const, balance: 200000, apr: 0.06, minPayment: 1500 }];
+    const without = derive(plan({ debts }), START);
+    const p = plan({ debts });
+    p.budget.push({ id: "piti", name: "PITI", group: "Home", amount: 1500, inRetirement: true, paysDebt: "m" });
+    const d = derive(p, START);
+    expect(d.retireMonthlyBudget).toBe(without.retireMonthlyBudget);
+    expect(d.monthlyExpenses).toBe(without.monthlyExpenses);
+    expect(d.retireItems.piti).toBeUndefined();
+  });
+});

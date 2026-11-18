@@ -13,6 +13,8 @@ import { radius, space, type, useTheme } from "../../lib/theme";
 import { AccountPanel } from "../AccountPanel";
 import { useAppearance } from "../../lib/appearance";
 import { AccountsEditor } from "../AccountsEditor";
+import { DragList, reorderAmong } from "../DragList";
+import { ReorderToggle } from "../ReorderToggle";
 import { PropertiesEditor } from "../PropertiesEditor";
 import { SharingEditor } from "../SharingEditor";
 import { ContributionsCard } from "../ContributionsCard";
@@ -263,7 +265,7 @@ function AccountsSection() {
   return (
     <>
       <Text style={[type.body, { color: t.text2 }]}>
-        Cash is your emergency fund. Everything else counts as invested. Tap an account to rename it, change its type or remove it; drag its grip to reorder.
+        Cash is your emergency fund. Everything else counts as invested. Tap an account to rename it, change its type or remove it. Tap Reorder to move one.
       </Text>
       <BankConnections />
       <AccountsEditor
@@ -356,21 +358,44 @@ function DebtsSection() {
   const t = useTheme();
   const { state } = usePlan();
   const update = useStore((s) => s.update);
+  // the grips only while reordering (the cards are big: a scroll shouldn't move one)
+  const [reorder, setReorder] = useState(false);
+  const debts = state.debts;
   return (
     <>
       <Text style={[type.body, { color: t.text2 }]}>
         Minimum payments come out of your budget every month. Extra payments go to the highest interest rate first.
       </Text>
-      {state.debts.length === 0 ? <Empty text="No debts. Nice." /> : null}
-      {state.debts.map((dt, i) => (
-        <DebtEditor
-          key={dt.id}
-          debt={dt}
-          paidFrom={paidFromFor(state, dt.id)}
-          onChange={(patch) => update((p) => { p.debts[i] = { ...p.debts[i]!, ...patch }; })}
-          onRemove={() => removeItem("this debt", debtLabel(dt), () => update((p) => { p.debts.splice(i, 1); }))}
-        />
-      ))}
+      {debts.length === 0 ? <Empty text="No debts. Nice." /> : null}
+      {debts.length > 1 ? (
+        <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+          <ReorderToggle on={reorder} onChange={setReorder} what="debts" />
+        </View>
+      ) : null}
+      <DragList
+        count={debts.length}
+        keyOf={(n) => debts[n]!.id}
+        nameOf={(n) => debtLabel(debts[n]!)}
+        grips={reorder}
+        onMove={(from, to) => update((p) => { p.debts = reorderAmong(p.debts, () => true, from, to); })}
+        style={{ gap: space.md }}
+        renderItem={(i, grip) => {
+          const dt = debts[i]!;
+          return (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
+              {grip}
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <DebtEditor
+                  debt={dt}
+                  paidFrom={paidFromFor(state, dt.id)}
+                  onChange={(patch) => update((p) => { p.debts[i] = { ...p.debts[i]!, ...patch }; })}
+                  onRemove={() => removeItem("this debt", debtLabel(dt), () => update((p) => { p.debts.splice(i, 1); }))}
+                />
+              </View>
+            </View>
+          );
+        }}
+      />
       <AddDebtButtons hasAny={state.debts.length > 0} onAdd={(d) => update((p) => { p.debts.push(d); })} />
     </>
   );

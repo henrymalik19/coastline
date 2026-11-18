@@ -91,6 +91,8 @@ function expectParity(input: PlanState) {
   const od = ours.d as Record<string, unknown>;
   delete od.essentialExpenses;
   delete od.runwayEssential;
+  // each retirement category's amount is new in the port (it adds up to retireMonthly's budget part)
+  delete od.retireItems;
   // property accounts are new in the port (always 0 here)
   expect((od.bal as Record<string, number>).property).toBe(0);
   delete (od.bal as Record<string, number>).property;

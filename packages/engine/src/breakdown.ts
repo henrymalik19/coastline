@@ -49,12 +49,12 @@ export type FireBreakdown = {
 };
 
 /** The parts of retirement spending (before what-ifs), as derive adds them up. */
-function spendingParts(s: PlanState, d: Pick<Derived, "escrowMonthly" | "homeMonthly" | "healthRetired">, essentialOnly = false) {
+function spendingParts(s: PlanState, d: Pick<Derived, "escrowMonthly" | "homeMonthly" | "healthRetired"> & Partial<Pick<Derived, "retireItems">>, essentialOnly = false) {
   const budget = (s.budget ?? []).filter((b) => isSpendingItem(b) && b.inRetirement && (!essentialOnly || b.essential !== false));
   const bills = (s.goals ?? [])
     .filter((g) => g.recurring && num(g.target) > 0 && num(g.recurring.every) > 0 && g.recurring.inRetirement !== false)
     .map((g) => num(g.target) / num(g.recurring!.every));
-  return { budget: sum(budget.map((b) => b.amount)), healthcare: d.healthRetired, bills: sum(bills), escrow: d.escrowMonthly, home: d.homeMonthly };
+  return { budget: sum(budget.map((b) => d.retireItems?.[b.id] ?? b.amount)), healthcare: d.healthRetired, bills: sum(bills), escrow: d.escrowMonthly, home: d.homeMonthly };
 }
 
 /** Yearly spending your savings supports at retirement, from a balance then (the FIRE number turned around). */

@@ -17,6 +17,8 @@ import { accountTxnsHref, budgetAccounts, isCard, trackingAccounts } from "../li
 import { useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
 import { sticky } from "../lib/sticky";
+import { useLayout } from "../lib/layout";
+import { ReorderToggle } from "./ReorderToggle";
 
 const TRACKING_TIP =
   "Your retirement and investment accounts. Not in your budget: their balances only change when you move money. Withdraw records money coming out into checking (it goes to Unassigned); a transfer to one from checking adds to it.";
@@ -29,6 +31,11 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
   const txns = useStore((s) => s.txns);
   const [showTracking, setShowTracking] = useState(false);
   const [tip, setTip] = useState(false);
+  // phones: the drag grips only while reordering (so a scroll doesn't move an account by accident)
+  const compact = useLayout().contentWidth < 600;
+  const [reorder, setReorder] = useState(false);
+  const grips = !compact || reorder;
+  const toggle = compact ? <ReorderToggle on={reorder} onChange={setReorder} what="accounts" /> : null;
   const all = budgetAccounts(state);
   const cash = all.filter((a) => a.kind === "cash");
   const cards = all.filter((a) => a.kind === "card");
@@ -72,12 +79,13 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
     <View style={{ gap: space.md }}>
       {cash.length ? (
         <View style={{ gap: space.xs }}>
-          {head("Checking & savings", money(cashTotal))}
+          {head("Checking & savings", money(cashTotal), toggle)}
           <Card style={{ paddingVertical: space.xs }}>
             <DragList
               count={cash.length}
               keyOf={(n) => cash[n]!.id}
               nameOf={(n) => cash[n]!.name}
+              grips={grips}
               onMove={(from, to) => update((p) => { p.accounts = reorderAmong(p.accounts, (a) => a.type === "cash", from, to); })}
               renderItem={(n, grip) => row(cash[n]!, n, grip, cash.length > 1)}
             />
@@ -87,12 +95,13 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
 
       {cards.length ? (
         <View style={{ gap: space.xs }}>
-          {head("Credit cards", `${money(owed)} owed`)}
+          {head("Credit cards", `${money(owed)} owed`, cash.length ? null : toggle)}
           <Card style={{ paddingVertical: space.xs }}>
             <DragList
               count={cards.length}
               keyOf={(n) => cards[n]!.id}
               nameOf={(n) => cards[n]!.name}
+              grips={grips}
               onMove={(from, to) => update((p) => { p.debts = reorderAmong(p.debts, isCard, from, to); })}
               renderItem={(n, grip) => row(cards[n]!, n, grip, cards.length > 1)}
             />
@@ -106,7 +115,7 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
         </Card>
       ) : (
         <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.xs }]}>
-          Tap an account for its transactions. Drag a grip to reorder. A credit card missing? Set its type to Credit card under Money → Debts.
+          Tap an account for its transactions. {compact ? "Tap Reorder, then drag a grip to move one." : "Drag a grip to reorder."} A credit card missing? Set its type to Credit card under Money → Debts.
         </Text>
       )}
 
@@ -133,10 +142,17 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
           {tip ? <InfoText text={TRACKING_TIP} /> : null}
           {showTracking ? (
             <Card style={{ paddingVertical: space.xs, gap: space.xs }}>
-              {tracking.map((a, n) => (
-                <View key={a.id}>
+              <DragList
+                count={tracking.length}
+                keyOf={(n) => tracking[n]!.id}
+                nameOf={(n) => tracking[n]!.name}
+                grips={grips}
+                onMove={(from, to) => update((p) => { p.accounts = reorderAmong(p.accounts, (a) => a.type !== "cash" && a.type !== "property", from, to); })}
+                renderItem={(n, grip) => { const a = tracking[n]!; return (
+                <View>
                   {n > 0 ? <Divider /> : null}
                   <View style={styles.row}>
+                    {tracking.length > 1 ? grip : null}
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text numberOfLines={1} style={[type.body, { color: t.text }]}>{a.name}</Text>
                       <Text style={[type.body, { color: t.text2, fontVariant: ["tabular-nums"] }]}>{money(a.balance)}</Text>
@@ -144,7 +160,8 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
                     <Button title="Withdraw" onPress={() => onTransfer(a.id)} style={{ minHeight: 34 }} />
                   </View>
                 </View>
-              ))}
+                ); }}
+              />
             </Card>
           ) : null}
         </View>

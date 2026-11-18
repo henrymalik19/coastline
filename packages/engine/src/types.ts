@@ -89,6 +89,17 @@ export type BudgetItem = {
    * Budget until you cover it.
    */
   hidden?: boolean;
+  /**
+   * What it'll cost a month once you retire, when that's different from now (groceries for two instead of
+   * four). Missing: the same as now (see PlanState.retireAmountsFrom).
+   */
+  retireAmount?: number;
+  /**
+   * The debt this category pays (a debt's id), like a "PITI" category that pays your mortgage. The plan
+   * counts that debt from Debts (its payment until it's paid off, a home's taxes and insurance after), so
+   * the category isn't counted again as spending, now or in retirement. It still shows on the Budget.
+   */
+  paysDebt?: string;
 };
 /** "property": what a home or rental is worth. Counts in net worth, not as invested money for Coast FI. */
 export type AccountType = "pretax" | "roth" | "taxable" | "hsa" | "cash" | "property";
@@ -333,6 +344,11 @@ export type PlanState = {
    * It covers everything you'll pay once retired, healthcare from 65 included. Unset or 0: use the budget.
    */
   retireSpending?: number;
+  /**
+   * What a retirement category costs a month when it has no retirement amount of its own: its plan amount
+   * (missing), or what you assigned it this month on the Budget ("assigned").
+   */
+  retireAmountsFrom?: "assigned";
   currentInvestMonthly: number;
   incomes: Income[];
   budget: BudgetItem[];
@@ -516,6 +532,8 @@ export type Derived = {
   retireMonthly: number;
   /** Retirement spending a month added up from the budget (before what-ifs), whether or not a set amount replaces it. */
   retireMonthlyBudget: number;
+  /** Each budget item still paid after you retire (id → what it costs a month then). */
+  retireItems: Record<string, number>;
   /** Retirement spending comes from a set yearly amount, not the budget. */
   retireSpendingSet: boolean;
   retireAnnual: number;
