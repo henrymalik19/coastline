@@ -9,17 +9,20 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, InfoText, InfoTip, InlineMoney, InlineSwitch, MonthField, Segmented, Select, TextField, ToggleRow } from "../../../components/form";
 import { fullName, splitCompanies } from "../../../lib/company";
+import { PLAN as TEST_PLAN, REGISTER as TEST_REGISTER } from "../../../lib/testdata/ynabComplex";
 import { Icon, type IconName } from "../../../components/Icon";
 import { Card, Divider, Screen } from "../../../components/ui";
 import { money } from "../../../lib/format";
 import { effectivePlan, usePlan } from "../../../lib/plan";
 import { useLimits } from "../../../lib/limits";
+import { importWait } from "../../../lib/importWait";
+import { useSync } from "../../../lib/sync";
 import { applyRegisterBalances, isCard, readyToAssignFor } from "../../../lib/register";
 import { monthKey, useStore } from "../../../lib/store";
 import { space, type, useTheme } from "../../../lib/theme";
 import { isoDay } from "../../../lib/categories";
 import { readYnabFiles } from "../../../lib/ynabFiles";
-import { balanceConflicts, buildImport, categoryKey, exportMonths, groupKey, recentMonths, suggestCategory, suggestChoice, budgetTxnsThisMonth, ynabAccounts, ynabCategories, ynabReadyToAssign, type ImportResult, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabCategory, type YnabData } from "../../../lib/ynab";
+import { balanceConflicts, buildImport, categoryKey, exportMonths, groupKey, recentMonths, suggestCategory, suggestChoice, budgetTxnsThisMonth, parseYnab, ynabAccounts, ynabCategories, ynabReadyToAssign, type ImportResult, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabCategory, type YnabData } from "../../../lib/ynab";
 import { sticky, stickyBottom } from "../../../lib/sticky";
 import { useLayout } from "../../../lib/layout";
 import { groupOrder } from "../../../lib/budgetOrder";
@@ -114,23 +117,13 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   // phones: grips only while reordering
   const [reorder, setReorder] = useState(false);
 
-  const pick = () => {
-    if (Platform.OS !== "web" || typeof document === "undefined") return;
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".zip,.csv";
-    input.multiple = true;
-    input.onchange = async () => {
-      setError("");
-      setDone("");
-      try {
-        const d = await readYnabFiles(input.files!);
-        if (!d.txns.length) throw new Error("No transactions in that file.");
+  /** An export read: start choosing what comes in. */
+  const load = (d: YnabData, name: string) => {
         // YNAB's scheduled ones (dated after today) come in as upcoming: they count on their day
         setFuture(d.txns.filter((x) => x.date > isoDay(start)).length);
         setData(d);
         running.current = false;
-        setFileName([...input.files!].find((x) => /\.zip$/i.test(x.name))?.name ?? input.files![0]?.name ?? "");
+        setFileName(name);
         const since = recentMonths(thisMonth, 2)[0]!;
         // closed or empty accounts start left out; the open ones match an account here with the same name (each only once)
         const taken = new Set<string>();
@@ -146,6 +139,20 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
           return [categoryKey(c.group, c.name), sug.action === "new" && unusedCategory(d, c, since) ? { action: "hidden" } : sug];
         })));
         setTab("accounts");
+  };
+  const pick = () => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".zip,.csv";
+    input.multiple = true;
+    input.onchange = async () => {
+      setError("");
+      setDone("");
+      try {
+        const d = await readYnabFiles(input.files!);
+        if (!d.txns.length) throw new Error("No transactions in that file.");
+        load(d, [...input.files!].find((x) => /\.zip$/i.test(x.name))?.name ?? input.files![0]?.name ?? "");
       } catch (e) {
         setError(e instanceof Error ? e.message : "Couldn't read that file.");
       }
@@ -220,8 +227,9 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
 
   // one import per budget: a second tap (or an import already done on any device) does nothing
   const running = useRef(false);
+  const wait = importWait(useSync());
   const run = () => {
-    if (!data || running.current || useStore.getState().importedAt) return;
+    if (!data || running.current || useStore.getState().importedAt || importWait(useSync.getState())) return;
     running.current = true;
     setConfirming(false);
     const r = buildImport(saved, data, { from, thisMonth, accounts: choices, names, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, today: isoDay(start) });
@@ -474,7 +482,13 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         In YNAB, open your budget's menu and choose Export budget. It downloads a zip; pick it here. You'll choose what comes in before anything changes{setup ? ", and check it all in the rest of setup" : ""}.
       </Text>
       {Platform.OS === "web" ? (
-        <Button title="Choose YNAB export" tone="primary" icon="plus" onPress={pick} style={{ alignSelf: "flex-start" }} />
+        <>
+          <Button title="Choose YNAB export" tone="primary" icon="plus" onPress={pick} style={{ alignSelf: "flex-start" }} />
+          {/* development only: the made-up export with the hard cases (lib/testdata/ynabComplex.ts), dated Nov 2026 */}
+          {__DEV__ ? (
+            <Button title="Use the test export" tone="ghost" onPress={() => { setError(""); setDone(""); load(parseYnab(TEST_REGISTER, TEST_PLAN), "Test export (made up)"); }} style={{ alignSelf: "flex-start" }} />
+          ) : null}
+        </>
       ) : (
         <Text style={[type.caption, { color: t.text3 }]}>Importing works in the web app for now.</Text>
       )}
@@ -811,7 +825,13 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
       </Text>
     </View>
   ) : null;
-  const actions = confirming ? (
+  // not while syncing, or before your account has loaded here (it would miss transactions you already have)
+  const actions = wait ? (
+    <View style={{ gap: 4 }}>
+      <Button title="Import" tone="primary" disabled onPress={() => undefined} style={{ minHeight: 40 }} />
+      <Text style={[type.caption, { color: t.text3 }]}>{wait}</Text>
+    </View>
+  ) : confirming ? (
     <View style={[styles.row, { flexWrap: "wrap" }]}>
       <Button title="Yes, import" tone="primary" onPress={run} style={{ minHeight: 40 }} />
       <Button title="Cancel" tone="ghost" onPress={() => setConfirming(false)} style={{ minHeight: 40 }} />

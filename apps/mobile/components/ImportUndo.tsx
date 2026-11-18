@@ -10,6 +10,8 @@ import { Button, ToggleRow } from "./form";
 import { Card } from "./ui";
 import { addedSinceImport, canUndoImport, UNDO_DAYS } from "../lib/importUndo";
 import { useStore } from "../lib/store";
+import { importWait } from "../lib/importWait";
+import { useSync } from "../lib/sync";
 import { radius, space, type, useTheme } from "../lib/theme";
 
 const DAY = 86_400_000;
@@ -38,6 +40,8 @@ export function ImportUndoCard({ children, onUndone, plain }: { children?: React
   const importedAt = useStore((s) => s.importedAt);
   const txns = useStore((s) => s.txns);
   const undoImport = useStore((s) => s.undoImport);
+  // not while syncing: other devices could be left half-undone
+  const wait = importWait(useSync());
   const keepImport = useStore((s) => s.keepImport);
   const [ask, setAsk] = useState<"undo" | "keep" | null>(null);
   // keep the transactions you added since (where their account was there before the import)
@@ -85,14 +89,15 @@ export function ImportUndoCard({ children, onUndone, plain }: { children?: React
                 )
               ) : null}
               <View style={[styles.row, { flexWrap: "wrap" }]}>
-                <Button title="Yes, undo it" tone="danger" onPress={() => { undoImport(keepAdded); setAsk(null); onUndone?.(); }} style={{ minHeight: 40 }} />
+                <Button title="Yes, undo it" tone="danger" disabled={!!wait} onPress={() => { if (wait) return; undoImport(keepAdded); setAsk(null); onUndone?.(); }} style={{ minHeight: 40 }} />
                 <Button title="Cancel" tone="ghost" onPress={() => setAsk(null)} style={{ minHeight: 40 }} />
               </View>
             </View>
           ) : (
             <View style={[styles.row, { flexWrap: "wrap" }]}>
-              <Button title={`Undo import · ${left} day${left === 1 ? "" : "s"} left`} onPress={() => setAsk("undo")} />
+              <Button title={`Undo import · ${left} day${left === 1 ? "" : "s"} left`} disabled={!!wait} onPress={() => setAsk("undo")} />
               <Button title="Keep it" tone="ghost" onPress={() => setAsk("keep")} />
+              {wait ? <Text style={[type.caption, { color: t.text3 }]}>{wait}</Text> : null}
             </View>
           )}
         </>

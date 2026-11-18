@@ -560,13 +560,14 @@ export function ynabReadyToAssign(d: YnabData, thisMonth: string, today: string,
     const av = a.available ?? 0;
     if (av > 0) { held += av; continue; }
     if (av > -0.005 || CARD_GROUP.test(a.group)) continue;
-    // what of it went on cards (that's card debt, not cash)
-    let onCards = 0;
-    for (const t of d.txns) {
-      if (t.date.slice(0, 7) !== thisMonth || t.date > today || !cards.has(t.account) || pending.has(t)) continue;
-      for (const p of t.splits?.length ? t.splits : [t]) if (p.group === a.group && p.category === a.category) onCards -= p.amount;
-    }
-    cashOver += Math.max(0, -av - Math.max(0, onCards));
+    // the purchases that took it past $0 (in date order): the ones in cash are overspending in cash (they
+    // come out of next month in YNAB); the ones on a card stay on the card
+    const spending = d.txns
+      .map((t, i) => ({ t, i }))
+      .filter(({ t }) => t.date.slice(0, 7) === thisMonth && t.date <= today && !pending.has(t))
+      .flatMap(({ t, i }) => (t.splits?.length ? t.splits : [t]).filter((x) => x.group === a.group && x.category === a.category).map((x) => ({ date: t.date, i, account: t.account, amount: x.amount })));
+    const spent = spending.reduce((x, y) => x - y.amount, 0);
+    cashOver += overspentBy(av - (a.activity ?? -spent), spending).filter((x) => !cards.has(x.account)).reduce((x, y) => x + y.amount, 0);
   }
   const later = d.assigned.filter((a) => a.month > thisMonth && !isReady(a.group, a.category)).reduce((t, a) => t + a.assigned, 0);
   return Math.round((cash - held - later + cashOver) * 100) / 100;
@@ -830,7 +831,8 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     // a transfer to an account you left out (an old or closed one): still a transfer, not spending, so it
     // needs no category (it points at that account by name, since there's no account here for it)
     const outside = !!t.transferTo && !to && !tx.categoryId && !t.splits?.length;
-    const missing = t.splits?.length ? tx.splits!.some((s) => !s.categoryId) : !tx.categoryId && !(to && toBudget) && !outside;
+    // (an account's starting balance never needs one)
+    const missing = t.splits?.length ? tx.splits!.some((s) => !s.categoryId) : !tx.categoryId && !(to && toBudget) && !outside && !/^starting balance$/i.test(t.payee);
     if (outside) summary.transfersOutside++;
     if (missing && t.date < recentFrom) summary.olderWithoutCategory++;
     else if (missing && !tx.review) {
