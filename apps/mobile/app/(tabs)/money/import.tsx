@@ -22,7 +22,7 @@ import { monthKey, useStore } from "../../../lib/store";
 import { radius, space, type, useTheme } from "../../../lib/theme";
 import { isoDay } from "../../../lib/categories";
 import { readYnabFiles } from "../../../lib/ynabFiles";
-import { balanceConflicts, buildImport, categoryKey, exportMonths, groupKey, recentMonths, suggestCategory, suggestCategories, suggestChoice, budgetTxnsThisMonth, parseYnab, ynabAccounts, ynabCategories, ynabReadyToAssign, type ImportResult, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabCategory, type YnabData } from "../../../lib/ynab";
+import { balanceConflicts, buildImport, categoryKey, exportMonths, groupKey, recentMonths, payeeMatches, suggestCategory, suggestCategories, suggestChoice, budgetTxnsThisMonth, parseYnab, ynabAccounts, ynabCategories, ynabReadyToAssign, type ImportResult, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabCategory, type YnabData } from "../../../lib/ynab";
 import { sticky, stickyBottom } from "../../../lib/sticky";
 import { useLayout } from "../../../lib/layout";
 import { groupOrder } from "../../../lib/budgetOrder";
@@ -172,6 +172,18 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     for (const tx of data?.txns ?? []) for (const x of tx.splits?.length ? tx.splits : [tx]) if (x.category) { const k = categoryKey(x.group, x.category); m.set(k, (m.get(k) ?? 0) + 1); }
     return m;
   }, [data]);
+  // a combined one: the places its transactions went that the one it joins has too (why it fits there)
+  const sharedPayees = useMemo(() => {
+    const m: Record<string, { payees: string[]; matched: number; of: number }> = {};
+    if (!data) return m;
+    for (const [k, ch] of Object.entries(catMap)) {
+      if (ch.action !== "combine") continue;
+      const hit = payeeMatches(data, [k], [ch.into], { minTxns: 1, minShare: 0 })[k];
+      if (hit) m[k] = hit;
+    }
+    return m;
+  }, [data, catMap]);
+  const countText = (c: { group: string; name: string }) => { const n = txnCount.get(categoryKey(c.group, c.name)) ?? 0; return `${n.toLocaleString()} ${n === 1 ? "transaction" : "transactions"}`; };
   const countOf = (c: { group: string; name: string }) => {
     const n = txnCount.get(categoryKey(c.group, c.name)) ?? 0;
     return <Text style={[type.caption, { color: t.text3, fontWeight: "400" }]}>{"  "}{n.toLocaleString()} {n === 1 ? "transaction" : "transactions"}</Text>;
@@ -396,7 +408,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
       <>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[type.body, { color: t.text, fontWeight: "600" }]} numberOfLines={1}>{c2.name}{countOf(c2)}</Text>
-          <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{c2.group !== into.group ? `From ${c2.group}` : "Combined"}</Text>
+          <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{sharedPayees[k2] ? `Same places: ${sharedPayees[k2]!.payees.join(", ")} · ${sharedPayees[k2]!.matched} of ${sharedPayees[k2]!.of}` : c2.group !== into.group ? `From ${c2.group}` : "Combined"}</Text>
         </View>
         <View style={{ flexShrink: 0 }}>
           <Select plain label={`${c2.name}: becomes`} value="" placeholder="Change" options={rowOptions(k2)} onChange={(v) => setCat(k2, v)} />
@@ -458,7 +470,10 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         <View key={k} style={[styles.phoneRow, { backgroundColor: t.surface, borderColor: t.border }]}>
           <View style={[styles.row, { alignItems: "flex-start" }]}>
             {grip}
-            <Text style={[type.body, { flex: 1, minWidth: 0, color: ch?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]}>{c.name}{countOf(c)}</Text>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[type.body, { color: ch?.action === "skip" ? t.text3 : t.text, fontWeight: "600" }]}>{c.name}</Text>
+              <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>{countText(c)}</Text>
+            </View>
             {perMonth}
           </View>
           {reset}

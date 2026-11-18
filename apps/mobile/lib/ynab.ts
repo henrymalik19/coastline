@@ -383,6 +383,75 @@ export function suggestCategories(plan: PlanState, d: YnabData, cats: YnabCatego
     if (!main) continue;
     for (const c of list) if (c !== main && !noNote(c)) out[categoryKey(c.group, c.name)] = { action: "combine", into: categoryKey(main.group, main.name) };
   }
+  // an old or hidden one whose transactions went to the same places as one you use: combined into it
+  const isOld = (k: string) => out[k]!.action === "hidden" || (out[k]!.action === "new" && !used.has(k));
+  const from = cats.map((c) => categoryKey(c.group, c.name)).filter(isOld);
+  const into = cats.map((c) => categoryKey(c.group, c.name)).filter((k) => (out[k]!.action === "new" || out[k]!.action === "match") && used.has(k));
+  for (const [k, m] of Object.entries(payeeMatches(d, from, into))) out[k] = { action: "combine", into: m.into };
+  return out;
+}
+
+/** A payee's name without store numbers and the like ("KROGER #123" and "Kroger" are one). */
+export const payeeKey = (p: string) =>
+  p.toLowerCase().replace(/#\s*\d+|\d+/g, " ").replace(/[^a-z&']+/g, " ").trim().split(/\s+/).slice(0, 3).join(" ");
+const NOT_A_PAYEE = /^(starting balance|reconciliation balance adjustment|manual balance adjustment|transfer :.*)$/i;
+
+/** Why a category was matched to another by payee: where most of its transactions went. */
+export type PayeeMatch = { into: string; payees: string[]; matched: number; of: number };
+
+/**
+ * Categories (`from`, categoryKeys) whose transactions mostly went to the same payees as one other
+ * category (`into`): Kroger and Aldi → Groceries. A payee used across many categories (Amazon, Target)
+ * counts for less. Needs at least 3 transactions, half or more of them matching, and a clear winner.
+ */
+export function payeeMatches(d: YnabData, from: string[], into: string[], o: { minTxns?: number; minShare?: number } = {}): Record<string, PayeeMatch> {
+  const minTxns = o.minTxns ?? 3;
+  const minShare = o.minShare ?? 0.5;
+  const fromSet = new Set(from);
+  const intoSet = new Set(into);
+  // each category's transactions by payee
+  const byCat = new Map<string, Map<string, number>>();
+  const names = new Map<string, string>();
+  for (const t of d.txns) {
+    if (t.transferTo || NOT_A_PAYEE.test(t.payee.trim())) continue;
+    const pk = payeeKey(t.payee);
+    if (!pk) continue;
+    if (!names.has(pk)) names.set(pk, t.payee.trim());
+    for (const x of t.splits?.length ? t.splits : [t]) {
+      if (!x.category) continue;
+      const k = categoryKey(x.group, x.category);
+      if (!fromSet.has(k) && !intoSet.has(k)) continue;
+      const m = byCat.get(k) ?? new Map<string, number>();
+      m.set(pk, (m.get(pk) ?? 0) + 1);
+      byCat.set(k, m);
+    }
+  }
+  // how many of the categories you use each payee shows up in
+  const spread = new Map<string, number>();
+  for (const k of into) for (const pk of byCat.get(k)?.keys() ?? []) spread.set(pk, (spread.get(pk) ?? 0) + 1);
+  const out: Record<string, PayeeMatch> = {};
+  for (const k of from) {
+    const mine = byCat.get(k);
+    if (!mine) continue;
+    const total = [...mine.values()].reduce((a, b) => a + b, 0);
+    if (total < minTxns) continue;
+    const score = new Map<string, number>();
+    const hits = new Map<string, Map<string, number>>();
+    for (const [pk, n] of mine) {
+      const k2s = into.filter((k2) => k2 !== k && byCat.get(k2)?.has(pk));
+      for (const k2 of k2s) {
+        score.set(k2, (score.get(k2) ?? 0) + n / k2s.length);
+        const h = hits.get(k2) ?? new Map<string, number>();
+        h.set(pk, n);
+        hits.set(k2, h);
+      }
+    }
+    const ranked = [...score].sort((a, b) => b[1] - a[1]);
+    const [best, second] = ranked;
+    if (!best || best[1] / total < minShare || (second && second[1] * 2 > best[1])) continue;
+    const h = [...hits.get(best[0])!].sort((a, b) => b[1] - a[1]);
+    out[k] = { into: best[0], payees: h.slice(0, 3).map(([pk]) => names.get(pk) ?? pk), matched: h.reduce((a, [, n]) => a + n, 0), of: total };
+  }
   return out;
 }
 
