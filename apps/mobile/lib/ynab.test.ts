@@ -2,7 +2,7 @@ import { budgetStartCash, budgetView, registerBalance, type PlanState } from "@c
 import { describe, expect, it } from "vitest";
 import { freshPlan } from "./presets";
 import { cardMap } from "./register";
-import { balanceConflicts, buildImport, categoryKey, groupKey, exportMonths, dateParser, money, monthOf, nameId, notCounted, budgetTxnsThisMonth, heldInYnab, parseCsv, parseYnab, suggestChoice, ynabAccounts, ynabCategories, ynabReadyToAssign } from "./ynab";
+import { balanceConflicts, buildImport, categoryKey, groupKey, exportMonths, dateParser, money, monthOf, nameId, notCounted, budgetTxnsThisMonth, heldInYnab, parseCsv, parseYnab, suggestCategories, suggestChoice, ynabAccounts, ynabCategories, ynabReadyToAssign } from "./ynab";
 
 // a small YNAB export, in the shape YNAB writes it (newest first, US dates, $ amounts)
 const REGISTER = `﻿"Account","Flag","Date","Payee","Category Group/Category","Category Group","Category","Memo","Outflow","Inflow","Cleared"
@@ -293,6 +293,41 @@ describe("choosing where categories go, and matching your own transactions", () 
     // importing again: it goes into the same hidden category, which stays hidden with no amount
     const again = buildImport(r.plan, d, { ...opts, existing: r.txns });
     expect(again.plan.budget.filter((b) => b.name === "Household")).toEqual([hh]);
+  });
+
+  it("a category combined into another of YNAB's: one category with both's transactions and amounts", () => {
+    const { plan, d, opts } = base();
+    const groceries = categoryKey("Everyday", "Groceries");
+    const r = buildImport(plan, d, { ...opts, categoryMap: { [categoryKey("Everyday", "Household")]: { action: "combine", into: groceries } } });
+    expect(r.summary.categoriesCombined).toBe(1);
+    expect(r.plan.budget.some((b) => b.name === "Household")).toBe(false);
+    const g = r.plan.budget.find((b) => b.name === "Groceries")!;
+    expect(r.plan.budgetPlan!.opening![g.id]).toBe(680); // 660 + 20 left in November
+    expect(r.txns.find((t) => t.payee === "Target")!.splits!.map((x) => x.categoryId)).toEqual([g.id, g.id]);
+    // combined into one that's itself left out: left out with it
+    const out = buildImport(plan, d, { ...opts, categoryMap: { [categoryKey("Everyday", "Household")]: { action: "combine", into: groceries }, [groceries]: { action: "skip" } } });
+    expect(out.plan.budget.some((b) => b.name === "Groceries" || b.name === "Household")).toBe(false);
+  });
+
+  it("a category can be money moved into an investment account (not spending)", () => {
+    const { plan, d, opts } = base();
+    const r = buildImport(plan, d, { ...opts, categoryMap: { [categoryKey("Savings", "Roth IRA")]: { action: "invest", account: "ynab:Roth IRA" } } });
+    const ira = r.plan.accounts.find((a) => a.name === "Roth IRA")!;
+    expect(r.plan.budget.find((b) => b.name === "Roth IRA")).toMatchObject({ accountId: ira.id, inRetirement: false });
+  });
+
+  it("suggests: investing for one named like an account, combining the same one twice, leaving out old cards' lines", () => {
+    const { plan, d } = base();
+    const cats = ynabCategories(d, ["2026-10", "2026-11"]);
+    const groc = cats.find((c) => c.name === "Groceries")!;
+    const all = [...cats, { ...groc, name: "Groceries (old)", average: 0 }, { ...groc, group: "Hidden Categories", name: "Visa", average: 0 }, { ...groc, group: "Other", name: "Groceries" }];
+    const s = suggestCategories(plan, d, all, "2026-11-30");
+    expect(s[categoryKey("Savings", "Roth IRA")]).toEqual({ action: "invest", account: "ynab:Roth IRA" });
+    expect(s[categoryKey("Everyday", "Groceries (old)")]).toEqual({ action: "combine", into: categoryKey("Everyday", "Groceries") });
+    expect(s[categoryKey("Hidden Categories", "Visa")]).toEqual({ action: "skip" });
+    expect(s[categoryKey("Everyday", "Household")]!.action).toBe("new");
+    // the same name in another group is another thing (each house has its own PITI)
+    expect(s[categoryKey("Other", "Groceries")]!.action).toBe("new");
   });
 
   it("a transfer to an account you left out stays a transfer, needing no category", () => {

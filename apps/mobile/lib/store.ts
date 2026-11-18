@@ -11,6 +11,7 @@ import { stampMs } from "./pages";
 import { canUndoImport, fromOldSnapshot, importSnapshot, parseUndo, readImportBackup, undoImportTxns, type ImportSnapshot } from "./importUndo";
 import { applyYnabUpdate, type YnabUpdate } from "./ynabUpdate";
 import { renamePayeesIn } from "./payees";
+import { combineCategory, uncombineTxns } from "./combine";
 
 export { newId } from "./id";
 
@@ -73,6 +74,8 @@ export type AppState = {
   updateFromYnab: (u: YnabUpdate, removeGone: boolean) => void;
   /** Rename a payee, or combine several into one (`to`), on every transaction. */
   renamePayees: (from: string[], to: string) => void;
+  /** Combine one budget category into another (lib/combine.ts). Returns its undo (puts both back as they were). */
+  combineCategories: (from: string, into: string) => () => void;
   /** Put the plan and transactions back as they were just before the last import. `keepAdded`: ones you added since stay where they still fit. */
   undoImport: (keepAdded?: boolean) => void;
   /** Keep the import as it is: no more undo (drops the copy kept for it). */
@@ -199,6 +202,17 @@ export const useStore = create<AppState>()(
         const next = structuredClone(plan);
         applyRegisterBalances(next, list);
         set({ plan: next, txns: list, lastImport: snapshot, importedAt: stamp, ynabSyncedAt: stamp, importDirty: true, updatedAt: now() });
+      },
+      combineCategories: (from, into) => {
+        const stamp = now();
+        const before = get().plan;
+        const r = combineCategory(before, get().txns, from, into, stamp);
+        if (!r.changed.length && r.plan === before) return () => {};
+        set({ plan: r.plan, txns: r.txns, updatedAt: stamp });
+        return () => {
+          const at = now();
+          set({ plan: structuredClone(before), txns: uncombineTxns(get().txns, r.changed, at), updatedAt: at });
+        };
       },
       renamePayees: (from, to) => {
         const list = renamePayeesIn(get().txns, from, to, now());

@@ -7,6 +7,7 @@ import { ReorderToggle } from "../../components/ReorderToggle";
 import { fullName } from "../../lib/company";
 import { debtItPays, newLoanPayment, paidLastTwoMonths, setLoanPayment } from "../../lib/debtLink";
 import { ImportUndoReminder, useImported } from "../../components/ImportUndo";
+import { txnsIn } from "../../lib/combine";
 import { BUDGET_ITEM, budgetCategories, budgetView, SAVINGS_GROUP, spendingHistory, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
 import { BudgetAccounts } from "../../components/BudgetAccounts";
@@ -54,6 +55,14 @@ export default function Budget() {
   const grips = !compact || reorder;
   const { state, result, actual, start } = usePlan();
   const update = useStore((s) => s.update);
+  const combineCategories = useStore((s) => s.combineCategories);
+  // just combined one category into another: shown on that one, with Undo, for a few seconds
+  const [combined, setCombined] = useState<{ into: string; name: string; undo: () => void } | null>(null);
+  useEffect(() => {
+    if (!combined) return;
+    const id = setTimeout(() => setCombined(null), 10000);
+    return () => clearTimeout(id);
+  }, [combined]);
   // drag a category from one of your groups into another
   const dragGroups = useRef<{ name: string; cats: { key: string }[] }[]>([]);
   const zone = useDragZone((fromList, from, toList, to) => {
@@ -425,6 +434,14 @@ export default function Budget() {
       return (
         <View style={styles.section}>
           <Text style={[type.overline, { color: t.text3 }]}>Category</Text>
+          {combined?.into === it.id ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.sm, borderRadius: radius.sm, backgroundColor: t.accentSoft }}>
+              <Text style={[type.caption, { color: t.text, flex: 1 }]}>"{combined.name}" combined into this one.</Text>
+              <Pressable role="button" onPress={() => { combined.undo(); setOpen(null); setCombined(null); }} hitSlop={8}>
+                <Text style={[type.label, { color: t.accent, fontWeight: "700" }]}>Undo</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <FormList>
             <FormRow label="Name">
               <InlineText label="Category name" placeholder="e.g. Groceries" value={it.name} onChange={(v) => editItem(it.id, { name: v })} />
@@ -484,6 +501,26 @@ export default function Budget() {
             )}
             <FormRow label="Group">
               <Select plain label="Group" value={groupOf(it)} options={groupNames.map((g) => ({ value: g, label: g }))} onChange={(g) => update((p) => { p.budget = moveToGroup(p.budget, itemIndex(it.id), g); })} />
+            </FormRow>
+            <FormRow label="Combine into" hint="Moves everything into another category">
+              <Select
+                plain
+                label="Combine into"
+                value=""
+                placeholder="Choose"
+                options={state.budget.filter((x) => x.id !== it.id && !x.hidden).map((x) => ({ value: x.id, label: x.name.trim() || "Unnamed", hint: groupOf(x) }))}
+                onChange={async (to) => {
+                  const into = state.budget.find((x) => x.id === to);
+                  if (!into) return;
+                  const name = it.name.trim() || "this category";
+                  const n = txnsIn(txns, it.id);
+                  const moves = n ? `Its ${n} transaction${n === 1 ? "" : "s"} and what you assigned move` : "What you assigned moves";
+                  if (!(await confirm(`Combine "${name}" into "${into.name.trim() || "Unnamed"}"?`, `${moves} over, and "${name}" is removed. You can undo it right after.`, "Combine"))) return;
+                  const undo = combineCategories(it.id, into.id);
+                  setOpen(into.id);
+                  setCombined({ into: into.id, name, undo });
+                }}
+              />
             </FormRow>
           </FormList>
           <ChangesLater

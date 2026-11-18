@@ -311,7 +311,15 @@ export function suggestChoice(plan: PlanState, a: YnabAccount, taken: Set<string
 export type YnabCategory = { group: string; name: string; average: number };
 /** What to do with a YNAB category: add it, put it into one of the plan's (a category id, or "cash" for the Emergency fund), or leave it out. */
 /** What a YNAB category becomes: a new category, one of yours, a hidden category (keeps its transactions, off the budget and plan), or nothing. */
-export type CategoryChoice = { action: "new" } | { action: "match"; id: string } | { action: "hidden" } | { action: "skip" };
+export type CategoryChoice =
+  | { action: "new" }
+  | { action: "match"; id: string }
+  | { action: "hidden" }
+  | { action: "skip" }
+  /** Into another of YNAB's categories (its categoryKey): one category here, with both's transactions and amounts. */
+  | { action: "combine"; into: string }
+  /** Money moved into an account (an IRA, an HSA): "plan:<id>" for one of yours, "ynab:<name>" for one the import adds. */
+  | { action: "invest"; account: string };
 
 /** The plan's category a YNAB category most likely is: the same name, or the Emergency fund for an emergency fund. */
 export function suggestCategory(plan: PlanState, c: Pick<YnabCategory, "name"> & { group?: string }): CategoryChoice {
@@ -321,6 +329,61 @@ export function suggestCategory(plan: PlanState, c: Pick<YnabCategory, "name"> &
   // hidden in YNAB: hidden here too (its money and spending still count, as they do in YNAB)
   if (c.group && YNAB_HIDDEN.test(c.group)) return { action: "hidden" };
   return { action: "new" };
+}
+
+/**
+ * What each of YNAB's categories should most likely become, looking at them all together: suggestCategory,
+ * plus these.
+ * - An old card's payment line (hidden in YNAB, named like an account) that never held money or a
+ *   transaction: left out.
+ * - Named like one of your investment accounts (exactly one): money moved into it ("Roth IRA" for your
+ *   "Fidelity - Roth IRA").
+ * - The same name but for a note in brackets ("Wedding Expenses ($500/month)" and "Wedding Expenses"):
+ *   combined into one (the one shown in YNAB, else the one without the note).
+ */
+export function suggestCategories(plan: PlanState, d: YnabData, cats: YnabCategory[], today?: string): Record<string, CategoryChoice> {
+  const key = (x: string) => x.toLowerCase().replace(/\([^)]*\)/g, "").replace(/[^a-z0-9]+/g, "");
+  const out: Record<string, CategoryChoice> = {};
+  const accountNames = new Set(d.txns.map((t) => norm(t.account)));
+  // used in the last year (an old card's line held money years ago, when the card was open)
+  const cut = today ? `${+today.slice(0, 4) - 1}${today.slice(4, 7)}` : "";
+  const used = new Set<string>();
+  for (const t of d.txns) if (t.date.slice(0, 7) >= cut) for (const x of t.splits?.length ? t.splits : [t]) if (x.category) used.add(categoryKey(x.group, x.category));
+  for (const a of d.assigned) if (a.month >= cut && (Math.abs(a.assigned) > 0.005 || Math.abs(a.available ?? 0) > 0.005)) used.add(categoryKey(a.group, a.category));
+  // investment accounts a category can be money moved into: yours, and the ones the import would add
+  const invest = [
+    ...plan.accounts.filter((a) => a.type !== "cash" && a.type !== "property").map((a) => ({ account: "plan:" + a.id, names: [a.name, fullName(a)] })),
+    ...ynabAccounts(d, today).filter((a) => a.kind === "invest" && !plan.accounts.some((x) => norm(fullName(x)) === norm(a.name) || norm(x.name) === norm(a.name))).map((a) => ({ account: "ynab:" + a.name, names: [a.name] })),
+  ];
+  for (const c of cats) {
+    const k = categoryKey(c.group, c.name);
+    let ch = suggestCategory(plan, c);
+    if (ch.action === "hidden" && accountNames.has(norm(c.name)) && !used.has(k)) ch = { action: "skip" };
+    else if (ch.action === "new" || ch.action === "hidden") {
+      const n = key(c.name);
+      const hits = n.length >= 3 ? invest.filter((x) => x.names.some((m) => key(m) === n || key(m).endsWith(n))) : [];
+      if (hits.length === 1) ch = { action: "invest", account: hits[0]!.account };
+    }
+    out[k] = ch;
+  }
+  // the same category twice (a note in brackets apart): one, the other combined into it
+  const byName = new Map<string, YnabCategory[]>();
+  for (const c of cats) {
+    const ch = out[categoryKey(c.group, c.name)]!;
+    if (ch.action !== "new" && ch.action !== "hidden") continue;
+    const n = key(c.name);
+    if (n) byName.set(n, [...(byName.get(n) ?? []), c]);
+  }
+  for (const list of byName.values()) {
+    if (list.length < 2) continue;
+    const shown = (c: YnabCategory) => out[categoryKey(c.group, c.name)]!.action !== "hidden";
+    const noNote = (c: YnabCategory) => !/\(/.test(c.name);
+    // only a note apart: the same name twice in different groups is two things (each house's PITI)
+    const main = list.find((c) => shown(c) && noNote(c)) ?? list.find(noNote);
+    if (!main) continue;
+    for (const c of list) if (c !== main && !noNote(c)) out[categoryKey(c.group, c.name)] = { action: "combine", into: categoryKey(main.group, main.name) };
+  }
+  return out;
 }
 
 /** YNAB's own categories (not Ready to Assign or card payments), with what you assigned a month on average lately. */
@@ -421,6 +484,8 @@ export type ImportResult = {
     notApprovedInYnab: number;
     /** Categories that pay one of your loans (a mortgage's "PITI"), linked to it: counted from Debts, not again as spending. */
     debtCategoriesLinked: number;
+    /** YNAB categories combined into another one (one category here for both). */
+    categoriesCombined: number;
     /** Older ones without a category: kept as history, nothing to do. */
     olderWithoutCategory: number;
     /** Transfers to accounts you left out: kept as transfers, nothing to do. */
@@ -605,7 +670,7 @@ function overspentBy(start: number, spending: { date: string; i: number; account
 /** Turn YNAB's data into the plan's categories, assignments, accounts and transactions. */
 export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): ImportResult {
   const plan = structuredClone(input);
-  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, notApprovedInYnab: 0, debtCategoriesLinked: 0, olderWithoutCategory: 0, transfersOutside: 0 };
+  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, notApprovedInYnab: 0, debtCategoriesLinked: 0, categoriesCombined: 0, olderWithoutCategory: 0, transfersOutside: 0 };
   // only this month's and last month's transactions are asked for a category (older ones are history)
   const [ty, tm] = o.thisMonth.split("-").map(Number) as [number, number];
   const recentFrom = tm === 1 ? `${ty - 1}-12-01` : `${ty}-${String(tm - 1).padStart(2, "0")}-01`;
@@ -673,11 +738,23 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   // YNAB keeps a payment line for every card, and hides the ones for cards you've closed: those are
   // named like the account, so they go together under Closed accounts (not among your categories)
   const accountNames = new Set(d.txns.map((t) => norm(t.account)));
+  const combined: YnabCategory[] = [];
   for (const c of cats) {
     const k = categoryKey(c.group, c.name);
     const opts = o.categories[k] ?? { inRetirement: true, essential: true };
     const ch = o.categoryMap?.[k] ?? suggestCategory(plan, c);
     if (ch.action === "skip") { summary.categoriesSkipped++; continue; }
+    if (ch.action === "combine") { combined.push(c); continue; }
+    if (ch.action === "invest") {
+      // money moved into an account: an investing category for it (not spending)
+      const accountId = ch.account.startsWith("plan:") ? ch.account.slice(5) : idOf.get(ch.account.slice(5));
+      if (!accountId) { summary.categoriesSkipped++; continue; }
+      const id = idFor("cat", k);
+      itemOf.set(k, id);
+      plan.budget.push({ id, name: c.name, amount: o.amounts?.[k] ?? c.average, inRetirement: false, group: (o.categoryGroup?.[k] ?? groupFor(c.group)) || undefined, accountId });
+      summary.categoriesAdded++;
+      continue;
+    }
     if (ch.action === "hidden") {
       const id = idFor("cat", k);
       itemOf.set(k, id);
@@ -710,6 +787,26 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     summary.categoriesAdded++;
   }
   plan.budget.push(...hiddenItems);
+  // combined into another of YNAB's: one category here (its transactions and amounts join that one's)
+  const rootOf = (k: string): string | undefined => {
+    let at = k;
+    for (let i = 0; i < 6; i++) {
+      const ch = o.categoryMap?.[at];
+      if (!ch || ch.action !== "combine") return at;
+      at = ch.into;
+    }
+    return undefined;
+  };
+  for (const c of combined) {
+    const k = categoryKey(c.group, c.name);
+    const root = rootOf(k);
+    const id = root ? itemOf.get(root) : undefined;
+    if (!id) { summary.categoriesSkipped++; continue; }
+    itemOf.set(k, id);
+    const item = plan.budget.find((b) => b.id === id);
+    if (item && !item.hidden) item.amount = Math.round((item.amount + (o.amounts?.[k] ?? c.average)) * 100) / 100;
+    summary.categoriesCombined++;
+  }
   // a category that pays one of your loans (a mortgage's PITI): linked to it, so it isn't counted twice
   summary.debtCategoriesLinked = linkDebtCategories(plan);
   if (o.removeEmpty) {
