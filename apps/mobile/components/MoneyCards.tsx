@@ -3,6 +3,7 @@
  * (not shown anywhere since Progress went away; goals show on Money and Forecast). Editing happens on the Money tab.
  */
 import { nextDue, type AccountType } from "@coastfi/engine";
+import { fullName } from "../lib/company";
 import { useRouter } from "expo-router";
 import { useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -69,7 +70,7 @@ export function NetWorthCard({ startOpen = false }: { startOpen?: boolean }) {
                 return (
                   <Line
                     key={a.id}
-                    label={a.name.trim() || "Unnamed account"}
+                    label={fullName(a, "Unnamed account")}
                     hint={hint}
                     value={money(a.balance)}
                     href={budgetIds.has(a.id) ? `/budget?view=transactions&account=${a.id}` : "/money/accounts"}

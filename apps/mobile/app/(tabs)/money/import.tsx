@@ -7,7 +7,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { isAppPath } from "../../../lib/nav";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { Button, InfoText, InfoTip, InlineMoney, InlineSwitch, MonthField, Segmented, Select, ToggleRow } from "../../../components/form";
+import { Button, InfoText, InfoTip, InlineMoney, InlineSwitch, MonthField, Segmented, Select, TextField, ToggleRow } from "../../../components/form";
+import { splitCompanies } from "../../../lib/company";
 import { Icon, type IconName } from "../../../components/Icon";
 import { Card, Divider, Screen } from "../../../components/ui";
 import { money } from "../../../lib/format";
@@ -76,6 +77,9 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const [range, setRange] = useState<string>("");
   const [amounts, setAmounts] = useState<Record<string, number>>({});
   const [choices, setChoices] = useState<Record<string, AccountChoice>>({});
+  // the company and name each added account gets here: "Chase - Sapphire" splits when other names share "Chase -"
+  const [names, setNames] = useState<Record<string, { company?: string; name: string }>>({});
+  const setName = (account: string, patch: { company?: string; name?: string }) => setNames((s) => ({ ...s, [account]: { ...(s[account] ?? { name: account }), ...patch } }));
   const [catOpts, setCatOpts] = useState<Record<string, { inRetirement: boolean; essential: boolean }>>({});
   const [removeEmpty, setRemoveEmpty] = useState(true);
   const [catMap, setCatMap] = useState<Record<string, CategoryChoice>>({});
@@ -130,6 +134,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         const since = recentMonths(thisMonth, 2)[0]!;
         // closed or empty accounts start left out; the open ones match an account here with the same name (each only once)
         const taken = new Set<string>();
+        setNames(splitCompanies(ynabAccounts(d, isoDay(start)).map((a) => a.name)));
         setChoices(Object.fromEntries(ynabAccounts(d, isoDay(start)).map((a) => {
           if (quietAccount(d, a.name, a.balance, since)) return [a.name, { action: "skip" }];
           const sug = suggestChoice(state, a, taken);
@@ -171,8 +176,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const [useYnabBalance, setUseYnabBalance] = useState<Record<string, boolean>>({});
   const conflicts = useMemo(() => (data ? balanceConflicts(saved, ynabAccounts(data, isoDay(start)), choices) : []), [data, saved, choices]);
   const preview = useMemo(
-    () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, today: isoDay(start) }) : null),
-    [data, saved, from, thisMonth, choices, useYnabBalance, catOpts, catMap, groupMap, catGroup, amounts, removeEmpty, existing, keepBoth],
+    () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, names, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, today: isoDay(start) }) : null),
+    [data, saved, from, thisMonth, choices, names, useYnabBalance, catOpts, catMap, groupMap, catGroup, amounts, removeEmpty, existing, keepBoth],
   );
 
   // Unassigned after this import, next to YNAB's Ready to Assign (only the accounts you bring in count on
@@ -216,7 +221,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     if (!data || running.current || useStore.getState().importedAt) return;
     running.current = true;
     setConfirming(false);
-    const r = buildImport(saved, data, { from, thisMonth, accounts: choices, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, today: isoDay(start) });
+    const r = buildImport(saved, data, { from, thisMonth, accounts: choices, names, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, today: isoDay(start) });
     // check Unassigned against YNAB's Ready to Assign, and say plainly if it's off
     const c = unassignedCheck(r);
     const said = !c ? "" : Math.abs(c.mine - c.ynab) < 0.01 ? ` Unassigned is ${money(c.mine)}, the same as YNAB's Ready to Assign.` : ` Unassigned is ${money(c.mine)}; YNAB's Ready to Assign is ${money(c.ynab)}.`;
@@ -259,6 +264,20 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
           </Text>
         ) : null}
         <Select label={`${a.name}: what it is here`} value={valueOf(choices[a.name])} options={options(a)} onChange={(v) => setChoice(a.name, v)} />
+        {(choices[a.name]?.action ?? "add") === "add" ? (
+          // a new account: its company and name here (both editable)
+          <View style={{ gap: 2, alignSelf: "stretch" }}>
+            <Text style={[type.caption, { color: t.text3 }]}>Company and name here</Text>
+            <View style={[styles.row, { gap: space.sm }]}>
+              <View style={{ flex: 2, minWidth: 0 }}>
+                <TextField label={`${a.name}: company`} placeholder="Company (optional)" value={names[a.name]?.company ?? ""} onChange={(v) => setName(a.name, { company: v })} />
+              </View>
+              <View style={{ flex: 3, minWidth: 0 }}>
+                <TextField label={`${a.name}: name here`} placeholder="Name" value={names[a.name]?.name ?? a.name} onChange={(v) => setName(a.name, { name: v })} />
+              </View>
+            </View>
+          </View>
+        ) : null}
       </View>
       {choices[a.name]?.action === "skip" && usedThisMonth(a.name) > 0 ? (
         <Text style={[type.caption, { color: t.bad }]}>
@@ -446,7 +465,6 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
       <Text style={[type.body, { color: t.text2 }]}>
         In YNAB, open your budget's menu and choose Export budget. It downloads a zip; pick it here. You'll choose what comes in before anything changes{setup ? ", and check it all in the rest of setup" : ""}.
       </Text>
-      <Text style={[type.caption, { color: t.text3 }]}>Coastwise isn't affiliated with YNAB.</Text>
       {Platform.OS === "web" ? (
         <Button title="Choose YNAB export" tone="primary" icon="plus" onPress={pick} style={{ alignSelf: "flex-start" }} />
       ) : (

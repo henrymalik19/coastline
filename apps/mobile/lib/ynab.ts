@@ -377,6 +377,8 @@ export type ImportOptions = {
   replaceMatching?: boolean;
   /** Matches you said aren't the same transaction (your transaction's id): both stay. */
   keepBoth?: string[];
+  /** Per YNAB account added (not matched): its company and name here (default: YNAB's name, no company). */
+  names?: Record<string, { company?: string; name: string }>;
   /** Ids for what the import adds (tests); without it, ids come from YNAB's names (see nameId). */
   newId?: () => string;
 };
@@ -588,10 +590,13 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     const id = idFor("acct", a.name);
     idOf.set(a.name, id);
     summary.accountsAdded++;
-    if (a.kind === "cash") plan.accounts.push({ id, name: a.name, type: "cash", balance: a.balance });
-    else if (a.kind === "invest") plan.accounts.push({ id, name: a.name, type: "taxable", balance: a.balance });
+    const named = o.names?.[a.name];
+    const name = named?.name.trim() || (named?.company?.trim() ? "" : a.name);
+    const co = named?.company?.trim() ? { company: named.company.trim() } : {};
+    if (a.kind === "cash") plan.accounts.push({ id, name, ...co, type: "cash", balance: a.balance });
+    else if (a.kind === "invest") plan.accounts.push({ id, name, ...co, type: "taxable", balance: a.balance });
     else {
-      const debt: Debt = { id, name: a.name, kind: a.kind === "card" ? "credit_card" : /mortgage/i.test(a.name) ? "mortgage" : /student/i.test(a.name) ? "student" : /auto|car/i.test(a.name) ? "car" : "other", balance: Math.max(0, -a.balance), apr: a.kind === "card" ? 0.24 : 0.06, minPayment: 0 };
+      const debt: Debt = { id, name, ...co, kind: a.kind === "card" ? "credit_card" : /mortgage/i.test(a.name) ? "mortgage" : /student/i.test(a.name) ? "student" : /auto|car/i.test(a.name) ? "car" : "other", balance: Math.max(0, -a.balance), apr: a.kind === "card" ? 0.24 : 0.06, minPayment: 0 };
       plan.debts.push(debt);
     }
   }

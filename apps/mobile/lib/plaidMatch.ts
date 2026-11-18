@@ -40,17 +40,18 @@ export function matchOf(p: Pick<PlanState, "accounts" | "debts">, b: Pick<BankAc
   return d ? { kind: "debt", item: d } : null;
 }
 
-/** What a bank account would be if added to the plan (type, name, debt kind). */
-export function newFromBank(b: BankAccount, id: string): { kind: "account"; account: Account } | { kind: "debt"; debt: Debt } {
+/** What a bank account would be if added to the plan (type, name, debt kind). `company`: the bank's name. */
+export function newFromBank(b: BankAccount, id: string, company?: string): { kind: "account"; account: Account } | { kind: "debt"; debt: Debt } {
   const name = b.name || b.officialName || "Account";
+  const co = company?.trim() ? { company: company.trim() } : {};
   const bal = Math.max(0, cents(b.current ?? 0));
   if (isDebtLike(b)) {
     const st = (b.subtype ?? "").toLowerCase();
     const kind: Debt["kind"] = b.type === "credit" ? "credit_card" : st === "student" ? "student" : st === "mortgage" ? "mortgage" : st === "auto" ? "car" : "personal";
-    return { kind: "debt", debt: { id, name, kind, balance: bal, apr: b.apr ?? 0, minPayment: cents(b.minPayment ?? 0), plaidAccountId: b.accountId } };
+    return { kind: "debt", debt: { id, name, ...co, kind, balance: bal, apr: b.apr ?? 0, minPayment: cents(b.minPayment ?? 0), plaidAccountId: b.accountId } };
   }
   const st = (b.subtype ?? "").toLowerCase();
-  const base = { id, name, balance: bal, plaidAccountId: b.accountId };
+  const base = { id, name, ...co, balance: bal, plaidAccountId: b.accountId };
   if (b.type === "depository") return { kind: "account", account: { ...base, type: "cash" } };
   if (b.type === "investment") {
     if (/hsa/.test(st)) return { kind: "account", account: { ...base, type: "hsa" } };

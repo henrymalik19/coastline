@@ -4,6 +4,7 @@
  * month, and what you assign to savings and debts is what the plan counts as done that month.
  */
 import { ReorderToggle } from "../../components/ReorderToggle";
+import { fullName } from "../../lib/company";
 import { ImportUndoReminder, useImported } from "../../components/ImportUndo";
 import { BUDGET_ITEM, budgetCategories, budgetView, SAVINGS_GROUP, spendingHistory, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
@@ -157,7 +158,7 @@ export default function Budget() {
       else delete e.cardDebt;
     });
   /** A card's name from its payment key (debt:<id>). */
-  const cardName = (key: string) => state.debts.find((x) => "debt:" + x.id === key)?.name?.trim() || "the card";
+  const cardName = (key: string) => { const d = state.debts.find((x) => "debt:" + x.id === key); return d ? fullName(d, "the card") : "the card"; };
   /** How much a category went over on cards this month (what it could leave on them as debt). */
   const overOnCards = (l: BudgetLine) => Math.min(Math.max(0, -l.available), Object.values(l.onCards ?? {}).reduce((a, v) => a + Math.max(0, v), 0));
   /** A card's payment line, this month: what you owe beyond what's set aside to pay it. */

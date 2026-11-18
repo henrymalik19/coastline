@@ -129,7 +129,7 @@ function ItemBlock({ item, accounts, busy }: { item: BankItem; accounts: BankAcc
       {accounts.map((b, i) => (
         <View key={b.id}>
           {i > 0 ? <Divider /> : null}
-          <BankRow b={b} />
+          <BankRow b={b} company={item.institution} />
         </View>
       ))}
       {!accounts.length ? <Text style={[type.caption, { color: t.text3 }]}>No accounts yet.</Text> : null}
@@ -137,7 +137,7 @@ function ItemBlock({ item, accounts, busy }: { item: BankItem; accounts: BankAcc
   );
 }
 
-function BankRow({ b }: { b: BankAccount }) {
+function BankRow({ b, company }: { b: BankAccount; company?: string }) {
   const t = useTheme();
   const { state } = usePlan();
   const update = useStore((s) => s.update);
@@ -159,7 +159,7 @@ function BankRow({ b }: { b: BankAccount }) {
       if (v === "") return setMatch(p, b, null);
       if (v === "new") {
         setMatch(p, b, null);
-        const n = newFromBank(b, newId());
+        const n = newFromBank(b, newId(), company && company !== "Bank" ? company : undefined);
         if (n.kind === "debt") p.debts.push(n.debt);
         else p.accounts.push(n.account);
         return;

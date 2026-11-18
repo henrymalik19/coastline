@@ -1,4 +1,5 @@
 import type { Debt, DebtKind } from "@coastfi/engine";
+import { fullName } from "./company";
 
 /**
  * Debt types offered as choices. `typicalApr` is a round ballpark used to pre-fill a
@@ -31,4 +32,4 @@ export const DEBT_KINDS: { value: DebtKind; label: string; typicalApr: number; p
 export const debtKind = (k?: DebtKind) => DEBT_KINDS.find((d) => d.value === (k ?? "other")) ?? DEBT_KINDS[DEBT_KINDS.length - 1]!;
 
 /** What to call a debt on screen: its name, else its type. */
-export const debtLabel = (d: Pick<Debt, "name" | "kind">) => d.name.trim() || debtKind(d.kind).label;
+export const debtLabel = (d: Pick<Debt, "name" | "kind"> & { company?: string }) => fullName(d, debtKind(d.kind).label);

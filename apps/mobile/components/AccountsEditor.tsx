@@ -17,6 +17,8 @@ import { money } from "../lib/format";
 import { monthKey } from "../lib/store";
 import { ensureSpouseStep, spouseName } from "../lib/spouse";
 import { sticky } from "../lib/sticky";
+import { fullName } from "../lib/company";
+import { CompanyField, NameWithCompany } from "./CompanyField";
 
 export const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [
   { value: "pretax", label: "Pre-tax" },
@@ -101,13 +103,13 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
                 <DragList
                   count={list.length}
                   keyOf={(n) => list[n]!.id}
-                  nameOf={(n) => list[n]!.name.trim() || "Unnamed account"}
+                  nameOf={(n) => fullName(list[n]!, "Unnamed account")}
                   onMove={(from, to) => update((p) => { p.accounts = reorderAmong(p.accounts, inGroup, from, to); })}
                   renderItem={(n, grip) => {
                     const a = list[n]!;
                     const i = accounts.indexOf(a);
             const isOpen = open === a.id;
-            const name = a.name.trim() || "Unnamed account";
+            const name = fullName(a, "Unnamed account");
             const ck = contributionKey(state, a);
             const per = ck && ck !== "payroll" ? plannedNow(state, ck, thisMonth) : undefined;
             return (
@@ -127,7 +129,7 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
                       <Icon name="chevron" size={18} color={t.text3} />
                     </View>
                     <View style={{ flex: 1, gap: 1 }}>
-                      <Text style={[type.body, { color: a.name.trim() ? t.text : t.text3 }]} numberOfLines={1}>{name}</Text>
+                      <NameWithCompany name={a.name.trim() || "Unnamed account"} company={a.company} color={a.name.trim() || a.company?.trim() ? t.text : t.text3} />
                       <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>
                         {typeLabel(a.type)}
                         {sp && a.owner === "spouse" ? ` · ${sp}'s` : ""}
@@ -165,7 +167,10 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
                         note={a.type === "cash" ? "Cash can go past your emergency fund goal if you plan it." : undefined}
                       />
                     ) : null}
-                    <TextField label="Account name" placeholder="e.g. Fidelity 401(k)" value={a.name} onChange={(v) => update((p) => { p.accounts[i]!.name = v; })} />
+                    <Text style={[type.caption, { color: t.text3 }]}>Company</Text>
+                    <CompanyField id={a.id} value={a.company} onChange={(v) => update((p) => { if (v) p.accounts[i]!.company = v; else delete p.accounts[i]!.company; })} />
+                    <Text style={[type.caption, { color: t.text3 }]}>Name</Text>
+                    <TextField label="Account name" placeholder="e.g. 401(k)" value={a.name} onChange={(v) => update((p) => { p.accounts[i]!.name = v; })} />
                     <Choice label="Account type" options={ACCOUNT_TYPES} value={a.type} onChange={(v) => update((p) => { p.accounts[i]!.type = v; })} />
                     <Text style={[type.caption, { color: t.text3 }]}>{HELP[a.type]}</Text>
                     {a.type !== "cash" ? (
@@ -222,11 +227,11 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
             <DragList
               count={cards.length}
               keyOf={(n) => cards[n]!.id}
-              nameOf={(n) => cards[n]!.name?.trim() || "Credit card"}
+              nameOf={(n) => fullName(cards[n]!, "Credit card")}
               onMove={(from, to) => update((p) => { p.debts = reorderAmong(p.debts, isCard, from, to); })}
               renderItem={(n, grip) => {
                 const d = cards[n]!;
-                const name = d.name?.trim() || "Credit card";
+                const name = fullName(d, "Credit card");
                 const reg = hasRegister(txns, d.id);
                 return (
                   <View>
@@ -240,7 +245,7 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
                         style={[styles.row, { flex: 1, minHeight: 36 }]}
                       >
                         <View style={{ flex: 1, gap: 1 }}>
-                          <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{name}</Text>
+                          <NameWithCompany name={d.name?.trim() || "Credit card"} company={d.company} color={t.text} />
                           <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>Credit card · {reg ? "transactions" : "edit on Debts"}</Text>
                         </View>
                         <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(d.balance)} owed</Text>

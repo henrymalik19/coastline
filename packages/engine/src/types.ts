@@ -97,6 +97,8 @@ export type PlanAccount = "k401" | "ira" | "hsa" | "taxable" | "other";
 export type Account = {
   id: string;
   name: string;
+  /** The bank or company it's with ("Chase"), shown before the name. */
+  company?: string;
   type: AccountType;
   balance: number;
   plaidAccountId?: string;
@@ -159,8 +161,10 @@ export type RentalInRetirement = {
 export type DebtKind = "credit_card" | "car" | "student" | "mortgage" | "personal" | "medical" | "k401_loan" | "other";
 export type Debt = {
   id: string;
-  /** Optional description ("Chase Sapphire"); the UI falls back to the kind's label. */
+  /** Optional description ("Sapphire"); the UI falls back to the kind's label. */
   name: string;
+  /** The bank or company it's with ("Chase"), shown before the name. */
+  company?: string;
   kind?: DebtKind;
   balance: number;
   apr: number;

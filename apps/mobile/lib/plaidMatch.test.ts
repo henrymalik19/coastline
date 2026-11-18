@@ -16,6 +16,9 @@ const plan = () => {
 describe("newFromBank", () => {
   it("guesses the account type from the bank's", () => {
     expect(newFromBank(bank({ type: "depository" }), "x")).toMatchObject({ kind: "account", account: { type: "cash", balance: 100, plaidAccountId: "acc" } });
+    // the bank's name becomes the company
+    expect(newFromBank(bank({ type: "depository" }), "x", "Chase")).toMatchObject({ account: { company: "Chase" } });
+    expect(newFromBank(bank({ type: "credit" }), "x", "Chase")).toMatchObject({ debt: { company: "Chase" } });
     expect(newFromBank(bank({ type: "investment", subtype: "401k" }), "x")).toMatchObject({ account: { type: "pretax", counts: "k401" } });
     expect(newFromBank(bank({ type: "investment", subtype: "roth" }), "x")).toMatchObject({ account: { type: "roth", counts: "ira" } });
     expect(newFromBank(bank({ type: "investment", subtype: "ira" }), "x")).toMatchObject({ account: { type: "pretax", counts: "ira" } });

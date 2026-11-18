@@ -3,6 +3,7 @@
  * starting with a "Starting balance" transaction, and keeping the plan's balances in step with them.
  */
 import { budgetCategories, budgetStartCash, budgetView, isStartTxn, registerBalance, run, startTxnId, type BudgetState, type PlanState, type Txn } from "@coastfi/engine";
+import { fullName } from "./company";
 
 export type BudgetAccount = { id: string; name: string; kind: "cash" | "card"; balance: number };
 
@@ -13,8 +14,8 @@ export const isCard = (d: Pick<PlanState["debts"][number], "kind" | "name" | "pa
 /** Cash accounts and credit cards: the accounts you budget from. A card's balance is what you owe, as a negative. */
 export function budgetAccounts(p: PlanState): BudgetAccount[] {
   return [
-    ...p.accounts.filter((a) => a.type === "cash").map((a) => ({ id: a.id, name: a.name.trim() || "Cash", kind: "cash" as const, balance: a.balance })),
-    ...p.debts.filter(isCard).map((d) => ({ id: d.id, name: d.name?.trim() || "Credit card", kind: "card" as const, balance: -d.balance })),
+    ...p.accounts.filter((a) => a.type === "cash").map((a) => ({ id: a.id, name: fullName(a, "Cash"), kind: "cash" as const, balance: a.balance })),
+    ...p.debts.filter(isCard).map((d) => ({ id: d.id, name: fullName(d, "Credit card"), kind: "card" as const, balance: -d.balance })),
   ];
 }
 
@@ -112,8 +113,8 @@ export function applyRegisterBalances(p: PlanState, txns: Txn[], asOf = todayIso
 export type TrackingAccount = { id: string; name: string; kind: "acct" | "debt"; key: string; balance: number };
 export function trackingAccounts(p: PlanState): TrackingAccount[] {
   return [
-    ...p.accounts.filter((a) => a.type !== "cash" && a.type !== "property").map((a) => ({ id: a.id, name: a.name.trim() || "Account", kind: "acct" as const, key: "acct:" + a.id, balance: a.balance })),
-    ...p.debts.filter((d) => !isCard(d) && !d.payroll && d.balance > 0).map((d) => ({ id: d.id, name: d.name?.trim() || "Loan", kind: "debt" as const, key: "debt:" + d.id, balance: d.balance })),
+    ...p.accounts.filter((a) => a.type !== "cash" && a.type !== "property").map((a) => ({ id: a.id, name: fullName(a, "Account"), kind: "acct" as const, key: "acct:" + a.id, balance: a.balance })),
+    ...p.debts.filter((d) => !isCard(d) && !d.payroll && d.balance > 0).map((d) => ({ id: d.id, name: fullName(d, "Loan"), kind: "debt" as const, key: "debt:" + d.id, balance: d.balance })),
   ];
 }
 

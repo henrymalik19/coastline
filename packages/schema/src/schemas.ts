@@ -62,6 +62,7 @@ export const AccountTypeSchema = z.enum(["pretax", "roth", "taxable", "hsa", "ca
 export const AccountSchema = z.object({
   id,
   name: z.string(),
+  company: z.string().optional(),
   type: AccountTypeSchema,
   balance: money,
   plaidAccountId: z.string().optional(),
@@ -74,6 +75,7 @@ export const DebtKindSchema = z.enum(["credit_card", "car", "student", "mortgage
 export const DebtSchema = z.object({
   id,
   name: z.string(),
+  company: z.string().optional(),
   kind: DebtKindSchema.optional(),
   balance: nonNeg,
   apr: rate.min(0),

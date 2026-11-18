@@ -206,6 +206,15 @@ describe("importing into the plan", () => {
     expect(budgetStartCash(r.plan, r.txns, "2026-12")).toBe(5800);
   });
 
+  it("an account added gets the company and name you give it (matched ones keep yours)", () => {
+    const { plan, d, opts } = setup();
+    const r = buildImport(plan, d, { ...opts, names: { Visa: { company: "Chase", name: "Sapphire" }, Checking: { company: "Ally", name: "Main" } } });
+    expect(r.plan.debts.find((x) => x.company === "Chase")).toMatchObject({ name: "Sapphire", kind: "credit_card" });
+    // Checking was matched to yours: its name stays
+    expect(r.plan.accounts.find((a) => a.id === "chk")).toMatchObject({ name: "Checking" });
+    expect(r.plan.accounts.find((a) => a.id === "chk")!.company).toBeUndefined();
+  });
+
   it("two YNAB accounts never land in one account here", () => {
     const { plan, d, opts } = setup();
     const r = buildImport(plan, d, { ...opts, accounts: { Checking: { action: "match", id: "chk" }, "Roth IRA": { action: "match", id: "chk" } } });

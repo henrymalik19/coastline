@@ -31,12 +31,12 @@ export function fullPlan(): PlanState {
     ],
     accounts: [
       { id: "ira", name: "Roth IRA", type: "roth", balance: 12000.12, counts: "ira", owner: "spouse", plaidAccountId: "p1" },
-      { id: "chk", name: "Checking", type: "cash", balance: 13962.11 },
+      { id: "chk", name: "Checking", company: "Ally", type: "cash", balance: 13962.11 },
     ],
     debts: [
       { id: "m", name: "840 Madison", kind: "mortgage", balance: 366819.87, apr: 0.061, minPayment: 3572.77, minimumOnly: true, escrow: 1235, term: 360, firstPayment: "2023-04", original: 400000, budgetGroup: "Housing" },
       { id: "r", name: "710 Dillon", kind: "mortgage", balance: 175236.52, apr: 0.033, minPayment: 1147.19, plaidAccountId: "p2" },
-      { id: "cc", name: "Visa", kind: "credit_card", balance: 3000, apr: 0.24, minPayment: 90, promoApr: 0, promoUntil: "2027-06" },
+      { id: "cc", name: "Visa", company: "Chase", kind: "credit_card", balance: 3000, apr: 0.24, minPayment: 90, promoApr: 0, promoUntil: "2027-06" },
       { id: "loan", name: "401(k) loan", kind: "k401_loan", balance: 25305.25, apr: 0.078, minPayment: 528, payroll: true },
     ],
     goals: [

@@ -1,5 +1,6 @@
 import { isRentalDebt, PERIODS, type Debt, type DebtKind, type PlanState } from "@coastfi/engine";
 import { useState } from "react";
+import { CompanyField } from "./CompanyField";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { DEBT_KINDS, debtKind, debtLabel } from "../lib/debts";
 import { money, percent } from "../lib/format";
@@ -99,6 +100,12 @@ export function DebtEditor({
           );
         })}
       </View>
+      <FieldRow label="Company" hint="The bank it's with, shown before the name">
+        <View style={{ width: 220 }}>
+          <CompanyField id={debt.id} value={debt.company} onChange={(v) => onChange({ company: v || undefined })} />
+        </View>
+      </FieldRow>
+      <Divider />
       <FieldRow label="Name" hint="Optional, to tell debts apart">
         <TextField width={220} label="Debt name (optional)" placeholder={kind.placeholder} value={debt.name} onChange={(v) => onChange({ name: v })} />
       </FieldRow>
