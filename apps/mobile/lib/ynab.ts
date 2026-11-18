@@ -239,8 +239,10 @@ export type YnabAccountKind = "cash" | "card" | "invest" | "loan";
 export type YnabAccount = {
   name: string;
   kind: YnabAccountKind;
-  /** Today's balance in YNAB (a card or loan: negative, what you owe). */
+  /** Today's balance in YNAB, as YNAB shows it: transactions dated after today aren't in it (a card or loan: negative, what you owe). */
   balance: number;
+  /** What transactions dated after today add up to (they count on their day). */
+  upcoming: number;
   /** On your YNAB budget (its transactions have categories), or a tracking account. */
   onBudget: boolean;
   txnCount: number;
@@ -253,13 +255,14 @@ const CARD_GROUP = /^credit card payments$/i;
 const SPECIAL_GROUP = /^(inflow|credit card payments|hidden categories|internal master category)$/i;
 
 /** YNAB's accounts, from the register: what kind each looks like and its balance today. */
-export function ynabAccounts(d: YnabData): YnabAccount[] {
+export function ynabAccounts(d: YnabData, today?: string): YnabAccount[] {
   const cards = new Set(d.assigned.filter((a) => CARD_GROUP.test(a.group)).map((a) => norm(a.category)));
   for (const t of d.txns) if (CARD_GROUP.test(t.group)) cards.add(norm(t.category));
   const by = new Map<string, YnabAccount>();
   for (const t of d.txns) {
-    const a = by.get(t.account) ?? { name: t.account, kind: "cash" as YnabAccountKind, balance: 0, onBudget: false, txnCount: 0 };
-    a.balance = Math.round((a.balance + t.amount) * 100) / 100;
+    const a = by.get(t.account) ?? { name: t.account, kind: "cash" as YnabAccountKind, balance: 0, upcoming: 0, onBudget: false, txnCount: 0 };
+    if (today && t.date > today) a.upcoming = Math.round((a.upcoming + t.amount) * 100) / 100;
+    else a.balance = Math.round((a.balance + t.amount) * 100) / 100;
     a.txnCount++;
     if (t.category || t.splits?.length) a.onBudget = true;
     by.set(t.account, a);
@@ -344,6 +347,8 @@ export type ImportOptions = {
   from: string | null;
   /** This month, "YYYY-MM". */
   thisMonth: string;
+  /** Today, "YYYY-MM-DD": balances are as of today (later transactions count on their day). Without it, everything counts. */
+  today?: string;
   accounts: Record<string, AccountChoice>;
   /**
    * Per YNAB account matched to an investment account or loan of yours: take YNAB's balance (true) instead
@@ -444,7 +449,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   // only this month's and last month's transactions are asked for a category (older ones are history)
   const [ty, tm] = o.thisMonth.split("-").map(Number) as [number, number];
   const recentFrom = tm === 1 ? `${ty - 1}-12-01` : `${ty}-${String(tm - 1).padStart(2, "0")}-01`;
-  const accts = ynabAccounts(d);
+  const accts = ynabAccounts(d, o.today);
 
   // accounts: matched, added, or left out
   const idOf = new Map<string, string>();

@@ -344,3 +344,15 @@ describe("the same ids on every device", () => {
     expect(nameId("cat", "Checking", new Set())).not.toBe(first);
   });
 });
+
+describe("balances as YNAB shows them", () => {
+  it("today's balance leaves out transactions dated later; they're listed as upcoming", () => {
+    const t = (date: string, amount: number) => ({ account: "Travel", date, amount, payee: "", memo: "", group: "Fun", category: "Trips", cleared: "cleared" as const });
+    const d = { txns: [t("2026-11-01", 1050.01), t("2026-11-27", 2429.16)], assigned: [] } as unknown as Parameters<typeof ynabAccounts>[0];
+    const [a] = ynabAccounts(d, "2026-11-17");
+    expect(a!.balance).toBe(1050.01);
+    expect(a!.upcoming).toBe(2429.16);
+    // no date given: everything counts (as before)
+    expect(ynabAccounts(d)[0]!.balance).toBe(3479.17);
+  });
+});

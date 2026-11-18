@@ -129,7 +129,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
         const since = recentMonths(thisMonth, 2)[0]!;
         // closed or empty accounts start left out; the open ones match an account here with the same name (each only once)
         const taken = new Set<string>();
-        setChoices(Object.fromEntries(ynabAccounts(d).map((a) => {
+        setChoices(Object.fromEntries(ynabAccounts(d, isoDay(start)).map((a) => {
           if (quietAccount(d, a.name, a.balance, since)) return [a.name, { action: "skip" }];
           const sug = suggestChoice(state, a, taken);
           if (sug.action === "match") taken.add(sug.id);
@@ -147,7 +147,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     input.click();
   };
 
-  const accounts = useMemo(() => (data ? ynabAccounts(data) : []), [data]);
+  const accounts = useMemo(() => (data ? ynabAccounts(data, isoDay(start)) : []), [data, start]);
   const categories = useMemo(() => (data ? ynabCategories(data, recentMonths(thisMonth)) : []), [data, thisMonth]);
   const months = useMemo(() => (data ? exportMonths(data, thisMonth) : []), [data, thisMonth]);
   // default: the last 3 months, or all the export has if that is less
@@ -168,9 +168,9 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     });
   // investment accounts and loans matched to yours: keep your balance unless you pick YNAB's
   const [useYnabBalance, setUseYnabBalance] = useState<Record<string, boolean>>({});
-  const conflicts = useMemo(() => (data ? balanceConflicts(saved, ynabAccounts(data), choices) : []), [data, saved, choices]);
+  const conflicts = useMemo(() => (data ? balanceConflicts(saved, ynabAccounts(data, isoDay(start)), choices) : []), [data, saved, choices]);
   const preview = useMemo(
-    () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth }) : null),
+    () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, today: isoDay(start) }) : null),
     [data, saved, from, thisMonth, choices, useYnabBalance, catOpts, catMap, groupMap, catGroup, amounts, removeEmpty, existing, keepBoth],
   );
 
@@ -198,7 +198,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     if (!data || running.current || useStore.getState().importedAt) return;
     running.current = true;
     setConfirming(false);
-    const r = buildImport(saved, data, { from, thisMonth, accounts: choices, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth });
+    const r = buildImport(saved, data, { from, thisMonth, accounts: choices, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, today: isoDay(start) });
     importBudget(r.plan, r.txns, r.replaced);
     setDone(`Imported ${r.summary.transactions} transactions and ${r.summary.categoriesAdded + r.summary.categoriesUpdated} categories.`);
     setDoneNeeds(r.summary.needsCategoryFromYnab + r.summary.needsCategoryLeftOut);
@@ -232,6 +232,11 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
             {showKind ? `${KIND_LABEL[a.kind]} · ` : ""}{a.kind === "card" || a.kind === "loan" ? `Owe ${money(Math.max(0, -a.balance))}` : money(a.balance)}
           </Text>
         </View>
+        {a.upcoming ? (
+          <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
+            {a.upcoming > 0 ? "+" : "−"}{money(Math.abs(a.upcoming))} upcoming · {a.kind === "card" || a.kind === "loan" ? `owe ${money(Math.max(0, -(a.balance + a.upcoming)))}` : money(a.balance + a.upcoming)} after
+          </Text>
+        ) : null}
         <Select label={`${a.name}: what it is here`} value={valueOf(choices[a.name])} options={options(a)} onChange={(v) => setChoice(a.name, v)} />
       </View>
       {(() => {
