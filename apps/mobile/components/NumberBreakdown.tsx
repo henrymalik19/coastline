@@ -81,26 +81,70 @@ export function NumberBreakdown() {
   const reached = b.invested >= b.coastNow;
   const whatIf = Math.abs(num(state.whatif?.spendDelta)) > 0.0001;
 
-  // the answer: your number, your Coast number today, and where you stand
+  // when your plan gets there: Coast FI (savings catch up with the Coast number), and the FIRE number itself
+  const coastMonths = o.crossing === null ? null : Math.round(o.crossing * 12);
+  const fireMonths = o.whenBalance(b.fire);
+  const retireMonths = Math.round(yearsToRetire * 12);
+  const ageAt = (m: number) => Math.floor(d.age + m / 12);
+  const when = (m: number) => (m <= 0 ? "now" : `${monthLabel(start, m)} (age ${ageAt(m)})`);
+  const pointRow = (dot: string, title: string, sub: string, last = false) => (
+    <View style={styles.point}>
+      <View style={{ alignItems: "center", width: 14 }}>
+        <View style={[styles.dot, { backgroundColor: dot }]} />
+        {last ? null : <View style={[styles.stem, { backgroundColor: t.border }]} />}
+      </View>
+      <View style={{ flex: 1, minWidth: 0, paddingBottom: last ? 0 : space.sm }}>
+        <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{title}</Text>
+        <Text style={[type.caption, { color: t.text3 }]}>{sub}</Text>
+      </View>
+    </View>
+  );
+
+  // the answer: the two numbers in plain words, and when your plan reaches each
   const answer = (
     <Card style={{ gap: space.md }}>
       <View style={styles.answers}>
         <View style={[styles.answer, { backgroundColor: t.surface2 }]}>
           <Text style={[type.caption, { color: t.text3 }]}>Your FIRE number</Text>
-          <Text style={[type.title, { color: t.text, fontVariant: ["tabular-nums"] }]}>{whole(b.fire)}</Text>
-          <Text style={[type.caption, { color: t.text3 }]}>Invested by {d.retireAge} to retire, in today's dollars</Text>
+          <Text style={[type.title, { color: whatIf ? t.warn : t.text, fontVariant: ["tabular-nums"] }]}>{whole(b.fire)}</Text>
+          <Text style={[type.caption, { color: t.text2 }]}>
+            What you need invested on the day you retire at {d.retireAge}, so it pays your retirement spending for life. In today's dollars.
+          </Text>
         </View>
         <View style={[styles.answer, { backgroundColor: t.surface2 }]}>
           <Text style={[type.caption, { color: t.text3 }]}>Your Coast number today</Text>
-          <Text style={[type.title, { color: reached ? t.good : t.text, fontVariant: ["tabular-nums"] }]}>{whole(b.coastNow)}</Text>
-          <Text style={[type.caption, { color: reached ? t.good : t.text3, fontWeight: reached ? "700" : "500" }]}>
-            {reached ? `Reached: your ${whole(b.invested)} grows into your number on its own` : `You have ${whole(b.invested)}, ${whole(b.coastNow - b.invested)} to go`}
+          <Text style={[type.title, { color: whatIf ? t.warn : reached ? t.good : t.text, fontVariant: ["tabular-nums"] }]}>{whole(b.coastNow)}</Text>
+          <Text style={[type.caption, { color: t.text2 }]}>
+            Have this much invested today and never add another dollar: at about {percent(b.r, 1)} a year after inflation, it grows into your FIRE number by {d.retireAge}.
           </Text>
         </View>
       </View>
-      <Text style={[type.caption, { color: t.text3 }]}>
-        Coast FI: once what you've invested would grow into your FIRE number by {d.retireAge} on its own, you only need to cover today's bills.
-      </Text>
+
+      {/* how the two connect: your savings catch up with the Coast number, then growth does the rest */}
+      <View style={{ gap: 0 }}>
+        <Text style={[type.overline, { color: t.text3, marginBottom: space.sm }]}>On your plan</Text>
+        {pointRow(t.accent, `Today: ${whole(b.invested)} invested`, reached ? "Already past your Coast number." : `${whole(b.coastNow - b.invested)} short of your Coast number. It goes up a little each year (less time left to grow), so your savings have to catch it.`)}
+        {pointRow(
+          reached ? t.good : coastMonths === null ? t.bad : t.text3,
+          reached ? "Coast FI: reached" : coastMonths === null ? `Coast FI: not before ${d.retireAge}` : `Coast FI: ${when(coastMonths)}`,
+          reached || coastMonths !== null
+            ? `From here you could stop investing: what you have grows into ${whole(b.fire)} by ${d.retireAge}. You'd only need to cover today's bills.`
+            : "Your plan doesn't catch up before you retire. Saving more, spending less in retirement or retiring later would change that.",
+        )}
+        {pointRow(
+          fireMonths !== null && fireMonths <= retireMonths ? t.good : t.text3,
+          fireMonths !== null && fireMonths < retireMonths ? `FIRE number: ${when(fireMonths)}` : `Retire at ${d.retireAge}: ${whole(b.fire)}`,
+          fireMonths !== null && fireMonths < retireMonths
+            ? `Keep investing as planned and you'd have your FIRE number before ${d.retireAge}: you could retire then.`
+            : `About ${whole(b.planValue)} by then on your plan${b.planValue + 0.5 >= b.fire ? ", enough." : `, ${whole(b.fire - b.planValue)} short.`}`,
+          true,
+        )}
+      </View>
+      {whatIf ? (
+        <Text style={[type.caption, { color: t.warn, fontWeight: "700" }]}>
+          Includes a what-if from Forecast (retirement spending {num(state.whatif?.spendDelta) >= 0 ? "+" : "−"}{Math.round(Math.abs(num(state.whatif?.spendDelta)) * 100)}%).
+        </Text>
+      ) : null}
     </Card>
   );
 
@@ -110,7 +154,7 @@ export function NumberBreakdown() {
       {step(1, "What you'll spend", `${whole(b.retireAnnual / 12)}/mo`,
         d.retireSpendingSet ? "The yearly amount you set for retirement." : "The budget categories you'd still pay after retiring, plus healthcare and your homes' taxes and insurance.",
         <>
-          {b.spending.map((x) => <View key={x.key}>{row(x.label, `${x.monthly < 0 ? "−" : ""}${whole(Math.abs(x.monthly))}/mo`, x.key === "whatif" ? { sub: "From the what-ifs on Forecast" } : {})}</View>)}
+          {b.spending.map((x) => <View key={x.key}>{row(x.label, `${x.monthly < 0 ? "−" : ""}${whole(Math.abs(x.monthly))}/mo`, x.key === "whatif" ? { sub: "From the what-ifs on Forecast", tone: t.warn } : {})}</View>)}
           <Divider />
           {row("Retirement spending", per(b.retireAnnual), { strong: true, sub: d.retireSpendingSet ? `Your budget's retirement items add up to ${whole(d.retireMonthlyBudget * 12)}/yr` : undefined })}
           {link(d.retireSpendingSet ? "Change your set amount" : "Choose categories and amounts", () => openPage("/money/retirement"))}
@@ -157,7 +201,11 @@ export function NumberBreakdown() {
           {row("You plan to spend", per(b.retireAnnual), { strong: true })}
         </>)}
       <View style={{ marginTop: space.xs }}>
-        {link(whatIf ? "A what-if is on: change it on Forecast" : "Try what-ifs on Forecast", () => router.push("/plan"))}
+        {whatIf ? (
+          <Pressable role="link" onPress={() => router.push("/plan")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
+            <Text style={[type.caption, { color: t.warn, fontWeight: "700" }]}>A what-if is on: change it on Forecast →</Text>
+          </Pressable>
+        ) : link("Try what-ifs on Forecast", () => router.push("/plan"))}
       </View>
     </Card>
   );
@@ -236,4 +284,7 @@ const styles = StyleSheet.create({
   num: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   answers: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   answer: { flexGrow: 1, flexBasis: 220, borderRadius: radius.md, padding: space.md, gap: 2 },
+  point: { flexDirection: "row", gap: space.sm },
+  dot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
+  stem: { width: 2, flex: 1, marginTop: 2 },
 });

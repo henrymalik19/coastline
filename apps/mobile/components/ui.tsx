@@ -20,8 +20,11 @@ export function Screen({
   titleTag?: ReactNode;
   /** Forms and text: cap at a readable width instead of filling the screen. */
   narrow?: boolean;
-  /** Show a back button (sub-pages). Pass a function to choose where it goes. */
-  back?: boolean | (() => void);
+  /**
+   * Show a back button (sub-pages). It goes back to the page you came from; with nothing to go back to
+   * (opened from a bookmark), to the page it belongs under: `back="/plan"`. A function chooses itself.
+   */
+  back?: boolean | string | (() => void);
   hideSettings?: boolean;
   /** Full-height page that doesn't scroll; its content scrolls internally (e.g. two-pane editors). */
   fill?: boolean;
@@ -52,7 +55,7 @@ export function Screen({
           <Pressable
             role="link"
             accessibilityLabel="Back"
-            onPress={() => (typeof back === "function" ? back() : router.canGoBack() ? router.back() : router.replace("/settings"))}
+            onPress={() => (typeof back === "function" ? back() : router.canGoBack() ? router.back() : router.replace((typeof back === "string" ? back : "/settings") as never))}
             style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start", marginLeft: -6, marginBottom: -8 }}
           >
             <Icon name="back" size={20} color={t.accent} />

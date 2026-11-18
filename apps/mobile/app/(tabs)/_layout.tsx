@@ -38,6 +38,8 @@ export default function TabsLayout() {
       <Tabs
         // Desktop web: sidebar on the left. Phones (native and narrow web): bottom tabs.
         tabBar={wide ? (props) => <Sidebar {...props} icons={ICONS} /> : undefined}
+        // Back goes to the page you were on (not to the first tab, Home)
+        backBehavior="history"
         screenOptions={{
           headerShown: false,
           tabBarPosition: wide ? "left" : "bottom",

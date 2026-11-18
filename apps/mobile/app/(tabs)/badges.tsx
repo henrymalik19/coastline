@@ -20,7 +20,7 @@ export default function Badges() {
   const rows: (typeof badges)[] = [];
   for (let i = 0; i < badges.length; i += cols) rows.push(badges.slice(i, i + cols));
   return (
-    <Screen title="Badges" subtitle={`Level ${got + 1} · ${got} of ${badges.length}`} back>
+    <Screen title="Badges" subtitle={`Level ${got + 1} · ${got} of ${badges.length}`} back="/home">
       <Card style={{ gap: space.sm }}>
         <SectionLabel>Level {got + 1}</SectionLabel>
         <ProgressBar progress={got / badges.length} />

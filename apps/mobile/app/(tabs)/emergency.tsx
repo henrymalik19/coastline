@@ -35,7 +35,7 @@ export default function Emergency() {
   const fmtRunway = (v: number) => (Number.isFinite(v) ? `${v.toFixed(1)} months` : "no expenses set");
 
   return (
-    <Screen title="Emergency mode" subtitle="For a job loss, a big bill, or a stretch that goes sideways" narrow hideSettings back>
+    <Screen title="Emergency mode" subtitle="For a job loss, a big bill, or a stretch that goes sideways" narrow hideSettings back="/home">
       {/* on/off */}
       <Card style={{ gap: space.md, borderColor: em.active ? t.warn : t.border, borderWidth: em.active ? 2 : StyleSheet.hairlineWidth }}>
         <View style={styles.between}>
