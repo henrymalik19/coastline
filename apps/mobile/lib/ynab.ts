@@ -571,6 +571,16 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   const budgetFrom = from > lastMonth ? from : lastMonth;
   if (!plan.budgetPlan) plan.budgetPlan = { start: budgetFrom, startCash: 0, months: {} };
   if (plan.budgetPlan.start > budgetFrom) plan.budgetPlan.start = budgetFrom;
+  // YNAB's budget replaces these months whole: an amount left on a line YNAB doesn't have (say a loan
+  // payment line budgeted here before the import, while YNAB pays it from its own category) would
+  // count the same money twice. Later months are left alone.
+  for (let m = budgetFrom; m <= o.thisMonth; m = addMonthsTo(m, 1)) {
+    const e = plan.budgetPlan.months[m];
+    if (e?.assigned) {
+      const { assigned: _old, ...rest } = e;
+      plan.budgetPlan.months[m] = rest;
+    }
+  }
   const monthsTouched = new Set<string>();
   const setHere = new Set<string>();
   const carryMonth = addMonthsTo(budgetFrom, -1);
@@ -584,8 +594,14 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
     // (the month before's available, carried into the first month, adds to that month's own)
     const prev = setHere.has(a.month + "|" + key) ? (e.assigned?.[key] ?? 0) : 0;
     setHere.add(a.month + "|" + key);
-    e.assigned = { ...(e.assigned ?? {}), [key]: Math.round((prev + Math.max(0, a.assigned)) * 100) / 100 };
+    // a negative amount is money moved out of the category in YNAB: it nets against the rest (the month
+    // before's money carried in, say), and only the total can't go below zero (as a budget amount here can't)
+    e.assigned = { ...(e.assigned ?? {}), [key]: Math.round((prev + a.assigned) * 100) / 100 };
     monthsTouched.add(a.month);
+  }
+  for (const m of monthsTouched) {
+    const e = plan.budgetPlan.months[m]!;
+    e.assigned = Object.fromEntries(Object.entries(e.assigned ?? {}).map(([k, v]) => [k, Math.max(0, v)]));
   }
   summary.months = monthsTouched.size;
 

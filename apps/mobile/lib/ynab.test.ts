@@ -356,3 +356,37 @@ describe("balances as YNAB shows them", () => {
     expect(ynabAccounts(d)[0]!.balance).toBe(3479.17);
   });
 });
+
+describe("YNAB's budget replaces the months it brings in", () => {
+  it("an amount on a line YNAB doesn't have is gone from those months, and later months are left alone", () => {
+    const plan: PlanState = freshPlan();
+    plan.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 1 }];
+    plan.debts = [{ id: "house", name: "Mortgage", kind: "mortgage", balance: 300000, apr: 0.06, minPayment: 2000 }];
+    // budgeted here before the import: the mortgage payment line (YNAB pays it from its own category)
+    plan.budgetPlan = { start: "2026-11", startCash: 0, months: { "2026-11": { assigned: { "debt:house": 2000 } }, "2027-01": { assigned: { "debt:house": 2000 } } } };
+    let n = 0;
+    const r = buildImport(plan, parseYnab(REG, PLAN), { from: "2026-11", thisMonth: "2026-12", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
+    const months = r.plan.budgetPlan!.months;
+    for (const m of ["2026-11", "2026-12"]) expect(months[m]?.assigned?.["debt:house"]).toBeUndefined();
+    expect(Object.values(months["2026-11"]?.assigned ?? {}).length).toBeGreaterThan(0);
+    expect(months["2027-01"]?.assigned?.["debt:house"]).toBe(2000);
+  });
+});
+
+describe("money moved out of a category in YNAB", () => {
+  it("a negative amount nets against what was carried in, never below zero", () => {
+    // October left $500 in Roth IRA; in November it was moved back out (a negative amount in YNAB)
+    const plan = PLAN.replace(`"Nov 2026","Savings: Roth IRA","Savings","Roth IRA","$500.00","-$500.00","$500.00"`, `"Nov 2026","Savings: Roth IRA","Savings","Roth IRA","-$500.00","$0.00","$0.00"`);
+    expect(plan).not.toBe(PLAN);
+    const p: PlanState = freshPlan();
+    p.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 1 }];
+    let n = 0;
+    const r = buildImport(p, parseYnab(REG, plan), { from: "2026-11", thisMonth: "2026-12", accounts: {}, categories: {}, removeEmpty: false, newId: () => `n${++n}` });
+    const roth = r.plan.budget.find((b) => b.name === "Roth IRA")!;
+    const groceries = r.plan.budget.find((b) => b.name === "Groceries")!;
+    const nov = r.plan.budgetPlan!.months["2026-11"]!.assigned!;
+    expect(nov[roth.id] ?? 0).toBe(0);
+    // Groceries: October's $200 left over carries in, plus November's $650
+    expect(nov[groceries.id]).toBe(850);
+  });
+});
