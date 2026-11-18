@@ -100,6 +100,13 @@ export type BudgetItem = {
    * the category isn't counted again as spending, now or in retirement. It still shows on the Budget.
    */
   paysDebt?: string;
+  /**
+   * A sub category: the id of the category it sits under (one level only). It has its own amount and its
+   * own money; the category above shows the total of its own share and its sub categories.
+   */
+  parentId?: string;
+  /** Archived (hidden) with this monthly amount: offered again when it is restored. */
+  archivedAmount?: number;
 };
 /** "property": what a home or rental is worth. Counts in net worth, not as invested money for Coast FI. */
 export type AccountType = "pretax" | "roth" | "taxable" | "hsa" | "cash" | "property";

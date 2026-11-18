@@ -19,7 +19,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Segmented, Select } from "../../components/form";
 import { ChangesLater, MonthlyAmount } from "../../components/ScheduleEditor";
-import { BILLS_GROUP, CLOSED_ACCOUNTS_GROUP, DEBTS_GROUP, groupOf, groupOrder, linkedGroupChoices, moveGroup, moveToGroup, setHidden, UNGROUPED } from "../../lib/budgetOrder";
+import { BILLS_GROUP, CLOSED_ACCOUNTS_GROUP, DEBTS_GROUP, groupOf, groupOrder, linkedGroupChoices, moveGroup, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
+import { archive, archiveSet, canBeSub, makeOwn, moveUnder, parentChoices, restore, subsOf } from "../../lib/subcats";
 import { DragList, reorderAmong, useDragZone } from "../../components/DragList";
 import { newId } from "../../lib/store";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -153,7 +154,13 @@ export default function Budget() {
       p.budgetPlan.months = { ...p.budgetPlan.months, [month]: e };
     });
   // a negative amount takes money back out of the category: never more than it had coming into the month
-  const setAssigned = (k: string, v: number) => edit((e) => { e.assigned = { ...(e.assigned ?? {}), [k]: Math.max(-Math.max(0, view.lines[k]?.carried ?? 0), v) }; });
+  // a hidden category is history only: money can be taken out of it, never put in
+  const setAssigned = (k: string, v: number) =>
+    edit((e) => {
+      const was = e.assigned?.[k] ?? 0;
+      const hidden = state.budget.some((b) => b.id === k && b.hidden);
+      e.assigned = { ...(e.assigned ?? {}), [k]: Math.max(-Math.max(0, view.lines[k]?.carried ?? 0), hidden ? Math.min(v, was) : v) };
+    });
   /**
    * A category that went over on a credit card: leave that overspending on the card as debt (`on`), or
    * let it come out of next month's Unassigned (the default). Split across the cards it was spent on.
@@ -200,6 +207,14 @@ export default function Budget() {
       const last = p.budget.map((x, i) => (!x.hidden && groupOf(x) === group ? i : -1)).filter((i) => i >= 0).at(-1) ?? (firstHidden < 0 ? p.budget.length : firstHidden) - 1;
       p.budget.splice(last + 1, 0, { id, name: "", amount: 0, inRetirement: !saving, group, ...(saving ? { essential: false } : {}) });
     });
+    setOpen(id);
+  };
+  /** A new sub category under a category: same group and retirement switches, listed after its others. */
+  const addSub = (parentId: string) => {
+    const parent = state.budget.find((x) => x.id === parentId);
+    if (!parent) return;
+    const id = newId();
+    update((p) => { p.budget = moveUnder([...p.budget, { id, name: "", amount: 0, inRetirement: parent.inRetirement, group: parent.group, ...(parent.essential === false ? { essential: false } : {}) }], id, parentId); });
     setOpen(id);
   };
   const addGroup = () => {
@@ -279,7 +294,8 @@ export default function Budget() {
    * bill or debt payment listed in it: those rows stay put at the top. The built-in groups keep their place.
    */
   const ownGroup = (g: (typeof groups)[number]) => own.includes(g.name);
-  const spendCats = (g: (typeof groups)[number]) => g.cats.filter((c) => c.kind === "spending");
+  // (sub categories ride along under their category: not dragged on their own)
+  const spendCats = (g: (typeof groups)[number]) => g.cats.filter((c) => c.kind === "spending" && !c.parent);
   dragGroups.current = groups.filter(ownGroup).map((g) => ({ name: g.name, cats: spendCats(g) }));
   const rta = view.readyToAssign;
   // overspent categories (red): Unassigned doesn't count them, so they come first
@@ -388,39 +404,42 @@ export default function Budget() {
     if (c.kind === "spending") {
       const it = state.budget.find((x) => x.id === c.key);
       if (!it) return null;
+      const archivedParent = it.hidden && it.parentId ? state.budget.find((x) => x.id === it.parentId && !x.hidden && !x.parentId) : undefined;
+      const parentItem = !it.hidden && it.parentId ? state.budget.find((x) => x.id === it.parentId) : undefined;
+      const kids = subsOf(state.budget, it.id);
       if (it.hidden)
         return (
           <View style={styles.section}>
-            <Text style={[type.overline, { color: t.text3 }]}>Hidden category</Text>
+            <Text style={[type.overline, { color: t.text3 }]}>Archived {it.parentId ? "sub category" : "category"}</Text>
             <FormList>
               <FormRow label="Name">
                 <InlineText label="Category name" placeholder="e.g. Moving" value={it.name} onChange={(v) => editItem(it.id, { name: v })} />
               </FormRow>
-              <FormRow label="Show on budget" hint="Pick the group it goes in">
+              <FormRow label={archivedParent ? "Restore on its own" : "Restore"} hint={`Back on your budget${it.archivedAmount ? ` with its ${money(it.archivedAmount)} a month` : ""}: pick the group`}>
                 <Select
                   plain
-                  label="Show on budget in group"
+                  label="Restore to group"
                   value=""
                   placeholder="Choose a group"
                   options={groupNames.map((g) => ({ value: g, label: g }))}
                   onChange={(g) => {
                     setOpen(null);
-                    update((p) => {
-                      p.budget = setHidden(p.budget, it.id, false);
-                      p.budget = moveToGroup(p.budget, p.budget.findIndex((x) => x.id === it.id), g);
-                    });
+                    update((p) => { p.budget = restore(p.budget.map((x) => (x.id === it.id ? { ...x, parentId: undefined } : x)), it.id, g); });
                   }}
                 />
               </FormRow>
             </FormList>
-            <Text style={[type.caption, { color: t.text3 }]}>Not on your budget and not in your plan. Its transactions stay in it.</Text>
+            <Text style={[type.caption, { color: t.text3 }]}>History only: its past transactions stay in it, but new ones can't go in and no money can be assigned.</Text>
             <View style={styles.chips}>
+              {archivedParent ? (
+                <Chip title={`Restore under ${archivedParent.name || "its category"}`} icon="check" tone="accent" onPress={() => { setOpen(it.id); update((p) => { p.budget = restore(p.budget, it.id); }); }} />
+              ) : null}
               <Chip
                 title="Delete"
                 icon="trash"
                 tone="danger"
                 onPress={async () => {
-                  if (await confirm(`Delete "${it.name || "this category"}"?`, "Its transactions are kept but won't have a category.", "Delete")) {
+                  if (await confirm(`Delete "${it.name || "this category"}"?`, "Its transactions are kept but won't have a category. This can't be undone.", "Delete")) {
                     setOpen(null);
                     update((p) => { p.budget = p.budget.filter((x) => x.id !== it.id); });
                   }
@@ -446,6 +465,20 @@ export default function Budget() {
             <FormRow label="Name">
               <InlineText label="Category name" placeholder="e.g. Groceries" value={it.name} onChange={(v) => editItem(it.id, { name: v })} />
             </FormRow>
+            {parentItem ? (
+              <FormRow label="Sub category of" hint="Its own amount and money; the category shows the total">
+                <Pressable role="button" onPress={() => update((p) => { p.budget = makeOwn(p.budget, it.id); })} hitSlop={6} style={{ alignItems: "flex-end" }}>
+                  <Text style={[type.body, { color: t.text }]}>{parentItem.name || "Category"}</Text>
+                  <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Make it its own category</Text>
+                </Pressable>
+              </FormRow>
+            ) : null}
+            {kids.length ? (
+              <FormRow label="Sub categories" hint={`This category shows the total: its own ${money(it.amount)} plus theirs`}>
+                <Text style={[type.body, { color: t.text2 }]}>{kids.map((x) => x.name || "Unnamed").join(", ")}</Text>
+              </FormRow>
+            ) : null}
+            {parentItem ? null : (
             <FormRow
               label="Spending or investing?"
               hint={linkedTo ? `Money you move into ${linkedTo.name.trim() || "the account"}: it counts as investing, not spending, so it doesn't raise your retirement number` : "Spending. If this is money you put into an account (an IRA, a brokerage), pick the account"}
@@ -458,7 +491,8 @@ export default function Budget() {
                 onChange={(v) => linkItem(it.id, v)}
               />
             </FormRow>
-            {linkedTo ? null : (
+            )}
+            {linkedTo || parentItem ? null : (
               <FormRow
                 label="Pays a loan?"
                 hint={it.paysDebt ? "Counted from Debts, not as spending" : "Pick the loan it pays, so it isn't counted twice"}
@@ -483,7 +517,7 @@ export default function Budget() {
                   </Pressable>
                 </FormRow>
               ) : (
-                <FormRow label="Each month" hint={linkedTo ? `What you put into ${linkedTo.name.trim() || "the account"} each month` : "What your plan expects"}>
+                <FormRow label={kids.length ? "Its own, each month" : "Each month"} hint={linkedTo ? `What you put into ${linkedTo.name.trim() || "the account"} each month` : kids.length ? `Besides its sub categories: ${money(it.amount + kids.reduce((a, x) => a + x.amount, 0))} in all` : "What your plan expects"}>
                   <InlineMoney label={`${it.name || "Item"} planned each month`} value={it.amount} onChange={(v) => editItem(it.id, { amount: v })} />
                 </FormRow>
               );
@@ -499,17 +533,27 @@ export default function Budget() {
                 </Pressable>
               </FormRow>
             )}
+            {parentItem ? null : (
             <FormRow label="Group">
               <Select plain label="Group" value={groupOf(it)} options={groupNames.map((g) => ({ value: g, label: g }))} onChange={(g) => update((p) => { p.budget = moveToGroup(p.budget, itemIndex(it.id), g); })} />
             </FormRow>
-            <FormRow label="Combine into" hint="Moves everything into another category">
+            )}
+            <FormRow label="Combine into" hint="Into one category, or kept as a sub category">
               <Select
                 plain
                 label="Combine into"
                 value=""
                 placeholder="Choose"
-                options={state.budget.filter((x) => x.id !== it.id && !x.hidden).map((x) => ({ value: x.id, label: x.name.trim() || "Unnamed", hint: groupOf(x) }))}
+                options={[
+                  ...state.budget.filter((x) => x.id !== it.id && !x.hidden).map((x) => ({ value: x.id, label: x.name.trim() || "Unnamed", hint: x.parentId ? `In ${state.budget.find((y) => y.id === x.parentId)?.name ?? "a category"}` : groupOf(x), section: "Combine: one category, its name goes" })),
+                  ...(canBeSub(state.budget, it.id) ? parentChoices(state.budget, it.id).filter((x) => x.id !== it.parentId).map((x) => ({ value: "under:" + x.id, label: `Under ${x.name.trim() || "Unnamed"}`, hint: "Keeps its name, transactions and amount", section: "As a sub category" })) : []),
+                ]}
                 onChange={async (to) => {
+                  if (to.startsWith("under:")) {
+                    update((p) => { p.budget = moveUnder(p.budget, it.id, to.slice(6)); });
+                    setOpen(it.id);
+                    return;
+                  }
                   const into = state.budget.find((x) => x.id === to);
                   if (!into) return;
                   const name = it.name.trim() || "this category";
@@ -532,14 +576,27 @@ export default function Budget() {
           />
           <View style={[styles.chips, { justifyContent: "space-between" }]}>
             <Text style={[type.caption, { color: t.text3, flex: 1 }]}>{compact ? "Tap Reorder above the categories, then drag a grip to move one." : "Drag a category's grip to reorder it or move it to another group."}</Text>
+            {parentItem || linkedTo || it.paysDebt ? null : <Chip title="Add a sub category" icon="plus" onPress={() => addSub(it.id)} />}
             {linkedTo ? null : (
               <Chip
-                title="Hide"
+                title="Archive"
                 icon="close"
                 onPress={async () => {
-                  if (!(await confirm(`Hide "${it.name || "this category"}"?`, "It leaves your budget and your plan, but keeps its transactions. Find it under Hidden at the bottom of the budget. An overspent one still shows until you cover it.", "Hide"))) return;
-                  setOpen(null);
-                  update((p) => { p.budget = setHidden(p.budget, it.id, true); });
+                  const ids = archiveSet(state.budget, it.id);
+                  const left = ids.reduce((a, k) => a + Math.max(0, view.lines[k]?.available ?? 0), 0);
+                  const to = parentItem ? parentItem.name || "its category" : "Unassigned";
+                  const also = kids.length ? ` Its ${kids.length} sub categor${kids.length === 1 ? "y goes" : "ies go"} with it.` : "";
+                  if (!(await confirm(`Archive "${it.name || "this category"}"?`, `It keeps its past transactions as history, but leaves your budget and plan: no new transactions or money go in.${also}${left > 0.005 ? ` The ${money(left)} left moves to ${to}.` : ""} Restore it any time from Archived at the bottom of the budget.`, "Archive"))) return;
+                  setOpen(parentItem ? parentItem.id : null);
+                  // what's left: to its category (a sub category), or to Unassigned
+                  if (left > 0.005)
+                    edit((e) => {
+                      const a = { ...(e.assigned ?? {}) };
+                      for (const k of ids) { const v = Math.max(0, view.lines[k]?.available ?? 0); if (v > 0.005) a[k] = Math.round(((a[k] ?? 0) - v) * 100) / 100; }
+                      if (parentItem) a[parentItem.id] = Math.round(((a[parentItem.id] ?? 0) + left) * 100) / 100;
+                      e.assigned = a;
+                    });
+                  update((p) => { p.budget = archive(p.budget, ids); });
                 }}
               />
             )}
@@ -548,9 +605,9 @@ export default function Budget() {
               icon="trash"
               tone="danger"
               onPress={async () => {
-                if (await confirm(`Delete "${it.name || "this category"}"?`, "It comes off your budget and your plan.", "Delete")) {
+                if (await confirm(`Delete "${it.name || "this category"}"?`, `It comes off your budget and your plan.${kids.length ? " Its sub categories become categories of their own." : ""} This can't be undone.`, "Delete")) {
                   setOpen(null);
-                  update((p) => { p.budget = p.budget.filter((x) => x.id !== it.id); });
+                  update((p) => { p.budget = p.budget.filter((x) => x.id !== it.id).map((x) => { if (x.parentId !== it.id) return x; const { parentId: _, ...own } = x; return own; }); });
                 }
               }}
             />
@@ -623,7 +680,31 @@ export default function Budget() {
     );
   };
 
-  const line = (c: BudgetCategory, grip?: ReactNode) => {
+  /**
+   * A category and its sub categories (bottom-up): the category row is its own share, with Available as
+   * the total of it and its sub categories; each sub category on its own row under it.
+   */
+  const family = (c: BudgetCategory, grip?: ReactNode) => {
+    const kids = cats.filter((x) => x.parent === c.key && !x.hidden);
+    if (!kids.length) return line(c, grip);
+    const lines = [c, ...kids].map((x) => view.lines[x.key]!);
+    const sum = (f: (l: BudgetLine) => number) => Math.round(lines.reduce((a, l) => a + f(l), 0) * 100) / 100;
+    const total: BudgetLine = { ...view.lines[c.key]!, assigned: sum((l) => l.assigned), spent: sum((l) => l.spent), available: sum((l) => l.available) };
+    return (
+      <View>
+        {line(c, grip, { total })}
+        {kids.map((k) => (
+          <View key={k.key}>
+            <Divider />
+            {line(k, undefined, { indent: true })}
+          </View>
+        ))}
+      </View>
+    );
+  };
+  const line = (c: BudgetCategory, grip?: ReactNode, opts: { label?: string; indent?: boolean; total?: BudgetLine } = {}) => {
+    // an archived sub category says which category it was in
+    const shownName = opts.label ?? (c.hidden && c.parent ? `${cats.find((x) => x.key === c.parent)?.name ?? "Category"} › ${label(c)}` : label(c));
     const l = view.lines[c.key]!;
     const debtOf = c.kind === "debt" ? state.debts.find((y) => "debt:" + y.id === c.key) : undefined;
     // a loan paid from one of your categories: listed here, but its money is in that category
@@ -661,11 +742,12 @@ export default function Budget() {
     const newPay = paysLoan && dupItem ? newLoanPayment(paysLoan, dupItem, paidLastTwoMonths(txns, dupItem.id, thisMonth)) : undefined;
     return (
       <View key={c.key} nativeID={"cat-" + c.key}>
-        <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${label(c)}: ${money(l.available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, pressed ? { backgroundColor: t.surface2 } : null]}>
+        <Pressable role="button" aria-expanded={isOpen} accessibilityLabel={`${shownName}: ${money((opts.total ?? l).available)} available`} onPress={() => { setOpen(isOpen ? null : c.key); }} style={({ pressed }) => [styles.row, compact ? { paddingHorizontal: space.md } : null, opts.indent ? { paddingLeft: (compact ? space.md : space.lg) + space.lg } : null, pressed ? { backgroundColor: t.surface2 } : null]}>
           <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
             {grip}
             <View style={{ flexShrink: 1, minWidth: 0 }}>
-              <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{label(c)}</Text>
+              <Text style={[type.body, { color: t.text }]} numberOfLines={1}>{shownName}</Text>
+              {opts.total ? <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>Available includes its sub categories</Text> : null}
               {/* phones: under the name, so the name keeps its line */}
               {overLast.has(c.key) && compact ? (
                 <Text style={[type.caption, { color: t.bad, fontWeight: "700", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>−{money(overLast.get(c.key)!)} over last month</Text>
@@ -693,7 +775,7 @@ export default function Budget() {
           </View>
           {num(l.assigned, t.text2)}
           {compact ? null : num(l.spent, t.text2)}
-          <View style={{ width: COLW, alignItems: "flex-end" }}>{pill(l, c)}</View>
+          <View style={{ width: COLW, alignItems: "flex-end" }}>{opts.total ? pill(opts.total, { ...c, target: 0 }) : pill(l, c)}</View>
         </Pressable>
         {isOpen ? (
           <View style={[styles.editor, { backgroundColor: t.surface2 }]}>
@@ -745,6 +827,24 @@ export default function Budget() {
             <View style={styles.section}>
               <Text style={[type.overline, { color: t.text3 }]}>{nameOf(month)}</Text>
               {/* this month's money: what you give it, and buttons that change that */}
+              {c.hidden ? (
+                <FormList>
+                  <FormRow
+                    label="Assigned"
+                    hint={
+                      l.available > 0.005 ? (
+                        <Text role="button" onPress={() => setAssigned(c.key, l.assigned - l.available)} style={{ color: t.accent, fontWeight: "700" }}>Move {money(l.available)} to Unassigned</Text>
+                      ) : l.available < -0.005 ? (
+                        "Overspent: it comes out of next month's Unassigned"
+                      ) : (
+                        "Hidden: history only, no money goes in"
+                      )
+                    }
+                  >
+                    <Text style={[type.body, { color: t.text2, fontVariant: ["tabular-nums"] }]}>{money(l.assigned)}</Text>
+                  </FormRow>
+                </FormList>
+              ) : (
               <FormList>
                 <FormRow
                   label="Assigned"
@@ -772,6 +872,7 @@ export default function Budget() {
                   <InlineMoney label={`${label(c)} assigned in ${nameOf(month)}`} value={l.assigned} onChange={(v) => setAssigned(c.key, v)} allowNegative={(l.carried ?? 0) > 0.005 || l.assigned < 0} />
                 </FormRow>
               </FormList>
+              )}
               {overOnCards(l) > 0.005 ? (
                 <View style={[styles.dupBox, { backgroundColor: t.badSoft, borderColor: t.bad }]}>
                   <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>
@@ -783,7 +884,7 @@ export default function Budget() {
                       : "Cover it from another category, or it comes out of next month's Unassigned. Or leave it on the card as debt: the card's payment line then shows it short."}
                   </Text>
                   <View style={styles.chips}>
-                    <Chip title={`Cover ${money(-l.available)}`} onPress={() => { setCardDebt(c.key, l, false); setAssigned(c.key, l.assigned - l.available); }} />
+                    {c.hidden ? null : <Chip title={`Cover ${money(-l.available)}`} onPress={() => { setCardDebt(c.key, l, false); setAssigned(c.key, l.assigned - l.available); }} />}
                     <Chip title="Take from next month" tone={(l.toDebt ?? 0) > 0.005 ? "neutral" : "accent"} icon={(l.toDebt ?? 0) > 0.005 ? undefined : "check"} onPress={() => setCardDebt(c.key, l, false)} />
                     <Chip title="Leave on card as debt" tone={(l.toDebt ?? 0) > 0.005 ? "accent" : "neutral"} icon={(l.toDebt ?? 0) > 0.005 ? "check" : undefined} onPress={() => setCardDebt(c.key, l, true)} />
                   </View>
@@ -819,20 +920,13 @@ export default function Budget() {
             {(() => {
               const list = monthTxns.filter((x) => x.categoryId === c.key || x.splits?.some((y) => y.categoryId === c.key) || (c.kind === "debt" && x.accountId === c.key.slice(5) && !!x.transferAccountId));
               if (!list.length) return null;
+              // just how many, with a way to them (the list itself made the panel long)
               return (
-                <View style={styles.section}>
-                  <Text style={[type.overline, { color: t.text3 }]}>Transactions</Text>
-                  <FormList>
-                    {list.slice(0, 8).map((x) => (
-                      <Pressable key={x.id} role="button" onPress={() => setAdding({ txn: x })} style={styles.txnRow}>
-                        <Text style={[type.body, { color: t.text, flex: 1 }]} numberOfLines={1}>{x.payee || "Transaction"}</Text>
-                        <Text style={[type.caption, { color: t.text3 }]}>{x.date.slice(5).replace("-", "/")}</Text>
-                        <Text style={[type.body, { color: x.amount > 0 ? t.good : t.text, fontVariant: ["tabular-nums"], minWidth: 72, textAlign: "right" }]}>{x.amount > 0 ? "+" : "−"}{money(Math.abs(x.amount))}</Text>
-                      </Pressable>
-                    ))}
-                  </FormList>
-                  {list.length > 8 ? <Text style={[type.caption, { color: t.text3 }]}>and {list.length - 8} more in the account registers</Text> : null}
-                </View>
+                <Pressable role="link" onPress={() => { setOpen(null); setTab("transactions"); router.setParams({ view: "transactions" }); }} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <Text style={[type.caption, { color: t.text3 }]}>{list.length} transaction{list.length === 1 ? "" : "s"} this month ·</Text>
+                  <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>See in Activity</Text>
+                  <Icon name="chevron" size={12} color={t.accent} />
+                </Pressable>
               );
             })()}
             {categoryEditor(c)}
@@ -1019,20 +1113,20 @@ export default function Budget() {
                       count={spendCats(g).length}
                       keyOf={(n) => spendCats(g)[n]!.key}
                       nameOf={(n) => spendCats(g)[n]!.name}
-                      onMove={(from, to) => update((p) => { p.budget = reorderAmong(p.budget, (b) => !b.hidden && groupOf(b) === g.name, from, to); })}
+                      onMove={(from, to) => update((p) => { p.budget = reorderAmong(p.budget, (b) => !b.hidden && !b.parentId && groupOf(b) === g.name, from, to); })}
                       renderItem={(n, grip) => (
                         <View>
                           {n > 0 ? <Divider /> : null}
-                          {line(spendCats(g)[n]!, grip)}
+                          {family(spendCats(g)[n]!, grip)}
                         </View>
                       )}
                     />
                   </>
                 ) : (
-                  g.cats.map((c, n) => (
+                  g.cats.filter((c) => !c.parent).map((c, n) => (
                     <View key={c.key}>
                       {n > 0 ? <Divider /> : null}
-                      {line(c)}
+                      {family(c)}
                     </View>
                   ))
                 )}
@@ -1044,16 +1138,16 @@ export default function Budget() {
               <Pressable
                 role="button"
                 aria-expanded={hiddenOpen}
-                accessibilityLabel={`Hidden categories (${hiddenCats.length}): ${hiddenOpen ? "hide the list" : "show them"}`}
+                accessibilityLabel={`Archived categories (${hiddenCats.length}): ${hiddenOpen ? "hide the list" : "show them"}`}
                 onPress={() => setHiddenOpen((v) => !v)}
                 style={[styles.groupHead, { borderBottomColor: t.border }, compact ? { paddingHorizontal: space.md } : null]}
               >
-                <Text style={[type.overline, { color: t.text2, flex: 1 }]} numberOfLines={1}>Hidden ({hiddenCats.length})</Text>
+                <Text style={[type.overline, { color: t.text2, flex: 1 }]} numberOfLines={1}>Archived ({hiddenCats.length})</Text>
                 <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{hiddenOpen ? "Hide list" : "Show"}</Text>
               </Pressable>
               {hiddenOpen ? (
                 <Text style={[type.caption, { color: t.text3, paddingHorizontal: compact ? space.md : space.lg, paddingTop: space.sm }]}>
-                  Off your budget and out of your plan, but they keep their transactions. One that's overspent shows here until you cover it.
+                  History only: they keep their past transactions, but new ones can't go in and no money can be assigned. Open one to restore it. One that's overspent shows here; it comes out of next month's Unassigned.
                 </Text>
               ) : null}
               {hiddenOpen ? (

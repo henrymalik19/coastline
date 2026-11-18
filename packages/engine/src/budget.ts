@@ -44,6 +44,8 @@ export type BudgetCategory = {
   paidBy?: string;
   /** Hidden: off the budget list unless it's overspent; no plan amount. */
   hidden?: boolean;
+  /** A sub category: the category it sits under (its own money; that one shows the total). */
+  parent?: string;
 };
 
 export type BudgetLine = {
@@ -99,16 +101,22 @@ export function budgetCategories(s: PlanState, d: Derived, plan: PlanResult, sta
   const debtTarget = (x: NonNullable<PlanState["debts"]>[number]) =>
     Math.max(0, num(x.minPayment)) + Math.max(0, paysExtra(x) ? (scheduleAmount(s.plan, "debt:" + x.id, month) ?? planned("debt:" + x.id)) : 0);
   // spending: the budget (and categories you made for money moved to an account, like "Roth IRA")
+  // a sub category sits under a top-level category (one level)
+  const parentOf = (b: NonNullable<PlanState["budget"]>[number]) => {
+    const p = b.parentId ? (s.budget ?? []).find((x) => x.id === b.parentId) : undefined;
+    return p && !p.parentId && p.id !== b.id ? p.id : undefined;
+  };
   for (const b of s.budget ?? []) {
     const linked = linkedAccount(s, b);
+    const parent = parentOf(b);
     if (b.hidden) {
-      out.push({ key: b.id, group: b.group?.trim() || "Other", name: b.name || "Budget item", kind: "spending", target: 0, moves: false, hidden: true });
+      out.push({ key: b.id, group: b.group?.trim() || "Other", name: b.name || "Budget item", kind: "spending", target: 0, moves: false, hidden: true, ...(parent ? { parent } : {}) });
       continue;
     }
     // a category that pays one of your loans: it's that loan's line (its target is the loan's payment)
     const loan = b.paysDebt ? (s.debts ?? []).find((x) => x.id === b.paysDebt && !x.payroll && num(x.balance) > 0) : undefined;
     const target = loan ? debtTarget(loan) : Math.max(0, valueIn(s.plan, BUDGET_ITEM + b.id, month, num(b.amount)));
-    out.push({ key: b.id, group: b.group?.trim() || "Other", name: b.name || "Budget item", kind: "spending", target, moves: false, ...(linked ? { account: linked.id } : {}), ...(loan ? { paysDebt: loan.id } : {}) });
+    out.push({ key: b.id, group: b.group?.trim() || "Other", name: b.name || "Budget item", kind: "spending", target, moves: false, ...(linked ? { account: linked.id } : {}), ...(loan ? { paysDebt: loan.id } : {}), ...(parent ? { parent } : {}) });
   }
   // bills: repeating goals
   for (const g of s.goals ?? [])

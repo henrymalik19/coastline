@@ -148,11 +148,16 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
     onClose();
   };
 
+  const wasIn = new Set([txn?.categoryId, ...(txn?.splits ?? []).map((x) => x.categoryId)].filter((x): x is string => !!x));
   const catOptions = [
     ...(kind === "in" ? [{ value: "ready", label: "Unassigned", hint: "Income: assign it on the Budget tab" }] : []),
-    // hidden categories last, marked: still pickable (a one-off)
-    ...cats.filter((c) => !c.hidden).map((c) => ({ value: c.key, label: c.label, hint: c.group })),
-    ...cats.filter((c) => c.hidden).map((c) => ({ value: c.key, label: c.label, hint: "Hidden" })),
+    // each category, then its sub categories ("Childcare › Babysitter")
+    ...cats.filter((c) => !c.hidden && !c.parent).flatMap((c) => [
+      { value: c.key, label: c.label, hint: c.group },
+      ...cats.filter((s) => !s.hidden && s.parent === c.key).map((s) => ({ value: s.key, label: `${c.label} › ${s.label}`, hint: c.group })),
+    ]),
+    // hidden categories are history only: listed just when this transaction is already in one (so it still shows)
+    ...cats.filter((c) => c.hidden && wasIn.has(c.key)).map((c) => ({ value: c.key, label: c.label, hint: "Hidden: history only" })),
   ];
 
   return (

@@ -12,6 +12,7 @@ import { canUndoImport, fromOldSnapshot, importSnapshot, parseUndo, readImportBa
 import { applyYnabUpdate, type YnabUpdate } from "./ynabUpdate";
 import { renamePayeesIn } from "./payees";
 import { combineCategory, uncombineTxns } from "./combine";
+import { keepFamilyGroups } from "./subcats";
 
 export { newId } from "./id";
 
@@ -108,6 +109,8 @@ export const useStore = create<AppState>()(
         // before the change, so an amount typed into a line adds to what's folded into it, not twice
         foldSavingsLines(draft);
         fn(draft);
+        // sub categories stay in their category's group
+        draft.budget = keepFamilyGroups(draft.budget);
         syncGoalSteps(draft);
         syncPaycheckLoans(draft);
         set({ plan: draft, updatedAt: now() });

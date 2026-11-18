@@ -39,7 +39,12 @@ export function combineCategory(plan: PlanState, txns: Txn[], from: string, into
       delete bp.opening[from];
     }
   }
-  p.budget = p.budget.filter((x) => x.id !== from);
+  // its sub categories go under the one it joins (or stand on their own, when that one is a sub category)
+  p.budget = p.budget.filter((x) => x.id !== from).map((x) => {
+    if (x.parentId !== from) return x;
+    if (b.parentId) { const { parentId: _, ...own } = x; return own; }
+    return { ...x, parentId: into, group: b.group };
+  });
   const changed: Txn[] = [];
   const out = txns.map((t) => {
     if (t.deleted) return t;
