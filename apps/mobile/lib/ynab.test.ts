@@ -75,6 +75,15 @@ describe("reading YNAB's files", () => {
     // only the same name: "Old Bank Checking" isn't your Checking, and each account here is matched once
     expect(suggestChoice(plan, { ...accts[0]!, name: "Old Bank Checking" })).toEqual({ action: "add" });
     expect(suggestChoice(plan, accts[0]!, new Set(["chk"]))).toEqual({ action: "add" });
+    // a note in brackets doesn't matter; the company in front counts as part of the name
+    plan.accounts = [{ id: "bp", name: "Fidelity - Bill Pay", type: "cash", balance: 1 }, { id: "sap", name: "Sapphire", company: "Chase", type: "cash", balance: 2 }];
+    expect(suggestChoice(plan, { ...accts[0]!, name: "Fidelity - Bill Pay (Joint)" })).toEqual({ action: "match", id: "bp" });
+    expect(suggestChoice(plan, { ...accts[0]!, name: "Chase - Sapphire" })).toEqual({ action: "match", id: "sap" });
+    // a different name with exactly the same balance (not $0) is the same account, renamed; two with it: neither
+    plan.accounts = [{ id: "tr", name: "Schwab - Travel", type: "cash", balance: 5800 }];
+    expect(suggestChoice(plan, accts[0]!)).toEqual({ action: "match", id: "tr" });
+    plan.accounts.push({ id: "tr2", name: "Other", type: "cash", balance: 5800 });
+    expect(suggestChoice(plan, accts[0]!)).toEqual({ action: "add" });
     expect(ynabCategories(d, ["2026-10", "2026-11"]).map((c) => [c.name, c.average])).toEqual([["Groceries", 625], ["Roth IRA", 500], ["Household", 25]]);
   });
 });

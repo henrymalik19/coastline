@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Txn } from "@coastfi/engine";
-import { addedSinceImport, canUndoImport, fromOldSnapshot, importSnapshot, undoImportTxns, UNDO_DAYS } from "./importUndo";
+import { addedSinceImport, canUndoImport, fromOldSnapshot, importSnapshot, readImportBackup, undoImportTxns, UNDO_DAYS } from "./importUndo";
+import { freshPlan } from "./presets";
 
 const tx = (id: string, extra: Partial<Txn> = {}): Txn => ({ id, accountId: "a", date: "2026-11-01", amount: -10, updatedAt: 1, ...extra }) as Txn;
 
@@ -71,5 +72,23 @@ describe("undoing an import", () => {
     expect(canUndoImport(snap, 5 + 1000)).toBe(true);
     expect(canUndoImport(snap, 5 + UNDO_DAYS * 86_400_000)).toBe(false);
     expect(canUndoImport(undefined, 0)).toBe(false);
+  });
+});
+
+describe("the YNAB import in a backup", () => {
+  const plan = freshPlan();
+  const day = 86_400_000;
+  const undo = { at: 10 * day, plan, had: ["a"], before: [] };
+  it("comes back with its undo copy while that can still be used", () => {
+    const r = readImportBackup(JSON.parse(JSON.stringify({ importedAt: 10 * day, syncedAt: 11 * day, undo })), 12 * day);
+    expect(r).toMatchObject({ importedAt: 10 * day, syncedAt: 11 * day, undo: { at: 10 * day, had: ["a"], before: [] } });
+    // past the undo window: the import is kept, the undo copy isn't
+    expect(readImportBackup({ importedAt: 10 * day, undo }, (10 + UNDO_DAYS + 1) * day)).toEqual({ importedAt: 10 * day });
+  });
+  it("is none when the backup has none (or it's unreadable)", () => {
+    expect(readImportBackup(undefined, 1)).toBeNull();
+    expect(readImportBackup({ importedAt: "x" }, 1)).toBeNull();
+    // a damaged undo copy is dropped, the import kept
+    expect(readImportBackup({ importedAt: 5, undo: { at: 5, plan: { nope: 1 }, had: [], before: [] } }, 6)).toEqual({ importedAt: 5 });
   });
 });

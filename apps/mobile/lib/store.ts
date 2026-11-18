@@ -8,7 +8,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { syncPaycheckLoans } from "./loans";
 import { freshPlan } from "./presets";
 import { stampMs } from "./pages";
-import { canUndoImport, fromOldSnapshot, importSnapshot, parseUndo, undoImportTxns, type ImportSnapshot } from "./importUndo";
+import { canUndoImport, fromOldSnapshot, importSnapshot, parseUndo, readImportBackup, undoImportTxns, type ImportSnapshot } from "./importUndo";
 import { applyYnabUpdate, type YnabUpdate } from "./ynabUpdate";
 import { renamePayeesIn } from "./payees";
 
@@ -231,17 +231,25 @@ export const useStore = create<AppState>()(
         } catch {
           throw new Error("That isn't a Coastwise backup file.");
         }
-        const r = raw as { app?: string; plan?: unknown; checkins?: unknown; txns?: unknown };
+        const r = raw as { app?: string; plan?: unknown; checkins?: unknown; txns?: unknown; ynabImport?: unknown };
         if (!r || typeof r !== "object" || r.app !== "coastfi" || !r.plan) throw new Error("That isn't a Coastwise backup file.");
         const plan = PlanStateSchema.safeParse(r.plan);
         if (!plan.success) throw new Error("The backup is damaged or from an incompatible version.");
         const checkins = z.array(CheckinSchema).safeParse(r.checkins ?? []);
         const txns = z.array(TxnSchema).safeParse(r.txns ?? []);
-        set({ plan: withProperties(plan.data), checkins: checkins.success ? checkins.data : [], txns: txns.success ? txns.data : [], onboarded: true, updatedAt: now() });
+        // the YNAB import comes back with the backup (and Undo with it, while it can still be used); a
+        // backup without one leaves none, so an undo copy from before can't be applied to this plan
+        const imp = readImportBackup(r.ynabImport, Date.now());
+        set({
+          plan: withProperties(plan.data), checkins: checkins.success ? checkins.data : [], txns: txns.success ? txns.data : [], onboarded: true, updatedAt: now(),
+          importedAt: imp?.importedAt, ynabSyncedAt: imp ? (imp.syncedAt ?? imp.importedAt) : undefined, lastImport: imp?.undo, importDirty: true,
+        });
       },
       exportJson: () => {
-        const { plan, checkins, txns } = get();
-        return JSON.stringify({ app: "coastfi", exportedAt: new Date().toISOString(), plan, checkins, txns: txns.filter((t) => !t.deleted) }, null, 2);
+        const { plan, checkins, txns, importedAt, ynabSyncedAt, lastImport } = get();
+        // the YNAB import goes along, with its undo copy, so a restore can still undo it
+        const ynabImport = importedAt ? { importedAt, ...(ynabSyncedAt ? { syncedAt: ynabSyncedAt } : {}), ...(lastImport ? { undo: lastImport } : {}) } : undefined;
+        return JSON.stringify({ app: "coastfi", exportedAt: new Date().toISOString(), plan, checkins, txns: txns.filter((t) => !t.deleted), ...(ynabImport ? { ynabImport } : {}) }, null, 2);
       },
       startFresh: () => {
         // transactions too (marked deleted, so it syncs); check-ins are kept

@@ -8,6 +8,7 @@
 import { startTxnId, type BudgetItem, type CardDebt, type Debt, type PlanState, type Txn } from "@coastfi/engine";
 import { unzipSync, strFromU8 } from "fflate";
 import { isCard } from "./register";
+import { fullName } from "./company";
 import { OUTSIDE } from "./outside";
 
 /* ---------- reading the files ---------- */
@@ -285,13 +286,23 @@ export function ynabAccounts(d: YnabData, today?: string): YnabAccount[] {
  * kind, and not one another YNAB account already took (`taken`). Otherwise add it.
  */
 export function suggestChoice(plan: PlanState, a: YnabAccount, taken: Set<string> = new Set()): AccountChoice {
-  const n = norm(a.name);
+  // names compared on letters and digits only, with the company in front ("Chase · Sapphire" is "Chase - Sapphire")
+  const key = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const bare = (x: string) => x.replace(/\([^)]*\)/g, "");
+  const n = key(a.name);
+  // what each of yours holds, the way YNAB shows it (a card or loan owed is negative)
   const pool =
-    a.kind === "cash" ? plan.accounts.filter((x) => x.type === "cash").map((x) => ({ id: x.id, name: x.name }))
-    : a.kind === "card" ? plan.debts.filter(isCard).map((x) => ({ id: x.id, name: x.name }))
-    : a.kind === "loan" ? plan.debts.filter((x) => !isCard(x)).map((x) => ({ id: x.id, name: x.name }))
-    : plan.accounts.filter((x) => x.type !== "cash").map((x) => ({ id: x.id, name: x.name }));
-  const hit = pool.find((x) => norm(x.name) === n && !taken.has(x.id));
+    a.kind === "cash" ? plan.accounts.filter((x) => x.type === "cash").map((x) => ({ id: x.id, name: fullName(x), bal: x.balance }))
+    : a.kind === "card" ? plan.debts.filter(isCard).map((x) => ({ id: x.id, name: fullName(x), bal: -x.balance }))
+    : a.kind === "loan" ? plan.debts.filter((x) => !isCard(x)).map((x) => ({ id: x.id, name: fullName(x), bal: -x.balance }))
+    : plan.accounts.filter((x) => x.type !== "cash").map((x) => ({ id: x.id, name: fullName(x), bal: x.balance }));
+  const free = pool.filter((x) => !taken.has(x.id));
+  const hit =
+    free.find((x) => key(x.name) === n) ??
+    // the same name but for a note in brackets ("Fidelity - Bill Pay" for "Fidelity - Bill Pay (Joint)")
+    free.find((x) => key(bare(x.name)) === key(bare(a.name)) && !!key(bare(a.name))) ??
+    // a different name, but exactly the same balance (not $0): the same account, renamed
+    (Math.abs(a.balance) >= 0.01 ? (() => { const same = free.filter((x) => Math.abs(x.bal - a.balance) < 0.005); return same.length === 1 ? same[0] : undefined; })() : undefined);
   return hit ? { action: "match", id: hit.id } : { action: "add" };
 }
 

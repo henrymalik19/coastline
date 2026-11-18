@@ -16,6 +16,12 @@ export type TxnActivity = {
   cardFunded: Record<string, number>;
   /** Each category's spending on each card (category → card payment key → amount; refunds lower it). */
   cardSpent: Record<string, Record<string, number>>;
+  /**
+   * Money in or out with no category yet (not a transfer, not an account's starting balance): it comes
+   * out of (or goes into) ready to assign until it gets one, so ready to assign follows your money.
+   * Negative = spent. Not part of `income`.
+   */
+  uncategorized: number;
 };
 
 const ymOf = (date: string) => date.slice(0, 7);
@@ -27,7 +33,7 @@ const ymOf = (date: string) => date.slice(0, 7);
  * spends from the category on it.
  */
 export function txnActivity(txns: Txn[], month: string, cards: Record<string, string>, asOf?: string): TxnActivity {
-  const out: TxnActivity = { income: 0, spent: {}, cardFunded: {}, cardSpent: {} };
+  const out: TxnActivity = { income: 0, spent: {}, cardFunded: {}, cardSpent: {}, uncategorized: 0 };
   const add = (rec: Record<string, number>, k: string, v: number) => { rec[k] = (rec[k] ?? 0) + v; };
   for (const t of txns) {
     if (t.deleted || t.review || ymOf(t.date) !== month || isUpcoming(t, asOf)) continue;
@@ -41,7 +47,15 @@ export function txnActivity(txns: Txn[], month: string, cards: Record<string, st
     }
     const parts = t.splits?.length ? t.splits.map((x) => ({ cat: x.categoryId, amt: num(x.amount) })) : [{ cat: t.categoryId, amt }];
     for (const p of parts) {
-      if (!p.cat) continue; // a transfer between budget accounts, or not categorized yet
+      if (!p.cat) {
+        // a transfer between budget accounts (no category): nothing to the budget. An account's starting
+        // balance: already counted when the budget started (a card's is what you owed then).
+        if (t.transferAccountId || t.id.startsWith("start:")) continue;
+        // not categorized yet: from (or to) ready to assign for now. On a card, it's set aside for the card.
+        out.uncategorized += p.amt;
+        if (card && p.amt < 0) add(out.cardFunded, card, -p.amt);
+        continue;
+      }
       // "ready", or a transfer filed under an account's old Budget line (those lines are gone): in or
       // out of ready to assign
       if (p.cat === "ready" || p.cat.startsWith("acct:")) {

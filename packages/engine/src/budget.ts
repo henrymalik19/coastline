@@ -75,6 +75,8 @@ export type BudgetView = {
   overspentBefore: number;
   /** Assigned in months after this one. */
   assignedLater: number;
+  /** In ready to assign: money in or out with no category yet, through this month (negative = spent). */
+  uncategorized?: number;
   lines: Record<string, BudgetLine>;
 };
 
@@ -160,6 +162,7 @@ export function budgetView(
   let income = 0;
   let assigned = 0;
   let overspent = 0;
+  let uncat = 0;
   // what categories already had when the budget started (an import): it's in them, not ready to assign
   let held = 0;
   for (const [k, v] of Object.entries(b.opening ?? {})) {
@@ -208,6 +211,7 @@ export function budgetView(
       carry[c.key] = Math.max(0, l.available);
     }
     income += act?.income ?? 0;
+    uncat += act?.uncategorized ?? 0;
     assigned += monthAssigned;
     if (m === month) {
       let later = 0;
@@ -216,11 +220,12 @@ export function budgetView(
         month,
         started: true,
         income: act?.income ?? 0,
-        readyToAssign: num(b.startCash) - held + income - assigned - overspent - later,
+        readyToAssign: num(b.startCash) - held + income + uncat - assigned - overspent - later,
         assigned: monthAssigned,
         spent: monthSpent,
         overspentBefore: overspent,
         assignedLater: later,
+        ...(Math.abs(uncat) >= 0.005 ? { uncategorized: uncat } : {}),
         lines,
       };
     }

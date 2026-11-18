@@ -8,7 +8,7 @@ import { isAppPath } from "../../../lib/nav";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, InfoText, InfoTip, InlineMoney, InlineSwitch, MonthField, Segmented, Select, TextField, ToggleRow } from "../../../components/form";
-import { splitCompanies } from "../../../lib/company";
+import { fullName, splitCompanies } from "../../../lib/company";
 import { Icon, type IconName } from "../../../components/Icon";
 import { Card, Divider, Screen } from "../../../components/ui";
 import { money } from "../../../lib/format";
@@ -195,6 +195,9 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const check = useMemo(() => (preview ? unassignedCheck(preview) : null), [preview]); // eslint-disable-line react-hooks/exhaustive-deps
   // accounts you're leaving out that have budget transactions this month: the budget won't match YNAB's
   const usedThisMonth = (name: string) => (data ? budgetTxnsThisMonth(data, name, thisMonth, isoDay(start)) : 0);
+  // your own cash accounts with money that no YNAB account is matched to: their money counts on top of YNAB's
+  const matchedIds = new Set(Object.values(choices).flatMap((c) => (c.action === "match" ? [c.id] : [])));
+  const unmatchedMine = preview ? saved.accounts.filter((x) => x.type === "cash" && Math.abs(x.balance) >= 0.01 && !matchedIds.has(x.id) && preview.plan.accounts.some((y) => y.id === x.id)) : [];
   const leftOutUsed = data ? ynabAccounts(data, isoDay(start)).filter((a) => choices[a.name]?.action === "skip" && usedThisMonth(a.name) > 0).map((a) => a.name) : [];
 
   const options = (a: YnabAccount) => {
@@ -263,11 +266,14 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
             {a.upcoming > 0 ? "+" : "−"}{money(Math.abs(a.upcoming))} upcoming · {a.kind === "card" || a.kind === "loan" ? `owe ${money(Math.max(0, -(a.balance + a.upcoming)))}` : money(a.balance + a.upcoming)} after
           </Text>
         ) : null}
-        <Select label={`${a.name}: what it is here`} value={valueOf(choices[a.name])} options={options(a)} onChange={(v) => setChoice(a.name, v)} />
+        {/* wide: the choice and the new account's company and name each get a column of their own, so rows line up */}
+        <View style={wide ? { width: 260 } : null}>
+          <Select label={`${a.name}: what it is here`} value={valueOf(choices[a.name])} options={options(a)} onChange={(v) => setChoice(a.name, v)} />
+        </View>
         {(choices[a.name]?.action ?? "add") === "add" ? (
           // a new account: its company and name here (both editable)
-          <View style={{ gap: 2, alignSelf: "stretch" }}>
-            <Text style={[type.caption, { color: t.text3 }]}>Company and name here</Text>
+          <View style={wide ? { width: 380 } : { gap: 2, alignSelf: "stretch" }}>
+            {wide ? null : <Text style={[type.caption, { color: t.text3 }]}>Company and name here</Text>}
             <View style={[styles.row, { gap: space.sm }]}>
               <View style={{ flex: 2, minWidth: 0 }}>
                 <TextField label={`${a.name}: company`} placeholder="Company" value={names[a.name]?.company ?? ""} onChange={(v) => setName(a.name, { company: v })} />
@@ -277,6 +283,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
               </View>
             </View>
           </View>
+        ) : wide ? (
+          <View style={{ width: 380 }} />
         ) : null}
       </View>
       {choices[a.name]?.action === "skip" && usedThisMonth(a.name) > 0 ? (
@@ -534,7 +542,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
           {tab === "accounts" ? (
             <Card style={{ gap: space.sm }}>
               <View style={[styles.row, { alignItems: "flex-start" }]}>
-                <Text style={[type.caption, { color: t.text3, flex: 1 }]}>Pick what each YNAB account is here.</Text>
+                <Text style={[type.caption, { color: t.text3, flex: 1 }]}>Pick what each YNAB account is here.{wide ? " A new one gets the company and name on the right." : ""}</Text>
                 <InfoTip text={ACCT_INFO} label="accounts" open={acctTip} onToggle={setAcctTip} />
               </View>
               {acctTip ? <InfoText text={ACCT_INFO} /> : null}
@@ -734,9 +742,14 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
               "info",
               t.bad,
               `Unassigned will be ${money(check.mine)}. YNAB shows ${money(check.ynab)}`,
-              leftOutUsed.length
-                ? `You're leaving out ${leftOutUsed.join(", ")}, which ${leftOutUsed.length === 1 ? "has" : "have"} budget transactions this month. Bring ${leftOutUsed.length === 1 ? "it" : "them"} in to match.`
-                : "YNAB counts a few things differently from Coastwise.",
+              [
+                unmatchedMine.length
+                  ? `Your own ${unmatchedMine.map((x) => `${fullName(x, "Cash")} (${money(x.balance)})`).join(", ")} ${unmatchedMine.length === 1 ? "isn't" : "aren't"} matched to a YNAB account, so ${unmatchedMine.length === 1 ? "its" : "their"} money counts on top of YNAB's. If ${unmatchedMine.length === 1 ? "it's" : "they're"} the same as one of YNAB's, pick "Same as" for it above.`
+                  : "",
+                leftOutUsed.length
+                  ? `You're leaving out ${leftOutUsed.join(", ")}, which ${leftOutUsed.length === 1 ? "has" : "have"} budget transactions this month. Bring ${leftOutUsed.length === 1 ? "it" : "them"} in to match.`
+                  : "",
+              ].filter(Boolean).join(" ") || "YNAB counts a few things differently from Coastwise.",
             )
         : null}
       {toSort

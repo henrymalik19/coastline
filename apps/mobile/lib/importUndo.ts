@@ -1,5 +1,5 @@
 import type { PlanState, Txn } from "@coastfi/engine";
-import { TxnSchema } from "@coastfi/schema";
+import { PlanStateSchema, TxnSchema, withProperties } from "@coastfi/schema";
 import { z } from "zod";
 
 /** How long after an import you can still undo it. */
@@ -102,4 +102,24 @@ export function addedSinceImport(current: Txn[], s: Pick<ImportSnapshot, "had" |
   const mine = yoursSince(current, s);
   const keep = mine.filter((x) => keepable(x, fit)).length;
   return { keep, remove: mine.length - keep };
+}
+
+/** The YNAB import as a backup file carries it: when it happened, the last update, and its undo copy. */
+export type ImportBackup = { importedAt: number; syncedAt?: number; undo?: ImportSnapshot };
+
+/**
+ * A backup's YNAB import, checked. Null when the backup has none (or it's unreadable): restoring it then
+ * leaves no import behind, so an undo copy from before can't be applied to the restored plan. The undo
+ * copy comes back only while it can still be used.
+ */
+export function readImportBackup(raw: unknown, now: number): ImportBackup | null {
+  const r = raw as { importedAt?: unknown; syncedAt?: unknown; undo?: { at?: unknown; plan?: unknown; had?: unknown; before?: unknown } } | null | undefined;
+  if (!r || typeof r !== "object" || typeof r.importedAt !== "number") return null;
+  const syncedAt = typeof r.syncedAt === "number" ? r.syncedAt : undefined;
+  let undo: ImportSnapshot | undefined;
+  if (r.undo && typeof r.undo.at === "number" && canUndoImport({ at: r.undo.at }, now)) {
+    const plan = PlanStateSchema.safeParse(r.undo.plan);
+    if (plan.success) undo = parseUndo(r.undo, withProperties(plan.data));
+  }
+  return { importedAt: r.importedAt, ...(syncedAt ? { syncedAt } : {}), ...(undo ? { undo } : {}) };
 }

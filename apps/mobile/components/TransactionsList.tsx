@@ -32,12 +32,14 @@ const dayHead = (d: string) => {
 
 /** `month` is "YYYY-MM" (the budget's month); `account` starts the list on one account. */
 export function TransactionsList({
-  month, account, onlyNeedsCategory, stickyTop = 0, onAccountChange,
+  month, account, onlyNeedsCategory, onlyReview, stickyTop = 0, onAccountChange,
 }: {
   month: string;
   account?: string;
   /** Open showing only the ones that need a category. */
   onlyNeedsCategory?: boolean;
+  /** Open showing only the ones held for review. */
+  onlyReview?: boolean;
   /** Where the filters stop, under the Budget's toolbar. */
   stickyTop?: number;
   /** The account picked ("all" for every account), so Add a transaction can start in it. */
@@ -64,7 +66,7 @@ export function TransactionsList({
   const [q, setQ] = useState("");
   const [needsCat, setNeedsCat] = useState(!!onlyNeedsCategory);
   // held for review (not approved in YNAB yet): listed apart, counted once you accept them
-  const [reviewOnly, setReviewOnly] = useState(false);
+  const [reviewOnly, setReviewOnly] = useState(!!onlyReview);
   const [editing, setEditing] = useState<Txn | "new" | null>(null);
   // the filters' height, so each day's heading sticks just under them
   const [filtersH, setFiltersH] = useState(96);
@@ -293,7 +295,8 @@ export function TransactionsList({
                 </Text>
               </View>
               {g.items.map((x, i) => (
-                <View key={x.id}>
+                // a faint tint on the ones waiting on you: held for review, or needing a category
+                <View key={x.id} style={x.review ? { backgroundColor: t.accentSoft } : uncategorized(x) ? { backgroundColor: t.warnSoft } : null}>
                   {i > 0 ? <Divider /> : null}
                   <Pressable
                     role="button"
@@ -342,7 +345,7 @@ export function TransactionsList({
                   {x.review ? (
                     // held for review: accept it here (outside the row's own button)
                     <View style={styles.reviewBar}>
-                      <Pressable role="button" accessibilityLabel={`Accept ${x.payee || "transaction"}`} onPress={() => accept(x)} hitSlop={6} style={[styles.acctTag, { backgroundColor: t.accentSoft, paddingHorizontal: 12, paddingVertical: 4 }]}>
+                      <Pressable role="button" accessibilityLabel={`Accept ${x.payee || "transaction"}`} onPress={() => accept(x)} hitSlop={6} style={[styles.acctTag, { backgroundColor: t.surface, borderWidth: 1, borderColor: t.accent, paddingHorizontal: 12, paddingVertical: 4 }]}>
                         <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Accept</Text>
                       </Pressable>
                     </View>

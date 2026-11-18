@@ -563,7 +563,7 @@ function DataSection() {
   };
   const doImport = async () => {
     if (!text.trim()) return;
-    if (!(await confirm("Restore this backup?", "This replaces your current plan and check-ins with the backup's.", "Restore"))) return;
+    if (!(await confirm("Restore this backup?", "This replaces your plan, transactions, check-ins and YNAB import with the backup's.", "Restore"))) return;
     try {
       importJson(text);
       setText("");
@@ -577,15 +577,20 @@ function DataSection() {
     <>
       <Group title="Back up">
         <View style={{ paddingVertical: space.sm, gap: space.md }}>
-          <Text style={[type.body, { color: t.text2 }]}>Your data lives on this device. Download a backup to keep a copy or move to another device.</Text>
+          <Text style={[type.body, { color: t.text2 }]}>Download a backup to keep a copy of your plan, transactions and check-ins. It includes your YNAB import too, so a restore can still undo it.</Text>
           <Button title={Platform.OS === "web" ? "Download backup" : "Share backup"} tone="primary" icon="database" onPress={doExport} style={{ alignSelf: "flex-start" }} />
         </View>
       </Group>
-      {importedAt ? (
-        <Group title="YNAB import">
+      <Group title="YNAB import">
+        {importedAt ? (
           <ImportUndoCard />
-        </Group>
-      ) : null}
+        ) : (
+          <View style={{ paddingVertical: space.sm, gap: space.md }}>
+            <Text style={[type.body, { color: t.text2 }]}>Bring in your accounts, budget and transactions from a YNAB export. You can undo it for 30 days.</Text>
+            <Button title="Import from YNAB" icon="database" onPress={() => router.push("/money/import")} style={{ alignSelf: "flex-start" }} />
+          </View>
+        )}
+      </Group>
       <Group title="Restore">
         <View style={{ paddingVertical: space.sm, gap: space.md }}>
           <TextInput

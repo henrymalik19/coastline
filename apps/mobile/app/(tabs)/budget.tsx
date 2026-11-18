@@ -71,7 +71,7 @@ export default function Budget() {
   const router = useRouter();
   const openPage = useOpenPage();
   // opened from a link (a plan step, a to-do): show this month with that line open
-  const { focus, view: viewParam, account: acctParam, needs: needsParam } = useLocalSearchParams<{ focus?: string; view?: string; account?: string; needs?: string }>();
+  const { focus, view: viewParam, account: acctParam, needs: needsParam, review: reviewParam } = useLocalSearchParams<{ focus?: string; view?: string; account?: string; needs?: string; review?: string }>();
   // Categories (assign money), Accounts (what's in each), or Transactions (what came in and went out)
   type View3 = "categories" | "accounts" | "transactions";
   const [tab, setTab] = useState<View3>(viewParam === "transactions" || viewParam === "accounts" ? viewParam : "categories");
@@ -112,6 +112,9 @@ export default function Budget() {
   }, [barH, tab, view.started]);
   // transactions that still need a category (this month and last; older ones are history)
   const needsCount = txns.filter((x) => needsCategory(x, needsCategorySince(start))).length;
+  // held for review (not approved in YNAB yet): counted once accepted
+  const reviewCount = txns.filter((x) => !x.deleted && x.review).length;
+  const openList = (filter: "needs" | "review") => { setTab("transactions"); router.setParams({ view: "transactions", needs: filter === "needs" ? "1" : undefined, review: filter === "review" ? "1" : undefined }); };
   // a display choice (Settings → Appearance), on unless turned off
   const showReal = useAppearance((s) => s.realSpending);
   const setShowReal = useAppearance((s) => s.setRealSpending);
@@ -343,6 +346,7 @@ export default function Budget() {
               : view.overspentBefore > 0.5 ? ` ${money(view.overspentBefore)} went to overspending in earlier months.` : ""}
             {red.length && redTotal > 0.005 ? ` ${red.length === 1 ? `${label(red[0]!)} is` : `${red.length} categories are`} overspent by ${money(redTotal)}: cover ${red.length === 1 ? "it" : "them"}, or it comes out of next month.` : ""}
             {onCardsTotal > 0.005 ? ` ${money(onCardsTotal)} of overspending is left on your cards as debt.` : ""}
+            {view.uncategorized ? ` Includes ${money(view.uncategorized)} not categorized yet: it moves to its category when you pick one.` : ""}
           </Text>
         </View>
       </View>
@@ -729,9 +733,9 @@ export default function Budget() {
             <View style={{ flexGrow: 1, flexShrink: 1, maxWidth: 440 }}>
               <Segmented
                 label="Budget view"
-                options={[{ value: "categories", label: "Categories" }, { value: "transactions", label: `${compact ? "Activity" : "Transactions"}${needsCount ? ` · ${needsCount}` : ""}` }, { value: "accounts", label: "Accounts" }]}
+                options={[{ value: "categories", label: "Categories" }, { value: "transactions", label: `${compact ? "Activity" : "Transactions"}${needsCount + reviewCount ? ` · ${needsCount + reviewCount}` : ""}` }, { value: "accounts", label: "Accounts" }]}
                 value={tab}
-                onChange={(v) => { setTab(v); if (v !== "transactions" && (acctParam || viewParam || needsParam)) router.setParams({ account: undefined, view: undefined, needs: undefined }); }}
+                onChange={(v) => { setTab(v); if (v !== "transactions" && (acctParam || viewParam || needsParam || reviewParam)) router.setParams({ account: undefined, view: undefined, needs: undefined, review: undefined }); }}
               />
             </View>
             {tab === "categories" && rtaHidden && !compact ? unassignedChip : null}
@@ -746,25 +750,29 @@ export default function Budget() {
       </View>
       ) : null}
       <ImportUndoReminder />
+      {/* Categories and Accounts: what's waiting on you in Activity (Activity has the same chips over its list) */}
+      {view.started && tab !== "transactions" && (reviewCount || needsCount) ? (
+        <View style={styles.chipRow}>
+          {reviewCount ? (
+            <Pressable role="link" onPress={() => openList("review")} hitSlop={4} style={[styles.waitChip, { borderColor: t.accent, backgroundColor: t.accentSoft }]}>
+              <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>To review · {reviewCount}</Text>
+            </Pressable>
+          ) : null}
+          {needsCount ? (
+            <Pressable role="link" onPress={() => openList("needs")} hitSlop={4} style={[styles.waitChip, { borderColor: t.warn, backgroundColor: t.warnSoft }]}>
+              <Text style={[type.caption, { color: t.text, fontWeight: "700" }]}>Needs a category · {needsCount}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       {!view.started || tab !== "accounts" ? monthBar : null}
       {view.started && tab === "transactions" ? (
-        <TransactionsList key={(acctParam ?? "all") + (needsParam ?? "")} month={month} account={acctParam} onlyNeedsCategory={needsParam === "1"} stickyTop={barH} onAccountChange={setListAcct} />
+        <TransactionsList key={(acctParam ?? "all") + (needsParam ?? "") + (reviewParam ?? "")} month={month} account={acctParam} onlyNeedsCategory={needsParam === "1"} onlyReview={reviewParam === "1"} stickyTop={barH} onAccountChange={setListAcct} />
       ) : view.started && tab === "accounts" ? (
         <BudgetAccounts onTransfer={(from) => setAdding({ from })} stickyTop={barH} />
       ) : view.started ? (
         <>
           <View ref={rtaRef as never}>{rtaCard}</View>
-          {needsCount ? (
-            <Pressable role="link" onPress={() => { setTab("transactions"); router.setParams({ view: "transactions", needs: "1" }); }} style={[styles.needsRow, { backgroundColor: t.warnSoft }]}>
-              <View style={[styles.realDot, { backgroundColor: t.warn }]} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={[type.body, { color: t.text, fontWeight: "700" }]}>{needsCount} {needsCount === 1 ? "transaction needs" : "transactions need"} a category</Text>
-                <Text style={[type.caption, { color: t.text2 }]}>Until then {needsCount === 1 ? "it doesn't" : "they don't"} count in any category or in Unassigned.</Text>
-              </View>
-              <Text style={[type.label, { color: t.accent, fontWeight: "700" }]}>Categorize</Text>
-              <Icon name="chevron" size={14} color={t.accent} />
-            </Pressable>
-          ) : null}
           {realRows.length ? (
             <Card style={{ gap: space.sm, paddingVertical: space.md }}>
               <View style={[styles.realHead]}>
@@ -973,6 +981,8 @@ export default function Budget() {
 }
 
 const styles = StyleSheet.create({
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  waitChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   needsRow: { flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm },
   realHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
   realDot: { width: 8, height: 8, borderRadius: 4 },
