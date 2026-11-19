@@ -608,7 +608,13 @@ function DataSection() {
       </Group>
       <Group title="YNAB import">
         {importedAt ? (
-          <ImportUndoCard />
+          <View style={{ gap: space.md }}>
+            <ImportUndoCard />
+            <View style={{ paddingVertical: space.sm, gap: space.md }}>
+              <Text style={[type.body, { color: t.text2 }]}>Still using YNAB too? Bring in its newer transactions from a fresh export.</Text>
+              <Button title="Update from YNAB" icon="database" onPress={() => router.push("/money/import")} style={{ alignSelf: "flex-start" }} />
+            </View>
+          </View>
         ) : (
           <View style={{ paddingVertical: space.sm, gap: space.md }}>
             <Text style={[type.body, { color: t.text2 }]}>Bring in your accounts, budget and transactions from a YNAB export. You can undo it for 30 days.</Text>
