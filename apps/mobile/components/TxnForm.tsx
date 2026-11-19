@@ -3,13 +3,13 @@
  * accounts. Built for quick entry on a phone: amount, payee (remembers its last category), category,
  * account, date.
  */
-import type { Txn } from "@coastfi/engine";
+import { isHistoryTxn, type Txn } from "@coastfi/engine";
 import { useMemo, useState } from "react";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { CalendarModal } from "./Calendar";
 import { Icon } from "./Icon";
 import { categoryText, isoDay, useCategories } from "../lib/categories";
-import { outsideName } from "../lib/outside";
+import { closedName, outsideName } from "../lib/outside";
 import { buildPayees, suggestPayees } from "../lib/payees";
 import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
@@ -159,6 +159,56 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
     // hidden categories are history only: listed just when this transaction is already in one (so it still shows)
     ...cats.filter((c) => c.hidden && wasIn.has(c.key)).map((c) => ({ value: c.key, label: c.label, hint: "Archived: history only" })),
   ];
+
+  // history from a closed account: there to look back at. Only its category can change (so it shows
+  // when you look for that category); it never counts in your budget, and it can't move to an account
+  if (txn && isHistoryTxn(txn)) {
+    const oneCat = !txn.transferAccountId && !txn.splits?.length;
+    const histOptions = [
+      ...(txn.amount > 0 ? [{ value: "ready", label: "Income", hint: "Money in" }] : []),
+      ...catOptions.filter((o) => o.value !== "ready"),
+      ...cats.filter((c) => c.hidden && !wasIn.has(c.key)).map((c) => ({ value: c.key, label: c.label, hint: "Archived" })),
+    ];
+    const detail = (k: string, v: string) => (
+      <View style={styles.listRow}>
+        <Text style={[type.body, { color: t.text2, width: 84 }]}>{k}</Text>
+        <Text style={[type.body, { color: t.text, flex: 1, textAlign: "right" }]}>{v}</Text>
+      </View>
+    );
+    return (
+      <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close">
+          <Pressable onPress={() => {}} aria-label="Old transaction" style={[styles.sheet, { backgroundColor: t.surface, borderColor: t.border }]}>
+            <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md }}>
+              <View style={styles.head}>
+                <Text style={[type.heading, { color: t.text, flex: 1 }]}>Old transaction</Text>
+                <IconButton icon="close" label="Close" onPress={onClose} />
+              </View>
+              <Text style={[type.caption, { color: t.text3 }]}>
+                From {closedName(txn.accountId)}, an account you didn't bring in. It's history: it never counts in your budget. You can change its category.
+              </Text>
+              <View style={[styles.list, { borderColor: t.border }]}>
+                {detail("Date", dateText)}
+                {divider}
+                {detail(txn.transferAccountId ? "Transfer" : "Payee", txn.transferAccountId ? `${txn.amount < 0 ? "To" : "From"} ${nameOf(txn.transferAccountId)}` : txn.payee || "No payee")}
+                {divider}
+                {detail("Amount", `${txn.amount > 0 ? "+" : "−"}${money(Math.abs(txn.amount))}`)}
+                {txn.memo ? <>{divider}{detail("Memo", txn.memo)}</> : null}
+                {txn.splits?.length ? <>{divider}{detail("Split", categoryText(cats, txn, nameOf))}</> : null}
+              </View>
+              {oneCat || txn.categoryId ? (
+                <Select label="Category" placeholder="No category" value={cat} options={[{ value: "", label: "No category" }, ...histOptions]} onChange={setCat} />
+              ) : null}
+              <View style={{ flexDirection: "row", gap: space.sm, justifyContent: "flex-end" }}>
+                <Button title="Cancel" onPress={onClose} />
+                <Button title="Save" tone="primary" disabled={cat === (txn.categoryId ?? "")} onPress={() => { saveTxn({ ...txn, categoryId: cat || undefined }, isoDay(start)); onClose(); }} />
+              </View>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    );
+  }
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>

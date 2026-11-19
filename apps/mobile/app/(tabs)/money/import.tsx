@@ -114,6 +114,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   });
   const [tab, setTab] = useState<"accounts" | "categories" | "matches">("accounts");
   const [showQuiet, setShowQuiet] = useState(false);
+  // the transactions of cash accounts and cards you leave out (closed ones) come in as history
+  const [history, setHistory] = useState(true);
   // the accounts tucked under "leaving out", fixed while you're on the Accounts list
   const [tucked, setTucked] = useState<Set<string> | null>(null);
   const [showUnused, setShowUnused] = useState(false);
@@ -179,11 +181,6 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const accountNames = useMemo(() => new Set(accounts.map((a) => a.name.trim().toLowerCase())), [accounts]);
   const categories = useMemo(() => (data ? ynabCategories(data, recentMonths(thisMonth)) : []), [data, thisMonth]);
   // how many of YNAB's transactions each category has (a split line counts for its own category)
-  const txnCount = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const tx of data?.txns ?? []) for (const x of tx.splits?.length ? tx.splits : [tx]) if (x.category) { const k = categoryKey(x.group, x.category); m.set(k, (m.get(k) ?? 0) + 1); }
-    return m;
-  }, [data]);
   // a combined one: the places its transactions went that the one it joins has too (why it fits there)
   const sharedPayees = useMemo(() => {
     const m: Record<string, { payees: string[]; matched: number; of: number }> = {};
@@ -205,6 +202,16 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   // default: the last 3 months, or all the export has if that is less
   const startPick = range || (months.includes(recentMonths(thisMonth, 2)[0]!) ? recentMonths(thisMonth, 2)[0]! : "all");
   const from = startPick === "all" ? null : startPick;
+  const txnCount = useMemo(() => {
+    const m = new Map<string, number>();
+    const kinds = new Map((data ? ynabAccounts(data) : []).map((a) => [a.name, a.kind]));
+    const comesIn = (acct: string) => choices[acct]?.action !== "skip" || (history && (kinds.get(acct) === "cash" || kinds.get(acct) === "card"));
+    for (const tx of data?.txns ?? []) {
+      if (!comesIn(tx.account) || (from && tx.date.slice(0, 7) < from)) continue;
+      for (const x of tx.splits?.length ? tx.splits : [tx]) if (x.category) { const k = categoryKey(x.group, x.category); m.set(k, (m.get(k) ?? 0) + 1); }
+    }
+    return m;
+  }, [data, choices, history, from]);
   const oldest = months[months.length - 1];
   const startMonth = from ?? oldest ?? thisMonth;
   const monthCount = months.indexOf(startMonth) + 1;
@@ -222,8 +229,8 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   const [useYnabBalance, setUseYnabBalance] = useState<Record<string, boolean>>({});
   const conflicts = useMemo(() => (data ? balanceConflicts(saved, ynabAccounts(data, isoDay(start)), choices) : []), [data, saved, choices]);
   const preview = useMemo(
-    () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, names, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, today: isoDay(start) }) : null),
-    [data, saved, from, thisMonth, choices, names, useYnabBalance, catOpts, catMap, groupMap, catGroup, amounts, removeEmpty, existing, keepBoth],
+    () => (data ? buildImport(saved, data, { from, thisMonth, accounts: choices, names, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, today: isoDay(start), history }) : null),
+    [data, saved, from, thisMonth, choices, names, useYnabBalance, catOpts, catMap, groupMap, catGroup, amounts, removeEmpty, existing, keepBoth, history],
   );
 
   // Unassigned after this import, next to YNAB's Ready to Assign (only the accounts you bring in count on
@@ -271,12 +278,12 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     if (!data || running.current || useStore.getState().importedAt || importWait(useSync.getState())) return;
     running.current = true;
     setConfirming(false);
-    const r = buildImport(saved, data, { from, thisMonth, accounts: choices, names, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, today: isoDay(start) });
+    const r = buildImport(saved, data, { from, thisMonth, accounts: choices, names, useYnabBalance, categories: catOpts, categoryMap: catMap, groupMap, categoryGroup: catGroup, amounts, removeEmpty, existing, keepBoth, today: isoDay(start), history });
     // check Unassigned against YNAB's Ready to Assign, and say plainly if it's off
     const c = unassignedCheck(r);
     const said = !c ? "" : Math.abs(c.mine - c.ynab) < 0.01 ? ` Unassigned is ${money(c.mine)}, the same as YNAB's Ready to Assign.` : ` Unassigned is ${money(c.mine)}; YNAB's Ready to Assign is ${money(c.ynab)}.`;
     importBudget(r.plan, r.txns, r.replaced);
-    setDone(`Imported ${r.summary.transactions} transactions and ${r.summary.categoriesAdded + r.summary.categoriesUpdated} categories.${said}${r.summary.notApprovedInYnab ? ` ${r.summary.notApprovedInYnab} to review under Transactions.` : ""}`);
+    setDone(`Imported ${r.summary.transactions} transactions${r.summary.history ? ` (and ${r.summary.history.toLocaleString()} older ones from closed accounts, as history)` : ""} and ${r.summary.categoriesAdded + r.summary.categoriesUpdated} categories.${said}${r.summary.notApprovedInYnab ? ` ${r.summary.notApprovedInYnab} to review under Transactions.` : ""}`);
     setDoneNeeds(r.summary.needsCategoryFromYnab + r.summary.needsCategoryLeftOut);
     setData(null);
   };
@@ -750,6 +757,14 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
                     </>
                   ) : null}
                 </>
+              ) : null}
+              {preview && (preview.summary.history > 0 || !history) ? (
+                <ToggleRow
+                  label={history ? `Keep their history (${preview.summary.history.toLocaleString()} transactions)` : "Keep their history"}
+                  hint="Transactions from the cash accounts and cards you leave out, to look back at in Activity. The accounts aren't added, and they never count in your budget."
+                  value={history}
+                  onChange={setHistory}
+                />
               ) : null}
             </Card>
           ) : null}

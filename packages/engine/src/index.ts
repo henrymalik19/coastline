@@ -12,11 +12,12 @@ export { simulatePlan, scheduleAmount, isHighInterest, paysExtra, rateIn, k401Co
 export { project, fireNumber, coastNumberAt, coastCrossing } from "./project";
 export { investFromTakeHome } from "./schedule";
 export { accountPlanKey, isKeptRentalDebt, keptRental, rentInRetirement, isRentalDebt, isSpouseIra, isSpendingItem, linkedAccount, linkedItemSchedules, budgetScheduleMonths, mergeAccountSchedules, payPerCheck, valueIn, hsaEligibleIn, isValueKey, ACCOUNT_KEY, PAY401, PAYHSA, PAYGROSS, PAYNET, PAYDED, HSAEMP, BUDGET_ITEM, HSA_ELIGIBLE } from "./schedule";
-export { isUpcoming, registerBalance, transferPair, txnActivity, type TxnActivity } from "./txn";
+export { isHistoryTxn, isUpcoming, registerBalance, transferPair, txnActivity, type TxnActivity } from "./txn";
 export { SAVINGS_GROUP, START_TXN, budgetCategories, budgetStartCash, budgetView, isStartTxn, spendingHistory, startTxnId, type BudgetCategory, type BudgetCategoryKind, type BudgetLine, type BudgetView } from "./budget";
 export { accountForecasts, accountGroup, type AccountForecast, type AccountMonth, type AccountYear, type AccountKey } from "./forecast";
 export { monteCarlo } from "./montecarlo";
 export { run, finalAndFire, MC_SEED } from "./run";
+export { ACCESS_AGE, earlyAccess, type EarlyAccess } from "./early";
 export { extraToCoastBy, extraToRetire, investingNow, investingStarts, monthlyGrowthFactor, mortgagePayoffs, retireAgeOnPlan, type MortgagePayoff } from "./howTo";
 export { amortize, loanPayment, loanSchedule, mortgagesAtRetirement, scheduledPayment, type DebtAtRetirement, type LoanSchedule } from "./mortgage";
 export { addMonths, monthsBetween, mulberry32 } from "./util";

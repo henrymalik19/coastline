@@ -1,4 +1,4 @@
-import { budgetStartCash, budgetView, registerBalance, type PlanState } from "@coastfi/engine";
+import { budgetStartCash, budgetView, isHistoryTxn, registerBalance, type PlanState } from "@coastfi/engine";
 import { describe, expect, it } from "vitest";
 import { freshPlan } from "./presets";
 import { cardMap } from "./register";
@@ -354,6 +354,42 @@ describe("choosing where categories go, and matching your own transactions", () 
     expect(pay.categoryId).toBeUndefined();
     expect(r.summary.transfersOutside).toBe(1);
     expect(r.summary.needsCategoryFromYnab).toBe(0);
+  });
+
+  it("history from a closed account left out: its transactions come in under its name, and never count in the budget", () => {
+    // an old account, now $0: a purchase, then money from Checking that brought it back to $0
+    const OLD = REG.replace(`"Checking","","11/03/2026"`, `"Old Account","","11/04/2026","Kroger","Everyday: Groceries","Everyday","Groceries","","$50.00","$0.00","Cleared"
+"Old Account","","11/04/2026","Transfer : Checking","","","","","$0.00","$50.00","Cleared"
+"Checking","","11/04/2026","Transfer : Old Account","","","","","$50.00","$0.00","Cleared"
+"Checking","","11/03/2026"`);
+    const { plan, opts } = base();
+    const d = parseYnab(OLD, PLAN);
+    const two = base(); // its own ids, so both imports name things the same
+    const skip = { "Old Account": { action: "skip" as const }, Visa: { action: "skip" as const } };
+    const without = buildImport(two.plan, parseYnab(OLD, PLAN), { ...two.opts, accounts: skip });
+    const r = buildImport(plan, d, { ...opts, accounts: skip, history: true });
+    const old = r.txns.filter((t) => t.accountId === "outside:Old Account");
+    expect(old.map((t) => t.amount).sort((x, y) => x - y)).toEqual([-50, 50]);
+    // Visa is left out too, but it still has a balance: it isn't closed, so it isn't history
+    expect(r.txns.some((t) => t.accountId === "outside:Visa")).toBe(false);
+    expect(r.summary.history).toBe(2);
+    expect(without.summary.history).toBe(0);
+    expect(without.txns.some((t) => t.accountId.startsWith("outside:"))).toBe(false);
+    // its category links up like any other (find it by category); a transfer with Checking has none
+    const kroger = old.find((t) => t.payee === "Kroger")!;
+    expect(kroger.categoryId).toBeTruthy();
+    const pay = old.find((t) => t.amount === 50)!;
+    expect(pay.transferAccountId).toBe(r.txns.find((t) => t.payee === "Employer")!.accountId);
+    expect(pay.categoryId).toBeUndefined();
+    // the budget is the same with or without it, and none of it asks for a category or review
+    const catsOf = (p: PlanState) => p.budget.map((x) => ({ key: x.id, moves: false, target: x.amount }));
+    for (const m of ["2026-11", "2026-12"]) {
+      const a = budgetView({ ...r.plan.budgetPlan!, startCash: 0 }, catsOf(r.plan), m, { txns: r.txns, cards: cardMap(r.plan) });
+      const b = budgetView({ ...without.plan.budgetPlan!, startCash: 0 }, catsOf(without.plan), m, { txns: without.txns, cards: cardMap(without.plan) });
+      expect(a.lines).toEqual(b.lines);
+    }
+    expect(old.every((t) => isHistoryTxn(t) && !t.review)).toBe(true);
+    expect(r.summary.transactions).toBe(without.summary.transactions);
   });
 
   it("only this month's and last month's transactions are asked for a category", () => {

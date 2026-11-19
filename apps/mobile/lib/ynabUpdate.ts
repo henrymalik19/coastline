@@ -5,7 +5,7 @@
  * YNAB's export has no transaction ids, so each one's id comes from its details (see stableId in
  * ynab.ts): one edited in YNAB shows up as a new transaction, and its old copy as gone from YNAB.
  */
-import type { BudgetItem, PlanState, Txn } from "@coastfi/engine";
+import { isHistoryTxn, type BudgetItem, type PlanState, type Txn } from "@coastfi/engine";
 import { buildImport, categoryKey, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabData } from "./ynab";
 
 export type YnabUpdate = {
@@ -19,8 +19,10 @@ export type YnabUpdate = {
   replaced: string[];
   /** YNAB categories you don't have here: they come in hidden. */
   hiddenAdded: BudgetItem[];
-  /** YNAB accounts not in your budget: their transactions are skipped. */
+  /** YNAB accounts not in your budget: not added. A cash account's or card's transactions come in as history. */
   skippedAccounts: string[];
+  /** How many of `add` are history from accounts not here (closed ones). */
+  history: number;
   /** The months looked at: from the first month YNAB's transactions here start. */
   from: string;
 };
@@ -50,7 +52,7 @@ export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSy
     const sug = suggestCategory(plan, c);
     categoryMap[categoryKey(c.group, c.name)] = sug.action === "new" ? { action: "hidden" } : sug;
   }
-  const r = buildImport(structuredClone(plan), d, { from, thisMonth, accounts, categories: {}, categoryMap, removeEmpty: false, existing: txns, replaceMatching: true, newId });
+  const r = buildImport(structuredClone(plan), d, { from, thisMonth, accounts, categories: {}, categoryMap, removeEmpty: false, existing: txns, replaceMatching: true, newId, history: true });
 
   const have = new Set(txns.map((t) => t.id)); // deleted ones too: one you deleted here stays deleted
   const incoming = r.txns.filter((t) => t.source === "ynab" && !t.id.startsWith("start:"));
@@ -69,6 +71,7 @@ export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSy
     replaced: r.matches.filter((m) => addIds.has(m.ynab.id)).map((m) => m.mine.id),
     hiddenAdded: r.plan.budget.filter((b) => b.hidden && !plan.budget.some((x) => x.id === b.id) && used.has(b.id)),
     skippedAccounts,
+    history: add.filter((t) => isHistoryTxn(t)).length,
     from,
   };
 }

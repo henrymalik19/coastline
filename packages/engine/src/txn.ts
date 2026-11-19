@@ -32,11 +32,17 @@ const ymOf = (date: string) => date.slice(0, 7);
  * from that card's payment category. A transfer out to an account you don't budget (an IRA, a loan)
  * spends from the category on it.
  */
+/**
+ * History from an account that isn't here (a closed one left out of an import): its account id is
+ * "outside:" plus that account's name. It's kept to look back at, and never counts in the budget.
+ */
+export const isHistoryTxn = (t: { accountId?: string }): boolean => !!t.accountId && t.accountId.startsWith("outside:");
+
 export function txnActivity(txns: Txn[], month: string, cards: Record<string, string>, asOf?: string): TxnActivity {
   const out: TxnActivity = { income: 0, spent: {}, cardFunded: {}, cardSpent: {}, uncategorized: 0 };
   const add = (rec: Record<string, number>, k: string, v: number) => { rec[k] = (rec[k] ?? 0) + v; };
   for (const t of txns) {
-    if (t.deleted || t.review || ymOf(t.date) !== month || isUpcoming(t, asOf)) continue;
+    if (t.deleted || t.review || ymOf(t.date) !== month || isUpcoming(t, asOf) || isHistoryTxn(t)) continue;
     const amt = num(t.amount);
     const card = cards[t.accountId];
     // a payment to a card: spends from its payment category (counted once, on the card's side)

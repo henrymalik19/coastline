@@ -1,5 +1,5 @@
 /** The budget's categories with their on-screen names (shared by the Budget tab, registers and forms). */
-import { budgetCategories, isStartTxn, type BudgetCategory, type Txn } from "@coastfi/engine";
+import { budgetCategories, isHistoryTxn, isStartTxn, type BudgetCategory, type Txn } from "@coastfi/engine";
 import { useMemo } from "react";
 import { debtLabel } from "./debts";
 import { usePlan } from "./plan";
@@ -59,7 +59,7 @@ export function needsCategorySince(start: Date): string {
  */
 export function needsCategory(t: Pick<Txn, "id" | "categoryId" | "transferAccountId" | "splits" | "deleted" | "date">, since?: string): boolean {
   // one held for review isn't asked for a category until it's accepted
-  if (t.deleted || isStartTxn(t) || (t as { review?: boolean }).review) return false;
+  if (t.deleted || isStartTxn(t) || (t as { review?: boolean }).review || isHistoryTxn(t as { accountId?: string })) return false;
   if (since && t.date < since) return false;
   if (t.splits?.length) return t.splits.some((s) => !s.categoryId);
   return !t.categoryId && !t.transferAccountId;

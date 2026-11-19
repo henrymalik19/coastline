@@ -3,7 +3,7 @@
  * cards) for the budget's month, with search and an account filter. Tap one to change it. Each
  * account's register (reconcile) is a tap away.
  */
-import { isStartTxn, isUpcoming, registerBalance, startTxnId, type Txn } from "@coastfi/engine";
+import { isHistoryTxn, isStartTxn, isUpcoming, registerBalance, startTxnId, type Txn } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -12,7 +12,7 @@ import { Icon } from "./Icon";
 import { TxnForm } from "./TxnForm";
 import { Card, Divider } from "./ui";
 import { categoryText, isoDay, useCategories, needsCategory, needsCategorySince } from "../lib/categories";
-import { outsideName } from "../lib/outside";
+import { closedName, OUTSIDE, outsideName } from "../lib/outside";
 import { money } from "../lib/format";
 import { useLayout } from "../lib/layout";
 import { usePlan } from "../lib/plan";
@@ -21,6 +21,9 @@ import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { ClearedDot } from "./ClearedDot";
 import { sticky } from "../lib/sticky";
+
+/** The account filter's "All closed accounts". */
+const CLOSED = "closed:*";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -66,6 +69,16 @@ export function TransactionsList({
   const [q, setQ] = useState("");
   // one category (and its sub categories), or all of them
   const [catF, setCatF] = useState("all");
+  // a category or a search looks at every date (an old payee, a category used years ago); the date
+  // picker shows it, and you can narrow it back down
+  const pickCategory = (v: string) => {
+    setCatF(v);
+    if (v !== "all" && range === "month") setRange("all");
+  };
+  const search = (v: string) => {
+    setQ(v);
+    if (v.trim() && !q.trim() && range === "month") setRange("all");
+  };
   const catKeys = useMemo(() => (catF === "all" ? null : new Set([catF, ...cats.filter((c) => c.parent === catF).map((c) => c.key)])), [catF, cats]);
   const catOptions = useMemo(() => {
     const name = (k: string) => cats.find((c) => c.key === k)?.label ?? "Category";
@@ -97,12 +110,20 @@ export function TransactionsList({
   }, [account]);
   const [bankSays, setBankSays] = useState(0);
 
-  const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? state.accounts.find((a) => a.id === id)?.name ?? state.debts.find((d) => d.id === id)?.name ?? outsideName(id) ?? "Account";
+  // history from closed accounts (left out of an import): each one's name, with how many transactions
+  const closedAccts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const x of txns) if (!x.deleted && isHistoryTxn(x)) m.set(x.accountId, (m.get(x.accountId) ?? 0) + 1);
+    return [...m].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [txns]);
+  const closedSet = useMemo(() => new Set(closedAccts.map(([id]) => id)), [closedAccts]);
+  const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? state.accounts.find((a) => a.id === id)?.name ?? state.debts.find((d) => d.id === id)?.name ?? (closedSet.has(id) ? closedName(id) : outsideName(id)) ?? "Account";
   // only this month's and last month's need a category; older ones are history
   const since = needsCategorySince(start);
   /** Under a transfer's from → to: what it's for (a card payment, from Unassigned…), and its memo. */
   const transferNote = (x: Txn) => {
-    const what = categoryText(cats, x, nameOf, since).match(/\(([^)]*)\)$/)?.[1];
+    // an old one from a closed account: the category it was filed under (TCG Bonus), so it shows what it was
+    const what = (isHistoryTxn(x) && x.categoryId ? cats.find((c) => c.key === x.categoryId)?.label : undefined) ?? categoryText(cats, x, nameOf, since).match(/\(([^)]*)\)$/)?.[1];
     return [what ?? "Transfer", x.payee && !/^transfer/i.test(x.payee) ? x.payee : "", x.memo ?? ""].filter(Boolean).join(" · ");
   };
   const uncategorized = (x: Txn) => needsCategory(x, since);
@@ -111,7 +132,7 @@ export function TransactionsList({
     const needle = q.trim().toLowerCase();
     return txns
       .filter((x) => !x.deleted)
-      .filter((x) => acct === "all" || x.accountId === acct || x.transferAccountId === acct)
+      .filter((x) => acct === "all" || (acct === CLOSED ? isHistoryTxn(x) : x.accountId === acct || x.transferAccountId === acct))
       // the ones that need a category: from every month (the count beside it is all of them)
       .filter((x) => needsCat || reviewOnly || inRange(x.date))
       .filter((x) => !needsCat || uncategorized(x))
@@ -272,15 +293,25 @@ export function TransactionsList({
               label="Account"
               value={acct}
               onChange={setAcct}
-              options={[{ value: "all", label: `All accounts (${accounts.length})` }, ...accounts.map((a) => ({ value: a.id, label: a.name, hint: a.kind === "card" ? "Credit card" : "Cash account" }))]}
+              options={[
+                { value: "all", label: `All accounts (${accounts.length})` },
+                ...accounts.map((a) => ({ value: a.id, label: a.name, hint: a.kind === "card" ? "Credit card" : "Cash account" })),
+                // history from accounts you didn't bring in: all of them, or one
+                ...(closedAccts.length
+                  ? [
+                      { value: CLOSED, label: `All closed accounts (${closedAccts.length})`, hint: "History only", section: "Closed accounts" },
+                      ...closedAccts.map(([id, n]) => ({ value: id, label: id.slice(OUTSIDE.length), hint: `${n.toLocaleString()} transactions · history only`, section: "Closed accounts" })),
+                    ]
+                  : []),
+              ]}
             />
           </View>
           <View style={compact ? { flex: 1, minWidth: 0 } : { width: 220 }}>
-            <Select label="Category" value={catF} onChange={setCatF} options={catOptions} />
+            <Select label="Category" value={catF} onChange={pickCategory} options={catOptions} />
           </View>
         </View>
         <View style={compact ? { width: "100%" } : { flex: 1, minWidth: 200 }}>
-          <TextField label="Search transactions" placeholder={compact ? "Search" : "Search payee, category, amount"} value={q} onChange={setQ} />
+          <TextField label="Search transactions" placeholder={compact ? "Search" : "Search payee, category, amount"} value={q} onChange={search} />
         </View>
       </View>
       </View>
@@ -380,7 +411,11 @@ export function TransactionsList({
       ) : (
         <Card style={{ gap: space.sm }}>
           <Text style={[type.body, { color: t.text2 }]}>
-            {q || needsCat || reviewOnly ? "Nothing matches." : allMonths ? "No transactions yet." : range === "custom" ? "No transactions between those dates." : `No transactions in ${ymText(month)}.`}
+            {catF !== "all" && !q && !needsCat && !reviewOnly
+              ? txns.some((x) => !x.deleted && (catKeys?.has(x.categoryId ?? "") || x.splits?.some((s) => catKeys?.has(s.categoryId ?? ""))))
+                ? "Nothing in this category for these dates."
+                : "No transactions in this category, ever. It may only have held money you set aside."
+              : q || needsCat || reviewOnly ? "Nothing matches." : allMonths ? "No transactions yet." : range === "custom" ? "No transactions between those dates." : `No transactions in ${ymText(month)}.`}
           </Text>
           <Text style={[type.caption, { color: t.text3 }]}>Add what you spend and earn here. Each one comes out of (or goes into) a budget category.</Text>
         </Card>

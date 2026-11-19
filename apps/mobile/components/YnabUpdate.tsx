@@ -71,7 +71,8 @@ export function YnabUpdateCard() {
         <>
           <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>From {file || "your YNAB export"}</Text>
           {nothing ? line(`Nothing new since ${dayText(lastSync)}.`, t.text2) : null}
-          {u.add.length ? line(`${n(u.add.length, "transaction")} new or changed in YNAB come in.`) : null}
+          {u.add.length - u.history ? line(`${n(u.add.length - u.history, "transaction")} new or changed in YNAB come in.`) : null}
+          {u.history ? line(`${n(u.history, "older transaction")} from closed accounts come in as history: in Activity, never in your budget.`) : null}
           {u.replaced.length ? line(`${n(u.replaced.length, "of yours", "of yours")} ${u.replaced.length === 1 ? "is" : "are"} the same as YNAB's: YNAB's replace${u.replaced.length === 1 ? "s it" : " them"}.`) : null}
           {u.gone.length ? (
             <ToggleRow
@@ -84,7 +85,7 @@ export function YnabUpdateCard() {
           {u.keptEdited.length ? line(`${n(u.keptEdited.length, "transaction")} gone from YNAB that you changed here stay${u.keptEdited.length === 1 ? "s" : ""}, as yours.`, t.text2) : null}
           {u.hiddenAdded.length ? line(`New in YNAB, coming in archived: ${u.hiddenAdded.map((b) => b.name).join(", ")}.`, t.text2) : null}
           {u.skippedAccounts.length ? (
-            <Text style={[type.caption, { color: t.text3 }]}>Not in your budget, so skipped: {u.skippedAccounts.join(", ")}.</Text>
+            <Text style={[type.caption, { color: t.text3 }]}>Not in your budget, so not added: {u.skippedAccounts.join(", ")}.</Text>
           ) : null}
           <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
             {nothing ? null : <Button title="Update" tone="primary" onPress={apply} />}

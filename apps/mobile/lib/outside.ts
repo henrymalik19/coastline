@@ -9,3 +9,6 @@ export const isOutside = (id?: string): boolean => !!id && id.startsWith(OUTSIDE
 
 /** "Old Savings (not in Coastwise)" for an outside account, else undefined. */
 export const outsideName = (id?: string): string | undefined => (isOutside(id) ? `${id!.slice(OUTSIDE.length) || "Another account"} (not in Coastwise)` : undefined);
+
+/** An account history comes from (a closed one left out of an import): "Wells - Checking (closed)". */
+export const closedName = (id?: string): string | undefined => (isOutside(id) ? `${id!.slice(OUTSIDE.length) || "Another account"} (closed)` : undefined);

@@ -8,7 +8,7 @@ import { fullName } from "../../lib/company";
 import { debtItPays, newLoanPayment, paidLastTwoMonths, setLoanPayment } from "../../lib/debtLink";
 import { ImportUndoReminder, useImported } from "../../components/ImportUndo";
 import { txnsIn } from "../../lib/combine";
-import { BUDGET_ITEM, budgetCategories, budgetView, SAVINGS_GROUP, spendingHistory, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
+import { BUDGET_ITEM, budgetCategories, budgetView, isHistoryTxn, SAVINGS_GROUP, spendingHistory, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
 import { BudgetAccounts } from "../../components/BudgetAccounts";
 import { TransactionsList } from "../../components/TransactionsList";
@@ -138,7 +138,7 @@ export default function Budget() {
   const [adding, setAdding] = useState<{ txn?: Txn; categoryId?: string; kind?: "out" | "in"; amount?: number; from?: string } | null>(null);
   // the account picked on the Transactions list: a new transaction added from there starts in it
   const [listAcct, setListAcct] = useState("all");
-  const monthTxns = txns.filter((x) => !x.deleted && x.date.startsWith(month));
+  const monthTxns = txns.filter((x) => !x.deleted && x.date.startsWith(month) && !isHistoryTxn(x));
   const i = between(thisMonth, month);
   const entry = b?.months?.[month];
   const cashNow = state.accounts.filter((a) => a.type === "cash").reduce((s, a) => s + (+a.balance || 0), 0);

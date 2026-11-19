@@ -3,7 +3,7 @@
  * it's worked out in five steps that open one at a time, then the other kinds of FI (folded away).
  * What-ifs live on Forecast; the withdrawal rate is a real setting, so it stays in step 3.
  */
-import { baristaFi, DISPLAY_INFLATION, extraToCoastBy, extraToRetire, FAT_FACTOR, fireBreakdown, fiLevels, inFutureDollars, investingNow, investingStarts, mortgagePayoffs, retireAgeOnPlan } from "@coastfi/engine";
+import { ACCESS_AGE, baristaFi, DISPLAY_INFLATION, earlyAccess, extraToRetire, FAT_FACTOR, fireBreakdown, fiLevels, inFutureDollars, investingNow, investingStarts, mortgagePayoffs, retireAgeOnPlan } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -34,15 +34,9 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
   // one step open at a time; the other kinds of FI start folded
   const [openStep, setOpenStep] = useState<number | null>(null);
   const [levelsOpen, setLevelsOpen] = useState(false);
-  // how you get there: the Coast-by age you pick (whole ages before you retire)
-  const coastAges = Array.from({ length: Math.max(0, Math.ceil(d.retireAge) - 1 - Math.floor(d.age)) }, (_, i) => Math.floor(d.age) + 1 + i);
-  const [coastAge, setCoastAge] = useState<number | null>(null);
-  const coastBy = coastAge ?? coastAges[Math.min(coastAges.length - 1, 9)] ?? null;
   // these run the forecast again (a few dozen times): only when the plan changes
   const extra = useMemo(() => (d.years > 0 ? extraToRetire(state, start) : 0), [state, start, d.years]);
   const laterAge = useMemo(() => (extra > 0.5 ? retireAgeOnPlan(state, start) : null), [state, start, extra > 0.5]);
-  const coastMonths2 = coastBy === null ? 0 : Math.round((coastBy - d.age) * 12);
-  const coastExtra = useMemo(() => (coastBy === null || extra <= 0.5 ? 0 : extraToCoastBy(state, start, coastMonths2)), [state, start, coastMonths2, coastBy === null, extra <= 0.5]);
   const toView = (v: "retirement" | "whatif") => (onView ? onView(v) : router.navigate(`/plan?view=${v}` as never));
 
   const whole = (v: number) => money(v, { whole: true });
@@ -199,17 +193,6 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
       ) : (
         <>
           {row(`To retire at ${d.retireAge}`, more(extra), { tone, sub: `Every month until ${d.retireAge}, on top of your plan.${shortMo > 0.5 ? ` Your bills run about ${whole(shortMo)}/mo more than your pay now, so that part covers them first.` : ""} It follows your plan's steps, so some may pay debts or build savings first.` })}
-          {reached ? row("Coast FI", "Reached ✓", { tone: t.good }) : coastBy === null ? null : (
-            <>
-              <View style={[styles.row, { flexWrap: "wrap" }]}>
-                <Text style={[type.caption, { color: t.text2, fontWeight: "500", flex: 1, minWidth: 140 }]}>To reach Coast FI by</Text>
-                <Select label="Coast FI by age" value={String(coastBy)} options={coastAges.map((a) => ({ value: String(a), label: `Age ${a}` }))} onChange={(v) => setCoastAge(Number(v))} />
-              </View>
-              {coastExtra <= 0.5
-                ? row("Your plan already gets there", "✓", { tone: t.good })
-                : row(`Until ${coastBy}`, more(coastExtra), { tone, sub: `Then you could stop investing: what you have grows into ${whole(b.fire)} by ${d.retireAge} on its own.` })}
-            </>
-          )}
           <Divider />
           <Text style={[type.overline, { color: t.text3 }]}>Or, investing as you do now</Text>
           {row("Retire later", laterAge === null ? "Not by 75" : `At ${laterAge}`, { tone, sub: laterAge === null ? "Your plan isn't enough at any age up to 75" : `Keep going until ${laterAge} and your plan is enough` })}
@@ -229,7 +212,35 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
           ))}
         </>
       ) : null}
-      {link("Try these in What if", () => toView("whatif"))}
+      {link("Try these in What if, or a Coast FI age", () => toView("whatif"))}
+    </Card>
+  );
+
+  // retiring before 59½: the years until then are paid from money you can reach early (brokerage)
+  const early = earlyAccess(state, o);
+  const yrs = (v: number) => (Math.abs(v - Math.round(v)) < 0.01 ? `${Math.round(v)}` : v.toFixed(1));
+  const beforeAccess = !early ? null : (
+    <Card style={{ gap: space.sm }}>
+      <SectionLabel>Before 59½</SectionLabel>
+      <Text style={[type.caption, { color: t.text2 }]}>
+        You retire at {d.retireAge}. 401(k)s and IRAs can't be touched without a 10% penalty until 59½, so the {yrs(early.years)} years in between are paid from your brokerage.
+      </Text>
+      {row(`Spending for ${yrs(early.years)} years`, whole(early.spending))}
+      {early.income > 0.5 ? row("Income that comes in by then", `− ${whole(early.income)}`) : null}
+      {early.health > 0.5 ? row("Health insurance until then", `+ ${whole(early.health)}`, { sub: "Beyond what you'd pay on Medicare" }) : null}
+      {early.mortgage > 0.5 ? row("Mortgage left when you retire", `+ ${whole(early.mortgage)}`, { sub: "Your number pays it off when you retire" }) : null}
+      <Divider />
+      {row("You need early", whole(early.need), { strong: true })}
+      {row("Your brokerage then", whole(early.reachable), { sub: `On your plan at ${d.retireAge}` })}
+      {early.short > 0.5 ? (
+        <>
+          {row("Short", whole(early.short), { strong: true, tone: t.bad })}
+          {row("Into brokerage", `${whole(early.extraMonthly)}/mo more`, { tone, sub: `Every month until ${d.retireAge}. Putting it there instead of a 401(k) or IRA keeps the total the same, but you can reach it early.` })}
+        </>
+      ) : row("Covered", "✓", { strong: true, tone: t.good })}
+      <Text style={[type.caption, { color: t.text3 }]}>
+        Only brokerage counts here. Roth IRA contributions (not growth), cash, and rules like regular early withdrawals from a 401(k) (72(t)) can also help, so this is on the safe side. In today's dollars; age {ACCESS_AGE} is when the penalty ends.
+      </Text>
     </Card>
   );
 
@@ -358,6 +369,7 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
     <>
       {answer}
       {getThere}
+      {beforeAccess}
       {breakdown}
       {ladder}
     </>

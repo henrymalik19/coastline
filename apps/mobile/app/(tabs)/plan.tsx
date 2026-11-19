@@ -10,6 +10,7 @@ import { BalanceChart } from "../../components/BalanceChart";
 import { InfoText, InfoTip, Segmented, Select } from "../../components/form";
 import { Icon } from "../../components/Icon";
 import { WhatIf } from "../../components/WhatIf";
+import { CoastBy } from "../../components/CoastBy";
 import { NumberBreakdown } from "../../components/NumberBreakdown";
 import { RetirementEssentials } from "../../components/RetirementEssentials";
 import { HealthcareSection, RetirementIncomeSection } from "../../components/settings/sections";
@@ -22,15 +23,16 @@ import { useLayout } from "../../lib/layout";
 import { usePlan } from "../../lib/plan";
 import { radius, space, type, useTheme } from "../../lib/theme";
 
-// the flow: where you're headed, what sets your retirement, what-ifs to try, then your number
+// the answer first (your plan: your number and how you get there), then your accounts growing, what-ifs
+// to try, and what sets your retirement. The keys stay as they were so old links still work.
 type ViewKey = "overview" | "retirement" | "whatif" | "number";
 const VIEWS: { value: ViewKey; label: string }[] = [
-  { value: "overview", label: "Overview" },
-  { value: "retirement", label: "Retirement" },
+  { value: "number", label: "Your plan" },
+  { value: "overview", label: "Accounts" },
   { value: "whatif", label: "What if" },
-  { value: "number", label: "Your number" },
+  { value: "retirement", label: "Retirement" },
 ];
-const viewOf = (v?: string): ViewKey => (v === "retirement" || v === "whatif" || v === "number" ? v : "overview");
+const viewOf = (v?: string): ViewKey => (v === "retirement" || v === "whatif" || v === "overview" || v === "forecast" || v === "table" ? (v === "forecast" || v === "table" ? "overview" : v) : "number");
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const keyLabel = (k: string) => `${MON[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
 
@@ -160,7 +162,7 @@ export default function Forecast() {
           <Text style={[type.caption, { color: t.text3, paddingTop: space.xs }]}>Ahead of or behind plan shows here after your first full month.</Text>
         )}
         <Pressable role="link" onPress={() => go("number")} hitSlop={6} style={{ alignSelf: "flex-start", paddingTop: space.xs }}>
-          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>How is my number worked out? →</Text>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>See your plan: how you get there →</Text>
         </Pressable>
       </View> : null}
     </Card>
@@ -230,8 +232,9 @@ export default function Forecast() {
       ) : tab === "whatif" ? (
         <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
           <WhatIf />
+          <CoastBy />
           <Pressable role="link" onPress={() => go("number")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
-            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>See your number →</Text>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>See your plan →</Text>
           </Pressable>
         </ScrollView>
       ) : tab === "retirement" ? (
@@ -244,7 +247,7 @@ export default function Forecast() {
               <Text style={[type.caption, { color: t.text3 }]}>Changes below update it right away</Text>
             </View>
             <Pressable role="link" onPress={() => go("number")} hitSlop={6}>
-              <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>How it's worked out →</Text>
+              <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>See your plan →</Text>
             </Pressable>
           </Card>
           <SectionLabel>What you'll spend</SectionLabel>

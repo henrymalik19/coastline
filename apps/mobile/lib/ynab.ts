@@ -553,6 +553,11 @@ export type ImportOptions = {
   names?: Record<string, { company?: string; name: string }>;
   /** Ids for what the import adds (tests); without it, ids come from YNAB's names (see nameId). */
   newId?: () => string;
+  /**
+   * Bring in the transactions of closed cash accounts and cards you're leaving out ($0 now), as history:
+   * they keep the old account's name ("outside:" + name), show in Activity, and never count in the budget.
+   */
+  history?: boolean;
 };
 export const categoryKey = (group: string, name: string) => norm(group) + "\u0000" + norm(name);
 /** A YNAB group, for `groupMap`. */
@@ -577,6 +582,8 @@ export type ImportResult = {
     notApprovedInYnab: number;
     /** Categories that pay one of your loans (a mortgage's "PITI"), linked to it: counted from Debts, not again as spending. */
     debtCategoriesLinked: number;
+    /** Transactions from accounts left out (closed ones) brought in as history (ImportOptions.history). */
+    history: number;
     /** YNAB categories combined into another one (one category here for both). */
     categoriesCombined: number;
     /** YNAB categories brought in as a sub category of another. */
@@ -765,7 +772,7 @@ function overspentBy(start: number, spending: { date: string; i: number; account
 /** Turn YNAB's data into the plan's categories, assignments, accounts and transactions. */
 export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): ImportResult {
   const plan = structuredClone(input);
-  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, notApprovedInYnab: 0, debtCategoriesLinked: 0, categoriesCombined: 0, categoriesAsSub: 0, olderWithoutCategory: 0, transfersOutside: 0 };
+  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, notApprovedInYnab: 0, debtCategoriesLinked: 0, categoriesCombined: 0, categoriesAsSub: 0, olderWithoutCategory: 0, transfersOutside: 0, history: 0 };
   // only this month's and last month's transactions are asked for a category (older ones are history)
   const [ty, tm] = o.thisMonth.split("-").map(Number) as [number, number];
   const recentFrom = tm === 1 ? `${ty - 1}-12-01` : `${ty}-${String(tm - 1).padStart(2, "0")}-01`;
@@ -1033,8 +1040,44 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   const seen = new Map<string, number>();
   const madeFrom = new Map<YnabTxn, Txn>();
   const held = heldInYnab(d, o.thisMonth, o.today);
+  // history: the transactions of cash accounts and cards left out (closed ones), to look back at
+  // closed: a cash account or card left out that holds nothing now (an open one you left out isn't history)
+  const closedAcct = new Set(accts.filter((a) => (a.kind === "cash" || a.kind === "card") && Math.abs(a.balance) < 0.005 && Math.abs(a.upcoming) < 0.005).map((a) => a.name));
+  const historyAccount = (name: string) => !idOf.has(name) && closedAcct.has(name);
+  const history: Txn[] = [];
+  const original0 = (group: string, name: string) => (name || group ? [group, name].filter(Boolean).join(": ") : undefined);
   for (const t of d.txns) {
-    if (!budgetAccount(t.account)) continue;
+    if (!budgetAccount(t.account)) {
+      if (!o.history || !historyAccount(t.account) || !inRange(t.date) || /^starting balance$/i.test(t.payee)) continue;
+      const base = [t.account, t.date, t.amount, t.payee].join("|");
+      const n = (seen.get(base) ?? 0) + 1;
+      seen.set(base, n);
+      const id = stableId(t, n);
+      const to = t.transferTo ? idOf.get(t.transferTo) : undefined;
+      const h: Txn = {
+        id, accountId: OUTSIDE + t.account, date: t.date, amount: t.amount,
+        ...(t.payee ? { payee: t.payee } : {}), ...(t.memo ? { memo: t.memo } : {}),
+        cleared: t.cleared, source: "ynab", importId: id, updatedAt: now,
+      };
+      if (t.splits?.length)
+        h.splits = t.splits.map((s) => {
+          const k = catOf(s.group, s.category);
+          const orig = !k ? original0(s.group, s.category) : undefined;
+          return { categoryId: k ?? "", amount: s.amount, ...(s.memo ? { memo: s.memo } : {}), ...(orig ? { originalCategory: orig } : {}) };
+        });
+      else {
+        const k = catOf(t.group, t.category);
+        if (k) h.categoryId = k;
+        else { const orig = original0(t.group, t.category); if (orig) h.originalCategory = orig; }
+      }
+      if (t.transferTo) {
+        h.transferAccountId = to ?? OUTSIDE + t.transferTo;
+        // a transfer with one of your budget accounts: no category, like any transfer between them
+        if (to && budgetAccount(t.transferTo)) delete h.categoryId;
+      }
+      history.push(h);
+      continue;
+    }
     if (!inRange(t.date)) { before.set(t.account, Math.round(((before.get(t.account) ?? 0) + t.amount) * 100) / 100); continue; }
     const base = [t.account, t.date, t.amount, t.payee].join("|");
     const n = (seen.get(base) ?? 0) + 1;
@@ -1158,5 +1201,6 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   const replaced = o.replaceMatching === false ? [] : matches.filter((m) => !keep.has(m.mine.id)).map((m) => m.mine.id);
   summary.transactionsMatched = replaced.length;
   summary.transactions = txns.length;
-  return { plan, txns, replaced, matches, summary };
+  summary.history = history.length;
+  return { plan, txns: history.length ? [...txns, ...history] : txns, replaced, matches, summary };
 }
