@@ -9,6 +9,7 @@ import { syncConfigured } from "../../lib/supabase";
 import { useSync } from "../../lib/sync";
 import { useSharing } from "../../lib/sharing";
 import { versionText } from "../../lib/version";
+import { useIsAdmin } from "../../lib/admin";
 import { radius, space, type, useTheme } from "../../lib/theme";
 import { Icon, type IconName } from "../Icon";
 import { useFillPage } from "../MasterDetail";
@@ -64,9 +65,38 @@ export function SectionIndex({ base, title, subtitle }: { base: SectionBase; tit
     <Screen title={title} subtitle={subtitle} narrow hideSettings={base === "/settings"}>
       <SectionGroups base={base} />
       {base === "/settings" ? <FeedbackRow /> : null}
+      {base === "/settings" ? <AdminRow /> : null}
       {base === "/settings" ? <PrivacyLink /> : null}
       {base === "/settings" ? <VersionLine /> : null}
     </Screen>
+  );
+}
+
+/** Admin accounts only: usage and the diagnostic reports people send. */
+function AdminRow() {
+  const t = useTheme();
+  const router = useRouter();
+  if (!useIsAdmin()) return null;
+  return (
+    <Card padded={false}>
+      <Pressable
+        role="link"
+        onPress={() => router.push("/settings/admin")}
+        style={(st) => {
+          const hovered = (st as typeof st & { hovered?: boolean }).hovered;
+          return [styles.row, { backgroundColor: st.pressed || hovered ? t.surface2 : "transparent" }];
+        }}
+      >
+        <View style={[styles.icon, { backgroundColor: t.accentSoft }]}>
+          <Icon name="gear" size={18} color={t.accent} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[type.body, { color: t.text, fontWeight: "500" }]}>Admin</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>Usage and diagnostic reports</Text>
+        </View>
+        <Icon name="chevron" size={18} color={t.text3} />
+      </Pressable>
+    </Card>
   );
 }
 

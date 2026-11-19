@@ -197,6 +197,41 @@ describe.skipIf(!env)("plans as rows, and who can see them (local Supabase)", ()
     expect(Number((await anon.from("contribution_limit").select("k401").eq("year", 2026).single()).data!.k401)).toBe(24500);
   });
 
+  it("diagnostics: anyone signed in can send one (as the app does), nobody reads them back, signed-out visitors can't send", async () => {
+    const sent = await a.client.from("diagnostic_report").insert({ report: { version: "test", transactions: 3 }, note: "hello" });
+    expect(sent.error).toBeNull();
+    expect((await a.client.from("diagnostic_report").select("id")).data ?? []).toEqual([]);
+    const anon = createClient(url, anonKey, { auth: { persistSession: false } });
+    expect((await anon.from("diagnostic_report").insert({ report: {} })).error).not.toBeNull();
+    const mine = await admin.from("diagnostic_report").select("user_id, note").eq("user_id", a.id);
+    expect(mine.data).toEqual([{ user_id: a.id, note: "hello" }]);
+  });
+
+  it("admin: only an admin sees reports (with who sent them) and usage, and can remove a report", async () => {
+    const sender = await newUser();
+    await sender.client.from("diagnostic_report").insert({ report: { version: "x" }, note: "from sender" });
+    // not an admin: no, and nothing to see
+    expect((await sender.client.rpc("is_admin")).data).toBe(false);
+    expect((await sender.client.rpc("admin_reports", { p_limit: 10 })).error).not.toBeNull();
+    expect((await sender.client.rpc("admin_stats")).error).not.toBeNull();
+    expect((await sender.client.from("app_admin").insert({ user_id: sender.id })).error).not.toBeNull();
+    // made an admin by hand
+    const boss = await newUser();
+    await admin.from("app_admin").insert({ user_id: boss.id });
+    expect((await boss.client.rpc("is_admin")).data).toBe(true);
+    const reports = (await boss.client.rpc("admin_reports", { p_limit: 200 })).data as { id: string; email: string; note: string }[];
+    const r = reports.find((x) => x.note === "from sender")!;
+    expect(r.email).toBe(sender.email);
+    const stats = (await boss.client.rpc("admin_stats")).data as Record<string, number>;
+    expect(stats.accounts).toBeGreaterThan(0);
+    expect(stats.reports).toBeGreaterThan(0);
+    // removing: an admin can, someone else can't
+    await sender.client.rpc("admin_delete_report", { p_id: r.id });
+    expect((await admin.from("diagnostic_report").select("id").eq("id", r.id)).data).toHaveLength(1);
+    expect((await boss.client.rpc("admin_delete_report", { p_id: r.id })).error).toBeNull();
+    expect((await admin.from("diagnostic_report").select("id").eq("id", r.id)).data).toHaveLength(0);
+  });
+
   it("homes and rentals are their own rows, linked to their mortgage", async () => {
     const props = (await a.client.from("property").select("id, kind, mortgage_id, income_id").eq("plan_id", a.id).order("sort")).data;
     expect(props).toEqual([
