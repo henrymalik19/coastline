@@ -37,7 +37,7 @@ import { useLayout } from "../../lib/layout";
 import { usePlan } from "../../lib/plan";
 import { monthKey, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
-import { sticky } from "../../lib/sticky";
+import { stackHeight, sticky } from "../../lib/sticky";
 import { useOpenPage } from "../../lib/nav";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -1022,7 +1022,7 @@ export default function Budget() {
   return (
     <Screen title="Budget" subtitle={compact ? undefined : "Plan where your money goes"}>
       {view.started ? (
-      <View onLayout={(e) => setBarH(Math.round(e.nativeEvent.layout.height))} style={[styles.toolbar, sticky(0, t.bg)]}>
+      <View onLayout={(e) => setBarH(stackHeight(e.nativeEvent.layout.height))} style={[styles.toolbar, sticky(0, t.bg)]}>
             <View style={{ flexGrow: 1, flexShrink: 1, maxWidth: 440 }}>
               <Segmented
                 label="Budget view"
@@ -1058,7 +1058,7 @@ export default function Budget() {
           ) : null}
         </View>
       ) : null}
-      {!view.started || tab !== "accounts" ? monthBar : null}
+      {!view.started || tab === "categories" ? monthBar : null}
       {view.started && tab === "transactions" ? (
         <TransactionsList key={(acctParam ?? "all") + (needsParam ?? "") + (reviewParam ?? "")} month={month} account={acctParam} onlyNeedsCategory={needsParam === "1"} onlyReview={reviewParam === "1"} stickyTop={barH} onAccountChange={setListAcct} />
       ) : view.started && tab === "accounts" ? (
@@ -1118,7 +1118,7 @@ export default function Budget() {
               ) : null}
             </Card>
           ) : null}
-          <View onLayout={(e) => setColH(Math.round(e.nativeEvent.layout.height))} style={[styles.colHead, { paddingHorizontal: compact ? space.md : space.lg }, sticky(barH, t.bg)]}>
+          <View onLayout={(e) => setColH(stackHeight(e.nativeEvent.layout.height))} style={[styles.colHead, { paddingHorizontal: compact ? space.md : space.lg }, sticky(barH, t.bg)]}>
             <View style={{ flex: 1, flexDirection: "row", alignItems: "flex-end", gap: space.md }}>
               <Text style={[type.caption, styles.colName, { color: t.text3 }]}>Category</Text>
               {compact ? <ReorderToggle on={reorder} onChange={setReorder} /> : null}

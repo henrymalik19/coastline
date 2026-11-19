@@ -413,19 +413,22 @@ export function Segmented<T extends string>({
 
 /** A dropdown: shows the choice, opens a list. Saves room where a Segmented row would wrap. */
 export function Select<T extends string>({
-  options, value, onChange, label, plain, placeholder,
+  options, value, onChange, label, plain, placeholder, trigger,
 }: {
   /** `section`: a heading over this option and the ones after it with the same section. */
   options: { value: T; label: string; hint?: string; section?: string }[]; value: T; onChange: (v: T) => void; label: string;
   /** No box: right-aligned text and a chevron, for list rows. */
   plain?: boolean;
   placeholder?: string;
+  /** Your own button in place of the box: gets a function that opens the list. */
+  trigger?: (open: () => void) => ReactNode;
 }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
   const cur = options.find((o) => o.value === value);
   return (
     <>
+      {trigger ? trigger(() => setOpen(true)) : (
       <Pressable
         role="button"
         aria-haspopup="listbox"
@@ -436,6 +439,7 @@ export function Select<T extends string>({
         <Text style={[type.body, { color: cur && cur.value ? t.text : t.text3, flex: 1, textAlign: plain ? "right" : "left" }]} numberOfLines={1}>{cur && cur.value ? cur.label : placeholder ?? cur?.label ?? "Pick one"}</Text>
         <Icon name={plain ? "chevron" : "down"} size={plain ? 14 : 16} color={t.text3} />
       </Pressable>
+      )}
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel={`Close ${label}`}>
           <Pressable onPress={() => {}} aria-label={label} style={[styles.sheet, { backgroundColor: t.surface, borderColor: t.border }]}>

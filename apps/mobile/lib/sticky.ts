@@ -13,3 +13,9 @@ export function sticky(top: number, background: string): ViewStyle | null {
 export function stickyBottom(background: string): ViewStyle | null {
   return Platform.OS === "web" ? ({ position: "sticky", bottom: 0, zIndex: 3, backgroundColor: background } as unknown as ViewStyle) : null;
 }
+
+/**
+ * The height to stack the next sticky header under this one: rounded down and 1px short, so the
+ * two overlap a hair instead of leaving a sub-pixel gap that rows show through while scrolling.
+ */
+export const stackHeight = (h: number) => Math.max(0, Math.floor(h) - 1);

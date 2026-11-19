@@ -20,13 +20,17 @@ import { budgetAccounts } from "../lib/register";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { ClearedDot } from "./ClearedDot";
-import { sticky } from "../lib/sticky";
+import { stackHeight, sticky } from "../lib/sticky";
 
 /** The account filter's "All closed accounts". */
 const CLOSED = "closed:*";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const shiftYm = (ym: string, by: number) => {
+  const n = Number(ym.slice(0, 4)) * 12 + Number(ym.slice(5, 7)) - 1 + by;
+  return `${Math.floor(n / 12)}-${String((n % 12) + 1).padStart(2, "0")}`;
+};
 const ymText = (ym: string) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
 const dayHead = (d: string) => {
   const dt = new Date(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10)));
@@ -35,8 +39,9 @@ const dayHead = (d: string) => {
 
 /** `month` is "YYYY-MM" (the budget's month); `account` starts the list on one account. */
 export function TransactionsList({
-  month, account, onlyNeedsCategory, onlyReview, stickyTop = 0, onAccountChange,
+  month: budgetMonth, account, onlyNeedsCategory, onlyReview, stickyTop = 0, onAccountChange,
 }: {
+  /** The month it opens on (the Budget's); its own ‹ › step from there without changing the Budget's. */
   month: string;
   account?: string;
   /** Open showing only the ones that need a category. */
@@ -57,6 +62,9 @@ export function TransactionsList({
   const saveTxn = useStore((s) => s.saveTxn);
   const cats = useCategories();
   const accounts = budgetAccounts(state);
+  // the month shown: starts as the Budget's; ‹ › go to any month, old history included
+  const [month, setMonth] = useState(budgetMonth);
+  useEffect(() => setMonth(budgetMonth), [budgetMonth]);
   const [acct, setAcct] = useState(account && budgetAccounts(state).some((a) => a.id === account) ? account : "all");
   // tell the Budget screen, so its Add a transaction starts in this account
   useEffect(() => { onAccountChange?.(acct); }, [acct]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -240,23 +248,53 @@ export function TransactionsList({
 
   return (
     <>
-      <View ref={topRef as never} onLayout={(e) => setFiltersH(Math.round(e.nativeEvent.layout.height))} style={[{ gap: space.sm, paddingVertical: space.xs, marginVertical: -space.xs }, sticky(stickyTop, t.bg)]}>
+      <View ref={topRef as never} onLayout={(e) => setFiltersH(stackHeight(e.nativeEvent.layout.height))} style={[{ gap: space.sm, paddingVertical: space.xs, marginVertical: -space.xs }, sticky(stickyTop, t.bg)]}>
       <View style={[styles.row, { gap: space.sm }]}>
         {needsCat || reviewOnly ? (
           <Text style={[type.caption, { color: t.text3, fontWeight: "700" }]}>All dates</Text>
         ) : (
-          <Select
-            plain
-            label="Dates"
-            value={range}
-            options={[{ value: "month", label: ymText(month) }, { value: "all", label: "All dates" }, { value: "custom", label: "Pick dates…" }]}
-            onChange={(v) => {
-              setRange(v as typeof range);
-              // a range starts as this month so far
-              if (v === "custom" && !from && !to) { setFrom(`${month}-01`); setTo(today); }
-            }}
-          />
+          // the dates, like the Budget's month (‹ Nov 2026 ›), but the month opens a list: all dates, or a range.
+          // Its own month: going back here doesn't move the Budget's
+          <View style={[styles.row, { gap: space.md, flexWrap: "nowrap", width: "100%" }]}>
+            <Pressable role="button" accessibilityLabel="Previous month" disabled={range !== "month"} onPress={() => setMonth(shiftYm(month, -1))} hitSlop={8} style={[styles.navBtn, { borderColor: t.border, opacity: range === "month" ? 1 : 0 }]}>
+              <Icon name="back" size={16} color={t.accent} />
+            </Pressable>
+            <View style={{ flex: 1, alignItems: "center" }}>
+              <Select
+                label="Dates"
+                value={range}
+                options={[{ value: "month", label: ymText(month) }, { value: "all", label: "All dates" }, { value: "custom", label: "Pick dates…" }]}
+                onChange={(v) => {
+                  setRange(v as typeof range);
+                  // a range starts as this month so far
+                  if (v === "custom" && !from && !to) { setFrom(`${month}-01`); setTo(today); }
+                }}
+                trigger={(open) => (
+                  <Pressable role="button" aria-haspopup="listbox" accessibilityLabel={`Dates: ${range === "month" ? ymText(month) : range === "all" ? "all dates" : "picked dates"}. Change`} onPress={open} hitSlop={6} style={styles.dateHead}>
+                    <Text style={[type.heading, { color: t.text }]}>{range === "month" ? ymText(month) : range === "all" ? "All dates" : "Picked dates"}</Text>
+                    <Icon name="down" size={16} color={t.accent} />
+                  </Pressable>
+                )}
+              />
+              {range === "month" && month === today.slice(0, 7) ? (
+                <Text style={[type.overline, { color: t.accent }]}>This month</Text>
+              ) : range === "month" ? (
+                <Pressable role="button" onPress={() => setMonth(today.slice(0, 7))} hitSlop={6}>
+                  <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Back to this month</Text>
+                </Pressable>
+              ) : (
+                <Pressable role="button" onPress={() => setRange("month")} hitSlop={6}>
+                  <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Back to one month</Text>
+                </Pressable>
+              )}
+            </View>
+            <Pressable role="button" accessibilityLabel="Next month" disabled={range !== "month"} onPress={() => setMonth(shiftYm(month, 1))} hitSlop={8} style={[styles.navBtn, { borderColor: t.border, opacity: range === "month" ? 1 : 0 }]}>
+              <Icon name="chevron" size={16} color={t.accent} />
+            </Pressable>
+          </View>
         )}
+        {/* the two "waiting on you" chips stay together: one row, wrapping as a pair */}
+        <View style={[styles.row, { gap: space.sm }]}>
         {toReview.length || reviewOnly ? (
           <Pressable role="checkbox" aria-checked={reviewOnly} onPress={() => { setReviewOnly((v) => !v); setNeedsCat(false); }} hitSlop={6} style={[styles.chip, { borderColor: t.accent, backgroundColor: reviewOnly ? t.accentSoft : t.surface }]}>
             <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>To review ({toReview.length})</Text>
@@ -272,6 +310,7 @@ export function TransactionsList({
             <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{missingElsewhere} to categorize in other accounts</Text>
           </Pressable>
         ) : null}
+        </View>
       </View>
       {range === "custom" && !needsCat ? (
         // two equal halves, edge to edge like the fields below
@@ -434,6 +473,8 @@ export function TransactionsList({
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", flexWrap: "wrap" },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  navBtn: { borderWidth: 1, borderRadius: 999, width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  dateHead: { flexDirection: "row", alignItems: "center", gap: 6 },
   summary: { flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: 10, paddingHorizontal: space.md, paddingVertical: 8 },
   dayHead: { paddingHorizontal: 16, paddingVertical: 6 },
   txn: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: 16, paddingVertical: 12 },

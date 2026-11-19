@@ -51,11 +51,11 @@ export function YnabUpdateCard() {
     if (!u) return;
     updateFromYnab(u, removeGone);
     const out = (removeGone ? u.gone.length : 0) + u.replaced.length;
-    setDone(`Updated: ${n(u.add.length - u.history, "transaction")} in${u.history ? `, ${u.history.toLocaleString()} as history` : ""}${out ? `, ${out} removed` : ""}.`);
+    setDone(`Updated: ${n(u.add.length - u.history, "transaction")} in${u.changed.length + u.changedBoth.length ? `, ${(u.changed.length + u.changedBoth.length).toLocaleString()} changed` : ""}${u.history ? `, ${u.history.toLocaleString()} as history` : ""}${out ? `, ${out} removed` : ""}.`);
     setU(null);
   };
 
-  const nothing = u && !u.add.length && !u.gone.length && !u.replaced.length;
+  const nothing = u && !u.add.length && !u.changed.length && !u.changedBoth.length && !u.gone.length && !u.replaced.length;
   // accounts left out: closed ones whose transactions come in as history, and the rest
   const asHistory = new Set((u?.add ?? []).filter(isHistoryTxn).map((x) => x.accountId.slice(OUTSIDE.length)));
   const closed = (u?.skippedAccounts ?? []).filter((a) => asHistory.has(a));
@@ -107,7 +107,9 @@ export function YnabUpdateCard() {
           <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>From {file || "your YNAB export"}</Text>
           {nothing ? <Text style={[type.body, { color: t.text2 }]}>Nothing new since {dayText(lastSync)}.</Text> : null}
           <View>
-            {fresh ? row(fresh, "New or changed in YNAB", "They come in like any transaction.") : null}
+            {fresh ? row(fresh, "New in YNAB", "They come in like any transaction.") : null}
+            {u.changed.length ? row(u.changed.length, "Changed in YNAB", "A new category, memo or amount: updated here to match.") : null}
+            {u.changedBoth.length ? row(u.changedBoth.length, "Changed in both apps", "Your version here stays. YNAB only fills in a category or memo you left blank.") : null}
             {u.history ? row(u.history, `Old transactions from ${n(closed.length, "closed account")}`, "History only: you see them in Activity, and they never count in your budget. No accounts are added.", { key: "closed", list: closed }) : null}
             {u.replaced.length ? row(u.replaced.length, "Of yours match YNAB's", "The same transaction you added here: YNAB's copy replaces yours.") : null}
             {u.keptEdited.length ? row(u.keptEdited.length, "Gone from YNAB, but you changed them here", "They stay, as yours.") : null}
@@ -117,7 +119,7 @@ export function YnabUpdateCard() {
           {u.gone.length ? (
             <ToggleRow
               label={`Remove ${n(u.gone.length, "transaction")} gone from YNAB`}
-              hint="Deleted in YNAB, or changed there (the changed version comes in above, so leave this on to avoid having both). Off: they stay here."
+              hint="Deleted in YNAB (or the payee or date changed there, which comes in above as new). Off: they stay here."
               value={removeGone}
               onChange={setRemoveGone}
             />

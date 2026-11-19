@@ -24,7 +24,7 @@ import { radius, space, type, useTheme } from "../../../lib/theme";
 import { isoDay } from "../../../lib/categories";
 import { readYnabFiles } from "../../../lib/ynabFiles";
 import { balanceConflicts, buildImport, categoryKey, exportMonths, groupKey, recentMonths, payeeMatches, suggestCategory, suggestCategories, suggestChoice, budgetTxnsThisMonth, parseYnab, ynabAccounts, ynabCategories, ynabReadyToAssign, type ImportResult, type AccountChoice, type CategoryChoice, type YnabAccount, type YnabCategory, type YnabData } from "../../../lib/ynab";
-import { sticky, stickyBottom } from "../../../lib/sticky";
+import { stackHeight, sticky, stickyBottom } from "../../../lib/sticky";
 import { useLayout } from "../../../lib/layout";
 import { groupOrder } from "../../../lib/budgetOrder";
 import { ImportUndoCard, useImported } from "../../../components/ImportUndo";
@@ -708,7 +708,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
   ));
   const review = data && preview ? (
     <>
-          <View onLayout={(e) => setTabsH(Math.round(e.nativeEvent.layout.height))} style={[styles.pinned, sticky(0, t.bg)]}>
+          <View onLayout={(e) => setTabsH(stackHeight(e.nativeEvent.layout.height))} style={[styles.pinned, sticky(0, t.bg)]}>
           {(() => {
             const tabs = [
               { value: "accounts" as const, label: `Accounts (${importing})` },
