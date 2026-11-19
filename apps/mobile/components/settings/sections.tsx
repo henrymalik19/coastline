@@ -1,5 +1,6 @@
 import { Redirect, useRouter } from "expo-router";
 import { ImportUndoCard } from "../ImportUndo";
+import { YnabUpdateCard } from "../YnabUpdate";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../../lib/confirm";
@@ -610,12 +611,11 @@ function DataSection() {
       </Group>
       <Group title="YNAB import">
         {importedAt ? (
-          <View style={{ gap: space.md }}>
-            <ImportUndoCard />
-            <View style={{ paddingVertical: space.sm, gap: space.md }}>
-              <Text style={[type.body, { color: t.text2 }]}>Still using YNAB too? Bring in its newer transactions from a fresh export.</Text>
-              <Button title="Update from YNAB" icon="database" onPress={() => router.push("/money/import")} style={{ alignSelf: "flex-start" }} />
-            </View>
+          // both right here, in this one card: undo the import, or update it from a newer export
+          <View style={{ paddingVertical: space.sm, gap: space.md }}>
+            <ImportUndoCard plain />
+            <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: t.border }} />
+            <YnabUpdateCard plain />
           </View>
         ) : (
           <View style={{ paddingVertical: space.sm, gap: space.md }}>

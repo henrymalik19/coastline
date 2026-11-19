@@ -19,7 +19,7 @@ import { isHistoryTxn } from "@coastfi/engine";
 type Open = "closed" | "cats" | "rest";
 const n = (k: number, one: string, many = one + "s") => `${k} ${k === 1 ? one : many}`;
 
-export function YnabUpdateCard() {
+export function YnabUpdateCard({ plain }: { /** No card around it (inside another one). */ plain?: boolean } = {}) {
   const t = useTheme();
   const { start } = usePlan();
   const plan = useStore((s) => s.plan);
@@ -87,8 +87,9 @@ export function YnabUpdateCard() {
     </View>
   );
 
+  const Wrap = plain ? View : Card;
   return (
-    <Card style={{ gap: space.sm }}>
+    <Wrap style={{ gap: space.sm }}>
       <Text style={[type.heading, { color: t.text }]}>Update transactions from YNAB</Text>
       {!u ? (
         <>
@@ -133,7 +134,7 @@ export function YnabUpdateCard() {
       )}
       {error ? <Text role="alert" style={[type.label, { color: t.bad }]}>{error}</Text> : null}
       {done ? <Text role="status" style={[type.label, { color: t.good }]}>{done}</Text> : null}
-    </Card>
+    </Wrap>
   );
 }
 
