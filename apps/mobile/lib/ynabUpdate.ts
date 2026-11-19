@@ -9,7 +9,7 @@
  * and its `importId` becomes YNAB's new one so the next update knows it.
  */
 import { isHistoryTxn, type BudgetItem, type PlanState, type Txn } from "@coastfi/engine";
-import { buildImport, categoryKey, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, type AccountChoice, type CategoryChoice, type YnabData } from "./ynab";
+import { buildImport, categoryKey, recentMonths, suggestCategory, suggestChoice, ynabAccounts, ynabCategories, ynabIdsByAccount, type AccountChoice, type CategoryChoice, type YnabData } from "./ynab";
 
 export type YnabUpdate = {
   /** New in YNAB since. */
@@ -75,13 +75,33 @@ export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSy
   const fromYnab = txns.filter((t) => !t.deleted && t.source === "ynab" && !t.id.startsWith("start:"));
   const from = fromYnab.reduce((m, t) => (ym(t.date) < m ? ym(t.date) : m), thisMonth);
 
-  // accounts: the ones you have here (same name); others are skipped, never added
+  // accounts: first where each one's transactions already are (the import may have put a YNAB account
+  // into one of yours with another name, and an old closed account can have the name yours has); then,
+  // for the rest, the same name. Others are skipped, never added
   const taken = new Set<string>();
   const accounts: Record<string, AccountChoice> = {};
   const skippedAccounts: string[] = [];
-  for (const a of ynabAccounts(d)) {
-    const sug = suggestChoice(plan, a, taken);
-    if (sug.action === "match") { taken.add(sug.id); accounts[a.name] = sug; }
+  const yours = new Set([...plan.accounts.map((a) => a.id), ...plan.debts.map((x) => x.id)]);
+  const whereIs = new Map<string, string>();
+  for (const t of txns) if (t.source === "ynab" && !t.deleted) { whereIs.set(t.id, t.accountId); if (t.importId) whereIs.set(t.importId, t.accountId); }
+  const ids = ynabIdsByAccount(d);
+  const all = ynabAccounts(d);
+  const held = new Set<string>(); // went in as history (or nowhere): never matched by name
+  // each YNAB account's best guess; the one holding the most transactions gets an account first
+  const best = all.flatMap((a) => {
+    const votes = new Map<string, number>();
+    for (const id of ids.get(a.name) ?? []) { const at = whereIs.get(id); if (at) votes.set(at, (votes.get(at) ?? 0) + 1); }
+    const [top] = [...votes.entries()].sort((x, y) => y[1] - x[1]);
+    return top ? [{ name: a.name, at: top[0], n: top[1] }] : [];
+  });
+  for (const b of best.sort((x, y) => y.n - x.n)) {
+    if (yours.has(b.at) && !taken.has(b.at)) { taken.add(b.at); accounts[b.name] = { action: "match", id: b.at }; }
+    else if (!yours.has(b.at)) held.add(b.name);
+  }
+  for (const a of all) {
+    if (accounts[a.name]) continue;
+    const sug = held.has(a.name) ? undefined : suggestChoice(plan, a, taken);
+    if (sug?.action === "match") { taken.add(sug.id); accounts[a.name] = sug; }
     else { accounts[a.name] = { action: "skip" }; skippedAccounts.push(a.name); }
   }
   // categories: yours (same name, hidden ones too); a new one comes in hidden

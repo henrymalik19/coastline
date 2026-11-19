@@ -110,6 +110,24 @@ describe("update transactions from YNAB", () => {
     expect([again.add.length, again.changed.length, again.gone.length, again.replaced.length]).toEqual([0, 0, 0, 0]);
   });
 
+  it("keeps each account where the import put it, even when an old YNAB account has your account's name", () => {
+    // yours is "Checking"; at import you put YNAB's "Joint" into it. YNAB also has an old, closed "Checking"
+    const acct = (name: string, r: string) => r.replace('"Checking"', `"${name}"`);
+    const OLD = acct("Checking", row("01/06/2019", "Bank", "Everyday", "Groceries", "$10.00")) + acct("Checking", row("02/06/2019", "Bank", "Inflow", "Ready to Assign", "$0.00", "$10.00"));
+    const JOINT = acct("Joint", KROGER) + acct("Joint", PAY);
+    const plan: PlanState = freshPlan();
+    plan.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 0 }];
+    plan.budget = [{ id: "food", name: "Groceries", amount: 600, inRetirement: true, group: "Everyday" }];
+    let k = 0;
+    const newId = () => `n${++k}`;
+    const r = buildImport(plan, parseYnab(HEAD + JOINT + OLD), { from: "2026-11", thisMonth: "2026-11", accounts: { Joint: { action: "match", id: "chk" }, Checking: { action: "skip" } }, categories: {}, removeEmpty: false, newId });
+    const txns = r.txns.map((t) => ({ ...t, updatedAt: 100 }));
+    const u = planYnabUpdate(r.plan, parseYnab(HEAD + acct("Joint", row("11/05/2026", "Shell", "Car", "Gas", "$30.00")) + JOINT + OLD), txns, 100, "2026-11", newId);
+    expect(u.gone).toEqual([]);
+    expect(u.add.map((t) => [t.accountId, t.payee])).toEqual([["chk", "Shell"]]);
+    expect(u.skippedAccounts).toEqual(["Checking"]);
+  });
+
   it("skips accounts you don't have here", () => {
     const { plan, txns, newId } = imported();
     const u = planYnabUpdate(plan, parseYnab(V2.replace(`"Checking","","11/12/2026"`, `"Savings","","11/12/2026"`)), txns, 100, "2026-11", newId);

@@ -595,6 +595,22 @@ export type ImportResult = {
   };
 };
 
+/**
+ * Each YNAB account's transaction ids, the way the import makes them (counted over the whole export,
+ * so close to the import's): which account here holds them shows which account it went into.
+ */
+export function ynabIdsByAccount(d: YnabData): Map<string, string[]> {
+  const seen = new Map<string, number>();
+  const out = new Map<string, string[]>();
+  for (const t of d.txns) {
+    const base = [t.account, t.date, t.amount, t.payee].join("|");
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    out.set(t.account, [...(out.get(t.account) ?? []), stableId(t, n)]);
+  }
+  return out;
+}
+
 /** A stable id for a YNAB transaction, so importing it again replaces it instead of adding it twice. */
 function stableId(t: YnabTxn, n: number): string {
   return "ynab-" + hash([t.account, t.date, t.payee, t.transferTo ?? "", t.amount, t.memo, t.category, n].join("|"));
