@@ -8,6 +8,7 @@ import { usePlan } from "../../lib/plan";
 import { syncConfigured } from "../../lib/supabase";
 import { useSync } from "../../lib/sync";
 import { useSharing } from "../../lib/sharing";
+import { versionText } from "../../lib/version";
 import { radius, space, type, useTheme } from "../../lib/theme";
 import { Icon, type IconName } from "../Icon";
 import { useFillPage } from "../MasterDetail";
@@ -64,6 +65,7 @@ export function SectionIndex({ base, title, subtitle }: { base: SectionBase; tit
       <SectionGroups base={base} />
       {base === "/settings" ? <FeedbackRow /> : null}
       {base === "/settings" ? <PrivacyLink /> : null}
+      {base === "/settings" ? <VersionLine /> : null}
     </Screen>
   );
 }
@@ -93,6 +95,12 @@ function FeedbackRow() {
       </Pressable>
     </Card>
   );
+}
+
+/** Which version is running (the commit it was built from, and when). */
+function VersionLine() {
+  const t = useTheme();
+  return <Text selectable style={[type.caption, { color: t.text3, alignSelf: "center" }]}>{versionText()}</Text>;
 }
 
 function PrivacyLink() {

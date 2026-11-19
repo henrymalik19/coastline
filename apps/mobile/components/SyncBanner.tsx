@@ -3,12 +3,14 @@
  * the page (it never pushes the page down) while a big job runs, when this device can't reach your
  * account, or when a sync failed. Only once it lasts: a quick save or a blip in the signal shows
  * nothing. On a wide screen the sidebar's sync line says all of this instead (one place, not two).
+ * Also, on any screen: a newer version of the app is live, with Reload.
  */
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useIsWide } from "../lib/layout";
 import { syncNow, useSync } from "../lib/sync";
+import { useNewVersion } from "../lib/version";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button } from "./form";
 import { Icon } from "./Icon";
@@ -44,29 +46,41 @@ export function SyncBanner() {
   const wide = useIsWide();
   const { progress, error } = useSync();
   const note = useSyncNote();
-  if (wide || !note) return null;
+  const newer = useNewVersion();
+  const sync = !wide && note;
+  if (!sync && !newer) return null;
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { top: top + space.xs }]}>
-      <View
-        role={note === "error" ? "alert" : "status"}
-        style={[styles.pill, { backgroundColor: note === "error" ? t.badSoft : t.surface, borderColor: t.border, shadowColor: t.shadow }]}
-      >
-        {note === "progress" ? <ActivityIndicator size="small" color={t.accent} /> : <Icon name="info" size={16} color={note === "error" ? t.bad : t.text2} />}
-        <Text style={[type.caption, { color: note === "error" ? t.text : t.text2, flexShrink: 1 }]} numberOfLines={2}>
-          {note === "progress"
-            ? progress
-            : note === "offline"
-              ? "Offline. Changes are saved here and sync when you're back."
-              : `Couldn't sync${error ? `: ${error}` : ""}. Your changes are safe here.`}
-        </Text>
-        {note === "error" ? <Button title="Retry" onPress={() => void syncNow()} style={{ minHeight: 32 }} /> : null}
-      </View>
+      {sync ? (
+        <View
+          role={note === "error" ? "alert" : "status"}
+          style={[styles.pill, { backgroundColor: note === "error" ? t.badSoft : t.surface, borderColor: t.border, shadowColor: t.shadow }]}
+        >
+          {note === "progress" ? <ActivityIndicator size="small" color={t.accent} /> : <Icon name="info" size={16} color={note === "error" ? t.bad : t.text2} />}
+          <Text style={[type.caption, { color: note === "error" ? t.text : t.text2, flexShrink: 1 }]} numberOfLines={2}>
+            {note === "progress"
+              ? progress
+              : note === "offline"
+                ? "Offline. Changes are saved here and sync when you're back."
+                : `Couldn't sync${error ? `: ${error}` : ""}. Your changes are safe here.`}
+          </Text>
+          {note === "error" ? <Button title="Retry" onPress={() => void syncNow()} style={{ minHeight: 32 }} /> : null}
+        </View>
+      ) : null}
+      {newer ? (
+        // a newer version is live: reloading gets it (your data is saved on the device, so nothing is lost)
+        <View role="status" style={[styles.pill, { backgroundColor: t.surface, borderColor: t.border, shadowColor: t.shadow }]}>
+          <Icon name="info" size={16} color={t.accent} />
+          <Text style={[type.caption, { color: t.text2, flexShrink: 1 }]}>A new version of Coastwise is ready.</Text>
+          <Button title="Reload" tone="primary" onPress={() => window.location.reload()} style={{ minHeight: 32 }} />
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { position: "absolute", left: 0, right: 0, zIndex: 50, alignItems: "center", paddingHorizontal: space.md },
+  wrap: { position: "absolute", left: 0, right: 0, zIndex: 50, alignItems: "center", gap: space.xs, paddingHorizontal: space.md },
   pill: {
     flexDirection: "row", alignItems: "center", gap: space.sm, maxWidth: 520,
     paddingVertical: space.xs, paddingHorizontal: space.md, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth,

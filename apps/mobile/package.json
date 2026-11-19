@@ -37,7 +37,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run lib",
     "dev:hosted": "node scripts/dev-hosted.mjs",
-    "build:web": "expo export -p web"
+    "build:web": "node scripts/build-web.mjs"
   },
   "private": true
 }
