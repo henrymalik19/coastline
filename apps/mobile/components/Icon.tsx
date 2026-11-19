@@ -3,7 +3,7 @@ import Svg, { Path, Polyline, Rect } from "react-native-svg";
 
 export type IconName =
   | "home" | "plan" | "calendar" | "trend" | "check" | "info" | "sparkle"
-  | "gear" | "plus" | "minus" | "trash" | "chevron" | "back" | "up" | "down" | "user" | "wallet" | "card" | "target" | "sliders" | "database" | "shield" | "edit" | "close" | "receipt" | "grip" | "lock" | "mail" | "transfer";
+  | "gear" | "plus" | "minus" | "trash" | "chevron" | "back" | "up" | "down" | "user" | "wallet" | "card" | "target" | "sliders" | "database" | "shield" | "edit" | "close" | "receipt" | "grip" | "lock" | "mail" | "transfer" | "history";
 
 /** Small stroke icon set (24px grid, 2px stroke), drawn with react-native-svg. */
 export function Icon({ name, size = 24, color }: { name: IconName; size?: number; color: string }) {
@@ -39,6 +39,12 @@ export function Icon({ name, size = 24, color }: { name: IconName; size?: number
         <>
           <Polyline points="3 17 9 11 13 15 21 7" {...p} />
           <Polyline points="15 7 21 7 21 13" {...p} />
+        </>
+      )}
+      {name === "history" && (
+        <>
+          <Path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5" {...p} />
+          <Path d="M3.5 3.5v5h5M12 7.5V12l3 2" {...p} />
         </>
       )}
       {name === "lock" && (

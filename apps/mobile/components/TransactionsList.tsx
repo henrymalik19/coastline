@@ -396,7 +396,7 @@ export function TransactionsList({
                     onPress={() => setEditing(x)}
                     style={({ pressed }) => [styles.txn, g.date > today ? { opacity: 0.6 } : null, pressed ? { backgroundColor: t.surface2 } : null]}
                   >
-                    <ClearedDot status={x.cleared} onToggle={() => saveTxn({ ...x, cleared: x.cleared === "cleared" ? "uncleared" : "cleared" }, isoDay(start))} />
+                    <ClearedDot status={x.cleared} history={isHistoryTxn(x)} onToggle={() => saveTxn({ ...x, cleared: x.cleared === "cleared" ? "uncleared" : "cleared" }, isoDay(start))} />
                     {x.transferAccountId ? (
                       // a transfer: from → to, with what it's for underneath
                       <View style={{ flex: 1, minWidth: 0 }}>

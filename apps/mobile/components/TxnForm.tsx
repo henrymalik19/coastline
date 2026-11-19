@@ -185,14 +185,27 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                 <IconButton icon="close" label="Close" onPress={onClose} />
               </View>
               <Text style={[type.caption, { color: t.text3 }]}>
-                From {closedName(txn.accountId)}, an account you didn't bring in. It's history: it never counts in your budget. You can change its category.
+                History from a closed account you didn't bring in: it never counts in your budget. You can change its category.
               </Text>
               <View style={[styles.list, { borderColor: t.border }]}>
                 {detail("Date", dateText)}
                 {divider}
-                {detail(txn.transferAccountId ? "Transfer" : "Payee", txn.transferAccountId ? `${txn.amount < 0 ? "To" : "From"} ${nameOf(txn.transferAccountId)}` : txn.payee || "No payee")}
+                {txn.transferAccountId ? (
+                  // a transfer: where the money left and where it went
+                  <>
+                    {detail("From", txn.amount < 0 ? closedName(txn.accountId) ?? "" : nameOf(txn.transferAccountId))}
+                    {divider}
+                    {detail("To", txn.amount < 0 ? nameOf(txn.transferAccountId) : closedName(txn.accountId) ?? "")}
+                  </>
+                ) : (
+                  <>
+                    {detail("Account", closedName(txn.accountId) ?? "")}
+                    {divider}
+                    {detail("Payee", txn.payee || "No payee")}
+                  </>
+                )}
                 {divider}
-                {detail("Amount", `${txn.amount > 0 ? "+" : "−"}${money(Math.abs(txn.amount))}`)}
+                {detail("Amount", `${txn.transferAccountId ? "" : txn.amount > 0 ? "+" : "−"}${money(Math.abs(txn.amount))}`)}
                 {txn.memo ? <>{divider}{detail("Memo", txn.memo)}</> : null}
                 {txn.splits?.length ? <>{divider}{detail("Split", categoryText(cats, txn, nameOf))}</> : null}
               </View>
