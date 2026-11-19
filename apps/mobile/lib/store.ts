@@ -9,7 +9,7 @@ import { syncPaycheckLoans } from "./loans";
 import { freshPlan } from "./presets";
 import { stampMs } from "./pages";
 import { canUndoImport, fromOldSnapshot, importSnapshot, parseUndo, readImportBackup, undoImportTxns, type ImportSnapshot } from "./importUndo";
-import { applyYnabUpdate, type YnabUpdate } from "./ynabUpdate";
+import { applyYnabUpdate, snapshotUpdate, undoYnabUpdate as undoYnabUpdateTxns, type UpdateSnapshot, type YnabUpdate } from "./ynabUpdate";
 import { renamePayeesIn } from "./payees";
 import { combineCategory, uncombineTxns } from "./combine";
 import { keepFamilyGroups } from "./subcats";
@@ -52,6 +52,8 @@ export type AppState = {
   ynabSyncedAt?: number;
   /** The import record changed here (imported, undone, kept, started over) and the server's copy needs it. */
   importDirty?: boolean;
+  /** What it takes to undo the last update from YNAB (this device only; gone after the next update or import). */
+  lastUpdate?: UpdateSnapshot;
   hydrated: boolean;
 
   /** Edit the plan with a mutating function on a copy. */
@@ -73,6 +75,8 @@ export type AppState = {
   refreshBalances: () => void;
   /** Bring in a newer YNAB export's transactions (ynabUpdate.ts): new ones in, gone ones out if `removeGone`. */
   updateFromYnab: (u: YnabUpdate, removeGone: boolean) => void;
+  /** Put the transactions back as they were just before the last update from YNAB. */
+  undoYnabUpdate: () => void;
   /** Rename a payee, or combine several into one (`to`), on every transaction. */
   renamePayees: (from: string[], to: string) => void;
   /** Combine one budget category into another (lib/combine.ts). Returns its undo (puts both back as they were). */
@@ -204,7 +208,7 @@ export const useStore = create<AppState>()(
         const snapshot = importSnapshot(stamp, structuredClone(get().plan), get().txns, list);
         const next = structuredClone(plan);
         applyRegisterBalances(next, list);
-        set({ plan: next, txns: list, lastImport: snapshot, importedAt: stamp, ynabSyncedAt: stamp, importDirty: true, updatedAt: now() });
+        set({ plan: next, txns: list, lastImport: snapshot, importedAt: stamp, ynabSyncedAt: stamp, importDirty: true, updatedAt: now(), lastUpdate: undefined });
       },
       combineCategories: (from, into) => {
         const stamp = now();
@@ -228,7 +232,17 @@ export const useStore = create<AppState>()(
         const next = structuredClone(s.plan);
         next.budget.push(...u.hiddenAdded.filter((b) => !next.budget.some((x) => x.id === b.id)));
         applyRegisterBalances(next, list);
-        set({ plan: next, txns: list, ynabSyncedAt: stamp, importDirty: true, updatedAt: stamp });
+        const lastUpdate = snapshotUpdate(s.txns, list, stamp, s.ynabSyncedAt);
+        set({ plan: next, txns: list, ynabSyncedAt: stamp, importDirty: true, updatedAt: stamp, lastUpdate });
+      },
+      undoYnabUpdate: () => {
+        const s = get();
+        if (!s.lastUpdate) return;
+        const stamp = now();
+        const list = undoYnabUpdateTxns(s.txns, s.lastUpdate, stamp);
+        const next = structuredClone(s.plan);
+        applyRegisterBalances(next, list);
+        set({ plan: next, txns: list, ynabSyncedAt: s.lastUpdate.syncedBefore ?? s.importedAt, importDirty: true, updatedAt: stamp, lastUpdate: undefined });
       },
       undoImport: (keepAdded = false) => {
         const snap = get().lastImport;
@@ -237,7 +251,7 @@ export const useStore = create<AppState>()(
         const list = undoImportTxns(get().txns, snap, stamp, keepAdded);
         const plan = structuredClone(snap.plan);
         applyRegisterBalances(plan, list);
-        set({ plan, txns: list, lastImport: undefined, importedAt: undefined, ynabSyncedAt: undefined, importDirty: true, updatedAt: stamp });
+        set({ plan, txns: list, lastImport: undefined, importedAt: undefined, ynabSyncedAt: undefined, importDirty: true, updatedAt: stamp, lastUpdate: undefined });
       },
       keepImport: () => set({ lastImport: undefined, importDirty: true }),
       completeOnboarding: () => set({ onboarded: true, updatedAt: now() }),
@@ -272,7 +286,7 @@ export const useStore = create<AppState>()(
         // transactions too (marked deleted, so it syncs); check-ins are kept
         const stamp = now();
         const txns = get().txns.map((x) => (x.deleted ? x : { ...x, deleted: true, updatedAt: stamp }));
-        set({ plan: freshPlan(), txns, txnCursor: undefined, txnPushed: undefined, onboarded: false, todoDone: {}, lastImport: undefined, importedAt: undefined, ynabSyncedAt: undefined, importDirty: true, updatedAt: stamp });
+        set({ plan: freshPlan(), txns, txnCursor: undefined, txnPushed: undefined, onboarded: false, todoDone: {}, lastImport: undefined, importedAt: undefined, ynabSyncedAt: undefined, importDirty: true, updatedAt: stamp, lastUpdate: undefined });
       },
     }),
     {
@@ -280,7 +294,7 @@ export const useStore = create<AppState>()(
       version: 1,
       // everyday data in one entry; history (closed accounts) kept apart (lib/txnStorage.ts)
       storage: appStorage<Partial<AppState>>("coastfi.app"),
-      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty }),
+      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty, lastUpdate }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty, lastUpdate }),
       // never trust stored data blindly: validate, and fall back to a blank plan
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState> & { isSampleData?: boolean; seenWelcome?: boolean };
@@ -323,6 +337,12 @@ export const useStore = create<AppState>()(
           lastImport,
           importedAt: typeof p.importedAt === "number" ? p.importedAt : undefined,
           ynabSyncedAt: typeof p.ynabSyncedAt === "number" ? p.ynabSyncedAt : undefined,
+          lastUpdate: (() => {
+            const u = p.lastUpdate;
+            if (!u || typeof u.at !== "number" || !Array.isArray(u.added) || !u.added.every((x) => typeof x === "string")) return undefined;
+            const b = z.array(TxnSchema).safeParse(u.before);
+            return b.success ? { at: u.at, before: b.data, added: u.added, ...(typeof u.syncedBefore === "number" ? { syncedBefore: u.syncedBefore } : {}) } : undefined;
+          })(),
           // an older full undo copy was just made small: the account gets it
           importDirty: !!p.importDirty || oldCopy,
           syncBase: (() => {

@@ -9,6 +9,8 @@ import { Card } from "./ui";
 import { BackupFirst } from "./BackupFirst";
 import { dayText } from "./ImportUndo";
 import { usePlan } from "../lib/plan";
+import { confirm } from "../lib/confirm";
+import { fullName } from "../lib/company";
 import { monthKey, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { pickYnabFiles } from "../lib/ynabFiles";
@@ -26,6 +28,18 @@ export function YnabUpdateCard({ plain }: { /** No card around it (inside anothe
   const txns = useStore((s) => s.txns);
   const lastSync = useStore((s) => s.ynabSyncedAt ?? s.importedAt ?? 0);
   const updateFromYnab = useStore((s) => s.updateFromYnab);
+  const lastUpdate = useStore((s) => s.lastUpdate);
+  const undoUpdate = useStore((s) => s.undoYnabUpdate);
+  const nameOf = (id: string) => { const a = plan.accounts.find((x) => x.id === id) ?? plan.debts.find((x) => x.id === id); return a ? fullName(a) : "An account"; };
+  const undo = async () => {
+    if (!lastUpdate) return;
+    const changed = lastUpdate.before.length + lastUpdate.added.length;
+    if (!(await confirm("Undo the last update?", `The ${changed.toLocaleString()} transactions it changed or brought in go back to how they were. Changes you made to them since go too.`, "Undo update"))) return;
+    undoUpdate();
+    setDone("");
+    setUndone(true);
+  };
+  const [undone, setUndone] = useState(false);
   const [u, setU] = useState<YnabUpdate | null>(null);
   const [file, setFile] = useState("");
   const [removeGone, setRemoveGone] = useState(true);
@@ -42,6 +56,7 @@ export function YnabUpdateCard({ plain }: { /** No card around it (inside anothe
       if (!got.data.txns.length) throw new Error("No transactions in that file.");
       setFile(got.name);
       setRemoveGone(true);
+      setUndone(false);
       setU(planYnabUpdate(plan, got.data, txns, lastSync, monthKey(start)));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't read that file.");
@@ -125,15 +140,37 @@ export function YnabUpdateCard({ plain }: { /** No card around it (inside anothe
               onChange={setRemoveGone}
             />
           ) : null}
+          {u.warnings.length ? (
+            // a lot changing in one account: often the wrong YNAB account matched to it
+            <View role="alert" style={[styles.warn, { borderColor: t.warn, backgroundColor: t.warnSoft }]}>
+              <Text style={[type.body, { color: t.text, fontWeight: "700" }]}>Check this before updating</Text>
+              {u.warnings.map((w) => (
+                <Text key={w.accountId} style={[type.caption, { color: t.text }]}>
+                  <Text style={{ fontWeight: "700" }}>{nameOf(w.accountId)}</Text> (matched to YNAB's “{w.ynab}”) would{w.gone ? ` lose ${n(w.gone, "transaction")}` : ""}{w.gone && w.older ? " and" : ""}{w.older ? ` get ${n(w.older, "transaction")} older than any it has` : ""}.
+                </Text>
+              ))}
+              <Text style={[type.caption, { color: t.text2 }]}>That usually means the wrong YNAB account. If it looks wrong, cancel and send a diagnostic report. You can also undo an update afterwards.</Text>
+            </View>
+          ) : null}
           {nothing ? null : <BackupFirst />}
           <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
-            {nothing ? null : <Button title="Update" tone="primary" onPress={apply} />}
+            {nothing ? null : <Button title={u.warnings.length ? "Update anyway" : "Update"} tone="primary" onPress={apply} />}
             <Button title={nothing ? "Done" : "Cancel"} tone="ghost" onPress={() => setU(null)} />
           </View>
         </>
       )}
       {error ? <Text role="alert" style={[type.label, { color: t.bad }]}>{error}</Text> : null}
       {done ? <Text role="status" style={[type.label, { color: t.good }]}>{done}</Text> : null}
+      {undone ? <Text role="status" style={[type.label, { color: t.good }]}>Undone: your transactions are back to how they were before the update.</Text> : null}
+      {!u && lastUpdate ? (
+        // the last update can be undone (on this device), until the next one
+        <View style={[styles.undo, { borderTopColor: t.border }]}>
+          <Text style={[type.caption, { color: t.text2, flex: 1, minWidth: 180 }]}>
+            Last update {dayText(lastUpdate.at)}: {n(lastUpdate.before.length, "changed", "changed")}, {lastUpdate.added.length.toLocaleString()} brought in. Not right? Undo it.
+          </Text>
+          <Button title="Undo update" tone="ghost" onPress={() => void undo()} style={{ minHeight: 36 }} />
+        </View>
+      ) : null}
     </Wrap>
   );
 }
@@ -143,4 +180,6 @@ const styles = StyleSheet.create({
   count: { minWidth: 52, textAlign: "right", fontWeight: "700", fontVariant: ["tabular-nums"] },
   tags: { flexDirection: "row", flexWrap: "wrap", gap: space.xs, paddingTop: space.xs },
   tag: { paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.sm, overflow: "hidden" },
+  warn: { borderWidth: 1, borderRadius: radius.md, padding: space.md, gap: space.xs },
+  undo: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm },
 });

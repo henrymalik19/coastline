@@ -2,7 +2,7 @@ import type { PlanState, Txn } from "@coastfi/engine";
 import { describe, expect, it } from "vitest";
 import { freshPlan } from "./presets";
 import { buildImport, parseYnab } from "./ynab";
-import { applyYnabUpdate, planYnabUpdate } from "./ynabUpdate";
+import { applyYnabUpdate, planYnabUpdate, snapshotUpdate, undoYnabUpdate } from "./ynabUpdate";
 
 const HEAD = `"Account","Flag","Date","Payee","Category Group/Category","Category Group","Category","Memo","Outflow","Inflow","Cleared"\n`;
 const row = (date: string, payee: string, group: string, cat: string, out: string, inflow = "$0.00") =>
@@ -133,5 +133,36 @@ describe("update transactions from YNAB", () => {
     const u = planYnabUpdate(plan, parseYnab(V2.replace(`"Checking","","11/12/2026"`, `"Savings","","11/12/2026"`)), txns, 100, "2026-11", newId);
     expect(u.skippedAccounts).toEqual(["Savings"]);
     expect(u.add.some((t) => t.payee === "Etsy")).toBe(false);
+  });
+
+  it("warns when one account would lose many or get older ones (the wrong YNAB account)", () => {
+    const acct = (name: string, r: string) => r.replace('"Checking"', `"${name}"`);
+    const plan: PlanState = freshPlan();
+    plan.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 0 }];
+    plan.budget = [{ id: "food", name: "Groceries", amount: 600, inRetirement: true, group: "Everyday" }];
+    const days = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"));
+    const NOW = days.map((d) => row(`11/${d}/2026`, "Kroger", "Everyday", "Groceries", "$10.00")).join("");
+    const OLD = days.map((d) => acct("Old", row(`03/${d}/2019`, "Bank", "Everyday", "Groceries", "$5.00"))).join("");
+    let k = 0;
+    const newId = () => `n${++k}`;
+    const r = buildImport(plan, parseYnab(HEAD + NOW), { from: "2026-11", thisMonth: "2026-11", accounts: { Checking: { action: "match", id: "chk" } }, categories: {}, removeEmpty: false, newId });
+    const txns = r.txns.map((t) => ({ ...t, updatedAt: 100 }));
+    // the newer export has the current account renamed, and an old one with your account's name
+    const u = planYnabUpdate(r.plan, parseYnab(HEAD + NOW.replace(/"Checking"/g, '"Other"') + OLD.replace(/"Old"/g, '"Checking"')), txns, 100, "2026-11", newId);
+    expect(u.warnings).toEqual([{ accountId: "chk", ynab: "Checking", gone: 12, older: 0 }]); // (2019 is before the months this update looks at)
+    const fine = planYnabUpdate(r.plan, parseYnab(HEAD + NOW), txns, 100, "2026-11", newId);
+    expect(fine.warnings).toEqual([]);
+  });
+
+  it("an update can be undone: changed ones back as they were, new ones deleted", () => {
+    const { plan, txns, newId } = imported();
+    const u = planYnabUpdate(plan, parseYnab(V2), [...txns, mine], 100, "2026-11", newId);
+    const before = [...txns, mine];
+    const after = applyYnabUpdate(before, u, 100, true, 300);
+    const snap = snapshotUpdate(before, after, 300, 100);
+    const back = undoYnabUpdate(after, snap, 400);
+    const live = (l: Txn[]) => l.filter((t) => !t.deleted).map((t) => [t.payee, t.amount, t.categoryId]).sort();
+    expect(live(back)).toEqual(live(before));
+    expect(back.filter((t) => snap.added.includes(t.id)).every((t) => t.deleted && t.updatedAt === 400)).toBe(true);
   });
 });

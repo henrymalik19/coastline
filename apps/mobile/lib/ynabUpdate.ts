@@ -32,7 +32,15 @@ export type YnabUpdate = {
   history: number;
   /** The months looked at: from the first month YNAB's transactions here start. */
   from: string;
+  /** Accounts the update would change a lot: check before updating (it may have the wrong YNAB account). */
+  warnings: UpdateWarning[];
 };
+
+/** One account an update would change a lot: many of its transactions gone, or older ones than it has. */
+export type UpdateWarning = { accountId: string; ynab: string; gone: number; older: number };
+
+/** What it takes to undo an update: the transactions it changed, as they were, and the ones it added. */
+export type UpdateSnapshot = { at: number; before: Txn[]; added: string[]; syncedBefore?: number };
 
 const ym = (d: string) => d.slice(0, 7);
 /** The id YNAB knows it by now (its importId, once an update changed it in place). */
@@ -148,6 +156,16 @@ export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSy
   const add = fresh.filter((t) => !paired.has(t)).map(relink);
   const addIds = new Set(add.map((t) => t.id));
   const left = missing.filter((t) => !paired.has(t));
+  // a lot changing in one account (many gone, or older than anything it has) is worth a look first
+  const warnings: UpdateWarning[] = [];
+  for (const [name, c] of Object.entries(accounts)) {
+    if (c.action !== "match") continue;
+    const mine = fromYnab.filter((t) => t.accountId === c.id && ym(t.date) >= from);
+    const gone = left.filter((t) => t.accountId === c.id).length;
+    const first = txns.filter((t) => !t.deleted && t.accountId === c.id && !t.id.startsWith("start:")).reduce((m, t) => (t.date < m ? t.date : m), "9999");
+    const older = add.filter((t) => t.accountId === c.id && t.date < first).length;
+    if ((gone >= 10 && gone >= mine.length * 0.2) || older >= 10) warnings.push({ accountId: c.id, ynab: name, gone, older });
+  }
   // only the hidden categories something new or changed uses
   const used = new Set([...add, ...changed, ...changedBoth].flatMap((t) => [t.categoryId, ...(t.splits ?? []).map((s) => s.categoryId)]));
   return {
@@ -161,6 +179,7 @@ export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSy
     skippedAccounts,
     history: add.filter((t) => isHistoryTxn(t)).length,
     from,
+    warnings,
   };
 }
 
@@ -182,4 +201,29 @@ export function applyYnabUpdate(txns: Txn[], u: YnabUpdate, lastSync: number, re
     return t;
   });
   return [...out, ...u.add.map((t) => ({ ...t, updatedAt: stamp }))];
+}
+
+/** The undo for an update: every transaction it changed (as it was before) and every one it added. */
+export function snapshotUpdate(before: Txn[], after: Txn[], at: number, syncedBefore?: number): UpdateSnapshot {
+  const was = new Map(before.map((t) => [t.id, t]));
+  const changed: Txn[] = [];
+  const added: string[] = [];
+  for (const t of after) {
+    const old = was.get(t.id);
+    if (!old) added.push(t.id);
+    else if (old !== t) changed.push(old);
+  }
+  return { at, before: changed, added, ...(syncedBefore ? { syncedBefore } : {}) };
+}
+
+/** Undo an update: the ones it changed go back to how they were, the ones it added are deleted (stamped now, so it syncs). */
+export function undoYnabUpdate(txns: Txn[], snap: UpdateSnapshot, stamp: number): Txn[] {
+  const back = new Map(snap.before.map((t) => [t.id, t]));
+  const added = new Set(snap.added);
+  return txns.map((t) => {
+    const old = back.get(t.id);
+    if (old) return { ...old, updatedAt: stamp };
+    if (added.has(t.id) && !t.deleted) return { ...t, deleted: true, updatedAt: stamp };
+    return t;
+  });
 }
