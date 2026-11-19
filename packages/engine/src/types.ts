@@ -671,6 +671,8 @@ export type PlanResult = {
 export type SimulateOptions = {
   mode?: ProjectWith;
   extraMonthly?: number;
+  /** More a month on top of `extraMonthly`, for the first `months` only. */
+  extraFor?: { amount: number; months: number };
   months?: number;
   /**
    * false: only the amounts you set (paychecks as they are, match, minimums, your schedules and

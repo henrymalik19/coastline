@@ -3,7 +3,7 @@
  * it's worked out in five steps that open one at a time, then the other kinds of FI (folded away).
  * What-ifs live on Forecast; the withdrawal rate is a real setting, so it stays in step 3.
  */
-import { baristaFi, DISPLAY_INFLATION, extraToCoastBy, extraToRetire, FAT_FACTOR, fireBreakdown, fiLevels, inFutureDollars, investingNow, retireAgeOnPlan } from "@coastfi/engine";
+import { baristaFi, DISPLAY_INFLATION, extraToCoastBy, extraToRetire, FAT_FACTOR, fireBreakdown, fiLevels, inFutureDollars, investingNow, investingStarts, mortgagePayoffs, retireAgeOnPlan } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -38,8 +38,11 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
   const coastAges = Array.from({ length: Math.max(0, Math.ceil(d.retireAge) - 1 - Math.floor(d.age)) }, (_, i) => Math.floor(d.age) + 1 + i);
   const [coastAge, setCoastAge] = useState<number | null>(null);
   const coastBy = coastAge ?? coastAges[Math.min(coastAges.length - 1, 9)] ?? null;
-  const extra = d.years > 0 ? extraToRetire(o) : 0;
+  // these run the forecast again (a few dozen times): only when the plan changes
+  const extra = useMemo(() => (d.years > 0 ? extraToRetire(state, start) : 0), [state, start, d.years]);
   const laterAge = useMemo(() => (extra > 0.5 ? retireAgeOnPlan(state, start) : null), [state, start, extra > 0.5]);
+  const coastMonths2 = coastBy === null ? 0 : Math.round((coastBy - d.age) * 12);
+  const coastExtra = useMemo(() => (coastBy === null || extra <= 0.5 ? 0 : extraToCoastBy(state, start, coastMonths2)), [state, start, coastMonths2, coastBy === null, extra <= 0.5]);
   const toView = (v: "retirement" | "whatif") => (onView ? onView(v) : router.navigate(`/plan?view=${v}` as never));
 
   const whole = (v: number) => money(v, { whole: true });
@@ -171,13 +174,23 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
 
   // how you get there: what you invest now, what it takes, and the other ways
   const nowMo = investingNow(o);
-  const coastMonths2 = coastBy === null ? 0 : Math.round((coastBy - d.age) * 12);
-  const coastExtra = coastBy === null ? 0 : extraToCoastBy(o, coastMonths2);
+  const startsIn = investingStarts(o);
+  const nowSub =
+    startsIn === null
+      ? `Nothing on your plan goes into investments yet: after bills, nothing's left over. What you have, ${whole(b.invested)}, still grows.`
+      : startsIn > 0
+        ? `Starts ${monthLabel(start, startsIn)}: until then your plan pays debts or builds savings first. About a month this year.`
+        : "About a month this year on your plan, with any employer match";
+  // bills beyond income: the first part of any extra covers that
+  const shortMo = o.plan.months.slice(0, 12).reduce((a, m) => a + m.shortfall, 0) / 12;
+  const payoffs = mortgagePayoffs(state, o);
+  const owedSum = payoffs.reduce((a, p) => a + p.owedAtRetire, 0);
   const tone = whatIf ? t.warn : t.text;
+  const more = (v: number) => (Number.isFinite(v) ? `${whole(v)}/mo more` : "Out of reach");
   const getThere = d.years <= 0 ? null : (
     <Card style={{ gap: space.sm }}>
       <SectionLabel>How you get there</SectionLabel>
-      {row("You invest now", `${whole(nowMo)}/mo`, { strong: true, sub: "About a month this year on your plan, with any employer match" })}
+      {row("You invest now", `${whole(nowMo)}/mo`, { strong: true, sub: nowSub })}
       <Divider />
       {extra <= 0.5 ? (
         <Text style={[type.caption, { color: t.good, fontWeight: "700" }]}>
@@ -185,7 +198,7 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
         </Text>
       ) : (
         <>
-          {row(`To retire at ${d.retireAge}`, `${whole(nowMo + extra)}/mo`, { tone, sub: `${whole(extra)}/mo more than now, every month until ${d.retireAge}` })}
+          {row(`To retire at ${d.retireAge}`, more(extra), { tone, sub: `Every month until ${d.retireAge}, on top of your plan.${shortMo > 0.5 ? ` Your bills run about ${whole(shortMo)}/mo more than your pay now, so that part covers them first.` : ""} It follows your plan's steps, so some may pay debts or build savings first.` })}
           {reached ? row("Coast FI", "Reached ✓", { tone: t.good }) : coastBy === null ? null : (
             <>
               <View style={[styles.row, { flexWrap: "wrap" }]}>
@@ -194,7 +207,7 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
               </View>
               {coastExtra <= 0.5
                 ? row("Your plan already gets there", "✓", { tone: t.good })
-                : row(`Invest until ${coastBy}`, `${whole(nowMo + coastExtra)}/mo`, { tone, sub: `${whole(coastExtra)}/mo more than now. Then you could stop investing: it grows into ${whole(b.fire)} by ${d.retireAge}.` })}
+                : row(`Until ${coastBy}`, more(coastExtra), { tone, sub: `Then you could stop investing: what you have grows into ${whole(b.fire)} by ${d.retireAge} on its own.` })}
             </>
           )}
           <Divider />
@@ -203,6 +216,19 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
           {row("Spend less in retirement", `${whole(b.planSupports / 12)}/mo`, { tone, sub: b.planSupports < 0.5 && setAsideFor ? `Your plan at ${d.retireAge} only covers ${setAsideFor}` : `What your plan pays for at ${d.retireAge}, instead of ${whole(b.retireAnnual / 12)}/mo` })}
         </>
       )}
+      {payoffs.length ? (
+        <>
+          <Divider />
+          {payoffs.map((p) => (
+            <View key={p.id}>
+              {row(`Pay off ${p.name || "the mortgage"} by ${d.retireAge}`, more(p.extra), {
+                tone,
+                sub: `Extra on the loan each month, on top of its payment. You'd owe ${whole(p.owedAtRetire)} at ${d.retireAge}; paid off, your FIRE number drops about ${whole(owedSum > 0 ? (b.homeBridge * p.owedAtRetire) / owedSum : 0)}.`,
+              })}
+            </View>
+          ))}
+        </>
+      ) : null}
       {link("Try these in What if", () => toView("whatif"))}
     </Card>
   );

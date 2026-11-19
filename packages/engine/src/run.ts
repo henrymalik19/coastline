@@ -15,12 +15,15 @@ function withHome(s: PlanState, d: Derived, plan: PlanResult) {
   return { mortgagesAtRetire, homeBridge, dFire: homeBridge > 0 ? { ...d, retireBridge: d.retireBridge + homeBridge } : d };
 }
 
-/** Light run (no Monte Carlo): what the plan has at retirement and the FIRE number then. */
-export function finalAndFire(s: PlanState, startDate: Date): { final: number; fire: number } {
+/**
+ * Light run (no Monte Carlo): what the plan has at retirement, month by month, and the FIRE number then.
+ * `extraFor`: more a month toward the plan for the first months (it follows your steps like any money).
+ */
+export function finalAndFire(s: PlanState, startDate: Date, extraFor?: { amount: number; months: number }): { final: number; fire: number; series: Float64Array; d: Derived } {
   const d = derive(s, startDate);
-  const plan = simulatePlan(s, d);
+  const plan = simulatePlan(s, d, extraFor ? { extraFor } : {});
   const proj = project(d, plan, d.r);
-  return { final: proj.final, fire: fireNumber(withHome(s, d, plan).dFire, proj.preShareFinal) };
+  return { final: proj.final, fire: fireNumber(withHome(s, d, plan).dFire, proj.preShareFinal), series: proj.series, d };
 }
 
 function coastOnly(s: PlanState, startDate: Date, extraMonthly: number): number | null {

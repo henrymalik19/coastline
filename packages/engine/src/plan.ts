@@ -77,7 +77,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   const p: Partial<PlanSettings> = { ...(sb.plan ?? {}), ...mergeAccountSchedules(sb) };
   const mode = opts.mode || p.projectWith || "plan";
   const autoFill = opts.autoFill !== false;
-  const extraMonthly = (opts.extraMonthly ?? (s.whatif && s.whatif.extra)) || 0;
+  const extraBase = (opts.extraMonthly ?? (s.whatif && s.whatif.extra)) || 0;
   const months = Math.max(opts.months || 0, d.years * 12, 36);
   const y0 = d.start.getFullYear();
   const mo0 = d.start.getMonth();
@@ -227,6 +227,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   const maxedYears: PlanResult["maxedYears"] = { k401: [], ira: [], hsa: [], ...(hasSpIra ? { iraSpouse: [] } : {}) };
 
   for (let m = 0; m < months; m++) {
+    // extra a month toward the plan: the what-if's, plus any added for the first months (how you get there)
+    const extraMonthly = extraBase + (opts.extraFor && m < opts.extraFor.months ? opts.extraFor.amount : 0);
     const absMo = mo0 + m;
     const y = y0 + Math.floor(absMo / 12);
     const mo = absMo % 12;
