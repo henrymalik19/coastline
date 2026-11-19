@@ -12,6 +12,8 @@ import { monthKey, useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
 import { pickYnabFiles } from "../lib/ynabFiles";
 import { planYnabUpdate, type YnabUpdate } from "../lib/ynabUpdate";
+import { OUTSIDE } from "../lib/outside";
+import { isHistoryTxn } from "@coastfi/engine";
 
 const n = (k: number, one: string, many = one + "s") => `${k} ${k === 1 ? one : many}`;
 
@@ -84,9 +86,18 @@ export function YnabUpdateCard() {
           ) : null}
           {u.keptEdited.length ? line(`${n(u.keptEdited.length, "transaction")} gone from YNAB that you changed here stay${u.keptEdited.length === 1 ? "s" : ""}, as yours.`, t.text2) : null}
           {u.hiddenAdded.length ? line(`New in YNAB, coming in archived: ${u.hiddenAdded.map((b) => b.name).join(", ")}.`, t.text2) : null}
-          {u.skippedAccounts.length ? (
-            <Text style={[type.caption, { color: t.text3 }]}>Not in your budget, so not added: {u.skippedAccounts.join(", ")}.</Text>
-          ) : null}
+          {(() => {
+            // accounts left out: closed ones whose transactions come in as history, and the rest
+            const asHistory = new Set(u.add.filter(isHistoryTxn).map((x) => x.accountId.slice(OUTSIDE.length)));
+            const closed = u.skippedAccounts.filter((a) => asHistory.has(a));
+            const rest = u.skippedAccounts.filter((a) => !asHistory.has(a));
+            return (
+              <>
+                {closed.length ? <Text style={[type.caption, { color: t.text3 }]}>Closed, coming in as history only (no account added): {closed.join(", ")}.</Text> : null}
+                {rest.length ? <Text style={[type.caption, { color: t.text3 }]}>Not in your budget, so nothing from them comes in: {rest.join(", ")}.</Text> : null}
+              </>
+            );
+          })()}
           <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
             {nothing ? null : <Button title="Update" tone="primary" onPress={apply} />}
             <Button title={nothing ? "Done" : "Cancel"} tone="ghost" onPress={() => setU(null)} />
