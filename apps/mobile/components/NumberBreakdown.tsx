@@ -3,9 +3,9 @@
  * it's worked out in five steps that open one at a time, then the other kinds of FI (folded away).
  * What-ifs live on Forecast; the withdrawal rate is a real setting, so it stays in step 3.
  */
-import { baristaFi, DISPLAY_INFLATION, FAT_FACTOR, fireBreakdown, fiLevels, inFutureDollars } from "@coastfi/engine";
+import { baristaFi, DISPLAY_INFLATION, extraToCoastBy, extraToRetire, FAT_FACTOR, fireBreakdown, fiLevels, inFutureDollars, investingNow, retireAgeOnPlan } from "@coastfi/engine";
 import { useRouter } from "expo-router";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money, monthLabel, percent } from "../lib/format";
 import { usePlan } from "../lib/plan";
@@ -34,6 +34,12 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
   // one step open at a time; the other kinds of FI start folded
   const [openStep, setOpenStep] = useState<number | null>(null);
   const [levelsOpen, setLevelsOpen] = useState(false);
+  // how you get there: the Coast-by age you pick (whole ages before you retire)
+  const coastAges = Array.from({ length: Math.max(0, Math.ceil(d.retireAge) - 1 - Math.floor(d.age)) }, (_, i) => Math.floor(d.age) + 1 + i);
+  const [coastAge, setCoastAge] = useState<number | null>(null);
+  const coastBy = coastAge ?? coastAges[Math.min(coastAges.length - 1, 9)] ?? null;
+  const extra = d.years > 0 ? extraToRetire(o) : 0;
+  const laterAge = useMemo(() => (extra > 0.5 ? retireAgeOnPlan(state, start) : null), [state, start, extra > 0.5]);
   const toView = (v: "retirement" | "whatif") => (onView ? onView(v) : router.navigate(`/plan?view=${v}` as never));
 
   const whole = (v: number) => money(v, { whole: true });
@@ -150,6 +156,57 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
     </Card>
   );
 
+  // why step 5 says what it says: the money set aside first, then what's left pays a share a year
+  const setAside = b.bridge + b.healthBridge + b.homeBridge;
+  const setAsideFor = [
+    b.healthBridge > 0.5 ? `health insurance until 65` : "",
+    b.bridge > 0.5 ? "the years before Social Security or a pension" : "",
+    b.homeBridge > 0.5 ? "the mortgage left" : "",
+  ].filter(Boolean).join(", ");
+  const incomeMo = b.income / 12;
+  const onTrackWhy =
+    setAside > 0.5 && b.planValue <= setAside + 0.5
+      ? `On your plan you'd have about ${whole(b.planValue)} at ${d.retireAge}. Paying for ${setAsideFor} (${whole(setAside)}) uses all of it first, so nothing is left for your monthly spending${incomeMo > 0.5 ? `: only the ${whole(incomeMo)}/mo that comes in on its own` : ""}.`
+      : `On your plan you'd have about ${whole(b.planValue)} at ${d.retireAge}.${setAside > 0.5 ? ` After ${whole(setAside)} for ${setAsideFor},` : ""} taking out ${rate(b.swr)} a year pays about ${whole(Math.max(0, b.planSupports - b.income) / 12)}/mo${incomeMo > 0.5 ? `, plus ${whole(incomeMo)}/mo that comes in on its own` : ""}. You plan to spend ${whole(b.retireAnnual / 12)}/mo.`;
+
+  // how you get there: what you invest now, what it takes, and the other ways
+  const nowMo = investingNow(o);
+  const coastMonths2 = coastBy === null ? 0 : Math.round((coastBy - d.age) * 12);
+  const coastExtra = coastBy === null ? 0 : extraToCoastBy(o, coastMonths2);
+  const tone = whatIf ? t.warn : t.text;
+  const getThere = d.years <= 0 ? null : (
+    <Card style={{ gap: space.sm }}>
+      <SectionLabel>How you get there</SectionLabel>
+      {row("You invest now", `${whole(nowMo)}/mo`, { strong: true, sub: "About a month this year on your plan, with any employer match" })}
+      <Divider />
+      {extra <= 0.5 ? (
+        <Text style={[type.caption, { color: t.good, fontWeight: "700" }]}>
+          You're on track: keep investing about {whole(nowMo)}/mo and you'll have {whole(b.fire)} by {d.retireAge}.
+        </Text>
+      ) : (
+        <>
+          {row(`To retire at ${d.retireAge}`, `${whole(nowMo + extra)}/mo`, { tone, sub: `${whole(extra)}/mo more than now, every month until ${d.retireAge}` })}
+          {reached ? row("Coast FI", "Reached ✓", { tone: t.good }) : coastBy === null ? null : (
+            <>
+              <View style={[styles.row, { flexWrap: "wrap" }]}>
+                <Text style={[type.caption, { color: t.text2, fontWeight: "500", flex: 1, minWidth: 140 }]}>To reach Coast FI by</Text>
+                <Select label="Coast FI by age" value={String(coastBy)} options={coastAges.map((a) => ({ value: String(a), label: `Age ${a}` }))} onChange={(v) => setCoastAge(Number(v))} />
+              </View>
+              {coastExtra <= 0.5
+                ? row("Your plan already gets there", "✓", { tone: t.good })
+                : row(`Invest until ${coastBy}`, `${whole(nowMo + coastExtra)}/mo`, { tone, sub: `${whole(coastExtra)}/mo more than now. Then you could stop investing: it grows into ${whole(b.fire)} by ${d.retireAge}.` })}
+            </>
+          )}
+          <Divider />
+          <Text style={[type.overline, { color: t.text3 }]}>Or, investing as you do now</Text>
+          {row("Retire later", laterAge === null ? "Not by 75" : `At ${laterAge}`, { tone, sub: laterAge === null ? "Your plan isn't enough at any age up to 75" : `Keep going until ${laterAge} and your plan is enough` })}
+          {row("Spend less in retirement", `${whole(b.planSupports / 12)}/mo`, { tone, sub: b.planSupports < 0.5 && setAsideFor ? `Your plan at ${d.retireAge} only covers ${setAsideFor}` : `What your plan pays for at ${d.retireAge}, instead of ${whole(b.retireAnnual / 12)}/mo` })}
+        </>
+      )}
+      {link("Try these in What if", () => toView("whatif"))}
+    </Card>
+  );
+
   const breakdown = (
     <Card style={{ gap: space.sm }}>
       <SectionLabel>How it's worked out</SectionLabel>
@@ -162,14 +219,16 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
           {link(d.retireSpendingSet ? "Change your set amount" : "Choose categories and amounts", () => toView("retirement"))}
           {link("Change healthcare", () => toView("retirement"))}
         </>)}
-      {step(2, "From your savings", `${whole(b.need / 12)}/mo`,
-        "What's left after Social Security, pensions and rent you'll keep getting.",
+      {step(2, "What your savings must pay", `${whole(b.need / 12)}/mo`,
+        b.income > 0.5 || Math.abs(b.rentalIncome) > 0.5
+          ? `Your ${whole(b.retireAnnual / 12)}/mo of spending, less the money that keeps coming in on its own (Social Security, pensions, rent).`
+          : `Nothing else comes in (no Social Security, pension or rent entered), so your savings pay all ${whole(b.retireAnnual / 12)}/mo.`,
         <>
           {row("Retirement spending", per(b.retireAnnual))}
           {b.income - b.rentalIncome > 0.5 ? row("Social Security and pensions", `− ${per(b.income - b.rentalIncome)}`) : null}
           {Math.abs(b.rentalIncome) > 0.5 ? row("Rent you keep getting", `${b.rentalIncome >= 0 ? "−" : "+"} ${per(Math.abs(b.rentalIncome))}`, { sub: "Less a cushion for empty months" }) : null}
           <Divider />
-          {row("From your savings", per(b.need), { strong: true })}
+          {row("Savings pay", per(b.need), { strong: true })}
           {link(b.income - b.rentalIncome > 0.5 ? "Change Social Security and pensions" : "Add Social Security or a pension", () => toView("retirement"))}
         </>)}
       {step(3, "Your FIRE number", whole(b.fire),
@@ -195,8 +254,8 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
           <Divider />
           {row(reached ? "You've reached Coast FI" : "Still to go", reached ? "✓" : whole(b.coastNow - b.invested), { strong: true, tone: reached ? t.good : undefined })}
         </>)}
-      {step(5, "What your money supports", `${whole(b.planSupports / 12)}/mo`,
-        "The spending your savings would pay for in retirement, if you stopped saving today or kept to your plan.",
+      {step(5, "What you're on track for", `${whole(b.planSupports / 12)}/mo`,
+        onTrackWhy,
         <>
           {row("If you stopped saving today", per(b.coastSupports), { sub: `${whole(b.invested)} grows to ${whole(b.coastValue)} by ${d.retireAge}` })}
           {row("On your plan", per(b.planSupports), { sub: `About ${whole(b.planValue)} by ${d.retireAge}` })}
@@ -272,6 +331,7 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
   return (
     <>
       {answer}
+      {getThere}
       {breakdown}
       {ladder}
     </>

@@ -16,7 +16,8 @@ export { isUpcoming, registerBalance, transferPair, txnActivity, type TxnActivit
 export { SAVINGS_GROUP, START_TXN, budgetCategories, budgetStartCash, budgetView, isStartTxn, spendingHistory, startTxnId, type BudgetCategory, type BudgetCategoryKind, type BudgetLine, type BudgetView } from "./budget";
 export { accountForecasts, accountGroup, type AccountForecast, type AccountMonth, type AccountYear, type AccountKey } from "./forecast";
 export { monteCarlo } from "./montecarlo";
-export { run, MC_SEED } from "./run";
+export { run, finalAndFire, MC_SEED } from "./run";
+export { extraToCoastBy, extraToRetire, investingNow, monthlyGrowthFactor, retireAgeOnPlan } from "./howTo";
 export { amortize, loanPayment, loanSchedule, mortgagesAtRetirement, scheduledPayment, type DebtAtRetirement, type LoanSchedule } from "./mortgage";
 export { addMonths, monthsBetween, mulberry32 } from "./util";
 export { DISPLAY_INFLATION, nominalReturn, inFutureDollars } from "./inflation";

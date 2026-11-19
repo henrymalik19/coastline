@@ -15,6 +15,14 @@ function withHome(s: PlanState, d: Derived, plan: PlanResult) {
   return { mortgagesAtRetire, homeBridge, dFire: homeBridge > 0 ? { ...d, retireBridge: d.retireBridge + homeBridge } : d };
 }
 
+/** Light run (no Monte Carlo): what the plan has at retirement and the FIRE number then. */
+export function finalAndFire(s: PlanState, startDate: Date): { final: number; fire: number } {
+  const d = derive(s, startDate);
+  const plan = simulatePlan(s, d);
+  const proj = project(d, plan, d.r);
+  return { final: proj.final, fire: fireNumber(withHome(s, d, plan).dFire, proj.preShareFinal) };
+}
+
 function coastOnly(s: PlanState, startDate: Date, extraMonthly: number): number | null {
   const d = derive(s, startDate);
   const plan = simulatePlan(s, d, { extraMonthly });
