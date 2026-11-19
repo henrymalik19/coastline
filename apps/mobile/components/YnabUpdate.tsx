@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, ToggleRow } from "./form";
 import { Card } from "./ui";
+import { BackupFirst } from "./BackupFirst";
 import { dayText } from "./ImportUndo";
 import { usePlan } from "../lib/plan";
 import { monthKey, useStore } from "../lib/store";
@@ -121,6 +122,7 @@ export function YnabUpdateCard() {
               onChange={setRemoveGone}
             />
           ) : null}
+          {nothing ? null : <BackupFirst />}
           <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
             {nothing ? null : <Button title="Update" tone="primary" onPress={apply} />}
             <Button title={nothing ? "Done" : "Cancel"} tone="ghost" onPress={() => setU(null)} />

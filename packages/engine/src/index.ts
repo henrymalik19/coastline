@@ -23,3 +23,4 @@ export { amortize, loanPayment, loanSchedule, mortgagesAtRetirement, scheduledPa
 export { addMonths, monthsBetween, mulberry32 } from "./util";
 export { DISPLAY_INFLATION, nominalReturn, inFutureDollars } from "./inflation";
 export { fireBreakdown, fiLevels, baristaFi, FAT_FACTOR, type FireBreakdown, type FiLevel, type SpendingLine } from "./breakdown";
+export { spendingByMonth, spendingByYear, type PeriodSpending, type YearSpending } from "./years";

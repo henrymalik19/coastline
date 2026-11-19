@@ -100,7 +100,13 @@ function FeedbackRow() {
 /** Which version is running (the commit it was built from, and when). */
 function VersionLine() {
   const t = useTheme();
-  return <Text selectable style={[type.caption, { color: t.text3, alignSelf: "center" }]}>{versionText()}</Text>;
+  const router = useRouter();
+  // tap: diagnostics (Backup & restore)
+  return (
+    <Pressable role="link" onPress={() => router.push("/settings/data")} hitSlop={8} style={{ alignSelf: "center" }}>
+      <Text style={[type.caption, { color: t.text3 }]}>{versionText()}</Text>
+    </Pressable>
+  );
 }
 
 function PrivacyLink() {

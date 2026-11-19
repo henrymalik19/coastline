@@ -8,6 +8,7 @@ import { useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, ToggleRow } from "./form";
 import { Card } from "./ui";
+import { BackupFirst } from "./BackupFirst";
 import { addedSinceImport, canUndoImport, UNDO_DAYS } from "../lib/importUndo";
 import { useStore } from "../lib/store";
 import { importWait } from "../lib/importWait";
@@ -88,6 +89,7 @@ export function ImportUndoCard({ children, onUndone, plain }: { children?: React
                   <Text style={[type.caption, { color: t.text2 }]}>The {added.remove} transaction{added.remove === 1 ? "" : "s"} you added since {added.remove === 1 ? "is" : "are"} in accounts the import made, so {added.remove === 1 ? "it goes" : "they go"} too.</Text>
                 )
               ) : null}
+              <BackupFirst />
               <View style={[styles.row, { flexWrap: "wrap" }]}>
                 <Button title="Yes, undo it" tone="danger" disabled={!!wait} onPress={() => { if (wait) return; undoImport(keepAdded); setAsk(null); onUndone?.(); }} style={{ minHeight: 40 }} />
                 <Button title="Cancel" tone="ghost" onPress={() => setAsk(null)} style={{ minHeight: 40 }} />

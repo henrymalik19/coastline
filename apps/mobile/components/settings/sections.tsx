@@ -31,6 +31,8 @@ import { EmergencyFundGoal, looksLikeEmergencyFund } from "../EmergencyFundNote"
 import { AddDebtButtons, DebtEditor, paidFromFor } from "../DebtEditor";
 import { debtLabel } from "../../lib/debts";
 import { Card, Divider } from "../ui";
+import { BackupFirst } from "../BackupFirst";
+import { Diagnostics } from "../Diagnostics";
 import { HealthcareSuggestion } from "../HealthcareSuggestion";
 import { hsaEverEligible, HsaEligibilityChanges } from "../HsaEligibility";
 import { useOpenPage } from "../../lib/nav";
@@ -78,7 +80,7 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
       { key: "limits", title: "Contribution limits", subtitle: "401(k), IRA and HSA limits by year", icon: "shield" },
     ],
   },
-  { title: "Data", items: [{ key: "data", title: "Backup & restore", subtitle: "Download a backup, restore one, or start over", icon: "database" }] },
+  { title: "Data", items: [{ key: "data", title: "Backup & restore", subtitle: "Back up, restore, start over, or send diagnostics", icon: "database" }] },
 ];
 
 export const findSection = (k?: string) => SECTIONS.flatMap((g) => g.items).find((s) => s.key === k);
@@ -633,6 +635,7 @@ function DataSection() {
             placeholderTextColor={t.text3}
             style={[styles.textarea, { color: t.text, backgroundColor: t.surface2, borderColor: t.border }]}
           />
+          {text.trim() ? <BackupFirst /> : null}
           <Button title="Restore" onPress={doImport} disabled={!text.trim()} style={{ alignSelf: "flex-start" }} />
         </View>
       </Group>
@@ -640,6 +643,7 @@ function DataSection() {
       <Group title="Start over">
         <View style={{ paddingVertical: space.sm, gap: space.md }}>
           <Text style={[type.body, { color: t.text2 }]}>Clears your plan and transactions and takes you back through setup. Your check-in history is kept.</Text>
+          <BackupFirst />
           <Button
             title="Start from scratch"
             tone="danger"
@@ -651,6 +655,9 @@ function DataSection() {
             }}
           />
         </View>
+      </Group>
+      <Group title="Diagnostics">
+        <Diagnostics />
       </Group>
     </>
   );

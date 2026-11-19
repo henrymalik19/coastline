@@ -10,6 +10,7 @@ import { ImportUndoReminder, useImported } from "../../components/ImportUndo";
 import { txnsIn } from "../../lib/combine";
 import { BUDGET_ITEM, budgetCategories, budgetView, isHistoryTxn, SAVINGS_GROUP, spendingHistory, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
+import { BackupFirst } from "../../components/BackupFirst";
 import { BudgetAccounts } from "../../components/BudgetAccounts";
 import { TransactionsList } from "../../components/TransactionsList";
 import { cardMap, isCard, liveBudget } from "../../lib/register";
@@ -1271,6 +1272,10 @@ export default function Budget() {
             <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Manage income, accounts, debts and goals</Text>
             <Icon name="chevron" size={12} color={t.accent} />
           </Pressable>
+          <Pressable role="link" onPress={() => router.push("/money/spending")} hitSlop={6} style={styles.link}>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Spending report</Text>
+            <Icon name="chevron" size={12} color={t.accent} />
+          </Pressable>
           <View style={styles.editRow}>
             <Button title="Add a group" icon="plus" onPress={() => setAddReq({ kind: "group" })} style={{ minHeight: 36 }} />
             <Button title="Add categories" icon="plus" tone="ghost" onPress={() => setAddReq({ kind: "category", to: "group:" + (groupOrder(state.budget)[0] ?? UNGROUPED) })} style={{ minHeight: 36 }} />
@@ -1280,6 +1285,7 @@ export default function Budget() {
             <Text role="link" onPress={() => router.navigate("/plan?view=retirement")} style={{ color: t.accent, fontWeight: "700" }}>Choose what's included</Text>. Bills come from repeating savings goals and debt payments from Debts; tap one to change it there. Spent and paid come from the transactions you record.
           </Text>
           {imported ? null : <Button title="Import from YNAB" icon="database" tone="ghost" onPress={() => openPage("/money/import")} style={{ alignSelf: "flex-start" }} />}
+          <BackupFirst />
           <Button
             title="Start the budget over"
             tone="ghost"
