@@ -1,10 +1,10 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { transferPair, type PlanState, type Txn } from "@coastfi/engine";
 import { CheckinSchema, PlanStateSchema, TxnSchema, withProperties, type Checkin } from "@coastfi/schema";
 import { applyRegisterBalances, applyTracked, budgetAccounts, foldSavingsLines, startTxnFor } from "./register";
 import { z } from "zod";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
+import { appStorage } from "./txnStorage";
 import { syncPaycheckLoans } from "./loans";
 import { freshPlan } from "./presets";
 import { stampMs } from "./pages";
@@ -17,7 +17,7 @@ import { keepFamilyGroups } from "./subcats";
 export { newId } from "./id";
 
 /**
- * The user's plan + check-ins, saved on the device (AsyncStorage; localStorage on web).
+ * The user's plan + check-ins, saved on the device (AsyncStorage; localStorage on web; history apart, see txnStorage.ts).
  * Phase 3 adds sync on top of this; the store stays the single source of truth for the UI.
  */
 export type AppState = {
@@ -278,7 +278,8 @@ export const useStore = create<AppState>()(
     {
       name: "coastfi.app",
       version: 1,
-      storage: createJSONStorage(() => AsyncStorage),
+      // everyday data in one entry; history (closed accounts) kept apart (lib/txnStorage.ts)
+      storage: appStorage<Partial<AppState>>("coastfi.app"),
       partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty }),
       // never trust stored data blindly: validate, and fall back to a blank plan
       merge: (persisted, current) => {

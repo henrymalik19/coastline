@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { confirm } from "../lib/confirm";
 import {
   deleteAccount, MIN_PASSWORD, reloadAllDevices, reloadFromAccount, sendCode, setPassword, signInWithPassword, signOut, signOutOthers, syncNow, useSync, verifyCode, type SyncStatus,
@@ -20,17 +20,32 @@ const STATUS_TEXT: Record<SyncStatus, string> = {
   error: "Couldn't sync",
 };
 
+/** The sync state in a line (Account, and the sidebar on wide screens: there it also says a big job's progress and offers Retry). */
 export function SyncStatusLine() {
   const t = useTheme();
-  const { status, lastSyncedAt, error } = useSync();
+  const { status, lastSyncedAt, error, progress } = useSync();
   const color = status === "error" ? t.bad : status === "offline" ? t.warn : status === "synced" ? t.good : t.text3;
   const when = status === "synced" && lastSyncedAt ? ` · ${new Date(lastSyncedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "";
+  if (progress)
+    return (
+      <View role="status" style={styles.line}>
+        <ActivityIndicator size="small" color={t.accent} />
+        <Text style={[type.caption, { color: t.text2, flex: 1 }]}>{progress}</Text>
+      </View>
+    );
   return (
-    <Text role="status" style={[type.caption, { color }]}>
-      {STATUS_TEXT[status]}
-      {when}
-      {status === "error" && error ? `: ${error}` : ""}
-    </Text>
+    <View role="status" style={styles.line}>
+      <Text style={[type.caption, { color, flex: 1 }]}>
+        {STATUS_TEXT[status]}
+        {when}
+        {status === "error" && error ? `: ${error}` : ""}
+      </Text>
+      {status === "error" ? (
+        <Pressable accessibilityRole="button" onPress={() => void syncNow()} hitSlop={8}>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "600" }]}>Retry</Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -312,6 +327,7 @@ function PasswordSettings() {
 }
 
 const styles = StyleSheet.create({
+  line: { flexDirection: "row", alignItems: "center", gap: space.sm },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" },
   danger: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.md, gap: space.sm, borderRadius: radius.sm },
 });
