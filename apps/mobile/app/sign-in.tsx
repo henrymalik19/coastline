@@ -1,11 +1,11 @@
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
-import { Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { AccountPanel } from "../components/AccountPanel";
 import { Button } from "../components/form";
 import { Card, Screen } from "../components/ui";
 import { useStore } from "../lib/store";
-import { useSync } from "../lib/sync";
+import { signOut, useSync } from "../lib/sync";
 import { useMembership } from "../lib/sharing";
 import { space, type, useTheme } from "../lib/theme";
 
@@ -29,8 +29,14 @@ export default function SignIn() {
 
   return (
     <Screen title="Sign in" subtitle="Load your plan from your Coastwise account" narrow hideSettings back={() => (router.canGoBack() ? router.back() : router.replace("/"))}>
-      <AccountPanel />
-      {loading ? <Text role="status" style={[type.body, { color: t.text2 }]}>Loading your plan…</Text> : null}
+      {/* signed in: the account controls would look like Settings while the plan loads, so just say it is loading */}
+      {email ? null : <AccountPanel />}
+      {loading ? (
+        <Card style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+          <ActivityIndicator color={t.accent} />
+          <Text role="status" style={[type.body, { color: t.text2, flex: 1 }]}>Signed in as {email}. Loading your plan…</Text>
+        </Card>
+      ) : null}
       {noPlan ? (
         <Card style={{ gap: space.md }}>
           <Text style={[type.heading, { color: t.text }]}>No plan on this account yet</Text>
@@ -40,6 +46,9 @@ export default function SignIn() {
           <View style={{ flexDirection: "row" }}>
             <Button title="Set up my plan" tone="primary" onPress={() => router.replace("/onboarding")} />
           </View>
+          <Text role="link" style={[type.caption, { color: t.accent, fontWeight: "700" }]} onPress={() => void signOut(false)}>
+            Signed in as {email}. Use a different account
+          </Text>
         </Card>
       ) : null}
       {!email ? (

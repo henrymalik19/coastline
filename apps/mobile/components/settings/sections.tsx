@@ -1,3 +1,4 @@
+import { PlanHistory } from "./PlanHistory";
 import { Redirect, useRouter } from "expo-router";
 import { ImportUndoCard } from "../ImportUndo";
 import { YnabUpdateCard } from "../YnabUpdate";
@@ -608,6 +609,9 @@ function DataSection() {
           <Text style={[type.body, { color: t.text2 }]}>Download a backup to keep a copy of your plan, transactions and check-ins. It includes your YNAB import too, so a restore can still undo it.</Text>
           <Button title={Platform.OS === "web" ? "Download backup" : "Share backup"} tone="primary" icon="database" onPress={doExport} style={{ alignSelf: "flex-start" }} />
         </View>
+      </Group>
+      <Group title="Earlier versions">
+        <PlanHistory />
       </Group>
       <Group title="YNAB import">
         {importedAt ? (

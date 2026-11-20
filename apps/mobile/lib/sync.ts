@@ -18,12 +18,14 @@
 import type { PlanState, Txn } from "@coastfi/engine";
 import { allPages, batches, changedSince, newestStamp, pushedAfterPull, stampMs } from "./pages";
 import type { Checkin } from "@coastfi/schema";
-import { CheckinSchema, diffRows, PLAN_TABLES, planToRows, PlanStateSchema, rowsToPlan, TxnSchema, withProperties, type PlanRows, type PlanTable } from "@coastfi/schema";
+import { CheckinSchema, diffRows, planToRows, PlanStateSchema, TxnSchema, withProperties } from "@coastfi/schema";
 import { canUndoImport, parseUndo, type ImportSnapshot } from "./importUndo";
 import type { RealtimeChannel, Session } from "@supabase/supabase-js";
 import { AppState, Platform } from "react-native";
 import { create } from "zustand";
 import { deepEqual, merge3 } from "./merge";
+import { firstSyncAction } from "./firstSync";
+import { planFromSnapshot, snapshotOf, type PlanRow } from "./planSnapshot";
 import { freshPlan } from "./presets";
 import { loadLimits } from "./limits";
 import { checkMembership, onMembershipChange, onSharingSignIn, onSharingSignOut, publishViews } from "./sharing";
@@ -69,22 +71,106 @@ let chosen: { pid: string; keep: "account" | "device" } | undefined;
 export function choosePlan(keep: "account" | "device"): Promise<void> {
   const pid = useSync.getState().planChoice;
   if (!pid) return Promise.resolve();
-  chosen = { pid, keep };
   useSync.setState({ planChoice: undefined });
   lastSyncStart = Date.now();
-  return serial(() => syncInner());
+  return serial(async () => {
+    if (keep === "device") {
+      // the account's plan goes into its history first, so it can be brought back
+      try {
+        await keepVersion(pid, "Before it was replaced with another device's plan");
+      } catch (e) {
+        useSync.setState({ planChoice: pid });
+        failNow(e);
+        return;
+      }
+    }
+    chosen = { pid, keep };
+    await syncInner();
+  });
 }
 
-/** The plan as the server has it: settings, lists, and (until it's turned into rows) the old JSON. */
-type PlanRow = {
-  /** The plan as rows say it, or from the old JSON. Not validated yet. */
-  state: unknown;
-  todo_done: Record<string, string[]>;
-  onboarded: boolean;
-  client_updated_at: number;
-  /** Still the old JSON on the server: the next save writes every row. */
-  legacy: boolean;
-};
+/* ---------- plan history: earlier versions, kept on the server ---------- */
+export type PlanVersion = { id: number; saved_at: string; note: string | null };
+
+/** False when the server doesn't have plan history yet (the app can ship before the migration). */
+const noHistory = (e: { message?: string; code?: string }) => /save_plan_version|plan_version|PGRST202|PGRST205|42P01|42883/.test(`${e.message} ${e.code}`);
+
+/** Keep a version of a plan now: the server's copy, or `snapshot` (shaped like get_plan's). */
+async function keepVersion(pid: string, note: string, snapshot?: Record<string, unknown>): Promise<void> {
+  if (!supabase) return;
+  const res = await supabase.rpc("save_plan_version", { p: pid, p_note: note, ...(snapshot ? { p_snapshot: snapshot } : {}) });
+  if (res.error && !noHistory(res.error)) throw res.error;
+}
+
+/** This device's plan, shaped like get_plan's. */
+function deviceSnapshot(): Record<string, unknown> {
+  const s = useStore.getState();
+  return snapshotOf(s.plan, s.todoDone, s.onboarded, s.updatedAt);
+}
+
+/** The synced plan's earlier versions, newest first. Empty when there are none (or no history yet). */
+export async function listPlanVersions(): Promise<PlanVersion[]> {
+  if (!supabase || !planId) return [];
+  const res = await supabase.from("plan_version").select("id, saved_at, note").eq("plan_id", planId).order("saved_at", { ascending: false }).limit(100);
+  if (res.error) {
+    if (noHistory(res.error)) return [];
+    throw res.error;
+  }
+  return (res.data ?? []) as PlanVersion[];
+}
+
+/** One earlier version, as a plan (null when it can't be read). */
+export async function loadPlanVersion(id: number): Promise<{ plan: PlanState; todoDone: Record<string, string[]>; counts: { accounts: number; categories: number; goals: number } } | null> {
+  if (!supabase || !planId) return null;
+  const res = await supabase.from("plan_version").select("snapshot").eq("id", id).eq("plan_id", planId).maybeSingle();
+  if (res.error) throw res.error;
+  const snap = (res.data as { snapshot?: Record<string, unknown> & { plan: Record<string, unknown> } } | null)?.snapshot;
+  if (!snap?.plan) return null;
+  const row = planFromSnapshot(snap);
+  const ok = PlanStateSchema.safeParse(row.state);
+  const n = (k: string) => (Array.isArray(snap[k]) ? (snap[k] as unknown[]).length : 0);
+  // an old plan saved as JSON has no tables: count from the plan itself
+  const legacy = row.legacy ? (row.state as { accounts?: unknown[]; budget?: unknown[]; goals?: unknown[] }) : undefined;
+  const counts = legacy
+    ? { accounts: legacy.accounts?.length ?? 0, categories: legacy.budget?.length ?? 0, goals: legacy.goals?.length ?? 0 }
+    : { accounts: n("account"), categories: n("category"), goals: n("goal") };
+  return ok.success ? { plan: ok.data, todoDone: row.todo_done ?? {}, counts } : null;
+}
+
+/**
+ * Bring back an earlier version: the plan as it is now is kept in history first, then the earlier one
+ * becomes this device's plan and saves like any other change (every device gets it). Transactions
+ * and check-ins aren't part of a version and don't change.
+ */
+export async function restorePlanVersion(id: number): Promise<void> {
+  const pid = planId;
+  if (!supabase || !pid) throw new Error("Sign in first.");
+  const v = await loadPlanVersion(id);
+  if (!v) throw new Error("This version couldn't be read.");
+  await keepVersion(pid, "Before an earlier version was restored");
+  useStore.setState({ plan: v.plan, todoDone: v.todoDone, updatedAt: Date.now() });
+  await syncNow();
+}
+
+/**
+ * This device has a plan it never saved to an account, and it's about to open a plan shared with
+ * you instead: keep this device's plan in your own account first. With no plan there yet it becomes
+ * your plan (its transactions and check-ins too); otherwise it's kept in your plan's history.
+ */
+async function keepDevicePlan(userId: string): Promise<void> {
+  if (!supabase) return;
+  const s = useStore.getState();
+  const own = await fetchPlan(userId);
+  if (own) return keepVersion(userId, "A plan from a device, kept when it opened a plan shared with you", deviceSnapshot());
+  const rows = planToRows(s.plan, s.todoDone, true);
+  const res = await supabase.rpc("save_plan", { p: userId, p_base: null, p_at: Math.max(s.updatedAt, 1), p_plan: rows.plan, p_changes: diffRows(undefined, rows) });
+  if (res.error) throw res.error;
+  if (s.checkins.length) {
+    const ci = await supabase.from("checkin").upsert(s.checkins.map((c) => toRow(c, userId)), { onConflict: "plan_id,month" });
+    if (ci.error) throw ci.error;
+  }
+  await pushTxns(userId);
+}
 
 /** Read a plan in one snapshot, as the app's objects. Null when there's no plan yet. */
 /**
@@ -151,16 +237,9 @@ async function fetchPlan(pid: string): Promise<PlanRow | null> {
   const res = await supabase.rpc("get_plan", { p: pid });
   if (res.error) throw res.error;
   const snap = res.data as (Record<string, unknown> & { plan: Record<string, unknown> }) | null;
-  if (!snap) return null;
-  const at = Number(snap.plan.client_updated_at ?? 0);
-  if (snap.plan.legacy_state) {
-    return { state: snap.plan.legacy_state, todo_done: (snap.plan.legacy_todo_done as Record<string, string[]>) ?? {}, onboarded: !!snap.plan.onboarded, client_updated_at: at, legacy: true };
-  }
-  const tables = {} as PlanRows["tables"];
-  for (const t of Object.keys(PLAN_TABLES) as PlanTable[]) tables[t] = (snap[t] as Record<string, unknown>[]) ?? [];
-  const back = rowsToPlan({ plan: snap.plan, tables });
-  return { state: back.plan, todo_done: back.todoDone, onboarded: back.onboarded, client_updated_at: at, legacy: false };
+  return snap ? planFromSnapshot(snap) : null;
 }
+
 /** The server still has a plan's old JSON: the next save writes it all as rows. */
 let legacyOnServer = false;
 type CheckinRow = {
@@ -560,6 +639,8 @@ async function syncInner(depth = 0): Promise<void> {
 
     const before = useStore.getState().syncBase;
     if ((before && before.owner !== pid) || (!before && pid !== userId)) {
+      // a plan only this device has would be dropped by the switch: keep it in your account first
+      if (!before && pid !== userId && useStore.getState().onboarded) await keepDevicePlan(userId);
       await switchTo(pid, remote, remoteCheckins);
       // another plan: its import record, not this device's old one
       await pullImport(pid, true);
@@ -596,15 +677,15 @@ async function syncInner(depth = 0): Promise<void> {
       // newer one isn't always the one you want: a fresh setup here is newer than your real plan)
       const pick = chosen?.pid === pid ? chosen.keep : undefined;
       chosen = undefined;
-      if (!pick && remote.onboarded && s.onboarded && !deepEqual(s.plan, ok.data)) {
+      const action = firstSyncAction(s, { plan: ok.data, onboarded: remote.onboarded, at: remote.client_updated_at }, pick);
+      if (action === "ask") {
         setSync({ planChoice: pid, status: "synced", lastSyncedAt: Date.now(), error: undefined });
         return;
       }
-      if (pick === "device") {
+      if (action === "device") {
         // this device's copy is the newer one now, so the first save replaces the account's
         useStore.setState({ updatedAt: Math.max(Date.now(), remote.client_updated_at + 1) });
-      } else if (pick === "account" || remote.client_updated_at > s.updatedAt || (remote.onboarded && !s.onboarded)) {
-        // otherwise the newer copy wins; a finished plan beats an unfinished setup
+      } else if (action === "account") {
         take(pid, remote, ok.data);
         tookPlan = true;
       }
