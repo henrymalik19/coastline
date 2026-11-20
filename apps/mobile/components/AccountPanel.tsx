@@ -50,7 +50,8 @@ export function SyncStatusLine() {
 }
 
 /** Sign in with an emailed code, see sync status, sign out, delete account. */
-export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
+/** `intro`: the line saying why to sign in (off where the page already says it). */
+export function AccountPanel({ onSignedIn, intro = true }: { onSignedIn?: () => void; intro?: boolean }) {
   const t = useTheme();
   const { status, email: signedInEmail, notice, secondStep, choosingPassword } = useSync();
   const [email, setEmail] = useState("");
@@ -205,9 +206,11 @@ export function AccountPanel({ onSignedIn }: { onSignedIn?: () => void }) {
   return (
     <Card style={{ gap: space.md }}>
       {notice ? <Text role="status" style={[type.label, { color: t.warn }]}>{notice}</Text> : null}
-      <Text style={[type.body, { color: t.text2 }]}>
-        Sign in to back up your plan and use it on all your devices.
-      </Text>
+      {intro ? (
+        <Text style={[type.body, { color: t.text2 }]}>
+          Sign in to back up your plan and use it on all your devices.
+        </Text>
+      ) : null}
       {!sent ? (
         <>
           <TextField label="Email" placeholder="you@example.com" value={email} onChange={setEmail} autoComplete="email" />

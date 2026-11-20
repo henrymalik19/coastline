@@ -250,12 +250,30 @@ export default function Forecast() {
               <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>See your plan →</Text>
             </Pressable>
           </Card>
-          <SectionLabel>What you'll spend</SectionLabel>
-          <RetirementEssentials />
-          <SectionLabel>Income in retirement</SectionLabel>
-          <RetirementIncomeSection />
-          <SectionLabel>Healthcare</SectionLabel>
-          <HealthcareSection />
+          {twoColumn ? (
+            // wide screens: spending (the long list) on the left, income and healthcare beside it
+            <View style={{ flexDirection: "row", gap: space.lg, alignItems: "flex-start" }}>
+              <View style={{ flex: 3, minWidth: 0, gap: space.lg }}>
+                <SectionLabel>What you'll spend</SectionLabel>
+                <RetirementEssentials />
+              </View>
+              <View style={{ flex: 2, minWidth: 0, gap: space.lg }}>
+                <SectionLabel>Income in retirement</SectionLabel>
+                <RetirementIncomeSection />
+                <SectionLabel>Healthcare</SectionLabel>
+                <HealthcareSection />
+              </View>
+            </View>
+          ) : (
+            <>
+              <SectionLabel>What you'll spend</SectionLabel>
+              <RetirementEssentials />
+              <SectionLabel>Income in retirement</SectionLabel>
+              <RetirementIncomeSection />
+              <SectionLabel>Healthcare</SectionLabel>
+              <HealthcareSection />
+            </>
+          )}
         </ScrollView>
       ) : tab === "number" ? (
         <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
