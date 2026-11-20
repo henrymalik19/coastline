@@ -1220,6 +1220,12 @@ export default function Budget() {
                   History only: they keep their past transactions, but new ones can't go in and no money can be assigned. Open one to restore it or put it under a category. One that's overspent shows here; it comes out of next month's Unassigned.
                 </Text>
               ) : null}
+              {hiddenOpen && state.budget.filter((x) => x.hidden && !x.parentId && x.group !== CLOSED_ACCOUNTS_GROUP).length > 1 ? (
+                <Pressable role="link" onPress={() => router.push("/money/archived")} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start", paddingHorizontal: compact ? space.md : space.lg, paddingTop: space.sm }}>
+                  <Text style={[type.label, { color: t.accent, fontWeight: "700" }]}>Sort them all at once</Text>
+                  <Icon name="chevron" size={14} color={t.accent} />
+                </Pressable>
+              ) : null}
               {hiddenOpen && folds.length ? (
                 <View style={[styles.dupBox, { backgroundColor: t.accentSoft, borderColor: t.accent, marginHorizontal: compact ? space.md : space.lg, marginTop: space.sm }]}>
                   <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Belong under a category?</Text>
