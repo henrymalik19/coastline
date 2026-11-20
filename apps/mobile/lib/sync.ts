@@ -52,7 +52,28 @@ export const useSync = create<{
   secondStep?: string;
   /** Signed in with an emailed code after "Forgot password?": Account opens the new-password form. */
   choosingPassword?: boolean;
+  /**
+   * Signed in on a device that already set up a plan, to an account that has a different one: whose
+   * plan to keep (the plan id). Nothing uploads until it's answered (choosePlan).
+   */
+  planChoice?: string;
 }>(() => ({ status: supabase ? "signedOut" : "off" }));
+
+/** The answer to planChoice, used by the next sync of that plan. */
+let chosen: { pid: string; keep: "account" | "device" } | undefined;
+
+/**
+ * Answer planChoice: load the account's plan onto this device, or replace the account's plan with this
+ * device's. Transactions and check-ins are never replaced either way: both sets are kept.
+ */
+export function choosePlan(keep: "account" | "device"): Promise<void> {
+  const pid = useSync.getState().planChoice;
+  if (!pid) return Promise.resolve();
+  chosen = { pid, keep };
+  useSync.setState({ planChoice: undefined });
+  lastSyncStart = Date.now();
+  return serial(() => syncInner());
+}
 
 /** The plan as the server has it: settings, lists, and (until it's turned into rows) the old JSON. */
 type PlanRow = {
@@ -478,6 +499,8 @@ async function pushInner(depth = 0): Promise<void> {
   const s = useStore.getState();
   // never upload an unfinished setup: it could replace a real plan from another device
   if (!s.onboarded) return;
+  // waiting to hear whose plan to keep: upload nothing yet
+  if (useSync.getState().planChoice) return;
   setSync({ status: "syncing" });
   try {
     const base = baseFor(pid);
@@ -569,8 +592,19 @@ async function syncInner(depth = 0): Promise<void> {
     const base = baseFor(pid);
     const remoteTodo = remote.todo_done ?? {};
     if (!base) {
-      // first sync on this device: the newer copy wins; a finished plan beats an unfinished setup
-      if (remote.client_updated_at > s.updatedAt || (remote.onboarded && !s.onboarded)) {
+      // first sync on this device. Both have a finished plan and they differ: ask whose to keep (the
+      // newer one isn't always the one you want: a fresh setup here is newer than your real plan)
+      const pick = chosen?.pid === pid ? chosen.keep : undefined;
+      chosen = undefined;
+      if (!pick && remote.onboarded && s.onboarded && !deepEqual(s.plan, ok.data)) {
+        setSync({ planChoice: pid, status: "synced", lastSyncedAt: Date.now(), error: undefined });
+        return;
+      }
+      if (pick === "device") {
+        // this device's copy is the newer one now, so the first save replaces the account's
+        useStore.setState({ updatedAt: Math.max(Date.now(), remote.client_updated_at + 1) });
+      } else if (pick === "account" || remote.client_updated_at > s.updatedAt || (remote.onboarded && !s.onboarded)) {
+        // otherwise the newer copy wins; a finished plan beats an unfinished setup
         take(pid, remote, ok.data);
         tookPlan = true;
       }
@@ -686,7 +720,8 @@ function leavePlan() {
   channel?.unsubscribe();
   channel = null;
   planId = undefined;
-  setSync({ status: supabase ? "signedOut" : "off", userId: undefined, email: undefined, planId: undefined, sharedBy: undefined, lastSyncedAt: undefined, error: undefined, choosingPassword: undefined });
+  chosen = undefined;
+  setSync({ status: supabase ? "signedOut" : "off", userId: undefined, email: undefined, planId: undefined, sharedBy: undefined, lastSyncedAt: undefined, error: undefined, choosingPassword: undefined, planChoice: undefined });
 }
 
 /** Sign this device out if the app hasn't been opened on it for a long time (its plan stays). */
