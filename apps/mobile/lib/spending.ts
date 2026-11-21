@@ -38,16 +38,8 @@ export function buildItems(d: PeriodSpending, cats: CategoryInfo[]): Item[] {
 export type Period = { kind: "thisYear" | "lastYear" | "last12" | "all" } | { kind: "years"; from: string; to: string };
 export type Focus = { kind: "all" } | { kind: "group"; group: string } | { kind: "cat"; key: string };
 
-export const addMonths = (ym: string, n: number) => {
-  const [y, m] = ym.split("-").map(Number) as [number, number];
-  const i = y * 12 + (m - 1) + n;
-  return `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`;
-};
-const monthsBetween = (a: string, b: string) => {
-  const [ay, am] = a.split("-").map(Number) as [number, number];
-  const [by, bm] = b.split("-").map(Number) as [number, number];
-  return (by - ay) * 12 + (bm - am);
-};
+import { addMonths, monthsBetween } from "@coastfi/engine";
+export { addMonths };
 
 /** The months a period covers (first and last, "2024-01"), within what you have: `first` to `now`. */
 export function periodRange(p: Period, first: string, now: string): { from: string; to: string } {

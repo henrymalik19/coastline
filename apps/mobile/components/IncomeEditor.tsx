@@ -1,4 +1,4 @@
-import { HSAEMP, k401Cost, PAY401, PAYDED, PAYGROSS, PAYHSA, PAYNET, PERIODS, resolveIncome, type Debt, type Income, type IncomeKind, type PayFreq, type PayTaxes , type Property } from "@coastfi/engine";
+import { HSAEMP, k401Cost, PAY401, PAYDED, PAYGROSS, PAYHSA, PAYNET, PERIODS, rentalMonthly, resolveIncome, type Debt, type Income, type IncomeKind, type PayFreq, type PayTaxes , type Property } from "@coastfi/engine";
 import { useLayout } from "../lib/layout";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -206,7 +206,6 @@ function RentalMortgage({ inc }: { inc: Income }) {
       p.debts = p.debts.filter((x) => x.id !== id);
       for (const x of p.properties ?? []) if (x.mortgageId === id) delete x.mortgageId;
     });
-  const rent = (inc.net * PERIODS[inc.freq]) / 12;
   const other = state.debts.filter((d) => d.kind === "mortgage" && !d.id.startsWith("mort-"));
   if (!debt)
     return (
@@ -219,7 +218,7 @@ function RentalMortgage({ inc }: { inc: Income }) {
         </Text>
       </View>
     );
-  const keep = rent - debt.minPayment;
+  const { rent, keep } = rentalMonthly(inc, debt.minPayment);
   return (
     <View style={{ gap: space.sm, marginTop: space.xs }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>

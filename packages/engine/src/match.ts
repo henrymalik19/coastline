@@ -1,5 +1,6 @@
 import type { Income, ResolvedIncome } from "./types";
 import { num } from "./util";
+import { PERIODS } from "./constants";
 
 type MatchTiers = Pick<Income, "matchRate1" | "matchUpTo1" | "matchRate2" | "matchUpTo2">;
 
@@ -42,4 +43,13 @@ export function resolveIncome(inc: Income): ResolvedIncome {
     gapMatch: 0,
     maxPct: null,
   };
+}
+
+/**
+ * A rental's monthly numbers: the rent after costs (its net amount, per month) and what's left after
+ * the mortgage payment (negative when the payment is more than the rent).
+ */
+export function rentalMonthly(inc: Pick<Income, "net" | "freq">, mortgagePayment: number): { rent: number; keep: number } {
+  const rent = (num(inc.net) * PERIODS[inc.freq]) / 12;
+  return { rent, keep: rent - num(mortgagePayment) };
 }

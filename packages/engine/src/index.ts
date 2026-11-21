@@ -5,7 +5,7 @@
 export * from "./types";
 export { PERIODS, BASE_CHECKS, FICA, STEP_LABELS, BUCKETS, BUCKET_LABELS, type Bucket } from "./constants";
 export { checksInMonth } from "./paychecks";
-export { matchFor, resolveIncome } from "./match";
+export { matchFor, rentalMonthly, resolveIncome } from "./match";
 export { limitsFor, DEFAULT_LIMITS } from "./limits";
 export { derive } from "./derive";
 export { simulatePlan, scheduleAmount, isHighInterest, paysExtra, rateIn, k401Cost, nextDue, setAsideFor, SHORTFALL_ID, DEFAULT_CARD_APR } from "./plan";

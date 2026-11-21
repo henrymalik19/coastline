@@ -8,7 +8,7 @@ import { fullName } from "../../lib/company";
 import { debtItPays, newLoanPayment, paidLastTwoMonths, setLoanPayment } from "../../lib/debtLink";
 import { ImportUndoReminder, useImported } from "../../components/ImportUndo";
 import { txnsIn } from "../../lib/combine";
-import { BUDGET_ITEM, budgetCategories, budgetView, isHistoryTxn, SAVINGS_GROUP, spendingHistory, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
+import { addMonths, BUDGET_ITEM, budgetCategories, monthsBetween, budgetView, isHistoryTxn, SAVINGS_GROUP, spendingHistory, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
 import { BackupFirst } from "../../components/BackupFirst";
 import { BudgetAccounts } from "../../components/BudgetAccounts";
@@ -42,11 +42,6 @@ import { useOpenPage } from "../../lib/nav";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const nameOf = (ym: string) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
-const shift = (ym: string, n: number) => {
-  const k = Number(ym.slice(0, 4)) * 12 + Number(ym.slice(5, 7)) - 1 + n;
-  return `${Math.floor(k / 12)}-${String((k % 12) + 1).padStart(2, "0")}`;
-};
-const between = (a: string, b: string) => (Number(b.slice(0, 4)) - Number(a.slice(0, 4))) * 12 + Number(b.slice(5, 7)) - Number(a.slice(5, 7));
 // the built-in groups first (debt payments, savings, bills), then the groups you made
 const ORDER: Record<BudgetCategory["kind"], number> = { debt: 0, saving: 1, bill: 2, spending: 3 };
 
@@ -140,7 +135,7 @@ export default function Budget() {
   // the account picked on the Transactions list: a new transaction added from there starts in it
   const [listAcct, setListAcct] = useState("all");
   const monthTxns = txns.filter((x) => !x.deleted && x.date.startsWith(month) && !isHistoryTxn(x));
-  const i = between(thisMonth, month);
+  const i = monthsBetween(thisMonth, month);
   const entry = b?.months?.[month];
   const cashNow = state.accounts.filter((a) => a.type === "cash").reduce((s, a) => s + (+a.balance || 0), 0);
 
@@ -308,7 +303,7 @@ export default function Budget() {
   const onCardsTotal = red.reduce((a, c) => a + (view.lines[c.key]!.toDebt ?? 0), 0);
   const redTotal = red.reduce((a, c) => a - view.lines[c.key]!.available, 0) - onCardsTotal;
   // went over last month: it reset to $0 and came out of this month's Unassigned, so it's tagged here
-  const prevMonth = shift(month, -1);
+  const prevMonth = addMonths(month, -1);
   const prevView = month > b.start ? budgetView(b, cats, prevMonth, { txns, cards, asOf: isoDay(start) }) : null;
   // (overspending you left on a card as debt didn't come out of this month, so it isn't counted)
   const lastOver = prevView ? cats.flatMap((c) => { const l = prevView.lines[c.key]; const over = l ? -l.available - (l.toDebt ?? 0) : 0; return over > 0.005 ? [{ c, amount: over }] : []; }) : [];
@@ -334,7 +329,7 @@ export default function Budget() {
 
   const monthBar = (
     <View style={styles.monthBar}>
-      <Pressable role="button" accessibilityLabel="Previous month" disabled={!canGoBack} onPress={() => setMonth(shift(month, -1))} hitSlop={8} style={[styles.navBtn, { borderColor: t.border, opacity: canGoBack ? 1 : 0.35 }]}>
+      <Pressable role="button" accessibilityLabel="Previous month" disabled={!canGoBack} onPress={() => setMonth(addMonths(month, -1))} hitSlop={8} style={[styles.navBtn, { borderColor: t.border, opacity: canGoBack ? 1 : 0.35 }]}>
         <Icon name="back" size={16} color={t.accent} />
       </Pressable>
       <View style={{ alignItems: "center", flex: 1 }}>
@@ -347,7 +342,7 @@ export default function Budget() {
           </Pressable>
         )}
       </View>
-      <Pressable role="button" accessibilityLabel="Next month" onPress={() => setMonth(shift(month, 1))} hitSlop={8} style={[styles.navBtn, { borderColor: t.border }]}>
+      <Pressable role="button" accessibilityLabel="Next month" onPress={() => setMonth(addMonths(month, 1))} hitSlop={8} style={[styles.navBtn, { borderColor: t.border }]}>
         <Icon name="chevron" size={16} color={t.accent} />
       </Pressable>
     </View>

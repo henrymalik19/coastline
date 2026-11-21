@@ -3,7 +3,7 @@
  * cards) for the budget's month, with search and an account filter. Tap one to change it. Each
  * account's register (reconcile) is a tap away.
  */
-import { isHistoryTxn, isStartTxn, isUpcoming, registerBalance, startTxnId, type Txn } from "@coastfi/engine";
+import { addMonths, isHistoryTxn, isStartTxn, isUpcoming, registerBalance, startTxnId, type Txn } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -27,10 +27,6 @@ const CLOSED = "closed:*";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const shiftYm = (ym: string, by: number) => {
-  const n = Number(ym.slice(0, 4)) * 12 + Number(ym.slice(5, 7)) - 1 + by;
-  return `${Math.floor(n / 12)}-${String((n % 12) + 1).padStart(2, "0")}`;
-};
 const ymText = (ym: string) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
 const dayHead = (d: string) => {
   const dt = new Date(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10)));
@@ -256,7 +252,7 @@ export function TransactionsList({
           // the dates, like the Budget's month (‹ Nov 2026 ›), but the month opens a list: all dates, or a range.
           // Its own month: going back here doesn't move the Budget's
           <View style={[styles.row, { gap: space.md, flexWrap: "nowrap", width: "100%" }]}>
-            <Pressable role="button" accessibilityLabel="Previous month" disabled={range !== "month"} onPress={() => setMonth(shiftYm(month, -1))} hitSlop={8} style={[styles.navBtn, { borderColor: t.border, opacity: range === "month" ? 1 : 0 }]}>
+            <Pressable role="button" accessibilityLabel="Previous month" disabled={range !== "month"} onPress={() => setMonth(addMonths(month, -1))} hitSlop={8} style={[styles.navBtn, { borderColor: t.border, opacity: range === "month" ? 1 : 0 }]}>
               <Icon name="back" size={16} color={t.accent} />
             </Pressable>
             <View style={{ flex: 1, alignItems: "center" }}>
@@ -288,7 +284,7 @@ export function TransactionsList({
                 </Pressable>
               )}
             </View>
-            <Pressable role="button" accessibilityLabel="Next month" disabled={range !== "month"} onPress={() => setMonth(shiftYm(month, 1))} hitSlop={8} style={[styles.navBtn, { borderColor: t.border, opacity: range === "month" ? 1 : 0 }]}>
+            <Pressable role="button" accessibilityLabel="Next month" disabled={range !== "month"} onPress={() => setMonth(addMonths(month, 1))} hitSlop={8} style={[styles.navBtn, { borderColor: t.border, opacity: range === "month" ? 1 : 0 }]}>
               <Icon name="chevron" size={16} color={t.accent} />
             </Pressable>
           </View>
