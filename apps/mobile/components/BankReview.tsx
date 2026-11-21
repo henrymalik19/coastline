@@ -47,6 +47,8 @@ export function BankReview() {
   const last = step >= list.length - 1;
 
   const pick = (to: "none" | "new" | "new-cash" | { kind: "account" | "debt"; id: string }) => {
+    // unlinking: the account keeps the balance it shows now (the plan may only have yesterday's)
+    if (m) applyBanks(true);
     update((p) => {
       setMatch(p, b, null);
       if (to === "none") return;
