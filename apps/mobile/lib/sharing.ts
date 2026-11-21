@@ -223,12 +223,48 @@ export function onMembershipChange(fn: () => void): void {
   membershipListener = fn;
 }
 
+/* ---------- invites to you: accept or decline (signing in never joins a plan on its own) ---------- */
+export type Invite = { planId: string; from: string | null; role: MemberRole; at: string };
+export const useInvites = create<{ invites: Invite[]; busy: boolean; error?: string }>(() => ({ invites: [], busy: false }));
+
+/** Invites waiting for the signed-in person. */
+export async function loadInvites(): Promise<void> {
+  if (!supabase) return;
+  const r = await supabase.rpc("my_invites");
+  if (r.error) return;
+  const rows = (r.data ?? []) as { plan_id: string; owner_email: string | null; role: MemberRole; created_at: string }[];
+  useInvites.setState({ invites: rows.map((x) => ({ planId: x.plan_id, from: x.owner_email, role: x.role, at: x.created_at })) });
+}
+
+const inviteCall = async (fn: string, args: Record<string, unknown>) => {
+  if (!supabase) return;
+  useInvites.setState({ busy: true, error: undefined });
+  try {
+    const r = await supabase.rpc(fn, args);
+    if (r.error) throw new Error(r.error.message);
+    // set up the member's side again (live updates, a cards member's transactions); a change of plan
+    // reaches sync through onMembershipChange
+    await onSharingSignIn(signedInId, signedInEmail);
+  } catch (e) {
+    useInvites.setState({ error: e instanceof Error ? e.message : "Couldn't do that. Try again." });
+  } finally {
+    useInvites.setState({ busy: false });
+  }
+};
+/** Join the plan someone shared with you. */
+export const acceptInvite = (planId: string) => inviteCall("accept_invite", { p: planId });
+/** Say no: the invite is removed. */
+export const declineInvite = (planId: string) => inviteCall("decline_invite", { p: planId });
+/** Leave the plan shared with you; this device goes back to your own plan. */
+export const leaveSharedPlan = () => inviteCall("leave_plan", {});
+
 /**
- * Link any invite for this email and return this person's membership: a row, null (not a member,
- * or sharing isn't on this server), or "error" (couldn't check, e.g. offline: keep what we had).
+ * This person's membership (accepted invites only): a row, null (not a member, or sharing isn't on
+ * this server), or "error" (couldn't check, e.g. offline: keep what we had).
  */
 export async function checkMembership(): Promise<MemberRow | null | "error"> {
   if (!supabase) return null;
+  void loadInvites();
   const join = await supabase.rpc("member_join");
   if (join.error) {
     if (missingTable(join.error)) {
@@ -239,7 +275,9 @@ export async function checkMembership(): Promise<MemberRow | null | "error"> {
     if (useMembership.getState().status === "unknown") useMembership.setState({ status: "none" });
     return "error";
   }
-  const row = ((join.data ?? []) as MemberRow[])[0] ?? null;
+  // the server names the plan's column plan_id; the app calls it owner_id (the plan is its owner's)
+  const raw = ((join.data ?? []) as (MemberRow & { plan_id?: string })[])[0];
+  const row: MemberRow | null = raw ? { ...raw, owner_id: raw.owner_id ?? raw.plan_id! } : null;
   const prev = useMembership.getState();
   const status = !row ? "none" : row.role === "full" ? "full" : "member";
   useMembership.setState(row ? { status, row } : { status, row: undefined, txns: [], mine: [] });
@@ -279,6 +317,7 @@ export function onSharingSignOut(): void {
   signedInEmail = "";
   signedInId = "";
   published.clear();
+  useInvites.setState({ invites: [], busy: false, error: undefined });
   useMembership.setState({ status: "unknown", row: undefined, txns: [], mine: [], error: undefined });
   useSharing.setState({ members: [], error: undefined });
 }

@@ -3,7 +3,7 @@ import { Platform, Text, View } from "react-native";
 import { confirm } from "../lib/confirm";
 import { usePlan } from "../lib/plan";
 import { budgetAccounts } from "../lib/register";
-import { inviteMember, loadMembers, removeMember, SHARE_RULES, updateMember, useMembership, useSharing, type MemberRole, type MemberRow } from "../lib/sharing";
+import { inviteMember, leaveSharedPlan, loadMembers, removeMember, SHARE_RULES, updateMember, useMembership, useSharing, type MemberRole, type MemberRow } from "../lib/sharing";
 import { syncConfigured } from "../lib/supabase";
 import { useSync } from "../lib/sync";
 import { space, type, useTheme } from "../lib/theme";
@@ -49,6 +49,15 @@ export function SharingEditor() {
           {sharedBy ?? "The plan's owner"} shared their plan with you. You both see and change the same plan, budget and transactions, and changes show up on each
           other's devices. Only they can invite people, stop sharing or delete the plan.
         </Text>
+        <Button
+          title="Leave this plan"
+          tone="ghost"
+          onPress={async () => {
+            if (!(await confirm("Leave this shared plan?", `You stop seeing ${sharedBy ?? "their"} plan. This device goes back to your own plan in your account. ${sharedBy ?? "The owner"} can invite you again.`, "Leave"))) return;
+            await leaveSharedPlan();
+          }}
+          style={{ alignSelf: "flex-start" }}
+        />
       </Card>
     );
   }
@@ -75,8 +84,8 @@ export function SharingEditor() {
     try {
       await inviteMember(email, name, pick, role);
       setMsg(
-        `Invited. Have ${name.trim() || "them"} open ${appUrl()}, tap Sign in and use ${email.trim().toLowerCase()}. They'll get a code by email.` +
-          (role === "full" ? " Your plan replaces anything they had set up in Coastwise on that device." : ""),
+        `Invited. Have ${name.trim() || "them"} open ${appUrl()}, tap Sign in and use ${email.trim().toLowerCase()}. They'll get a code by email, then see your invite and accept it.` +
+          (role === "full" ? " Their own plan stays in their account." : ""),
       );
       setEmail("");
       setName("");
