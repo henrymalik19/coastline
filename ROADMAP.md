@@ -17,7 +17,11 @@ _Code_ = a change in this repo.
 
 The database changes are already applied to hosted Supabase.
 
-- [ ] **Owner:** Set the Supabase function secrets `PLAID_ENV=production`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, and a new `PLAID_TOKEN_KEY` (`openssl rand -base64 32`).
+- [x] **Owner:** Plaid Production approved (2026-11-21).
+- [ ] **Owner:** Plaid's "Complete your account setup" (company and app profile).
+- [ ] **Owner:** Set the Supabase function secrets `PLAID_ENV=production`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, a new `PLAID_TOKEN_KEY` (`openssl rand -base64 32`), and `PLAID_REDIRECT_URI=https://getcoastwise.com/plaid-oauth`.
+- [ ] **Owner:** Add `https://getcoastwise.com/plaid-oauth` to Plaid → Developers → API → Allowed redirect URIs (banks like Chase sign you in on their own site, then send you back there).
+- [ ] **Owner:** Until Plus exists, only admins and `PLAID_ALLOWED_USERS` (comma-separated user ids) can connect new banks. `PLAID_OPEN_TO_ALL=true` opens it to everyone.
 - [ ] **Code:** Deploy the `plaid` function to hosted Supabase. It includes disconnecting banks on account deletion and the two-step sign-in check.
 - [ ] **Owner:** Set `EXPO_PUBLIC_FF_BANKS=on` in Vercel and redeploy.
 - [ ] **Owner:** Add the Coastwise logo in Plaid's Link customization.
