@@ -11,12 +11,17 @@
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { handle, needsSecondStep, PlaidHttpError, type PlaidEnv, type PlaidStore } from "../_shared/plaid-core.ts";
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+// only the app's own pages may call this from a browser (the live site, and the dev server)
+const ORIGINS = new Set(["https://getcoastwise.com", "https://www.getcoastwise.com", ...(Deno.env.get("PLAID_DEV_ORIGINS") ?? "http://localhost:8081,http://127.0.0.1:8081").split(",").map((s) => s.trim()).filter(Boolean)]);
+const corsFor = (req: Request) => {
+  const origin = req.headers.get("Origin") ?? "";
+  return {
+    "Access-Control-Allow-Origin": ORIGINS.has(origin) ? origin : "https://getcoastwise.com",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    Vary: "Origin",
+  };
 };
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
 const env: PlaidEnv = {
   clientId: Deno.env.get("PLAID_CLIENT_ID"),
@@ -37,7 +42,7 @@ function supabaseStore(db: SupabaseClient): PlaidStore {
   return {
     async access(planId, userId) {
       if (planId === userId) return "owner";
-      const r = await db.from("plan_members").select("role").eq("owner_id", planId).eq("member_id", userId).maybeSingle();
+      const r = await db.from("plan_member").select("role").eq("plan_id", planId).eq("member_id", userId).maybeSingle();
       return r.data?.role === "full" ? "full" : null;
     },
     async item(planId, id) {
@@ -79,7 +84,9 @@ function supabaseStore(db: SupabaseClient): PlaidStore {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  const cors = corsFor(req);
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
   try {
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });

@@ -1,7 +1,7 @@
 // The Plaid core (supabase/functions/_shared/plaid-core.ts) runs here under Node with a fake store and a
 // fake Plaid: it doesn't depend on Supabase or Deno, and bank tokens are only ever stored encrypted.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handle, needsSecondStep, PlaidHttpError, type AccountRow, type PlaidStore } from "../../../supabase/functions/_shared/plaid-core";
+import { handle, MAX_CONNECTIONS, needsSecondStep, PlaidHttpError, type AccountRow, type PlaidStore } from "../../../supabase/functions/_shared/plaid-core";
 
 const KEY = btoa(String.fromCharCode(...new Uint8Array(32).map((_, i) => i)));
 const env = { clientId: "id", secret: "sec", env: "sandbox", tokenKey: KEY };
@@ -118,21 +118,37 @@ describe("plaid core", () => {
     const { store, items } = memStore();
     fakePlaid();
     const { itemId } = (await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "bank" }, "u1", env, store)) as { itemId: string };
+    items[itemId]!.last_synced_at = new Date(Date.now() - 10 * 60_000).toISOString();
     const calls = fakePlaid("ITEM_LOGIN_REQUIRED");
     await handle({ action: "sync", planId: "u1", force: true }, "u1", env, store);
     expect(calls.find((c) => c.path === "/accounts/get")?.body.access_token).toBe(TOKEN);
     expect(items[itemId]).toMatchObject({ status: "login_required", error_code: "ITEM_LOGIN_REQUIRED" });
   });
 
-  it("skips connections refreshed in the last few hours unless forced", async () => {
-    const { store } = memStore();
+  it("skips connections refreshed in the last few hours unless forced, and a forced one in the last few minutes", async () => {
+    const { store, items } = memStore();
     fakePlaid();
-    await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "bank" }, "u1", env, store);
+    const { itemId } = (await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "bank" }, "u1", env, store)) as { itemId: string };
     const calls = fakePlaid();
+    await handle({ action: "sync", planId: "u1", force: true }, "u1", env, store);
+    expect(calls.some((c) => c.path === "/accounts/get")).toBe(false);
+    items[itemId]!.last_synced_at = new Date(Date.now() - 10 * 60_000).toISOString();
     await handle({ action: "sync", planId: "u1" }, "u1", env, store);
     expect(calls.some((c) => c.path === "/accounts/get")).toBe(false);
     await handle({ action: "sync", planId: "u1", force: true }, "u1", env, store);
     expect(calls.some((c) => c.path === "/accounts/get")).toBe(true);
+  });
+
+  it("caps the connections on a plan, and hides Plaid's technical error text", async () => {
+    const { store } = memStore();
+    fakePlaid();
+    for (let i = 0; i < MAX_CONNECTIONS; i++) await handle({ action: "exchange", planId: "u1", publicToken: `p${i}`, kind: "bank" }, "u1", env, store);
+    await expect(handle({ action: "link_token", planId: "u1", kind: "bank" }, "u1", env, store)).rejects.toMatchObject({ code: "TOO_MANY" });
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error_code: "INVALID_FIELD", error_message: "client_id 123 is not valid" }), { status: 400 }));
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { store: s2 } = memStore();
+    const err = await handle({ action: "link_token", planId: "u1", kind: "bank" }, "u1", env, s2).catch((e: Error) => e);
+    expect((err as Error).message).not.toContain("client_id");
   });
 
   it("disconnects at Plaid and removes it here", async () => {

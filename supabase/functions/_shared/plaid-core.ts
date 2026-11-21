@@ -98,7 +98,9 @@ function api(env: PlaidEnv) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const e = data as PlaidErrorBody;
-      throw new PlaidHttpError(res.status >= 500 ? 502 : 400, e.display_message || e.error_message || `Plaid ${path} failed`, e.error_code);
+      // Plaid's message meant for people when it has one; its technical message stays on the server
+      if (e.error_message && !e.display_message) console.warn(`Plaid ${path}: ${e.error_code ?? ""} ${e.error_message}`);
+      throw new PlaidHttpError(res.status >= 500 ? 502 : 400, e.display_message || "The bank connection service had a problem. Try again in a moment.", e.error_code);
     }
     return data as T;
   };
@@ -148,6 +150,10 @@ type Liabilities = {
 
 const STATUS_FOR: Record<string, string> = { ITEM_LOGIN_REQUIRED: "login_required", PENDING_EXPIRATION: "pending_expiration" };
 const PRODUCTS = (kind: string) => (kind === "investments" ? { products: ["investments"] } : { products: ["transactions"], optional_products: ["liabilities"] });
+/** Bank connections a plan may have (each is billed monthly). */
+export const MAX_CONNECTIONS = 10;
+/** A forced refresh of one connection at most this often (Plaid bills some refreshes). */
+const FORCE_EVERY = 5 * 60_000;
 /** Plaid's "First Platypus Bank" test institution (Sandbox only). */
 const SANDBOX_INSTITUTION = "ins_109508";
 
@@ -166,6 +172,9 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
     (env.env ?? "sandbox") === "sandbox" || !!env.openToAll || !!env.allowedUsers?.includes(userId) || (store.canLink ? await store.canLink(userId) : false);
   const mayLink = async () => {
     if (!(await canLink())) throw new PlaidHttpError(403, "Connecting banks isn't open yet. It's coming soon.", "NOT_ALLOWED");
+    // each connection costs money every month: a household needs a handful, not dozens
+    if ((await store.items(planId)).length >= MAX_CONNECTIONS)
+      throw new PlaidHttpError(400, `A plan can have up to ${MAX_CONNECTIONS} bank connections. Remove one to add another.`, "TOO_MANY");
   };
 
   const itemOf = async (itemId: unknown) => {
@@ -281,9 +290,10 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
     case "sync": {
       // each connection at most every few hours unless forced (banks update about daily)
       const list = await store.items(planId);
-      const stale = Date.now() - 4 * 3600_000;
+      // forced (Refresh): still not more than every few minutes, however often it's tapped
+      const since = Date.now() - (body.force === true ? FORCE_EVERY : 4 * 3600_000);
       for (const it of list) {
-        if (body.force !== true && it.last_synced_at && Date.parse(it.last_synced_at) > stale) continue;
+        if (it.last_synced_at && Date.parse(it.last_synced_at) > since) continue;
         await syncItem(it.id);
       }
       return { items: list.length };
