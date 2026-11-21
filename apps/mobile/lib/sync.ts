@@ -24,7 +24,7 @@ import type { RealtimeChannel, Session } from "@supabase/supabase-js";
 import { AppState, Platform } from "react-native";
 import { create } from "zustand";
 import { deepEqual, merge3 } from "./merge";
-import { firstSyncAction, mergeCheckinLists } from "./firstSync";
+import { firstSyncAction, laterSyncAction, mergeCheckinLists } from "./firstSync";
 import { sawStamps } from "./stamp";
 import { planFromSnapshot, snapshotOf, type PlanRow } from "./planSnapshot";
 import { freshPlan } from "./presets";
@@ -702,9 +702,11 @@ async function syncInner(depth = 0): Promise<void> {
         take(pid, remote, ok.data);
         tookPlan = true;
       }
-    } else if (remote.client_updated_at !== base.at) {
-      const localChanged = !deepEqual(base.plan, s.plan) || !deepEqual(base.todoDone, s.todoDone);
-      if (!localChanged || (remote.onboarded && !s.onboarded)) {
+    } else {
+      const action = laterSyncAction(base, s, { at: remote.client_updated_at, onboarded: remote.onboarded });
+      if (action === "none") {
+        // nobody else saved since this device's last sync: its own changes upload below
+      } else if (action === "take") {
         take(pid, remote, ok.data);
         tookPlan = !s.onboarded;
       }

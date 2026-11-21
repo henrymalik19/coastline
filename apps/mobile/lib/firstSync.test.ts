@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstSyncAction, mergeCheckinLists } from "./firstSync";
+import { firstSyncAction, laterSyncAction, mergeCheckinLists } from "./firstSync";
 
 const mine = { a: 1 };
 const theirs = { a: 2 };
@@ -39,5 +39,21 @@ describe("check-ins between devices", () => {
   });
   it("changes nothing when this device is up to date", () => {
     expect(mergeCheckinLists([c("2026-10", 100, 9)], [c("2026-10", 100, 9)])).toBeNull();
+  });
+});
+
+describe("a later sync of the same plan", () => {
+  const base = { at: 100, plan: { a: 1 }, todoDone: {} };
+  it("does nothing special when nobody saved since", () => {
+    expect(laterSyncAction(base, { plan: { a: 2 }, todoDone: {}, onboarded: true }, { at: 100, onboarded: true })).toBe("none");
+  });
+  it("takes the other device's save when this one changed nothing", () => {
+    expect(laterSyncAction(base, { plan: { a: 1 }, todoDone: {}, onboarded: true }, { at: 200, onboarded: true })).toBe("take");
+  });
+  it("merges when both changed", () => {
+    expect(laterSyncAction(base, { plan: { a: 2 }, todoDone: {}, onboarded: true }, { at: 200, onboarded: true })).toBe("merge");
+  });
+  it("a finished plan elsewhere beats unfinished setup here", () => {
+    expect(laterSyncAction(base, { plan: { a: 2 }, todoDone: {}, onboarded: false }, { at: 200, onboarded: true })).toBe("take");
   });
 });

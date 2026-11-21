@@ -29,6 +29,22 @@ export function mergeCheckinLists(local: Checkin[], remote: Checkin[]): Checkin[
 
 export type FirstSync = "ask" | "account" | "device" | "keep";
 
+/**
+ * A later sync (this device synced this plan before, `base` is that copy):
+ * - "none": nobody saved since; this device's own changes (if any) upload as usual.
+ * - "take": someone saved since and this device changed nothing (or its setup isn't finished): take theirs.
+ * - "merge": both changed: keep both sets of changes, part by part (lib/merge.ts).
+ */
+export function laterSyncAction(
+  base: { at: number; plan: unknown; todoDone: unknown },
+  local: { plan: unknown; todoDone: unknown; onboarded: boolean },
+  remote: { at: number; onboarded: boolean },
+): "none" | "take" | "merge" {
+  if (remote.at === base.at) return "none";
+  const localChanged = !deepEqual(base.plan, local.plan) || !deepEqual(base.todoDone, local.todoDone);
+  return !localChanged || (remote.onboarded && !local.onboarded) ? "take" : "merge";
+}
+
 export function firstSyncAction(
   local: { plan: unknown; onboarded: boolean; updatedAt: number },
   remote: { plan: unknown; onboarded: boolean; at: number },
