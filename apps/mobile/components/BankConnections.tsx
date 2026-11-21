@@ -10,7 +10,8 @@ import { confirm } from "../lib/confirm";
 import { BANKS_ON } from "../lib/features";
 import { money } from "../lib/format";
 import { applyBanks, connectBank, connectTestBank, disconnectBank, loadBankAccess, loadBanks, reconnectBank, syncBanks, usePlaid, type BankItem } from "../lib/plaid";
-import { bankLabel, isDebtLike, matchOf, newFromBank, setMatch, type BankAccount } from "../lib/plaidMatch";
+import { bankLabel, bankSaysCash, isDebtLike, kindDiffers, matchOf, matchOptions, newFromBank, setMatch, type BankAccount } from "../lib/plaidMatch";
+import { ACCOUNT_TYPES } from "./AccountsEditor";
 import { usePlan } from "../lib/plan";
 import { hasRegister } from "../lib/register";
 import { newId, useStore } from "../lib/store";
@@ -86,11 +87,18 @@ function BankCard() {
             <Text style={[type.caption, { color: t.text3 }]}>Connecting banks is coming soon. Until then, add your accounts and update their balances yourself.</Text>
           ) : web ? (
             <View style={{ gap: 6 }}>
-              <Text style={[type.caption, { color: t.text3 }]}>{items.length ? "Connect another" : "Connect"}</Text>
-              <View style={styles.wrap}>
-                <Button title="Bank or card" icon="plus" disabled={busy} onPress={() => void connectBank("bank")} style={styles.small} />
-                <Button title="Investments" icon="plus" disabled={busy} onPress={() => void connectBank("investments")} style={styles.small} />
-              </View>
+              {/* one button; the question only picks which firms Plaid lists (every account at the firm comes along) */}
+              <Select
+                label="What are you connecting?"
+                value=""
+                options={[
+                  { value: "bank", label: "A bank or credit card", hint: "Checking, savings, cards, loans" },
+                  { value: "investments", label: "An investment or retirement account", hint: "Brokerage, IRA, 401(k), HSA" },
+                ]}
+                onChange={(k) => void connectBank(k as "bank" | "investments")}
+                trigger={(open) => <Button title={items.length ? "Connect another account" : "Connect an account"} icon="plus" disabled={busy} onPress={open} style={{ alignSelf: "flex-start" }} />}
+              />
+              <Text style={[type.caption, { color: t.text3 }]}>Every account you have at that bank comes along, checking and brokerage alike. Use each one as whatever it is to you.</Text>
               <Text style={[type.caption, { color: t.text3 }]}>
                 How we handle bank data:{" "}
                 <Text role="link" style={{ color: t.accent, fontWeight: "600" }} onPress={() => router.push("/privacy")}>privacy policy</Text>
@@ -154,21 +162,31 @@ function BankRow({ b, company }: { b: BankAccount; company?: string }) {
   const debt = isDebtLike(b);
   const m = matchOf(state, b);
   const value = m ? `${m.kind === "account" ? "a" : "d"}:${m.item.id}` : "";
+  // every account you have, likeliest first (nothing hidden by type: a brokerage can be your checking)
+  const choices = matchOptions(state, b, company);
   const options = [
     { value: "", label: "Not used" },
-    { value: "new", label: debt ? "Add as a new debt" : "Add as a new account" },
     ...(debt
-      ? state.debts.map((d) => ({ value: `d:${d.id}`, label: d.name || "Debt" }))
-      : state.accounts
-          .filter((a) => a.type !== "property" && (b.type === "depository" ? a.type === "cash" : b.type === "investment" ? a.type !== "cash" : true))
-          .map((a) => ({ value: `a:${a.id}`, label: a.name || "Account" }))),
+      ? [{ value: "new", label: "Add as a new debt", section: "New" }]
+      : bankSaysCash(b)
+        ? [{ value: "new", label: "Add as a new cash account", section: "New" }]
+        : [
+            { value: "new", label: "Add as a new investment account", section: "New" },
+            { value: "new-cash", label: "Add as a new cash account", hint: "If you use it like a checking or savings account", section: "New" },
+          ]),
+    ...choices.map((c) => ({
+      value: `${c.kind === "account" ? "a" : "d"}:${c.id}`,
+      label: c.name,
+      ...(c.type ? { hint: typeLabel(c.type) } : {}),
+      section: c.likely ? "Likely matches" : debt ? "Your debts" : "Your other accounts",
+    })),
   ];
   const onPick = (v: string) => {
     update((p) => {
       if (v === "") return setMatch(p, b, null);
-      if (v === "new") {
+      if (v === "new" || v === "new-cash") {
         setMatch(p, b, null);
-        const n = newFromBank(b, newId(), company && company !== "Bank" ? company : undefined);
+        const n = newFromBank(b, newId(), company && company !== "Bank" ? company : undefined, v === "new-cash");
         if (n.kind === "debt") p.debts.push(n.debt);
         else p.accounts.push(n.account);
         return;
@@ -193,9 +211,26 @@ function BankRow({ b, company }: { b: BankAccount; company?: string }) {
         </View>
       </View>
       {reg ? <Text style={[type.caption, { color: t.text3 }]}>Its balance comes from your Budget register, so it isn't changed here.</Text> : null}
+      {m?.kind === "account" && kindDiffers(m.item, b) ? (
+        // your type stands; just say so, with a way to switch if it was a slip
+        <Text style={[type.caption, { color: t.text3 }]}>
+          {company && company !== "Bank" ? company : "The bank"} calls this {bankSaysCash(b) ? "a checking or savings account" : "an investment account"}. It counts as{" "}
+          {m.item.type === "cash" ? "cash" : "investments"} in your plan, the way you set it.{" "}
+          <Text
+            role="button"
+            style={{ color: t.accent, fontWeight: "700" }}
+            onPress={() => update((p) => { const a = p.accounts.find((x) => x.id === m.item.id); if (a) a.type = bankSaysCash(b) ? "cash" : "taxable"; })}
+          >
+            Count it as {bankSaysCash(b) ? "cash" : "investments"} instead
+          </Text>
+        </Text>
+      ) : null}
     </View>
   );
 }
+
+/** An account type in words (Cash, Roth, ...). */
+const typeLabel = (k: string) => ACCOUNT_TYPES.find((x) => x.value === k)?.label ?? k;
 
 const styles = StyleSheet.create({
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },

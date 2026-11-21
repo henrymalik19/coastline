@@ -182,13 +182,15 @@ describe("plaid core", () => {
     expect(Object.keys(items)).toHaveLength(1);
   });
 
-  it("asks for investments only on an investment connection", async () => {
+  it("requires the product that picks the firms, and brings every other account at the firm along", async () => {
     const { store } = memStore();
     const calls = fakePlaid();
     await handle({ action: "link_token", planId: "u1", kind: "investments" }, "u1", env, store);
-    expect(calls[0]!.body).toMatchObject({ products: ["investments"] });
+    expect(calls[0]!.body).toMatchObject({ products: ["investments"], optional_products: ["transactions", "liabilities"] });
     await handle({ action: "link_token", planId: "u1", kind: "bank" }, "u1", env, store);
-    expect(calls[1]!.body).toMatchObject({ products: ["transactions"], optional_products: ["liabilities"] });
+    expect(calls[1]!.body).toMatchObject({ products: ["transactions"], optional_products: ["investments", "liabilities"] });
+    // every kind of account is shown in Plaid's window, whichever was picked
+    expect(Object.keys((calls[1]!.body as { account_filters: object }).account_filters).sort()).toEqual(["credit", "depository", "investment", "loan"]);
   });
 });
 

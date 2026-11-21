@@ -149,7 +149,17 @@ type Liabilities = {
 };
 
 const STATUS_FOR: Record<string, string> = { ITEM_LOGIN_REQUIRED: "login_required", PENDING_EXPIRATION: "pending_expiration" };
-const PRODUCTS = (kind: string) => (kind === "investments" ? { products: ["investments"] } : { products: ["transactions"], optional_products: ["liabilities"] });
+/**
+ * What Plaid's window asks for. The required product decides which firms are listed (banks and cards,
+ * or investment firms and 401(k) providers); the optional ones bring every other account at that firm
+ * too, so one sign-in to a bank with a brokerage (Schwab) links both. Every kind of account is shown.
+ */
+const ALL = { account_subtypes: ["all"] };
+const ACCOUNT_FILTERS = { account_filters: { depository: ALL, credit: ALL, loan: ALL, investment: ALL } };
+const PRODUCTS = (kind: string) =>
+  kind === "investments"
+    ? { products: ["investments"], optional_products: ["transactions", "liabilities"], ...ACCOUNT_FILTERS }
+    : { products: ["transactions"], optional_products: ["investments", "liabilities"], ...ACCOUNT_FILTERS };
 /** Bank connections a plan may have (each is billed monthly). */
 export const MAX_CONNECTIONS = 10;
 /** A forced refresh of one connection at most this often (Plaid bills some refreshes). */

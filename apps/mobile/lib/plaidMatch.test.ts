@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultPlanState } from "@coastfi/schema";
-import { applyBankBalances, dropMatches, matchOf, newFromBank, setMatch, withBankBalances, type BankAccount } from "./plaidMatch";
+import { applyBankBalances, dropMatches, kindDiffers, matchOf, matchOptions, newFromBank, setMatch, withBankBalances, type BankAccount } from "./plaidMatch";
 
 const bank = (o: Partial<BankAccount>): BankAccount => ({ id: "r", item: "i", accountId: "acc", name: "Acct", type: "depository", current: 100, ...o });
 const plan = () => {
@@ -98,5 +98,28 @@ describe("bank balances shown without editing the plan", () => {
     const p = plan();
     p.accounts[0]!.plaidAccountId = "a1";
     expect(withBankBalances(p, [bank({ accountId: "a1", current: 5 })], () => true)).toBe(p);
+  });
+});
+
+describe("what a bank account can be used as", () => {
+  it("offers every account, not only ones of the bank's kind (a brokerage used as checking)", () => {
+    const p = plan();
+    p.accounts.push({ id: "sch", name: "Schwab - Checking", type: "cash", balance: 10 });
+    const opts = matchOptions(p, bank({ type: "investment", subtype: "brokerage" }), "Charles Schwab");
+    expect(opts.map((o) => o.id).sort()).toEqual(["chk", "k", "sch"]);
+    // the same bank first, though it's cash
+    expect(opts[0]!.id).toBe("sch");
+  });
+  it("cards and loans can only be debts", () => {
+    expect(matchOptions(plan(), bank({ type: "credit" })).map((o) => o.kind)).toEqual(["debt"]);
+  });
+  it("says when the bank's kind and yours differ, without changing yours", () => {
+    expect(kindDiffers({ type: "cash" }, { type: "investment" })).toBe(true);
+    expect(kindDiffers({ type: "taxable" }, { type: "investment" })).toBe(false);
+    expect(kindDiffers({ type: "pretax" }, { type: "depository" })).toBe(true);
+  });
+  it("can add a brokerage as a cash account", () => {
+    expect(newFromBank(bank({ type: "investment", subtype: "brokerage" }), "x", undefined, true)).toMatchObject({ account: { type: "cash" } });
+    expect(newFromBank(bank({ type: "investment", subtype: "brokerage" }), "x")).toMatchObject({ account: { type: "taxable" } });
   });
 });
