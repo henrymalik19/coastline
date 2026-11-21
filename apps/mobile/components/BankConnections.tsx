@@ -9,7 +9,7 @@ import { Platform, StyleSheet, Text, View } from "react-native";
 import { confirm } from "../lib/confirm";
 import { BANKS_ON } from "../lib/features";
 import { money } from "../lib/format";
-import { applyBanks, connectBank, connectTestBank, disconnectBank, loadBanks, reconnectBank, syncBanks, usePlaid, type BankItem } from "../lib/plaid";
+import { applyBanks, connectBank, connectTestBank, disconnectBank, loadBankAccess, loadBanks, reconnectBank, syncBanks, usePlaid, type BankItem } from "../lib/plaid";
 import { bankLabel, isDebtLike, matchOf, newFromBank, setMatch, type BankAccount } from "../lib/plaidMatch";
 import { usePlan } from "../lib/plan";
 import { hasRegister } from "../lib/register";
@@ -44,11 +44,14 @@ function BankCard() {
   const openPage = useOpenPage();
   const planId = useSync((s) => s.planId);
   const userId = useSync((s) => s.userId);
-  const { items, accounts, busy, error, loaded } = usePlaid();
+  const { items, accounts, busy, error, loaded, canLink } = usePlaid();
   const [tip, setTip] = useState(false);
   useEffect(() => {
     if (supabase && planId && userId && (!loaded || usePlaid.getState().planId !== planId)) void loadBanks();
   }, [planId, userId, loaded]);
+  useEffect(() => {
+    if (supabase && planId && userId) void loadBankAccess();
+  }, [planId, userId]);
   if (!supabase) return null;
   const signedIn = !!planId && !!userId;
   const web = Platform.OS === "web";
@@ -75,7 +78,10 @@ function BankCard() {
             <ItemBlock key={it.id} item={it} accounts={accounts.filter((a) => a.item === it.id)} busy={busy} />
           ))}
           {error ? <Text role="alert" style={[type.caption, { color: t.bad }]}>{error}</Text> : null}
-          {web ? (
+          {canLink === false ? (
+            // before banks open to everyone: only admins and people on the list can connect new ones
+            <Text style={[type.caption, { color: t.text3 }]}>Connecting banks is coming soon. Until then, add your accounts and update their balances yourself.</Text>
+          ) : web ? (
             <View style={{ gap: 6 }}>
               <Text style={[type.caption, { color: t.text3 }]}>{items.length ? "Connect another" : "Connect"}</Text>
               <View style={styles.wrap}>

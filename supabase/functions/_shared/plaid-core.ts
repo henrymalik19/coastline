@@ -15,6 +15,11 @@
 //   remove       { itemId }                                                    -> { ok }
 //   remove_all   {}  (your own plan only; before deleting the account)         -> { removed }
 //   sandbox_connect { kind }  (Sandbox only: a test bank without the Link window) -> { itemId }
+//   access       {}  (may this person connect new banks?)                    -> { canLink }
+//
+// Who may connect new banks: everyone in Sandbox, or when env.openToAll; otherwise admins (the store)
+// and the ids in env.allowedUsers. Reconnecting, refreshing and removing banks already connected
+// always work.
 
 export type PlaidEnv = {
   clientId?: string;
@@ -23,6 +28,12 @@ export type PlaidEnv = {
   env?: string;
   /** 32 random bytes, base64: encrypts access tokens at rest */
   tokenKey?: string;
+  /** Where a bank that signs you in on its own site sends you back (OAuth), e.g. https://getcoastwise.com/plaid-oauth. Must be in Plaid's Allowed redirect URIs. */
+  redirectUri?: string;
+  /** Anyone signed in may connect new banks (off: only admins and allowedUsers). */
+  openToAll?: boolean;
+  /** User ids that may connect new banks besides admins. */
+  allowedUsers?: string[];
 };
 
 export type ItemRow = { id: string; item_id: string; kind: string; last_synced_at: string | null };
@@ -47,6 +58,8 @@ export interface PlaidStore {
   upsertAccounts(rows: AccountRow[]): Promise<void>;
   accountIds(item: string): Promise<string[]>;
   deleteAccounts(accountIds: string[]): Promise<void>;
+  /** May this person connect new banks (an admin)? Without it, only env.allowedUsers may (outside Sandbox). */
+  canLink?(userId: string): Promise<boolean>;
 }
 
 export class PlaidHttpError extends Error {
@@ -149,6 +162,12 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
   if (typeof planId !== "string" || !planId) throw new PlaidHttpError(400, "Which plan?");
   if (!(await store.access(planId, userId))) throw new PlaidHttpError(403, "You can't connect banks to this plan.");
 
+  const canLink = async () =>
+    (env.env ?? "sandbox") === "sandbox" || !!env.openToAll || !!env.allowedUsers?.includes(userId) || (store.canLink ? await store.canLink(userId) : false);
+  const mayLink = async () => {
+    if (!(await canLink())) throw new PlaidHttpError(403, "Connecting banks isn't open yet. It's coming soon.", "NOT_ALLOWED");
+  };
+
   const itemOf = async (itemId: unknown) => {
     if (typeof itemId !== "string") throw new PlaidHttpError(400, "Which connection?");
     const it = await store.item(planId, itemId);
@@ -233,17 +252,25 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
 
   switch (body.action) {
     case "link_token": {
-      const base = { client_name: "Coastwise", language: "en", country_codes: ["US"], user: { client_user_id: userId } };
+      const base = {
+        client_name: "Coastwise", language: "en", country_codes: ["US"], user: { client_user_id: userId },
+        // banks that sign you in on their own site send you back here
+        ...(env.redirectUri ? { redirect_uri: env.redirectUri } : {}),
+      };
       if (body.itemId) {
         // update mode: sign in to the bank again (same connection)
         const it = await itemOf(body.itemId);
         const r = await plaid<{ link_token: string }>("/link/token/create", { ...base, access_token: await accessToken(it.id) });
         return { linkToken: r.link_token };
       }
+      await mayLink();
       const r = await plaid<{ link_token: string }>("/link/token/create", { ...base, ...PRODUCTS(kindOf(body.kind)) });
       return { linkToken: r.link_token };
     }
+    case "access":
+      return { canLink: await canLink() };
     case "exchange":
+      await mayLink();
       if (typeof body.publicToken !== "string") throw new PlaidHttpError(400, "Missing the bank's token.");
       return saveItem(body.publicToken, kindOf(body.kind), body.institution as { id?: string; name?: string } | undefined);
     case "reconnected": {
@@ -289,6 +316,7 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
     }
     case "sandbox_connect": {
       if ((env.env ?? "sandbox") !== "sandbox") throw new PlaidHttpError(400, "Sandbox only.");
+      await mayLink();
       const kind = kindOf(body.kind);
       const p = await plaid<{ public_token: string }>("/sandbox/public_token/create", {
         institution_id: SANDBOX_INSTITUTION,

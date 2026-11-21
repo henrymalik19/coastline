@@ -3,7 +3,9 @@
 // function), write the same small wrapper there: an env, a PlaidStore, and the signed-in user's id.
 //
 // POST { action, planId, ... } with the user's Supabase session (Authorization: Bearer <jwt>).
-// Secrets: PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV, PLAID_TOKEN_KEY.
+// Secrets: PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV, PLAID_TOKEN_KEY. Optional: PLAID_REDIRECT_URI
+// (where OAuth banks send people back), PLAID_OPEN_TO_ALL=true (anyone may connect banks; otherwise
+// admins and PLAID_ALLOWED_USERS, a comma-separated list of user ids).
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by the runtime.
 
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
@@ -21,6 +23,9 @@ const env: PlaidEnv = {
   secret: Deno.env.get("PLAID_SECRET"),
   env: Deno.env.get("PLAID_ENV") ?? "sandbox",
   tokenKey: Deno.env.get("PLAID_TOKEN_KEY"),
+  redirectUri: Deno.env.get("PLAID_REDIRECT_URI") || undefined,
+  openToAll: Deno.env.get("PLAID_OPEN_TO_ALL") === "true",
+  allowedUsers: (Deno.env.get("PLAID_ALLOWED_USERS") ?? "").split(",").map((s) => s.trim()).filter(Boolean),
 };
 
 /** The Plaid tables, through the service role (server only). */
@@ -64,6 +69,11 @@ function supabaseStore(db: SupabaseClient): PlaidStore {
     },
     async deleteAccounts(accountIds) {
       ok(await db.from("plaid_accounts").delete().in("account_id", accountIds));
+    },
+    async canLink(userId) {
+      // admins: the app_admin table (added by hand on the server)
+      const r = await db.from("app_admin").select("user_id").eq("user_id", userId).maybeSingle();
+      return !r.error && !!r.data;
     },
   };
 }

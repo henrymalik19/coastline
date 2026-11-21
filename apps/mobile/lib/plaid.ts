@@ -22,7 +22,11 @@ export type BankItem = {
   lastSyncedAt?: string | null;
 };
 
-type PlaidState = { planId?: string; items: BankItem[]; accounts: BankAccount[]; loaded: boolean; busy: boolean; error?: string };
+type PlaidState = {
+  planId?: string; items: BankItem[]; accounts: BankAccount[]; loaded: boolean; busy: boolean; error?: string;
+  /** May this person connect new banks? Undefined until asked. */
+  canLink?: boolean;
+};
 export const usePlaid = create<PlaidState>(() => ({ items: [], accounts: [], loaded: false, busy: false }));
 
 /** Bank connections work when sync is set up and you're signed in (the plan is on the server). */
@@ -106,7 +110,7 @@ export const syncBanks = (force = false) =>
 
 type LinkMeta = { institution?: { institution_id?: string; name?: string } | null };
 type LinkHandler = { open: () => void; destroy?: () => void };
-type PlaidGlobal = { create: (o: { token: string; onSuccess: (publicToken: string, meta: LinkMeta) => void; onExit: (err: { display_message?: string; error_message?: string } | null) => void }) => LinkHandler };
+type PlaidGlobal = { create: (o: { token: string; receivedRedirectUri?: string; onSuccess: (publicToken: string, meta: LinkMeta) => void; onExit: (err: { display_message?: string; error_message?: string } | null) => void }) => LinkHandler };
 
 let script: Promise<PlaidGlobal> | null = null;
 function loadLink(): Promise<PlaidGlobal> {
@@ -128,40 +132,97 @@ function loadLink(): Promise<PlaidGlobal> {
   return script;
 }
 
-/** Open Plaid's window with a link token; resolves with what it returns, or null if you closed it. */
-async function openLink(token: string): Promise<{ publicToken: string; meta: LinkMeta } | null> {
+/**
+ * A link in progress, kept for this browser tab: a bank that signs you in on its own site (OAuth) sends
+ * you back to /plaid-oauth, a fresh page load, which picks the link up from here and finishes it.
+ */
+type PendingLink = { token: string; kind: "bank" | "investments"; itemId?: string; at: number };
+const PENDING = "coastwise.plaidLink";
+/** Plaid's link tokens last 4 hours; give up on one much older than a sign-in takes. */
+const PENDING_FOR = 30 * 60_000;
+const savePending = (p: PendingLink | null) => {
+  try {
+    if (p) sessionStorage.setItem(PENDING, JSON.stringify(p));
+    else sessionStorage.removeItem(PENDING);
+  } catch {
+    // no storage (a private window): a bank that signs in on its own site won't come back to finish
+  }
+};
+const readPending = (): PendingLink | null => {
+  try {
+    const p = JSON.parse(sessionStorage.getItem(PENDING) ?? "null") as PendingLink | null;
+    return p && typeof p.token === "string" && Date.now() - p.at < PENDING_FOR ? p : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Open Plaid's window with a link token; resolves with what it returns, or null if you closed it.
+ * `returnedFrom`: the page a bank sent you back to (its address carries Plaid's OAuth state).
+ */
+async function openLink(token: string, returnedFrom?: string): Promise<{ publicToken: string; meta: LinkMeta } | null> {
   const P = await loadLink();
   return new Promise((resolve, reject) => {
+    const done = <T,>(fn: (v: T) => void) => (v: T) => {
+      savePending(null);
+      fn(v);
+    };
     const h = P.create({
       token,
-      onSuccess: (publicToken, meta) => resolve({ publicToken, meta }),
-      onExit: (err) => (err ? reject(new Error(err.display_message || err.error_message || "The bank connection didn't finish.")) : resolve(null)),
+      ...(returnedFrom ? { receivedRedirectUri: returnedFrom } : {}),
+      onSuccess: (publicToken, meta) => done(resolve)({ publicToken, meta }),
+      onExit: (err) => (err ? done(reject)(new Error(err.display_message || err.error_message || "The bank connection didn't finish.")) : done(resolve)(null)),
     });
     h.open();
   });
+}
+
+/** After the bank's window: save a new connection, or note a reconnected one, then refresh. */
+async function finish(r: { publicToken: string; meta: LinkMeta } | null, kind: "bank" | "investments", itemId?: string) {
+  if (!r) return;
+  if (itemId) await call("reconnected", { itemId });
+  else await call("exchange", { publicToken: r.publicToken, kind, institution: { id: r.meta.institution?.institution_id, name: r.meta.institution?.name } });
+  await loadBanks();
+  applyBanks();
 }
 
 /** Connect a bank or card ("bank") or an investment/retirement account ("investments"). */
 export const connectBank = (kind: "bank" | "investments") =>
   run(async () => {
     const { linkToken } = await call<{ linkToken: string }>("link_token", { kind });
-    const r = await openLink(linkToken);
-    if (!r) return;
-    await call("exchange", { publicToken: r.publicToken, kind, institution: { id: r.meta.institution?.institution_id, name: r.meta.institution?.name } });
-    await loadBanks();
-    applyBanks();
+    savePending({ token: linkToken, kind, at: Date.now() });
+    await finish(await openLink(linkToken), kind);
   });
 
 /** Sign in to the bank again when it asks (same connection, same matches). */
 export const reconnectBank = (itemId: string) =>
   run(async () => {
     const { linkToken } = await call<{ linkToken: string }>("link_token", { itemId });
-    const r = await openLink(linkToken);
-    if (!r) return;
-    await call("reconnected", { itemId });
-    await loadBanks();
-    applyBanks();
+    savePending({ token: linkToken, kind: "bank", itemId, at: Date.now() });
+    await finish(await openLink(linkToken), "bank", itemId);
   });
+
+/**
+ * Back from a bank's own sign-in page (/plaid-oauth): reopen Plaid's window where it left off and finish
+ * the link. False when there's nothing to finish (opened on its own, or too long ago).
+ */
+export async function resumeBankLink(returnedFrom: string): Promise<boolean> {
+  const p = readPending();
+  if (!p) return false;
+  await run(async () => finish(await openLink(p.token, returnedFrom), p.kind, p.itemId));
+  return true;
+}
+
+/** May this person connect new banks? (Before banks open to everyone: admins and people on a list.) */
+export async function loadBankAccess(): Promise<void> {
+  try {
+    const r = await call<{ canLink: boolean }>("access");
+    usePlaid.setState({ canLink: r.canLink });
+  } catch {
+    // unknown: leave the buttons; the server still refuses if it must
+  }
+}
 
 /** Disconnect a bank: it's removed at Plaid too; your plan accounts stay, just no longer matched. */
 export const disconnectBank = (itemId: string) =>

@@ -67,6 +67,34 @@ function fakePlaid(fail?: string) {
 beforeEach(() => vi.useRealTimers());
 afterEach(() => vi.unstubAllGlobals());
 
+describe("who may connect new banks (production)", () => {
+  const prod = { ...env, env: "production" };
+  it("refuses new banks to someone not allowed, but they can still refresh and remove ones they have", async () => {
+    const { store } = memStore();
+    fakePlaid();
+    await expect(handle({ action: "link_token", planId: "u1", kind: "bank" }, "u1", prod, store)).rejects.toMatchObject({ status: 403, code: "NOT_ALLOWED" });
+    await expect(handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "bank" }, "u1", prod, store)).rejects.toMatchObject({ code: "NOT_ALLOWED" });
+    expect(await handle({ action: "access", planId: "u1" }, "u1", prod, store)).toEqual({ canLink: false });
+    expect(await handle({ action: "sync", planId: "u1", force: true }, "u1", prod, store)).toEqual({ items: 0 });
+  });
+  it("lets admins, listed people, or everyone (when open) connect", async () => {
+    const { store } = memStore();
+    fakePlaid();
+    expect(await handle({ action: "access", planId: "u1" }, "u1", { ...prod, allowedUsers: ["u1"] }, store)).toEqual({ canLink: true });
+    expect(await handle({ action: "access", planId: "u1" }, "u1", { ...prod, openToAll: true }, store)).toEqual({ canLink: true });
+    const admin = { ...store, canLink: async (u: string) => u === "u1" };
+    expect(await handle({ action: "link_token", planId: "u1", kind: "bank" }, "u1", prod, admin)).toEqual({ linkToken: "link-sandbox-abc" });
+  });
+  it("sends the redirect address for banks that sign in on their own site", async () => {
+    const { store } = memStore();
+    const calls = fakePlaid();
+    await handle({ action: "link_token", planId: "u1", kind: "bank" }, "u1", { ...env, redirectUri: "https://getcoastwise.com/plaid-oauth" }, store);
+    expect(calls.find((c) => c.path === "/link/token/create")?.body.redirect_uri).toBe("https://getcoastwise.com/plaid-oauth");
+    await handle({ action: "link_token", planId: "u1", kind: "bank" }, "u1", env, store);
+    expect(calls.filter((c) => c.path === "/link/token/create")[1]?.body.redirect_uri).toBeUndefined();
+  });
+});
+
 describe("plaid core", () => {
   it("refuses a plan you don't have access to", async () => {
     const { store } = memStore();
