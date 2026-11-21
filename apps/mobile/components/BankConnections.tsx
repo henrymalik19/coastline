@@ -119,6 +119,9 @@ function BankCard() {
 
 function ItemBlock({ item, accounts, busy }: { item: BankItem; accounts: BankAccount[]; busy: boolean }) {
   const t = useTheme();
+  const { state } = usePlan();
+  const loose = accounts.filter((b) => !matchOf(state, b));
+  const linked = accounts.length - loose.length;
   const needsLogin = item.status === "login_required" || item.status === "pending_expiration";
   const status =
     item.status === "ok" ? `Updated ${ago(item.lastSyncedAt)}`
@@ -141,14 +144,22 @@ function ItemBlock({ item, accounts, busy }: { item: BankItem; accounts: BankAcc
           }}
         />
       </View>
-      {accounts.map((b) => (
+      {/* only what still needs a decision; linked ones show in your Accounts list, tagged Linked */}
+      {loose.map((b) => (
         <LinkLine key={b.id} b={b} />
       ))}
       {!accounts.length ? <Text style={[type.caption, { color: t.text3 }]}>No accounts yet.</Text> : null}
       {accounts.length ? (
-        <Text role="button" onPress={() => usePlaid.setState({ review: item.id })} style={[type.caption, { color: t.accent, fontWeight: "700", alignSelf: "flex-start" }]}>
-          Review accounts
-        </Text>
+        <View style={styles.between}>
+          <Text style={[type.caption, { color: t.text3 }]}>
+            {linked ? `${linked} account${linked === 1 ? "" : "s"} linked` : ""}
+            {linked && loose.length ? " · " : ""}
+            {loose.length ? `${loose.length} not used` : ""}
+          </Text>
+          <Text role="button" onPress={() => usePlaid.setState({ review: item.id })} style={[type.caption, { color: t.accent, fontWeight: "700" }]}>
+            {loose.length ? "Set up" : "Review"}
+          </Text>
+        </View>
       ) : null}
     </View>
   );

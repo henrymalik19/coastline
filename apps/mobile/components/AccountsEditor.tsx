@@ -9,6 +9,7 @@ import { newId, useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
 import { Button, Choice, IconButton, NumberInput, TextField } from "./form";
 import { Icon } from "./Icon";
+import { BankLink } from "./BankLink";
 import { Card, Divider } from "./ui";
 import { DragList, reorderAmong } from "./DragList";
 import { hasRegister, isCard, accountTxnsHref } from "../lib/register";
@@ -213,6 +214,7 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
                         ) : null}
                       </>
                     ) : null}
+                    <BankLink kind="account" id={a.id} name={a.name} company={a.company} />
                     <View style={[styles.row, { justifyContent: "flex-end" }]}>
                       <Button title="Remove" icon="trash" tone="danger" onPress={() => void remove(a, i)} style={{ minHeight: 36 }} />
                     </View>

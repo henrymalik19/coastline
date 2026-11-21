@@ -1,6 +1,7 @@
 import { isRentalDebt, PERIODS, type Debt, type DebtKind, type PlanState } from "@coastfi/engine";
 import { useState } from "react";
 import { CompanyField } from "./CompanyField";
+import { BankLink } from "./BankLink";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { DEBT_KINDS, debtKind, debtLabel } from "../lib/debts";
 import { money, percent } from "../lib/format";
@@ -193,6 +194,7 @@ export function DebtEditor({
           <Text style={[type.caption, { color: t.text }]}>{kind.note}</Text>
         </View>
       ) : null}
+      <BankLink kind="debt" id={debt.id} name={debt.name} company={debt.company} />
         </>
       ) : null}
     </Card>
