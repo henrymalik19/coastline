@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultPlanState } from "@coastfi/schema";
-import { applyBankBalances, dropMatches, matchOf, newFromBank, setMatch, type BankAccount } from "./plaidMatch";
+import { applyBankBalances, dropMatches, matchOf, newFromBank, setMatch, withBankBalances, type BankAccount } from "./plaidMatch";
 
 const bank = (o: Partial<BankAccount>): BankAccount => ({ id: "r", item: "i", accountId: "acc", name: "Acct", type: "depository", current: 100, ...o });
 const plan = () => {
@@ -75,5 +75,28 @@ describe("dropMatches", () => {
     expect(dropMatches(p, ["a1"])).toBe(true);
     expect(p.accounts[0]!.plaidAccountId).toBeUndefined();
     expect(dropMatches(p, ["a1"])).toBe(false);
+  });
+});
+
+describe("bank balances shown without editing the plan", () => {
+  it("lays the bank's balance over a matched account and debt, leaving the saved plan alone", () => {
+    const p = plan();
+    p.accounts[0]!.plaidAccountId = "a1";
+    const before = structuredClone(p);
+    const shown = withBankBalances(p, [bank({ accountId: "a1", current: 999.999 })], () => false);
+    expect(shown).not.toBe(p);
+    expect(shown.accounts[0]!.balance).toBe(1000);
+    expect(p).toEqual(before);
+  });
+  it("is the same plan when every balance already matches (nothing reruns)", () => {
+    const p = plan();
+    p.accounts[0]!.plaidAccountId = "a1";
+    const shown = withBankBalances(p, [bank({ accountId: "a1", current: p.accounts[0]!.balance })], () => false);
+    expect(shown).toBe(p);
+  });
+  it("skips an account that keeps a register in Budget", () => {
+    const p = plan();
+    p.accounts[0]!.plaidAccountId = "a1";
+    expect(withBankBalances(p, [bank({ accountId: "a1", current: 5 })], () => true)).toBe(p);
   });
 });

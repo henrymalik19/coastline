@@ -1,10 +1,12 @@
-import { derive, k401Cost, run, simulatePlan, type Derived, type LimitsRow, type MonthRow, type PlanResult, type PlanState, type RunResult } from "@coastfi/engine";
+import { derive, k401Cost, run, simulatePlan, type Derived, type LimitsRow, type MonthRow, type PlanResult, type PlanState, type RunResult, type Txn } from "@coastfi/engine";
 import { withProperties } from "@coastfi/schema";
 import { useLimits } from "./limits";
 import { money } from "./format";
 import { useStore } from "./store";
 import { syncPaycheckLoans } from "./loans";
-import { foldSavingsLines, hasOldSavingsLines } from "./register";
+import { foldSavingsLines, hasOldSavingsLines, hasRegister } from "./register";
+import { usePlaid } from "./plaidState";
+import { withBankBalances, type BankAccount } from "./plaidMatch";
 import { estimateBracket } from "./tax";
 import type { Theme } from "./theme";
 
@@ -112,11 +114,28 @@ function sharedToday(key: string): Date {
   return today.date;
 }
 
+/**
+ * The saved plan with your connected banks' balances laid over it (lib/plaidMatch.ts). The same object
+ * while nothing it depends on changes, so the engine run above stays cached.
+ */
+let overlay: { saved: PlanState; bank: BankAccount[]; txns: Txn[]; value: PlanState } | null = null;
+const NO_TXNS: Txn[] = [];
+function withBanks(saved: PlanState, bank: BankAccount[], txns: Txn[]): PlanState {
+  if (!bank.length) return saved;
+  if (overlay && overlay.saved === saved && overlay.bank === bank && overlay.txns === txns) return overlay.value;
+  const value = withBankBalances(saved, bank, (id) => hasRegister(txns, id));
+  overlay = { saved, bank, txns, value };
+  return value;
+}
+
 export function usePlan(): PlanRun {
   const saved = useStore((s) => s.plan);
+  const bank = usePlaid((s) => s.accounts);
+  // transactions matter only with a bank (an account with a register keeps its own balance)
+  const txns = useStore((s) => (bank.length ? s.txns : NO_TXNS));
   const limits = useLimits((s) => s.rows);
   const start = sharedToday(new Date().toDateString());
-  return computePlan(saved, start, limits);
+  return computePlan(withBanks(saved, bank, txns), start, limits);
 }
 
 /** Plain-English line for a month that comes up short. */

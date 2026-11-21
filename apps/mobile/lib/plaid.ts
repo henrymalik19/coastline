@@ -5,29 +5,16 @@
  */
 import { useEffect } from "react";
 import { Platform } from "react-native";
-import { create } from "zustand";
 import { BANKS_ON } from "./features";
-import { applyBankBalances, dropMatches, type BankAccount } from "./plaidMatch";
+import { applyBankBalances, dropMatches, fillDebtTerms, type BankAccount } from "./plaidMatch";
 import { hasRegister } from "./register";
 import { useStore } from "./store";
 import { supabase } from "./supabase";
 import { useSync } from "./sync";
 
-export type BankItem = {
-  id: string;
-  institution: string;
-  kind: "bank" | "investments";
-  status: "ok" | "login_required" | "pending_expiration" | "error";
-  errorCode?: string | null;
-  lastSyncedAt?: string | null;
-};
-
-type PlaidState = {
-  planId?: string; items: BankItem[]; accounts: BankAccount[]; loaded: boolean; busy: boolean; error?: string;
-  /** May this person connect new banks? Undefined until asked. */
-  canLink?: boolean;
-};
-export const usePlaid = create<PlaidState>(() => ({ items: [], accounts: [], loaded: false, busy: false }));
+// the loaded connections and accounts live in lib/plaidState.ts (no imports there, so lib/plan.ts can read them)
+export { usePlaid, type BankItem } from "./plaidState";
+import { usePlaid, type BankItem } from "./plaidState";
 
 // signed out: forget the bank connections and accounts loaded for that sign-in (a shared computer)
 useSync.subscribe((s, prev) => {
@@ -81,14 +68,45 @@ export async function loadBanks(): Promise<void> {
   });
 }
 
-/** Copy the bank balances into matched accounts and debts (only when something changed, so it doesn't re-save the plan). */
-export function applyBanks(): void {
-  const { accounts } = usePlaid.getState();
+/** When this device last saved the bank balances into the plan, per plan (this device only). */
+const SNAP = "coastwise.bankSnapshot";
+const DAY = 24 * 3600_000;
+const snapshotAt = (planId: string): number => {
+  try {
+    return Number((JSON.parse(globalThis.localStorage?.getItem(SNAP) ?? "{}") as Record<string, number>)[planId] ?? 0);
+  } catch {
+    return 0;
+  }
+};
+const markSnapshot = (planId: string) => {
+  try {
+    const all = JSON.parse(globalThis.localStorage?.getItem(SNAP) ?? "{}") as Record<string, number>;
+    globalThis.localStorage?.setItem(SNAP, JSON.stringify({ ...all, [planId]: Date.now() }));
+  } catch {
+    // no storage: it saves again next time, which is fine
+  }
+};
+
+/**
+ * After the bank data loads. Screens show the bank's balances without editing the plan (usePlan lays
+ * them over it). The plan itself gets them at most once a day (`force`: now, e.g. before disconnecting),
+ * so a device that isn't signed in, and plan history, still have recent numbers. A debt's rate and
+ * minimum fill in whenever you haven't set them.
+ */
+export function applyBanks(force = false): void {
+  const { accounts, planId } = usePlaid.getState();
   if (!accounts.length) return;
   const s = useStore.getState();
   const reg = (id: string) => hasRegister(s.txns, id);
-  if (!applyBankBalances(structuredClone(s.plan), accounts, reg)) return;
-  s.update((p) => { applyBankBalances(p, accounts, reg); });
+  const due = force || !planId || Date.now() - snapshotAt(planId) > DAY;
+  const balances = due && applyBankBalances(structuredClone(s.plan), accounts, reg);
+  const terms = fillDebtTerms(structuredClone(s.plan), accounts);
+  if (planId && due) markSnapshot(planId);
+  if (!balances && !terms) return;
+  s.update((p) => {
+    if (balances) applyBankBalances(p, accounts, reg);
+    fillDebtTerms(p, accounts);
+  });
 }
 
 async function run<T>(fn: () => Promise<T>): Promise<T | undefined> {
@@ -233,6 +251,8 @@ export async function loadBankAccess(): Promise<void> {
 export const disconnectBank = (itemId: string) =>
   run(async () => {
     const ids = usePlaid.getState().accounts.filter((a) => a.item === itemId).map((a) => a.accountId);
+    // the accounts keep the balances they show now (the plan may only have yesterday's)
+    applyBanks(true);
     await call("remove", { itemId });
     const s = useStore.getState();
     if (dropMatches(structuredClone(s.plan), ids)) s.update((p) => { dropMatches(p, ids); });

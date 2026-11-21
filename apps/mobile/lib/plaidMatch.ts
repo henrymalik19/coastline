@@ -111,6 +111,55 @@ export function applyBankBalances(p: PlanState, bank: BankAccount[], hasRegister
   return changed;
 }
 
+/**
+ * The plan as you see it: matched accounts and debts show the bank's balance. The saved plan isn't
+ * changed (a refresh isn't an edit, so it isn't synced or kept in history); this is a copy, or the same
+ * plan when every balance already matches (so nothing downstream reruns).
+ */
+export function withBankBalances(p: PlanState, bank: BankAccount[], hasRegister: (planAccountId: string) => boolean): PlanState {
+  if (!bank.length) return p;
+  const by = new Map(bank.map((b) => [b.accountId, b]));
+  const bankValue = (x: { id: string; plaidAccountId?: string; balance: number }) => {
+    const b = x.plaidAccountId ? by.get(x.plaidAccountId) : undefined;
+    if (!b || b.current == null || hasRegister(x.id)) return undefined;
+    const v = Math.max(0, cents(b.current));
+    return Math.abs(x.balance - v) > 0.004 ? v : undefined;
+  };
+  let changed = false;
+  const accounts = p.accounts.map((a) => {
+    const v = bankValue(a);
+    if (v === undefined) return a;
+    changed = true;
+    return { ...a, balance: v };
+  });
+  const debts = p.debts.map((d) => {
+    const v = bankValue(d);
+    if (v === undefined) return d;
+    changed = true;
+    return { ...d, balance: v };
+  });
+  return changed ? { ...p, accounts, debts } : p;
+}
+
+/** Fill a matched debt's rate and minimum payment from the bank, only where you haven't set them. Returns whether anything changed. */
+export function fillDebtTerms(p: PlanState, bank: BankAccount[]): boolean {
+  const by = new Map(bank.map((b) => [b.accountId, b]));
+  let changed = false;
+  for (const d of p.debts) {
+    const b = d.plaidAccountId ? by.get(d.plaidAccountId) : undefined;
+    if (!b) continue;
+    if (!d.apr && b.apr != null && b.apr > 0) {
+      d.apr = b.apr;
+      changed = true;
+    }
+    if (!d.minPayment && b.minPayment != null && b.minPayment > 0) {
+      d.minPayment = cents(b.minPayment);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 /** Remove the matches to bank accounts that are gone (a disconnected bank). */
 export function dropMatches(p: PlanState, accountIds: string[]): boolean {
   const gone = new Set(accountIds);
