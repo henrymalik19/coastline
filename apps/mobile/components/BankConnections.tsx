@@ -54,6 +54,9 @@ function BankCard() {
   }, [planId, userId]);
   if (!supabase) return null;
   const signedIn = !!planId && !!userId;
+  // until banks open to everyone: only people allowed to connect see this card (signed out, not
+  // allowed, or not known yet: nothing), plus anyone whose plan already has a connection
+  if (!signedIn || (canLink !== true && !items.length)) return null;
   const web = Platform.OS === "web";
 
   return (

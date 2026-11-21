@@ -12,3 +12,9 @@
  * set up with Production keys.
  */
 export const BANKS_ON = process.env.EXPO_PUBLIC_FF_BANKS === "on";
+
+/**
+ * Telling everyone about bank connections (the landing page). Off unless EXPO_PUBLIC_FF_BANKS_PUBLIC=on:
+ * while only admins and people on the server's list can connect banks, nobody else hears about it.
+ */
+export const BANKS_PUBLIC = BANKS_ON && process.env.EXPO_PUBLIC_FF_BANKS_PUBLIC === "on";

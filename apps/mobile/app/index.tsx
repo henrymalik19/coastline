@@ -8,7 +8,7 @@ import { Icon, type IconName } from "../components/Icon";
 import { Card } from "../components/ui";
 import { useMembership } from "../lib/sharing";
 import { useStore } from "../lib/store";
-import { BANKS_ON } from "../lib/features";
+import { BANKS_PUBLIC } from "../lib/features";
 import { syncConfigured } from "../lib/supabase";
 import { radius, space, type, useTheme } from "../lib/theme";
 
@@ -51,7 +51,7 @@ function Landing() {
   const gutter = width >= 1024 ? 40 : width >= 600 ? 24 : 16;
   const start = () => router.push("/onboarding");
   const signIn = () => router.push("/sign-in");
-  const features = FEATURES.filter((f) => !f.banks || BANKS_ON);
+  const features = FEATURES.filter((f) => !f.banks || BANKS_PUBLIC);
   const heading2 = [type.title, { color: t.text, textAlign: wide ? ("center" as const) : undefined }];
 
   return (
