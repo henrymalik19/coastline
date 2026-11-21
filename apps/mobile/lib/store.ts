@@ -14,6 +14,7 @@ import { renamePayeesIn } from "./payees";
 import { combineCategory, uncombineTxns } from "./combine";
 import { keepFamilyGroups } from "./subcats";
 import { salvagePlan, salvageTxns } from "./salvage";
+import { sawStamps, stamp } from "./stamp";
 
 /** The device's saved copy has been read (until then nothing is written over it). */
 let loaded = false;
@@ -110,7 +111,8 @@ export type AppState = {
 
 export type SyncBase = { owner: string; at: number; plan: PlanState; todoDone: Record<string, string[]> };
 
-const now = () => Date.now();
+/** An edit time, always after every edit seen (lib/stamp.ts: devices' clocks differ). */
+const now = stamp;
 
 export const useStore = create<AppState>()(
   persist(
@@ -144,7 +146,8 @@ export const useStore = create<AppState>()(
         const old = get().checkins.find((x) => x.month === c.month);
         const rest = get().checkins.filter((x) => x.month !== c.month);
         // an old check-in's spending answer is kept
-        set({ checkins: [...rest, { ...old, ...c }].sort((a, b) => a.month.localeCompare(b.month)) });
+        // an edit time: the newer copy of a month wins between devices
+        set({ checkins: [...rest, { ...old, ...c, updatedAt: now() }].sort((a, b) => a.month.localeCompare(b.month)) });
       },
       saveTxn: (input, today) => {
         const t: Txn = { ...input, updatedAt: now() };
@@ -200,6 +203,8 @@ export const useStore = create<AppState>()(
         set({ txns: get().txns.map((x) => (x.deleted ? x : { ...x, deleted: true, updatedAt: stamp })), updatedAt: stamp });
       },
       mergeTxns: (incoming) => {
+        // the next edit here must come after these, whatever the other device's clock said
+        sawStamps(...incoming.map((t) => t.updatedAt));
         const by = new Map(get().txns.map((x) => [x.id, x]));
         let changed = false;
         for (const t of incoming) {
@@ -325,6 +330,7 @@ export const useStore = create<AppState>()(
         const wasSample = !p.onboarded && p.isSampleData === true;
         const st = salvageTxns(p.txns ?? []);
         const storedTxns = st.txns;
+        sawStamps(...storedTxns.map((t) => t.updatedAt), typeof p.txnPushed?.at === "number" ? p.txnPushed.at : 0, typeof p.updatedAt === "number" ? p.updatedAt : 0);
         // the marker only means something with the transactions it was saved with: if some couldn't be read, load them all again
         const c = p.txnCursor;
         const txnCursor = !st.dropped && c && typeof c.owner === "string" && typeof c.at === "string" && !Number.isNaN(stampMs(c.at)) ? c : undefined;

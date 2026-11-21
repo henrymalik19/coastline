@@ -24,7 +24,8 @@ import type { RealtimeChannel, Session } from "@supabase/supabase-js";
 import { AppState, Platform } from "react-native";
 import { create } from "zustand";
 import { deepEqual, merge3 } from "./merge";
-import { firstSyncAction } from "./firstSync";
+import { firstSyncAction, mergeCheckinLists } from "./firstSync";
+import { sawStamps } from "./stamp";
 import { planFromSnapshot, snapshotOf, type PlanRow } from "./planSnapshot";
 import { freshPlan } from "./presets";
 import { loadLimits } from "./limits";
@@ -252,9 +253,11 @@ type CheckinRow = {
   expected_next_invested: number;
   spent: number | null;
   budget: number | null;
+  client_updated_at?: number | string | null;
 };
 
 const toRow = (c: Checkin, owner: string) => ({
+  client_updated_at: c.updatedAt ?? 0,
   plan_id: owner,
   month: `${c.month}-01`,
   checked_on: c.date ?? null,
@@ -277,6 +280,7 @@ const fromRow = (r: CheckinRow): Checkin | null => {
     expectedNextInvested: Number(r.expected_next_invested),
     spent: r.spent === null ? undefined : Number(r.spent),
     budget: r.budget === null ? undefined : Number(r.budget),
+    ...(Number(r.client_updated_at) > 0 ? { updatedAt: Number(r.client_updated_at) } : {}),
   });
   return parsed.success ? parsed.data : null;
 };
@@ -499,9 +503,14 @@ function signOutGone() {
 
 /** One sync step at a time (a save and a check never interleave). */
 let queue: Promise<void> = Promise.resolve();
-const STEP_LIMIT = 45_000;
+/**
+ * Each step runs to its end before the next starts: two at once could write stale "synced up to"
+ * markers. A stuck request can't hold the queue: every request gives up on its own (REQUEST_LIMIT in
+ * lib/supabase.ts), so a step ends. This limit is only a last resort, long past any real step (a
+ * large import is a few dozen requests).
+ */
+const STEP_LIMIT = 10 * 60_000;
 const serial = (fn: () => Promise<void>) => {
-  // a step that never finishes (a stuck request) must not stop every later sync
   const step = () => Promise.race([fn(), new Promise<void>((resolve) => setTimeout(resolve, STEP_LIMIT))]);
   return (queue = queue.then(step, step));
 };
@@ -533,16 +542,18 @@ function take(pid: string, row: PlanRow, plan: PlanState) {
   applyingRemote = false;
 }
 
-/** Add check-ins only the server has (a month both have keeps this device's copy, which is uploaded). */
+/** Take in the server's check-ins: months this device doesn't have, and newer copies of ones it does. */
 function mergeCheckins(remote: Checkin[]) {
-  const local = useStore.getState().checkins;
-  const months = new Set(local.map((c) => c.month));
-  const missing = remote.filter((c) => !months.has(c.month));
-  if (!missing.length) return;
+  const next = mergeCheckinLists(useStore.getState().checkins, remote);
+  if (!next) return;
+  sawStamps(...remote.map((c) => c.updatedAt ?? 0));
   applyingRemote = true;
-  useStore.setState({ checkins: [...local, ...missing].sort((a, b) => a.month.localeCompare(b.month)) });
+  useStore.setState({ checkins: next });
   applyingRemote = false;
 }
+
+/** Check-ins changed here since they were last uploaded, per plan (all of them once after the app opens; the server keeps the newer copy). */
+const checkinsPushed = new Map<string, number>();
 
 /**
  * This device last synced a different plan (it just joined someone's plan, or left one): replace
@@ -605,11 +616,13 @@ async function pushInner(depth = 0): Promise<void> {
       legacyOnServer = false;
       useStore.setState({ syncBase: { owner: pid, at, plan: s.plan, todoDone: s.todoDone } });
     }
-    const { checkins } = useStore.getState();
-    if (checkins.length) {
-      const ci = await supabase.from("checkin").upsert(checkins.map((c) => toRow(c, pid)), { onConflict: "plan_id,month" });
+    const since = checkinsPushed.get(pid);
+    const changed = useStore.getState().checkins.filter((c) => since === undefined || (c.updatedAt ?? 0) > since);
+    if (changed.length) {
+      const ci = await supabase.from("checkin").upsert(changed.map((c) => toRow(c, pid)), { onConflict: "plan_id,month" });
       if (ci.error) throw ci.error;
     }
+    checkinsPushed.set(pid, Math.max(since ?? 0, ...changed.map((c) => c.updatedAt ?? 0)));
     await pushTxns(pid);
     await pushImport(pid);
     void publishViews();

@@ -6,7 +6,26 @@
  * - "device": keep this device's copy and replace the account's (picked).
  * - "keep": this device's copy is newer, or the two are the same: keep it, it uploads as usual.
  */
+import type { Checkin } from "@coastfi/schema";
 import { deepEqual } from "./merge";
+
+/**
+ * The server's check-ins taken into this device's: a month only the server has comes in; a month both
+ * have keeps the newer copy (one without an edit time counts as oldest; a tie keeps this device's).
+ * Null when nothing changes.
+ */
+export function mergeCheckinLists(local: Checkin[], remote: Checkin[]): Checkin[] | null {
+  const by = new Map(local.map((c) => [c.month, c]));
+  let changed = false;
+  for (const r of remote) {
+    const mine = by.get(r.month);
+    if (!mine || (r.updatedAt ?? 0) > (mine.updatedAt ?? 0)) {
+      by.set(r.month, r);
+      changed = true;
+    }
+  }
+  return changed ? [...by.values()].sort((a, b) => a.month.localeCompare(b.month)) : null;
+}
 
 export type FirstSync = "ask" | "account" | "device" | "keep";
 

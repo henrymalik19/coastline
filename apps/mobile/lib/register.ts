@@ -4,6 +4,7 @@
  */
 import { budgetCategories, budgetStartCash, budgetView, isStartTxn, registerBalance, run, startTxnId, type BudgetState, type PlanState, type Txn } from "@coastfi/engine";
 import { fullName } from "./company";
+import { stamp } from "./stamp";
 
 export type BudgetAccount = { id: string; name: string; kind: "cash" | "card"; balance: number };
 
@@ -84,7 +85,7 @@ export function startTxnFor(p: PlanState, txns: Txn[], accountId: string, today:
   if (!acct) return null;
   return {
     id: startTxnId(accountId), accountId, date: today, amount: Math.round(acct.balance * 100) / 100, payee: "Starting balance",
-    ...(acct.kind === "cash" ? { categoryId: "ready" } : {}), cleared: "reconciled", source: "manual", updatedAt: Date.now(),
+    ...(acct.kind === "cash" ? { categoryId: "ready" } : {}), cleared: "reconciled", source: "manual", updatedAt: stamp(),
   };
 }
 

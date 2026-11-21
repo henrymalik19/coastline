@@ -10,6 +10,7 @@ import { money } from "../lib/format";
 import { newId, useStore } from "../lib/store";
 import { ShareRules } from "../components/SharingEditor";
 import { availableNow, saveMemberTxn, useMembership } from "../lib/sharing";
+import { stamp } from "../lib/stamp";
 import { signOut, useSync } from "../lib/sync";
 import { space, type, useTheme } from "../lib/theme";
 
@@ -181,7 +182,7 @@ function TxnEditor({
         ...(cat ? { categoryId: cat } : {}),
         cleared: txn?.cleared ?? "uncleared",
         source: "manual",
-        updatedAt: Date.now(),
+        updatedAt: stamp(),
         ...(deleted ? { deleted: true } : {}),
       });
       if (!txn) {

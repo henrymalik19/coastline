@@ -264,6 +264,8 @@ export const CheckinSchema = z.object({
   spent: z.number().finite().min(0).optional(),
   /** The monthly budget when the check-in was logged, for the comparison. */
   budget: z.number().finite().min(0).optional(),
+  /** When it was last changed (an edit time, lib/stamp.ts): the newer copy wins between devices. Missing on old ones. */
+  updatedAt: z.number().finite().optional(),
 });
 export type Checkin = z.infer<typeof CheckinSchema>;
 
