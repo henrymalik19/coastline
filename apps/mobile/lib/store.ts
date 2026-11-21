@@ -13,6 +13,19 @@ import { applyYnabUpdate, snapshotUpdate, undoYnabUpdate as undoYnabUpdateTxns, 
 import { renamePayeesIn } from "./payees";
 import { combineCategory, uncombineTxns } from "./combine";
 import { keepFamilyGroups } from "./subcats";
+import { salvagePlan, salvageTxns } from "./salvage";
+
+/** The device's saved copy has been read (until then nothing is written over it). */
+let loaded = false;
+
+/** A saved copy that couldn't be read: kept aside on this device (web), so it isn't lost for good. */
+function keepDamaged(raw: unknown) {
+  try {
+    globalThis.localStorage?.setItem(`coastfi.app.damaged.${Date.now()}`, JSON.stringify(raw));
+  } catch {
+    // no room or no storage: nothing more to do
+  }
+}
 
 export { newId } from "./id";
 
@@ -55,6 +68,8 @@ export type AppState = {
   /** What it takes to undo the last update from YNAB (this device only; gone after the next update or import). */
   lastUpdate?: UpdateSnapshot;
   hydrated: boolean;
+  /** Something in this device's saved copy couldn't be read when the app opened (said once; not saved). */
+  loadNotice?: string;
 
   /** Edit the plan with a mutating function on a copy. */
   update: (fn: (draft: PlanState) => void) => void;
@@ -292,21 +307,44 @@ export const useStore = create<AppState>()(
     {
       name: "coastfi.app",
       version: 1,
-      // everyday data in one entry; history (closed accounts) kept apart (lib/txnStorage.ts)
-      storage: appStorage<Partial<AppState>>("coastfi.app"),
+      // everyday data in one entry; history (closed accounts) kept apart (lib/txnStorage.ts). Nothing is
+      // written until the saved copy has loaded: the device's storage is read asynchronously, and a
+      // change made before then would save a blank starting state over everything.
+      storage: (() => {
+        const s = appStorage<Partial<AppState>>("coastfi.app");
+        return { ...s, setItem: (name: string, value: Parameters<typeof s.setItem>[1]) => (loaded ? s.setItem(name, value) : undefined) };
+      })(),
       partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty, lastUpdate }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty, lastUpdate }),
       // never trust stored data blindly: validate, and fall back to a blank plan
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState> & { isSampleData?: boolean; seenWelcome?: boolean };
-        const ok = PlanStateSchema.safeParse(p.plan);
+        // one bad item drops only that item (lib/salvage.ts), never the whole plan or list
+        const sp = salvagePlan(p.plan);
         // saves from before the sample plan was removed: an untouched sample becomes a blank plan.
         // Only a save marked as the sample: today's saves carry neither flag, and setup in progress must survive a reload
         const wasSample = !p.onboarded && p.isSampleData === true;
-        const parsedTxns = z.array(TxnSchema).safeParse(p.txns ?? []);
-        const storedTxns = parsedTxns.success ? parsedTxns.data : [];
-        // the marker only means something with the transactions it was saved with: if those couldn't be read, load them all again
+        const st = salvageTxns(p.txns ?? []);
+        const storedTxns = st.txns;
+        // the marker only means something with the transactions it was saved with: if some couldn't be read, load them all again
         const c = p.txnCursor;
-        const txnCursor = parsedTxns.success && c && typeof c.owner === "string" && typeof c.at === "string" && !Number.isNaN(stampMs(c.at)) ? c : undefined;
+        const txnCursor = !st.dropped && c && typeof c.owner === "string" && typeof c.at === "string" && !Number.isNaN(stampMs(c.at)) ? c : undefined;
+        const base = (() => {
+          const b = p.syncBase;
+          const bp = b && PlanStateSchema.safeParse(b.plan);
+          return b && bp?.success && typeof b.owner === "string" && typeof b.at === "number" ? { ...b, plan: bp.data, todoDone: b.todoDone ?? {} } : undefined;
+        })();
+        // a finished plan that couldn't be read at all: never treat it as blank (that would sync a blank
+        // plan to the account). Take the last synced copy; without one, leave setup unfinished, which
+        // uploads nothing and lets the account's plan win at the next sync. The unreadable copy is kept aside.
+        const lost = !sp.plan && !!p.onboarded && !!p.plan;
+        if (lost) keepDamaged(p);
+        const notice = lost
+          ? base
+            ? "Part of this device's saved plan couldn't be read, so it went back to the last copy synced with your account."
+            : "This device's saved plan couldn't be read. Sign in to load it from your account; a copy of the damaged data is kept on this device."
+          : sp.dropped || st.dropped
+            ? `${sp.dropped + st.dropped} saved item${sp.dropped + st.dropped === 1 ? "" : "s"} on this device couldn't be read and ${sp.dropped + st.dropped === 1 ? "was" : "were"} left out. Your account still has ${sp.dropped + st.dropped === 1 ? "it" : "them"} if you sync.`
+            : undefined;
         const li = p.lastImport as unknown as (ImportSnapshot & { txns?: unknown }) | undefined;
         const oldCopy = !!li && Array.isArray(li.txns) && canUndoImport(li, Date.now());
         const lastImport = (() => {
@@ -321,18 +359,21 @@ export const useStore = create<AppState>()(
         })();
         return {
           ...current,
-          plan: ok.success && !wasSample ? withProperties(ok.data) : current.plan,
-          onboarded: !!p.onboarded,
+          loadNotice: notice,
+          plan: lost && base ? withProperties(base.plan) : sp.plan && !wasSample ? withProperties(sp.plan) : current.plan,
+          onboarded: lost ? !!base : !!p.onboarded,
           checkins: Array.isArray(p.checkins) ? p.checkins : [],
           txns: storedTxns,
           txnCursor,
           reloadSeen: p.reloadSeen && typeof p.reloadSeen.owner === "string" && typeof p.reloadSeen.at === "string" ? p.reloadSeen : undefined,
           txnPushed: (() => {
             const x = p.txnPushed;
-            return parsedTxns.success && x && typeof x.owner === "string" && typeof x.at === "number" ? x : undefined;
+            // what was uploaded still was (a dropped bad row is simply loaded from the account again)
+            return x && typeof x.owner === "string" && typeof x.at === "number" ? x : undefined;
           })(),
-          todoDone: p.todoDone && typeof p.todoDone === "object" ? p.todoDone : {},
-          updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : 0,
+          todoDone: lost && base ? base.todoDone : p.todoDone && typeof p.todoDone === "object" ? p.todoDone : {},
+          // a lost plan: as old as the synced copy (or 0), so it never counts as the newer one
+          updatedAt: lost ? (base?.at ?? 0) : typeof p.updatedAt === "number" ? p.updatedAt : 0,
           // the undo copy, while it can still be used (it's dropped once the window closes)
           lastImport,
           importedAt: typeof p.importedAt === "number" ? p.importedAt : undefined,
@@ -345,14 +386,13 @@ export const useStore = create<AppState>()(
           })(),
           // an older full undo copy was just made small: the account gets it
           importDirty: !!p.importDirty || oldCopy,
-          syncBase: (() => {
-            const b = p.syncBase;
-            const bp = b && PlanStateSchema.safeParse(b.plan);
-            return b && bp?.success && typeof b.owner === "string" && typeof b.at === "number" ? { ...b, plan: bp.data, todoDone: b.todoDone ?? {} } : undefined;
-          })(),
+          syncBase: base,
         };
       },
-      onRehydrateStorage: () => () => useStore.setState({ hydrated: true }),
+      onRehydrateStorage: () => () => {
+        loaded = true;
+        useStore.setState({ hydrated: true });
+      },
     },
   ),
 );
