@@ -29,6 +29,11 @@ type PlaidState = {
 };
 export const usePlaid = create<PlaidState>(() => ({ items: [], accounts: [], loaded: false, busy: false }));
 
+// signed out: forget the bank connections and accounts loaded for that sign-in (a shared computer)
+useSync.subscribe((s, prev) => {
+  if (prev.userId && !s.userId) usePlaid.setState({ planId: undefined, items: [], accounts: [], loaded: false, busy: false, error: undefined, canLink: undefined });
+});
+
 /** Bank connections work when sync is set up and you're signed in (the plan is on the server). */
 export const banksAvailable = () => !!supabase && !!useSync.getState().planId && !!useSync.getState().userId;
 
