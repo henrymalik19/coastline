@@ -145,6 +145,7 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
                       <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>
                         {typeLabel(a.type)}
                         {sp && a.owner === "spouse" ? ` · ${sp}'s` : ""}
+                        {a.plaidAccountId ? <Text style={{ color: t.good, fontWeight: "700" }}> · Linked</Text> : null}
                         {per !== undefined ? <Text style={{ color: t.accent, fontWeight: "700" }}> · +{money(per)}/mo</Text> : null}
                       </Text>
                     </View>
@@ -155,6 +156,9 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
                         <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(a.balance)}</Text>
                         <Icon name="chevron" size={14} color={t.accent} />
                       </Pressable>
+                    ) : a.plaidAccountId ? (
+                      // linked: the bank keeps the balance up to date (Settings → Accounts → Connected banks)
+                      <Text accessibilityLabel={`${name} balance from the bank`} style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(a.balance)}</Text>
                     ) : (
                       <NumberInput kind="money" label={`${name} balance`} value={a.balance} onChange={(v) => update((p) => { p.accounts[i]!.balance = v; })} />
                     )

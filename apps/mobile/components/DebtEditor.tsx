@@ -110,8 +110,12 @@ export function DebtEditor({
         <TextField width={220} label="Debt name (optional)" placeholder={kind.placeholder} value={debt.name} onChange={(v) => onChange({ name: v })} />
       </FieldRow>
       <Divider />
-      <FieldRow label="Balance" hint="What you still owe">
-        <NumberInput kind="money" label={`${debtLabel(debt)} balance`} value={debt.balance} onChange={(v) => onChange({ balance: v })} />
+      <FieldRow label="Balance" hint={debt.plaidAccountId ? "Linked: the bank keeps it up to date" : "What you still owe"}>
+        {debt.plaidAccountId ? (
+          <Text accessibilityLabel={`${debtLabel(debt)} balance from the bank`} style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(debt.balance)}</Text>
+        ) : (
+          <NumberInput kind="money" label={`${debtLabel(debt)} balance`} value={debt.balance} onChange={(v) => onChange({ balance: v })} />
+        )}
       </FieldRow>
       <Divider />
       <FieldRow label="Interest rate (APR)" hint={`Typical ${kind.label.toLowerCase()}: ${(kind.typicalApr * 100).toFixed(1).replace(/\.0$/, "")}%. Use yours.`} info={HELP.apr}>

@@ -205,9 +205,11 @@ async function openLink(token: string, returnedFrom?: string): Promise<{ publicT
 async function finish(r: { publicToken: string; meta: LinkMeta } | null, kind: "bank" | "investments", itemId?: string) {
   if (!r) return;
   if (itemId) await call("reconnected", { itemId });
-  else await call("exchange", { publicToken: r.publicToken, kind, institution: { id: r.meta.institution?.institution_id, name: r.meta.institution?.name } });
+  const added = itemId ? undefined : await call<{ itemId: string }>("exchange", { publicToken: r.publicToken, kind, institution: { id: r.meta.institution?.institution_id, name: r.meta.institution?.name } });
   await loadBanks();
   applyBanks();
+  // a new connection: go through its accounts one by one (new, one you have, or not used)
+  if (added?.itemId) usePlaid.setState({ review: added.itemId });
 }
 
 /** Connect a bank or card ("bank") or an investment/retirement account ("investments"). */
@@ -262,9 +264,10 @@ export const disconnectBank = (itemId: string) =>
 /** Sandbox only (local development): a test bank without the sign-in window. */
 export const connectTestBank = (kind: "bank" | "investments") =>
   run(async () => {
-    await call("sandbox_connect", { kind });
+    const added = await call<{ itemId: string }>("sandbox_connect", { kind });
     await loadBanks();
     applyBanks();
+    if (added?.itemId) usePlaid.setState({ review: added.itemId });
   });
 
 /** Once per plan while the app is open: refresh the bank balances (mounted under the tabs). */

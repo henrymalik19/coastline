@@ -19,5 +19,7 @@ type PlaidState = {
   planId?: string; items: BankItem[]; accounts: BankAccount[]; loaded: boolean; busy: boolean; error?: string;
   /** May this person connect new banks? Undefined until asked. */
   canLink?: boolean;
+  /** The connection whose accounts are being set up (the step-by-step window, components/BankReview.tsx). */
+  review?: string;
 };
 export const usePlaid = create<PlaidState>(() => ({ items: [], accounts: [], loaded: false, busy: false }));

@@ -8,18 +8,15 @@ import { useEffect, useState } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 import { confirm } from "../lib/confirm";
 import { BANKS_ON } from "../lib/features";
-import { money } from "../lib/format";
-import { applyBanks, connectBank, connectTestBank, disconnectBank, loadBankAccess, loadBanks, reconnectBank, syncBanks, usePlaid, type BankItem } from "../lib/plaid";
-import { bankLabel, bankSaysCash, isDebtLike, kindDiffers, matchOf, matchOptions, newFromBank, setMatch, type BankAccount } from "../lib/plaidMatch";
-import { ACCOUNT_TYPES } from "./AccountsEditor";
+import { connectBank, connectTestBank, disconnectBank, loadBankAccess, loadBanks, reconnectBank, syncBanks, usePlaid, type BankItem } from "../lib/plaid";
+import { bankLabel, matchOf, type BankAccount } from "../lib/plaidMatch";
+import { BankReview } from "./BankReview";
 import { usePlan } from "../lib/plan";
-import { hasRegister } from "../lib/register";
-import { newId, useStore } from "../lib/store";
 import { supabase } from "../lib/supabase";
 import { useSync } from "../lib/sync";
 import { space, type, useTheme } from "../lib/theme";
 import { Button, IconButton, InfoText, InfoTip, Select } from "./form";
-import { Card, Divider, SectionLabel } from "./ui";
+import { Card, SectionLabel } from "./ui";
 import { useOpenPage } from "../lib/nav";
 
 const INFO =
@@ -62,6 +59,7 @@ function BankCard() {
 
   return (
     <Card style={{ gap: space.md }}>
+      <BankReview />
       <View style={styles.between}>
         <View style={[styles.row, { flexShrink: 1 }]}>
           <SectionLabel flush>Connected banks</SectionLabel>
@@ -143,94 +141,33 @@ function ItemBlock({ item, accounts, busy }: { item: BankItem; accounts: BankAcc
           }}
         />
       </View>
-      {accounts.map((b, i) => (
-        <View key={b.id}>
-          {i > 0 ? <Divider /> : null}
-          <BankRow b={b} company={item.institution} />
-        </View>
+      {accounts.map((b) => (
+        <LinkLine key={b.id} b={b} />
       ))}
       {!accounts.length ? <Text style={[type.caption, { color: t.text3 }]}>No accounts yet.</Text> : null}
-    </View>
-  );
-}
-
-function BankRow({ b, company }: { b: BankAccount; company?: string }) {
-  const t = useTheme();
-  const { state } = usePlan();
-  const update = useStore((s) => s.update);
-  const txns = useStore((s) => s.txns);
-  const debt = isDebtLike(b);
-  const m = matchOf(state, b);
-  const value = m ? `${m.kind === "account" ? "a" : "d"}:${m.item.id}` : "";
-  // every account you have, likeliest first (nothing hidden by type: a brokerage can be your checking)
-  const choices = matchOptions(state, b, company);
-  const options = [
-    { value: "", label: "Not used" },
-    ...(debt
-      ? [{ value: "new", label: "Add as a new debt", section: "New" }]
-      : bankSaysCash(b)
-        ? [{ value: "new", label: "Add as a new cash account", section: "New" }]
-        : [
-            { value: "new", label: "Add as a new investment account", section: "New" },
-            { value: "new-cash", label: "Add as a new cash account", hint: "If you use it like a checking or savings account", section: "New" },
-          ]),
-    ...choices.map((c) => ({
-      value: `${c.kind === "account" ? "a" : "d"}:${c.id}`,
-      label: c.name,
-      ...(c.type ? { hint: typeLabel(c.type) } : {}),
-      section: c.likely ? "Likely matches" : debt ? "Your debts" : "Your other accounts",
-    })),
-  ];
-  const onPick = (v: string) => {
-    update((p) => {
-      if (v === "") return setMatch(p, b, null);
-      if (v === "new" || v === "new-cash") {
-        setMatch(p, b, null);
-        const n = newFromBank(b, newId(), company && company !== "Bank" ? company : undefined, v === "new-cash");
-        if (n.kind === "debt") p.debts.push(n.debt);
-        else p.accounts.push(n.account);
-        return;
-      }
-      setMatch(p, b, { kind: v.startsWith("d:") ? "debt" : "account", id: v.slice(2) });
-    });
-    applyBanks();
-  };
-  const reg = m && hasRegister(txns, m.item.id);
-  return (
-    <View style={{ gap: 2, paddingVertical: space.sm }}>
-      <View style={styles.between}>
-        <Text style={[type.body, { color: t.text, flex: 1, minWidth: 0 }]} numberOfLines={1}>{bankLabel(b)}</Text>
-        <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>
-          {b.current == null ? "–" : `${debt ? "owe " : ""}${money(Math.max(0, b.current))}`}
-        </Text>
-      </View>
-      <View style={styles.between}>
-        <Text style={[type.caption, { color: t.text3 }]}>{m ? "Updates" : "Use as"}</Text>
-        <View style={{ flex: 1, minWidth: 0, maxWidth: 240 }}>
-          <Select plain label={`Use ${bankLabel(b)} as`} options={options} value={value} onChange={onPick} />
-        </View>
-      </View>
-      {reg ? <Text style={[type.caption, { color: t.text3 }]}>Its balance comes from your Budget register, so it isn't changed here.</Text> : null}
-      {m?.kind === "account" && kindDiffers(m.item, b) ? (
-        // your type stands; just say so, with a way to switch if it was a slip
-        <Text style={[type.caption, { color: t.text3 }]}>
-          {company && company !== "Bank" ? company : "The bank"} calls this {bankSaysCash(b) ? "a checking or savings account" : "an investment account"}. It counts as{" "}
-          {m.item.type === "cash" ? "cash" : "investments"} in your plan, the way you set it.{" "}
-          <Text
-            role="button"
-            style={{ color: t.accent, fontWeight: "700" }}
-            onPress={() => update((p) => { const a = p.accounts.find((x) => x.id === m.item.id); if (a) a.type = bankSaysCash(b) ? "cash" : "taxable"; })}
-          >
-            Count it as {bankSaysCash(b) ? "cash" : "investments"} instead
-          </Text>
+      {accounts.length ? (
+        <Text role="button" onPress={() => usePlaid.setState({ review: item.id })} style={[type.caption, { color: t.accent, fontWeight: "700", alignSelf: "flex-start" }]}>
+          Review accounts
         </Text>
       ) : null}
     </View>
   );
 }
 
-/** An account type in words (Cash, Roth, ...). */
-const typeLabel = (k: string) => ACCOUNT_TYPES.find((x) => x.value === k)?.label ?? k;
+/** One bank account in a line: what it updates in your plan, or that it isn't used. */
+function LinkLine({ b }: { b: BankAccount }) {
+  const t = useTheme();
+  const { state } = usePlan();
+  const m = matchOf(state, b);
+  return (
+    <View style={styles.between}>
+      <Text style={[type.caption, { color: t.text2, flexShrink: 1 }]} numberOfLines={1}>{bankLabel(b)}</Text>
+      <Text style={[type.caption, { color: m ? t.text : t.text3, fontWeight: m ? "600" : "400" }]} numberOfLines={1}>
+        {m ? `→ ${m.item.name || "your account"}` : "Not used"}
+      </Text>
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
