@@ -25,6 +25,7 @@
     "zustand": "^5.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.49.1",
     "@types/react": "~19.3.0",
     "typescript": "~6.0.3",
     "vitest": "^4.1.12"
@@ -36,6 +37,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "vitest run lib",
+    "e2e": "playwright test",
     "dev:hosted": "node scripts/dev-hosted.mjs",
     "build:web": "node scripts/build-web.mjs"
   },

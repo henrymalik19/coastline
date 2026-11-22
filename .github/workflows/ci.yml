@@ -22,3 +22,24 @@ jobs:
       # Expo pins React, React Native and its own packages: catch updates that drift from those versions
       - run: npx expo install --check
         working-directory: apps/mobile
+  # the web app in a real browser at phone and desktop size (built offline: no account, no server)
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/mobile
+      - run: pnpm e2e
+        working-directory: apps/mobile
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: apps/mobile/test-results
+          retention-days: 7

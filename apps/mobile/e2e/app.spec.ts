@@ -1,0 +1,123 @@
+// End-to-end: the flows the UI test pass covered by hand, in a real browser at phone and desktop size.
+// Every test starts from an empty, offline app (see playwright.config.ts).
+import { expect, test, type Page } from "@playwright/test";
+
+/** Go through setup with the defaults and land on Home. */
+async function onboard(page: Page) {
+  await page.goto("/onboarding");
+  await page.getByRole("button", { name: "Start fresh" }).click();
+  for (let i = 0; i < 12; i++) {
+    const done = page.getByRole("button", { name: "Go to my dashboard" });
+    if (await done.isVisible().catch(() => false)) break;
+    await page.getByRole("button", { name: "Continue" }).click();
+  }
+  await page.getByRole("button", { name: "Go to my dashboard" }).click();
+  await expect(page).toHaveURL(/\/home/);
+}
+
+/** Setup with no budget asks for one; a yearly retirement amount is enough for a Coast FI number. */
+async function setRetirementSpending(page: Page, perYear = 60000) {
+  await page.goto("/home");
+  await page.getByRole("link", { name: /Or type how much you.ll spend a year/ }).click();
+  const box = page.getByRole("textbox", { name: "Yearly retirement spending" });
+  await box.fill(String(perYear));
+  await box.blur();
+  await page.getByRole("button", { name: "Use this amount" }).click();
+  await expect(page.getByText("to Coast FI").first()).toBeVisible();
+}
+
+/** Console errors and page crashes while the test runs. */
+function watchErrors(page: Page) {
+  const errors: string[] = [];
+  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  page.on("pageerror", (e) => errors.push(e.message));
+  return errors;
+}
+
+test("the start page loads", async ({ page }) => {
+  const errors = watchErrors(page);
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Get started" }).first()).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("setup with the defaults reaches Home", async ({ page }) => {
+  const errors = watchErrors(page);
+  await onboard(page);
+  await expect(page.getByText("Add your budget to see your number")).toBeVisible();
+  await setRetirementSpending(page);
+  expect(errors).toEqual([]);
+});
+
+test("every main page opens without errors", async ({ page }) => {
+  await onboard(page);
+  const errors = watchErrors(page);
+  for (const path of ["/home", "/budget", "/budget?view=transactions", "/budget?view=accounts", "/plan", "/plan?view=whatif", "/plan?view=retirement", "/money", "/money/accounts", "/money/debts", "/money/income", "/money/archived", "/money/payees", "/settings", "/settings/data"]) {
+    await page.goto(path);
+    await expect(page.locator("body")).not.toHaveText(/^\s*$/);
+  }
+  expect(errors).toEqual([]);
+});
+
+test("money keeps its cents in a box ('1,800.50', not '1,800.5')", async ({ page }) => {
+  await onboard(page);
+  await page.goto("/money/accounts");
+  const box = page.getByRole("textbox", { name: /balance$/ }).first();
+  await box.fill("1800.5");
+  await box.blur();
+  await expect(box).toHaveValue("1,800.50");
+});
+
+test("the outcomes chart always fits its median line", async ({ page }) => {
+  await onboard(page);
+  await setRetirementSpending(page);
+  // enough invested that the median ends over 2.2x the FIRE number (where the axis used to stop, so it ran off the top)
+  await page.goto("/money/accounts");
+  const k401 = page.getByRole("textbox", { name: "401(k) balance" });
+  await k401.fill("2000000");
+  await k401.blur();
+  await page.goto("/plan?view=whatif");
+  const chart = page.getByRole("img", { name: /Projected invested balance/ });
+  await expect(chart).toBeVisible();
+  const label = (await chart.getAttribute("aria-label")) ?? "";
+  const median = Number(/Median \$([\d,]+)/.exec(label)?.[1]?.replace(/,/g, "") ?? NaN);
+  // the axis labels ($1M, $2.5M, $600k...): the top one must be at least the median
+  const ticks = (await chart.locator("text").allTextContents())
+    .map((s) => /^\$([\d.]+)([kM]?)$/.exec(s.trim()))
+    .filter((m): m is RegExpExecArray => !!m)
+    .map((m) => Number(m[1]) * (m[2] === "M" ? 1e6 : m[2] === "k" ? 1e3 : 1));
+  expect(Number.isFinite(median)).toBe(true);
+  expect(Math.max(...ticks)).toBeGreaterThanOrEqual(median * 0.999);
+});
+
+test("Settings has Back on a phone", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "phone only");
+  await onboard(page);
+  await page.goto("/settings");
+  await expect(page.getByText("Back", { exact: true }).first()).toBeVisible();
+});
+
+test("a saved plan that can't be read says so, and offers setup again", async ({ page }) => {
+  await onboard(page);
+  // damage the plan itself (not one list item, which is just dropped)
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app") ?? "{}");
+    raw.state.plan.age = "old";
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/home");
+  await expect(page.getByText("Some saved data couldn't be read")).toBeVisible();
+  await expect(page.getByText(/setup starts again/)).toBeVisible();
+});
+
+test("Money and Settings use the width on a desktop", async ({ page, isMobile }) => {
+  test.skip(!!isMobile, "desktop only");
+  await onboard(page);
+  await page.goto("/settings");
+  const account = page.getByText("Account & sync");
+  const rules = page.getByText("Assumptions & plan rules");
+  const a = await account.boundingBox();
+  const r = await rules.boundingBox();
+  // side by side: two columns, not one narrow list
+  expect(a && r && Math.abs(a.y - r.y) < 200 && r.x > a.x + 300).toBe(true);
+});
