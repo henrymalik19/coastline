@@ -14,7 +14,7 @@ import { fullName } from "../lib/company";
 import { monthKey, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { pickYnabFiles } from "../lib/ynabFiles";
-import { planYnabUpdate, type YnabUpdate } from "../lib/ynabUpdate";
+import { canUndoUpdate, planYnabUpdate, type YnabUpdate } from "../lib/ynabUpdate";
 import { OUTSIDE } from "../lib/outside";
 import { isHistoryTxn } from "@coastfi/engine";
 
@@ -28,18 +28,21 @@ export function YnabUpdateCard({ plain }: { /** No card around it (inside anothe
   const txns = useStore((s) => s.txns);
   const lastSync = useStore((s) => s.ynabSyncedAt ?? s.importedAt ?? 0);
   const updateFromYnab = useStore((s) => s.updateFromYnab);
-  const lastUpdate = useStore((s) => s.lastUpdate);
+  const saved = useStore((s) => s.lastUpdate);
+  // one past its 30 days can't be undone any more (it's dropped when the app next opens)
+  const lastUpdate = canUndoUpdate(saved, Date.now()) ? saved : undefined;
+  const lastUndo = useStore((s) => s.lastUndo);
   const undoUpdate = useStore((s) => s.undoYnabUpdate);
   const nameOf = (id: string) => { const a = plan.accounts.find((x) => x.id === id) ?? plan.debts.find((x) => x.id === id); return a ? fullName(a) : "An account"; };
   const undo = async () => {
     if (!lastUpdate) return;
     const changed = lastUpdate.before.length + lastUpdate.added.length;
-    if (!(await confirm("Undo the last update?", `The ${changed.toLocaleString()} transactions it changed or brought in go back to how they were. Changes you made to them since go too.`, "Undo update"))) return;
-    undoUpdate();
+    if (!(await confirm("Undo the last update?", `The ${changed.toLocaleString()} transactions it changed or brought in go back to how they were. Any you've changed since stay as you left them.`, "Undo update"))) return;
+    const kept = undoUpdate();
     setDone("");
-    setUndone(true);
+    setUndone(kept ? `Undone. ${kept.toLocaleString()} you'd changed since the update stayed as you left them.` : "Undone: your transactions are back to how they were before the update.");
   };
-  const [undone, setUndone] = useState(false);
+  const [undone, setUndone] = useState("");
   const [u, setU] = useState<YnabUpdate | null>(null);
   const [file, setFile] = useState("");
   const [removeGone, setRemoveGone] = useState(true);
@@ -56,8 +59,8 @@ export function YnabUpdateCard({ plain }: { /** No card around it (inside anothe
       if (!got.data.txns.length) throw new Error("No transactions in that file.");
       setFile(got.name);
       setRemoveGone(true);
-      setUndone(false);
-      setU(planYnabUpdate(plan, got.data, txns, lastSync, monthKey(start)));
+      setUndone("");
+      setU(planYnabUpdate(plan, got.data, txns, lastSync, monthKey(start), undefined, lastUndo));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't read that file.");
     }
@@ -161,9 +164,9 @@ export function YnabUpdateCard({ plain }: { /** No card around it (inside anothe
       )}
       {error ? <Text role="alert" style={[type.label, { color: t.bad }]}>{error}</Text> : null}
       {done ? <Text role="status" style={[type.label, { color: t.good }]}>{done}</Text> : null}
-      {undone ? <Text role="status" style={[type.label, { color: t.good }]}>Undone: your transactions are back to how they were before the update.</Text> : null}
+      {undone ? <Text role="status" style={[type.label, { color: t.good }]}>{undone}</Text> : null}
       {!u && lastUpdate ? (
-        // the last update can be undone (on this device), until the next one
+        // the last update can be undone (on this device) for 30 days, until the next one or another device updates
         <View style={[styles.undo, { borderTopColor: t.border }]}>
           <Text style={[type.caption, { color: t.text2, flex: 1, minWidth: 180 }]}>
             Last update {dayText(lastUpdate.at)}: {n(lastUpdate.before.length, "changed", "changed")}, {lastUpdate.added.length.toLocaleString()} brought in. Not right? Undo it.

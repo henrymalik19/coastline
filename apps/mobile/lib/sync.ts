@@ -470,7 +470,10 @@ async function pullImport(owner: string, force = false): Promise<void> {
   }
   // an undo copy past its 30 days: clear it on the server too
   const expired = !!row.undo && !lastImport;
-  useStore.setState({ importedAt, ynabSyncedAt: importedAt ? (row.synced_at ?? importedAt) : undefined, lastImport, importDirty: expired });
+  const syncedAt = importedAt ? (row.synced_at ?? importedAt) : undefined;
+  // another device updated from YNAB (or undid) since: this device's undo would put back the wrong copy
+  const moved = Number(syncedAt ?? 0) !== Number(s.ynabSyncedAt ?? 0) ? { lastUpdate: undefined, lastUndo: undefined } : {};
+  useStore.setState({ importedAt, ynabSyncedAt: syncedAt, lastImport, importDirty: expired, ...moved });
 }
 
 let started = false;

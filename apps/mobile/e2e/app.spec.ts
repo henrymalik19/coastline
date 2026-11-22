@@ -121,3 +121,37 @@ test("Money and Settings use the width on a desktop", async ({ page, isMobile })
   // side by side: two columns, not one narrow list
   expect(a && r && Math.abs(a.y - r.y) < 200 && r.x > a.x + 300).toBe(true);
 });
+
+test("transactions move from an older save into the browser's database, and stay there", async ({ page }) => {
+  await onboard(page);
+  await page.goto("/budget");
+  await page.getByRole("button", { name: /^Start with / }).click();
+  await expect(page.getByRole("button", { name: "Add categories" }).first()).toBeVisible();
+  // an older save: a transaction (dated today) inside the localStorage entry, as before
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app") ?? "{}");
+    const acct = raw.state.plan.accounts[0].id;
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    raw.state.txns = [...(raw.state.txns ?? []), { id: "e2e-old", accountId: acct, date: today, amount: -12.34, payee: "Corner Cafe", cleared: "cleared", source: "manual", updatedAt: 5 }];
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/budget?view=transactions");
+  await expect(page.getByText("Corner Cafe").first()).toBeVisible();
+  // any change saves: the transaction leaves localStorage for the database
+  await page.goto("/money/accounts");
+  const box = page.getByRole("textbox", { name: /balance$/ }).first();
+  await box.fill("100");
+  await box.blur();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("coastfi.app") ?? "{}").state?.txns?.length)).toBe(0);
+  const inDb = await page.evaluate(() => new Promise<string[]>((resolve, reject) => {
+    const req = indexedDB.open("coastfi");
+    req.onsuccess = () => { const g = req.result.transaction("txns").objectStore("txns").getAllKeys(); g.onsuccess = () => resolve(g.result as string[]); g.onerror = () => reject(g.error); };
+    req.onerror = () => reject(req.error);
+  }));
+  expect(inDb).toContain("e2e-old");
+  await page.reload();
+  await page.goto("/budget?view=transactions");
+  await expect(page.getByText("Corner Cafe").first()).toBeVisible();
+});
+

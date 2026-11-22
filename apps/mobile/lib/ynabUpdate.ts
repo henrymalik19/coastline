@@ -42,6 +42,17 @@ export type UpdateWarning = { accountId: string; ynab: string; gone: number; old
 /** What it takes to undo an update: the transactions it changed, as they were, and the ones it added. */
 export type UpdateSnapshot = { at: number; before: Txn[]; added: string[]; syncedBefore?: number };
 
+/**
+ * What an undo did, so the next update can tell its marks from yours: `was` holds each row it put back
+ * with the edit time it had before (the undo had to stamp it now so it syncs), `removed` the rows it took
+ * out again. A row still carrying the undo's stamp `at` hasn't been touched since.
+ */
+export type UndoMark = { at: number; was: Record<string, number>; removed: string[] };
+
+/** How long an update can be undone. */
+export const UPDATE_UNDO_DAYS = 30;
+export const canUndoUpdate = (u: { at: number } | undefined, now: number) => !!u && now - u.at < UPDATE_UNDO_DAYS * 86_400_000;
+
 const ym = (d: string) => d.slice(0, 7);
 /** The id YNAB knows it by now (its importId, once an update changed it in place). */
 const ynabId = (t: Txn) => t.importId ?? t.id;
@@ -79,7 +90,13 @@ export function pairChanged(gone: Txn[], fresh: Txn[]): [Txn, Txn][] {
  * What an update would do. `lastSync`: when you last imported or updated (anything of YNAB's changed
  * here after that is yours now).
  */
-export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSync: number, thisMonth: string, newId?: () => string): YnabUpdate {
+export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSync: number, thisMonth: string, newId?: () => string, undo?: UndoMark): YnabUpdate {
+  // a row the last undo put back or took out (and nobody touched since) is YNAB's as before, not an edit of yours
+  const byUndo = (t: Txn) => !!undo && t.updatedAt === undo.at;
+  const editedAt = (t: Txn) => (byUndo(t) && undo!.was[t.id] !== undefined ? undo!.was[t.id]! : t.updatedAt);
+  const edited = (t: Txn) => editedAt(t) > lastSync;
+  const undoRemoved = new Set(undo?.removed ?? []);
+  const reAddable = (t: Txn) => t.deleted && undoRemoved.has(t.id) && byUndo(t);
   const fromYnab = txns.filter((t) => !t.deleted && t.source === "ynab" && !t.id.startsWith("start:"));
   const from = fromYnab.reduce((m, t) => (ym(t.date) < m ? ym(t.date) : m), thisMonth);
 
@@ -120,7 +137,8 @@ export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSy
   }
   const r = buildImport(structuredClone(plan), d, { from, thisMonth, accounts, categories: {}, categoryMap, removeEmpty: false, existing: txns, replaceMatching: true, newId, history: true });
 
-  const have = new Set(txns.flatMap((t) => [t.id, ynabId(t)])); // deleted ones too: one you deleted here stays deleted
+  // deleted ones too: one you deleted here stays deleted (but one the undo took out can come back)
+  const have = new Set(txns.filter((t) => !reAddable(t)).flatMap((t) => [t.id, ynabId(t)]));
   const incoming = r.txns.filter((t) => t.source === "ynab" && !t.id.startsWith("start:"));
   const fresh = incoming.filter((t) => !have.has(t.id));
   const now = new Set(incoming.map((t) => t.id));
@@ -129,7 +147,7 @@ export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSy
   const covered = (t: Txn) => ym(t.date) >= from && matched.has(t.accountId) && !now.has(ynabId(t));
   const missing = fromYnab.filter(covered);
   // one you deleted here that YNAB then changed: matched too, so it stays deleted instead of coming back
-  const deletedHere = txns.filter((t) => t.deleted && t.source === "ynab" && !t.id.startsWith("start:") && covered(t));
+  const deletedHere = txns.filter((t) => t.deleted && !reAddable(t) && t.source === "ynab" && !t.id.startsWith("start:") && covered(t));
 
   const pairs = pairChanged([...missing, ...deletedHere], fresh);
   const paired = new Set(pairs.flatMap(([a, b]) => [a, b]));
@@ -142,7 +160,7 @@ export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSy
   for (const [old, next] of pairs) {
     if (old.deleted) {
       changed.push({ ...old, importId: next.id });
-    } else if (old.updatedAt > lastSync) {
+    } else if (edited(old)) {
       // changed in both: yours stays; YNAB fills only what you left blank (a category, a memo)
       const fill: Partial<Txn> = {};
       if (uncategorized(old) && !uncategorized(next)) Object.assign(fill, { categoryId: next.categoryId, splits: next.splits, originalCategory: next.originalCategory });
@@ -172,8 +190,8 @@ export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSy
     add,
     changed,
     changedBoth,
-    gone: left.filter((t) => t.updatedAt <= lastSync),
-    keptEdited: left.filter((t) => t.updatedAt > lastSync),
+    gone: left.filter((t) => !edited(t)),
+    keptEdited: left.filter(edited),
     replaced: r.matches.filter((m) => addIds.has(m.ynab.id)).map((m) => m.mine.id),
     hiddenAdded: r.plan.budget.filter((b) => b.hidden && !plan.budget.some((x) => x.id === b.id) && used.has(b.id)),
     skippedAccounts,
@@ -190,7 +208,9 @@ export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSy
  */
 export function applyYnabUpdate(txns: Txn[], u: YnabUpdate, lastSync: number, removeGone: boolean, stamp: number): Txn[] {
   const remove = new Set([...(removeGone ? u.gone.map((t) => t.id) : []), ...u.replaced]);
-  const over = new Map([...u.changed, ...u.changedBoth].map((t) => [t.id, t]));
+  // an added one that's already here (an undo took it out): it comes back in its place
+  const over = new Map([...u.changed, ...u.changedBoth, ...u.add].map((t) => [t.id, t]));
+  const here = new Set(txns.map((t) => t.id));
   const kept = new Set(u.keptEdited.map((t) => t.id));
   const out = txns.map((t) => {
     const next = over.get(t.id);
@@ -200,7 +220,7 @@ export function applyYnabUpdate(txns: Txn[], u: YnabUpdate, lastSync: number, re
     if (kept.has(t.id)) return { ...t, source: "manual" as const, updatedAt: stamp };
     return t;
   });
-  return [...out, ...u.add.map((t) => ({ ...t, updatedAt: stamp }))];
+  return [...out, ...u.add.filter((t) => !here.has(t.id)).map((t) => ({ ...t, updatedAt: stamp }))];
 }
 
 /** The undo for an update: every transaction it changed (as it was before) and every one it added. */
@@ -216,14 +236,23 @@ export function snapshotUpdate(before: Txn[], after: Txn[], at: number, syncedBe
   return { at, before: changed, added, ...(syncedBefore ? { syncedBefore } : {}) };
 }
 
-/** Undo an update: the ones it changed go back to how they were, the ones it added are deleted (stamped now, so it syncs). */
-export function undoYnabUpdate(txns: Txn[], snap: UpdateSnapshot, stamp: number): Txn[] {
+/**
+ * Undo an update: the ones it changed go back to how they were, the ones it added are deleted (stamped
+ * now, so it syncs). One you changed after the update (on any device) stays as you left it: `kept`.
+ */
+export function undoYnabUpdate(txns: Txn[], snap: UpdateSnapshot, stamp: number): { txns: Txn[]; kept: number; mark: UndoMark } {
   const back = new Map(snap.before.map((t) => [t.id, t]));
   const added = new Set(snap.added);
-  return txns.map((t) => {
+  const mark: UndoMark = { at: stamp, was: {}, removed: [] };
+  let kept = 0;
+  const out = txns.map((t) => {
     const old = back.get(t.id);
-    if (old) return { ...old, updatedAt: stamp };
-    if (added.has(t.id) && !t.deleted) return { ...t, deleted: true, updatedAt: stamp };
-    return t;
+    if (!old && !added.has(t.id)) return t;
+    if (t.updatedAt > snap.at) { kept++; return t; } // changed since the update: yours
+    if (old) { mark.was[t.id] = old.updatedAt; return { ...old, updatedAt: stamp }; }
+    if (t.deleted) return t;
+    mark.removed.push(t.id);
+    return { ...t, deleted: true, updatedAt: stamp };
   });
+  return { txns: out, kept, mark };
 }

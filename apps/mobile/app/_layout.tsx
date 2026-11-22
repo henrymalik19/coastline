@@ -5,7 +5,7 @@ import { AppState, Platform } from "react-native";
 import { ConfirmHost } from "../components/ConfirmHost";
 import { PlanChoiceHost } from "../components/PlanChoiceHost";
 import { InviteHost } from "../components/InviteHost";
-import { LoadNoticeHost } from "../components/LoadNoticeHost";
+import { LoadNoticeHost, SaveProblemBar } from "../components/LoadNoticeHost";
 import { rollForwardNow } from "../lib/rollForwardNow";
 import { useStore } from "../lib/store";
 import { startSync } from "../lib/sync";
@@ -68,6 +68,7 @@ export default function RootLayout() {
       <PlanChoiceHost />
       <InviteHost />
       <LoadNoticeHost />
+      <SaveProblemBar />
       <ConfirmHost />
     </>
   );

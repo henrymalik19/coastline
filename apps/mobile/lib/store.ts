@@ -9,7 +9,7 @@ import { syncPaycheckLoans } from "./loans";
 import { freshPlan } from "./presets";
 import { stampMs } from "./pages";
 import { canUndoImport, fromOldSnapshot, importSnapshot, parseUndo, readImportBackup, undoImportTxns, type ImportSnapshot } from "./importUndo";
-import { applyYnabUpdate, snapshotUpdate, undoYnabUpdate as undoYnabUpdateTxns, type UpdateSnapshot, type YnabUpdate } from "./ynabUpdate";
+import { applyYnabUpdate, canUndoUpdate, snapshotUpdate, undoYnabUpdate as undoYnabUpdateTxns, type UndoMark, type UpdateSnapshot, type YnabUpdate } from "./ynabUpdate";
 import { renamePayeesIn } from "./payees";
 import { combineCategory, uncombineTxns } from "./combine";
 import { keepFamilyGroups } from "./subcats";
@@ -82,6 +82,8 @@ export type AppState = {
   importDirty?: boolean;
   /** What it takes to undo the last update from YNAB (this device only; gone after the next update or import). */
   lastUpdate?: UpdateSnapshot;
+  /** What undoing the last update did, so updating again treats those rows as YNAB's (this device only). */
+  lastUndo?: UndoMark;
   hydrated: boolean;
   /** Something in this device's saved copy couldn't be read when the app opened (said once; not saved). */
   loadNotice?: string;
@@ -105,8 +107,8 @@ export type AppState = {
   refreshBalances: () => void;
   /** Bring in a newer YNAB export's transactions (ynabUpdate.ts): new ones in, gone ones out if `removeGone`. */
   updateFromYnab: (u: YnabUpdate, removeGone: boolean) => void;
-  /** Put the transactions back as they were just before the last update from YNAB. */
-  undoYnabUpdate: () => void;
+  /** Put the transactions back as they were just before the last update from YNAB. Returns how many you'd changed since (those stay). */
+  undoYnabUpdate: () => number;
   /** Rename a payee, or combine several into one (`to`), on every transaction. */
   renamePayees: (from: string[], to: string) => void;
   /** Combine one budget category into another (lib/combine.ts). Returns its undo (puts both back as they were). */
@@ -243,7 +245,7 @@ export const useStore = create<AppState>()(
         const snapshot = importSnapshot(stamp, structuredClone(get().plan), get().txns, list);
         const next = structuredClone(plan);
         applyRegisterBalances(next, list);
-        set({ plan: next, txns: list, lastImport: snapshot, importedAt: stamp, ynabSyncedAt: stamp, importDirty: true, updatedAt: now(), lastUpdate: undefined });
+        set({ plan: next, txns: list, lastImport: snapshot, importedAt: stamp, ynabSyncedAt: stamp, importDirty: true, updatedAt: now(), lastUpdate: undefined, lastUndo: undefined });
       },
       combineCategories: (from, into) => {
         const stamp = now();
@@ -268,16 +270,17 @@ export const useStore = create<AppState>()(
         next.budget.push(...u.hiddenAdded.filter((b) => !next.budget.some((x) => x.id === b.id)));
         applyRegisterBalances(next, list);
         const lastUpdate = snapshotUpdate(s.txns, list, stamp, s.ynabSyncedAt);
-        set({ plan: next, txns: list, ynabSyncedAt: stamp, importDirty: true, updatedAt: stamp, lastUpdate });
+        set({ plan: next, txns: list, ynabSyncedAt: stamp, importDirty: true, updatedAt: stamp, lastUpdate, lastUndo: undefined });
       },
       undoYnabUpdate: () => {
         const s = get();
-        if (!s.lastUpdate) return;
+        if (!s.lastUpdate) return 0;
         const stamp = now();
-        const list = undoYnabUpdateTxns(s.txns, s.lastUpdate, stamp);
+        const { txns: list, kept, mark } = undoYnabUpdateTxns(s.txns, s.lastUpdate, stamp);
         const next = structuredClone(s.plan);
         applyRegisterBalances(next, list);
-        set({ plan: next, txns: list, ynabSyncedAt: s.lastUpdate.syncedBefore ?? s.importedAt, importDirty: true, updatedAt: stamp, lastUpdate: undefined });
+        set({ plan: next, txns: list, ynabSyncedAt: s.lastUpdate.syncedBefore ?? s.importedAt, importDirty: true, updatedAt: stamp, lastUpdate: undefined, lastUndo: mark });
+        return kept;
       },
       undoImport: (keepAdded = false) => {
         const snap = get().lastImport;
@@ -286,7 +289,7 @@ export const useStore = create<AppState>()(
         const list = undoImportTxns(get().txns, snap, stamp, keepAdded);
         const plan = structuredClone(snap.plan);
         applyRegisterBalances(plan, list);
-        set({ plan, txns: list, lastImport: undefined, importedAt: undefined, ynabSyncedAt: undefined, importDirty: true, updatedAt: stamp, lastUpdate: undefined });
+        set({ plan, txns: list, lastImport: undefined, importedAt: undefined, ynabSyncedAt: undefined, importDirty: true, updatedAt: stamp, lastUpdate: undefined, lastUndo: undefined });
       },
       keepImport: () => set({ lastImport: undefined, importDirty: true }),
       completeOnboarding: () => set({ onboarded: true, updatedAt: now() }),
@@ -321,7 +324,7 @@ export const useStore = create<AppState>()(
         // transactions too (marked deleted, so it syncs); check-ins are kept
         const stamp = now();
         const txns = get().txns.map((x) => (x.deleted ? x : { ...x, deleted: true, updatedAt: stamp }));
-        set({ plan: freshPlan(), txns, txnCursor: undefined, txnPushed: undefined, onboarded: false, todoDone: {}, lastImport: undefined, importedAt: undefined, ynabSyncedAt: undefined, importDirty: true, updatedAt: stamp, lastUpdate: undefined });
+        set({ plan: freshPlan(), txns, txnCursor: undefined, txnPushed: undefined, onboarded: false, todoDone: {}, lastImport: undefined, importedAt: undefined, ynabSyncedAt: undefined, importDirty: true, updatedAt: stamp, lastUpdate: undefined, lastUndo: undefined });
       },
     }),
     {
@@ -334,7 +337,7 @@ export const useStore = create<AppState>()(
         const s = appStorage<Partial<AppState>>("coastfi.app");
         return { ...s, setItem: (name: string, value: Parameters<typeof s.setItem>[1]) => (loaded ? s.setItem(name, value) : undefined) };
       })(),
-      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, outbox, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty, lastUpdate }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, outbox, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty, lastUpdate }),
+      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, outbox, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty, lastUpdate, lastUndo }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, outbox, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty, lastUpdate, lastUndo }),
       // never trust stored data blindly: validate, and fall back to a blank plan
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState> & { isSampleData?: boolean; seenWelcome?: boolean };
@@ -406,9 +409,16 @@ export const useStore = create<AppState>()(
           ynabSyncedAt: typeof p.ynabSyncedAt === "number" ? p.ynabSyncedAt : undefined,
           lastUpdate: (() => {
             const u = p.lastUpdate;
-            if (!u || typeof u.at !== "number" || !Array.isArray(u.added) || !u.added.every((x) => typeof x === "string")) return undefined;
+            // past its 30 days it's dropped (so is one from before the window existed)
+            if (!u || typeof u.at !== "number" || !canUndoUpdate(u, Date.now()) || !Array.isArray(u.added) || !u.added.every((x) => typeof x === "string")) return undefined;
             const b = z.array(TxnSchema).safeParse(u.before);
             return b.success ? { at: u.at, before: b.data, added: u.added, ...(typeof u.syncedBefore === "number" ? { syncedBefore: u.syncedBefore } : {}) } : undefined;
+          })(),
+          lastUndo: (() => {
+            const m = p.lastUndo;
+            if (!m || typeof m.at !== "number" || !Array.isArray(m.removed) || !m.removed.every((x) => typeof x === "string") || !m.was || typeof m.was !== "object") return undefined;
+            const was = Object.fromEntries(Object.entries(m.was).filter(([, v]) => typeof v === "number")) as Record<string, number>;
+            return { at: m.at, was, removed: m.removed };
           })(),
           // an older full undo copy was just made small: the account gets it
           importDirty: !!p.importDirty || oldCopy,

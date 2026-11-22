@@ -2,7 +2,7 @@ import type { PlanState, Txn } from "@coastfi/engine";
 import { describe, expect, it } from "vitest";
 import { freshPlan } from "./presets";
 import { buildImport, parseYnab } from "./ynab";
-import { applyYnabUpdate, planYnabUpdate, snapshotUpdate, undoYnabUpdate } from "./ynabUpdate";
+import { applyYnabUpdate, canUndoUpdate, planYnabUpdate, snapshotUpdate, undoYnabUpdate } from "./ynabUpdate";
 
 const HEAD = `"Account","Flag","Date","Payee","Category Group/Category","Category Group","Category","Memo","Outflow","Inflow","Cleared"\n`;
 const row = (date: string, payee: string, group: string, cat: string, out: string, inflow = "$0.00") =>
@@ -160,9 +160,55 @@ describe("update transactions from YNAB", () => {
     const before = [...txns, mine];
     const after = applyYnabUpdate(before, u, 100, true, 300);
     const snap = snapshotUpdate(before, after, 300, 100);
-    const back = undoYnabUpdate(after, snap, 400);
+    const { txns: back, kept } = undoYnabUpdate(after, snap, 400);
+    expect(kept).toBe(0);
     const live = (l: Txn[]) => l.filter((t) => !t.deleted).map((t) => [t.payee, t.amount, t.categoryId]).sort();
     expect(live(back)).toEqual(live(before));
     expect(back.filter((t) => snap.added.includes(t.id)).every((t) => t.deleted && t.updatedAt === 400)).toBe(true);
+  });
+
+  it("an undo keeps what you changed after the update", () => {
+    const { plan, txns, newId } = imported();
+    const before = [...txns, mine];
+    const u = planYnabUpdate(plan, parseYnab(V2), before, 100, "2026-11", newId);
+    const after = applyYnabUpdate(before, u, 100, true, 300);
+    const snap = snapshotUpdate(before, after, 300, 100);
+    // you recategorize the changed Shell, and give the new Etsy a memo
+    const shellId = u.changed[0]!.id;
+    const etsyId = u.add.find((t) => t.payee === "Etsy")!.id;
+    const edited = after.map((t) => (t.id === shellId ? { ...t, categoryId: "food", updatedAt: 350 } : t.id === etsyId ? { ...t, memo: "gift", updatedAt: 351 } : t));
+    const { txns: back, kept } = undoYnabUpdate(edited, snap, 400);
+    expect(kept).toBe(2);
+    expect(back.find((t) => t.id === shellId)).toMatchObject({ amount: -45, categoryId: "food", updatedAt: 350 });
+    expect(back.find((t) => t.id === etsyId)).toMatchObject({ memo: "gift" });
+    expect(back.find((t) => t.id === etsyId)!.deleted).toBeFalsy();
+  });
+
+  it("the same update again after an undo brings it all back, without calling anything yours", () => {
+    const { plan, txns, newId } = imported();
+    const before = [...txns, mine];
+    const u = planYnabUpdate(plan, parseYnab(V2), before, 100, "2026-11", newId);
+    const after = applyYnabUpdate(before, u, 100, true, 300);
+    const snap = snapshotUpdate(before, after, 300, 100);
+    const { txns: back, mark } = undoYnabUpdate(after, snap, 400);
+    // ynabSyncedAt goes back to 100
+    const again = planYnabUpdate(plan, parseYnab(V2), back, 100, "2026-11", newId, mark);
+    expect(again.changedBoth).toEqual([]);
+    expect(again.keptEdited).toEqual([]);
+    expect(again.add.map((t) => t.payee).sort()).toEqual(u.add.map((t) => t.payee).sort());
+    expect(again.changed.map((t) => [t.id, t.amount])).toEqual(u.changed.map((t) => [t.id, t.amount]));
+    const redone = applyYnabUpdate(back, again, 100, true, 500);
+    const live = (l: Txn[]) => l.filter((t) => !t.deleted).map((t) => [t.id, t.payee, t.amount]).sort();
+    expect(live(redone)).toEqual(live(after));
+    expect(new Set(redone.map((t) => t.id)).size).toBe(redone.length); // no row twice
+    // without the mark (as before): the undone rows looked like your edits
+    const old = planYnabUpdate(plan, parseYnab(V2), back, 100, "2026-11", newId);
+    expect(old.changedBoth.length + old.add.length).not.toEqual(again.changedBoth.length + again.add.length);
+  });
+
+  it("an update can be undone for 30 days", () => {
+    expect(canUndoUpdate({ at: 0 }, 29 * 86_400_000)).toBe(true);
+    expect(canUndoUpdate({ at: 0 }, 30 * 86_400_000)).toBe(false);
+    expect(canUndoUpdate(undefined, 0)).toBe(false);
   });
 });

@@ -2,7 +2,7 @@ import type { Txn } from "@coastfi/engine";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
-const { historySig, splitStorage, textShelf } = await import("./txnStorage");
+const { historySig, rowStorage, saveHealth, splitStorage, textShelf } = await import("./txnStorage");
 
 const memText = () => {
   const m = new Map<string, string>();
@@ -90,5 +90,85 @@ describe("splitStorage", () => {
     await s.set([]);
     expect(text.m.has("h")).toBe(false);
     expect(historySig([])).toBe("0:0:0");
+  });
+});
+
+const memRows = () => {
+  const r = { m: new Map<string, Txn>(), puts: 0, fail: false,
+    all: async () => [...r.m.values()],
+    write: async (put: Txn[], del: string[]) => { if (r.fail) throw new Error("QuotaExceededError"); for (const t of put) { r.m.set(t.id, t); r.puts++; } for (const id of del) r.m.delete(id); },
+    clear: async () => void r.m.clear() };
+  return r;
+};
+type St = { txns: Txn[]; plan: string };
+
+describe("rowStorage", () => {
+  it("keeps every transaction in rows and only the rest in the text entry", async () => {
+    const text = memText();
+    const rows = memRows();
+    const st = rowStorage<St>("app", text, rows);
+    await st.setItem("app", val([tx("a", "chk"), tx("h1", "outside:Old")]));
+    expect(JSON.parse(text.m.get("app")!).state).toEqual({ txns: [], plan: "p" });
+    expect([...rows.m.keys()]).toEqual(["a", "h1"]);
+    const back = await rowStorage<St>("app", text, rows).getItem("app");
+    expect(back!.state.txns.map((t) => t.id)).toEqual(["a", "h1"]);
+    expect(back!.state.plan).toBe("p");
+  });
+
+  it("writes only the transactions that changed", async () => {
+    const rows = memRows();
+    const st = rowStorage<St>("app", memText(), rows);
+    const a = tx("a", "chk", 1);
+    const b = tx("b", "chk", 1);
+    await st.setItem("app", val([a, b]));
+    expect(rows.puts).toBe(2);
+    await st.setItem("app", val([a, { ...b, updatedAt: 2 }]));
+    expect(rows.puts).toBe(3);
+    await st.setItem("app", val([{ ...a }, { ...b, updatedAt: 2 }])); // new copies, nothing different
+    expect(rows.puts).toBe(3);
+    await st.setItem("app", val([a])); // b gone for good (a start-over)
+    expect([...rows.m.keys()]).toEqual(["a"]);
+  });
+
+  it("moves transactions out of an older save, and history off the old shelf, keeping the newest copy", async () => {
+    const text = memText();
+    const rows = memRows();
+    rows.m.set("a", tx("a", "chk", 1));
+    text.m.set("app", JSON.stringify(val([tx("a", "chk", 5), tx("b", "chk")])));
+    const legacy = memShelf();
+    legacy.v = [tx("h1", "outside:Old")];
+    const st = rowStorage<St>("app", text, rows, legacy);
+    const v = await st.getItem("app");
+    expect(v!.state.txns.map((t) => [t.id, t.updatedAt])).toEqual([["a", 5], ["b", 1], ["h1", 1]]);
+    await st.setItem("app", v!);
+    expect(JSON.parse(text.m.get("app")!).state.txns).toEqual([]);
+    expect(rows.m.get("a")!.updatedAt).toBe(5);
+    expect(rows.m.size).toBe(3);
+    expect(legacy.v).toEqual([]);
+  });
+
+  it("when rows can't be written, everything goes in the text entry; once they can, it moves back", async () => {
+    const text = memText();
+    const rows = memRows();
+    rows.fail = true;
+    const st = rowStorage<St>("app", text, rows);
+    await st.setItem("app", val([tx("a", "chk")]));
+    expect(JSON.parse(text.m.get("app")!).state.txns).toHaveLength(1);
+    rows.fail = false;
+    await st.setItem("app", val([tx("a", "chk", 2)]));
+    expect(JSON.parse(text.m.get("app")!).state.txns).toEqual([]);
+    expect(rows.m.get("a")!.updatedAt).toBe(2);
+  });
+
+  it("a save that fails is reported until one works", async () => {
+    const text = memText();
+    let full = true;
+    const failing = { ...text, setItem: async (k: string, v: string) => { if (full) { const e = new Error("quota"); e.name = "QuotaExceededError"; throw e; } await text.setItem(k, v); } };
+    const st = rowStorage<St>("app", failing, memRows());
+    await st.setItem("app", val([tx("a", "chk")]));
+    expect(saveHealth.get()).toBe("full");
+    full = false;
+    await st.setItem("app", val([tx("a", "chk", 2)]));
+    expect(saveHealth.get()).toBeUndefined();
   });
 });
