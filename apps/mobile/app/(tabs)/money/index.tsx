@@ -12,12 +12,27 @@ import { useLayout } from "../../../lib/layout";
 import { radius, space, type, useTheme } from "../../../lib/theme";
 
 export default function MoneyHome() {
-  const { contentWidth } = useLayout();
+  const { contentWidth, twoColumn } = useLayout();
+  // a wide screen: net worth and spending on the left, the pages beside them (not one narrow column)
   return (
-    <Screen title="Money" subtitle={contentWidth < 600 ? undefined : "What you have, earn and owe"} narrow>
-      <NetWorthCard />
-      <SpendingLink />
-      <SectionGroups base="/money" heading="Your money" />
+    <Screen title="Money" subtitle={contentWidth < 600 ? undefined : "What you have, earn and owe"} narrow={!twoColumn}>
+      {twoColumn ? (
+        <View style={{ flexDirection: "row", gap: space.lg, alignItems: "flex-start" }}>
+          <View style={{ flex: 2, minWidth: 0, gap: space.lg }}>
+            <NetWorthCard />
+            <SpendingLink />
+          </View>
+          <View style={{ flex: 3, minWidth: 0 }}>
+            <SectionGroups base="/money" heading="Your money" />
+          </View>
+        </View>
+      ) : (
+        <>
+          <NetWorthCard />
+          <SpendingLink />
+          <SectionGroups base="/money" heading="Your money" />
+        </>
+      )}
     </Screen>
   );
 }

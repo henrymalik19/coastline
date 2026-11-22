@@ -16,6 +16,7 @@ import { useFillPage } from "../MasterDetail";
 import { Card, Divider, Screen } from "../ui";
 import { findSection, SECTION_SCREENS, SECTIONS } from "./sections";
 import { useBanks } from "../BankConnections";
+import { useLayout } from "../../lib/layout";
 import { usePlaid } from "../../lib/plaidState";
 
 /** These pages live in the Money tab (what you have today, and what retirement looks like); the rest stay in Settings. */
@@ -66,10 +67,11 @@ function useSummaries(): Record<string, string> {
 /** A list of pages (Money tab or Settings), each row opening `${base}/${key}`. */
 export function SectionIndex({ base, title, subtitle }: { base: SectionBase; title: string; subtitle: string }) {
   const router = useRouter();
+  const { twoColumn } = useLayout();
   // Settings isn't a tab: a way back to where you came from (Home if opened directly)
   const back = base === "/settings" ? () => (router.canGoBack() ? router.back() : router.replace("/home")) : undefined;
   return (
-    <Screen title={title} subtitle={subtitle} narrow hideSettings={base === "/settings"} back={back}>
+    <Screen title={title} subtitle={subtitle} narrow={!twoColumn} hideSettings={base === "/settings"} back={back}>
       <SectionGroups base={base} />
       {base === "/settings" ? <FeedbackRow /> : null}
       {base === "/settings" ? <AdminRow /> : null}
@@ -177,8 +179,10 @@ export function SectionGroups({ base, heading }: { base: SectionBase; heading?: 
   const banks = useBanks();
   const shown = (s: { key: string; hidden?: boolean }) => !s.hidden && (s.key !== "banks" || banks);
   const groups = groupsFor(base).filter((g) => g.items.some(shown));
+  // a wide screen: the groups side by side, two to a row, instead of one narrow column
+  const { twoColumn } = useLayout();
   return (
-    <>
+    <View style={twoColumn ? { flexDirection: "row", flexWrap: "wrap", gap: space.lg, alignItems: "flex-start" } : { gap: space.lg }}>
       {groups.map((group, gi) => {
         const rows = [
           ...group.items.filter(shown).map((s) => ({ key: s.key, title: s.title, summary: summary[s.key], icon: s.icon, href: `${base}/${s.key}` })),
@@ -186,7 +190,7 @@ export function SectionGroups({ base, heading }: { base: SectionBase; heading?: 
           ...(base === "/money" && gi === groups.length - 1 ? [{ key: "emergency", ...emergency }] : []),
         ];
         return (
-        <View key={group.title} style={{ gap: space.sm }}>
+        <View key={group.title} style={[{ gap: space.sm }, twoColumn ? { flexBasis: "45%", flexGrow: 1, minWidth: 0 } : null]}>
           {groups.length > 1 || heading ? <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.xs }]}>{groups.length > 1 ? group.title : heading ?? group.title}</Text> : null}
           <Card padded={false}>
             {rows.map((s, i) => (
@@ -217,9 +221,9 @@ export function SectionGroups({ base, heading }: { base: SectionBase; heading?: 
         );
       })}
       {base === "/money" ? (
-        <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.xs }]}>What if you save more or returns change? Try it on Forecast → What if.</Text>
+        <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.xs, flexBasis: "100%" }]}>What if you save more or returns change? Try it on Forecast → What if.</Text>
       ) : null}
-    </>
+    </View>
   );
 }
 

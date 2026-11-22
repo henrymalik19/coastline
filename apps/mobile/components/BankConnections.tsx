@@ -76,7 +76,8 @@ function ConnectButton() {
  */
 export function BankBar() {
   const t = useTheme();
-  const router = useRouter();
+  // Back on the banks page returns here (Accounts), not to the Settings list
+  const openPage = useOpenPage();
   const visible = useBanks();
   const { items, accounts, canLink, error } = usePlaid();
   const { state } = usePlan();
@@ -85,7 +86,7 @@ export function BankBar() {
     const out: { key: string; text: string; onPress: () => void }[] = [];
     if (it.status === "login_required" || it.status === "pending_expiration")
       out.push({ key: `${it.id}-login`, text: `${it.institution} needs you to sign in again`, onPress: () => void reconnectBank(it.id) });
-    else if (it.status === "error") out.push({ key: `${it.id}-err`, text: `${it.institution} couldn't update`, onPress: () => router.push("/settings/banks") });
+    else if (it.status === "error") out.push({ key: `${it.id}-err`, text: `${it.institution} couldn't update`, onPress: () => openPage("/settings/banks") });
     const loose = accounts.filter((b) => b.item === it.id && !matchOf(state, b)).length;
     if (loose) out.push({ key: `${it.id}-loose`, text: `${loose} ${it.institution} account${loose === 1 ? "" : "s"} not set up`, onPress: () => usePlaid.setState({ review: it.id }) });
     return out;
@@ -95,7 +96,7 @@ export function BankBar() {
       <View style={[styles.between, { flexWrap: "wrap" }]}>
         {canLink ? <ConnectButton /> : <View />}
         {items.length ? (
-          <Text role="link" onPress={() => router.push("/settings/banks")} style={[type.caption, { color: t.accent, fontWeight: "700" }]}>
+          <Text role="link" onPress={() => openPage("/settings/banks")} style={[type.caption, { color: t.accent, fontWeight: "700" }]}>
             Manage banks
           </Text>
         ) : null}

@@ -111,7 +111,9 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
     const moved = txns
       .filter((x) => !x.deleted && x.date.startsWith(String(y0)) && ((x.transferAccountId && ids.has(x.transferAccountId) && x.amount < 0) || (x.categoryId && [...ids].some((id) => x.categoryId === "acct:" + id) && x.amount < 0)))
       .reduce((sum, x) => sum + Math.abs(x.amount), 0);
-    const soFar = (k === "k401" ? c?.k401 ?? 0 : k === "hsa" ? c?.hsa ?? 0 : k === "iraSpouse" ? c?.iraSpouse ?? 0 : c?.ira ?? 0) + moved;
+    // the same "in so far" as the Accounts table: what you entered, or (401(k), HSA) the plan's estimate from
+    // this year's earlier paychecks until you do, plus transfers you've recorded
+    const soFar = before + moved;
     // the plan, from January (or today) of the picked month's year through that month
     const thisYear = selY === y0;
     const byThen =
@@ -179,10 +181,13 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       key: ("debt:" + x.id) as AccountKey,
       name: debtLabel(x),
       value: `${money(x.balance)} owed`,
-      status:
-        m !== undefined && m <= atI
-          ? `Paid off ${when(m)}`
-          : m !== undefined ? `Paid off ${when(m)}` : x.payroll ? "From your paycheck" : "Minimum payments",
+      // this page shows only the amounts you've set; your full plan (Home) also sends leftover money to
+      // your priority steps, which can pay a debt off much sooner: say so, so the two don't seem to disagree
+      status: (() => {
+        const base = m !== undefined ? `Paid off ${when(m)}` : x.payroll ? "From your paycheck" : "Minimum payments";
+        const full = result.plan.events.find((e) => e.key === "debt:" + x.id)?.m;
+        return full !== undefined && (m === undefined || full < m) ? `${base} · your plan: ${when(full)}` : base;
+      })(),
       info: m !== undefined && m <= atI ? undefined : `By ${selLabel}: ${money(owedThen, { whole: true })} owed.`,
       progress: x.balance > 0 ? 0 : undefined,
       later: x.balance > 0 ? Math.min(1, Math.max(0, 1 - owedThen / x.balance)) : undefined,

@@ -23,9 +23,10 @@ export function badgeList(s: PlanState, o: RunResult, streak: Streak): Badge[] {
   }
   B.push({ key: "coast", title: "Coast FI", icon: "🎯", desc: "Growth alone gets you to FIRE", got: o.progress >= 1, eta: o.progress >= 1 ? null : o.crossing !== null ? Math.round(o.crossing * 12) : null });
   B.push({ key: "fi", title: "Fully FI", icon: "🏁", desc: "Invested at least your FIRE number", got: o.progressFire >= 1, eta: o.progressFire >= 1 ? null : o.whenBalance(o.fire) });
-  const sef = d.bal.cash >= pl.starterTarget;
+  // an empty plan has no emergency fund target yet: "$0 of $0" isn't a badge
+  const sef = pl.starterTarget > 0.5 && d.bal.cash >= pl.starterTarget;
   B.push({ key: "sef", title: "Safety net", icon: "🛟", desc: "Starter emergency fund", got: sef, eta: sef ? null : ev("starterEF") });
-  const fef = d.bal.cash >= pl.fullTarget;
+  const fef = pl.fullTarget > 0.5 && d.bal.cash >= pl.fullTarget;
   B.push({ key: "fef", title: "Fortress", icon: "🏰", desc: `${s.plan.efMonths}-month emergency fund`, got: fef, eta: fef ? null : ev("fullEF") });
   if (s.debts.length) {
     const free = s.debts.every((x) => (+x.balance || 0) <= 0);

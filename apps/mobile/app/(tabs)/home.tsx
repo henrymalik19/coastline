@@ -50,6 +50,9 @@ export default function Home() {
   // transactions that still need a category (a to-do until they're done)
   const needsCount = txns.filter((x) => needsCategory(x, needsCategorySince(start))).length;
   const toggleTodo = useStore((s) => s.toggleTodo);
+  // weekly or every-two-weeks pay with no next payday set: the plan can't tell which months get a third
+  // paycheck, so each month has the year's average (more than Money's "normal month" of two)
+  const averaged = state.incomes.some((i) => (i.freq === "weekly" || i.freq === "biweekly") && !i.nextPayday);
 
   // which plan step a to-do comes from ("Step 3: Pay off high-interest debt")
   const stepOf = (key: string): string | undefined => {
@@ -200,7 +203,7 @@ export default function Home() {
       {todos.length && !m0.emergency ? (
         <View style={{ paddingHorizontal: space.lg, paddingBottom: space.md, marginTop: -space.xs, gap: 4 }}>
           <Text style={[type.caption, { color: t.text2, fontVariant: ["tabular-nums"] }]}>
-            {money(m0.income)} in − {money(m0.expenses)} costs ={" "}
+            {money(m0.income)} in{averaged ? " (paychecks averaged over the year)" : ""} − {money(m0.expenses)} costs ={" "}
             <Text style={{ fontWeight: "700", color: t.text }}>{money(Math.max(0, m0.income - m0.expenses))}</Text> for your priority steps.{" "}
             <Text role="link" style={{ color: t.accent, fontWeight: "700" }} onPress={() => openPage("/settings/priorities")}>
               See the order
