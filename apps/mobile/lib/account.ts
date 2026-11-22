@@ -61,7 +61,7 @@ export async function signOut(forget = false) {
     useStore.getState().startFresh();
     // forgetting clears this device only: the account's import record and transactions aren't this
     // device's to change (startFresh marks transactions deleted, which signing back in would upload)
-    useStore.setState({ importDirty: false, txns: [], checkins: [], syncBase: undefined, txnCursor: undefined, txnPushed: undefined });
+    useStore.setState({ importDirty: false, txns: [], checkins: [], syncBase: undefined, txnCursor: undefined, txnPushed: undefined, outbox: [] });
   }
 }
 

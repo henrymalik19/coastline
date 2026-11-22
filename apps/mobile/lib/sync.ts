@@ -26,11 +26,12 @@ import { create } from "zustand";
 import { deepEqual, merge3 } from "./merge";
 import { firstSyncAction, laterSyncAction, mergeCheckinLists } from "./firstSync";
 import { sawStamps } from "./stamp";
+import { afterUpload } from "./outbox";
 import { planFromSnapshot, snapshotOf, type PlanRow } from "./planSnapshot";
 import { freshPlan } from "./presets";
 import { loadLimits } from "./limits";
 import { checkMembership, onMembershipChange, onSharingSignIn, onSharingSignOut, publishViews } from "./sharing";
-import { useStore } from "./store";
+import { asRemote, useStore } from "./store";
 import { needsSecondStep } from "./mfa";
 import { AWAY_LIMIT_DAYS, awayTooLong, lastActive, noteActive } from "./idle";
 import { supabase } from "./supabase";
@@ -203,7 +204,7 @@ const newReload = (pid: string, at: string | null | undefined) => {
 function dropLocalCopy() {
   applyingRemote = true;
   useStore.setState({
-    txns: [], checkins: [], syncBase: undefined, txnCursor: undefined, txnPushed: undefined,
+    txns: [], checkins: [], syncBase: undefined, txnCursor: undefined, txnPushed: undefined, outbox: [],
     // the account's plan is the newer one now (a plan saved at 0 never wins)
     updatedAt: 0,
     lastImport: undefined, importedAt: undefined, ynabSyncedAt: undefined, importDirty: false,
@@ -342,11 +343,16 @@ const missingTable = (e: unknown) => /PGRST205|42P01|does not exist|Could not fi
 
 async function pushTxns(owner: string): Promise<void> {
   if (!supabase || !txnTable) return;
-  const since = pushedThrough(owner);
-  const changed = useStore.getState().txns.filter((t) => t.updatedAt > since);
+  // exactly what this device changed and the server hasn't confirmed (lib/outbox.ts): no clocks involved
+  const { txns, outbox } = useStore.getState();
+  if (!outbox.length) return;
+  const queued = new Set(outbox);
+  const changed = txns.filter((t) => queued.has(t.id));
+  // ids of rows no longer here (nothing to send) leave the queue
+  if (changed.length < outbox.length) useStore.setState((st) => ({ outbox: st.outbox.filter((id) => st.txns.some((t) => t.id === id)) }));
   if (!changed.length) return;
-  // in batches: an import is thousands of rows, too much for one request. Saving is safe to repeat, so
-  // if a batch fails the next sync sends them all again (an import's rows share one edit time).
+  // in batches: an import is thousands of rows, too much for one request. Each batch's ids leave the
+  // outbox once it's saved (a failed one keeps its ids for the next sync; saving again is harmless).
   const all = batches(changed, TXN_BATCH);
   try {
     for (const [i, batch] of all.entries()) {
@@ -359,6 +365,8 @@ async function pushTxns(owner: string): Promise<void> {
         }
         throw res.error;
       }
+      // confirmed: out of the queue, unless edited again while this was on its way
+      useStore.setState((st) => ({ outbox: afterUpload(st.outbox, batch, st.txns) }));
     }
   } finally {
     if (all.length > 1) setSync({ progress: undefined });
@@ -568,17 +576,17 @@ async function switchTo(pid: string, remote: PlanRow | null, checkins: Checkin[]
   applyingRemote = true;
   if (remote && ok?.success) {
     const todoDone = remote.todo_done ?? {};
-    useStore.setState({
+    asRemote(() => useStore.setState({
       plan: ok.data, todoDone, onboarded: remote.onboarded, updatedAt: remote.client_updated_at, txns, txnCursor,
       checkins: [...checkins].sort((a, b) => a.month.localeCompare(b.month)),
       syncBase: { owner: pid, at: remote.client_updated_at, plan: ok.data, todoDone },
-    });
+    }));
   } else {
     const plan = freshPlan();
-    useStore.setState({ plan, todoDone: {}, onboarded: false, updatedAt: 0, txns, txnCursor, checkins, syncBase: { owner: pid, at: 0, plan, todoDone: {} } });
+    asRemote(() => useStore.setState({ plan, todoDone: {}, onboarded: false, updatedAt: 0, txns, txnCursor, checkins, syncBase: { owner: pid, at: 0, plan, todoDone: {} } }));
   }
   applyingRemote = false;
-  useStore.setState({ txnPushed: { owner: pid, at: newestEdit(txns) } });
+  useStore.setState({ txnPushed: { owner: pid, at: newestEdit(txns) }, outbox: [] });
 }
 
 /** Upload this device's changes: the plan (if it changed), check-ins and transactions. */

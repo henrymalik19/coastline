@@ -74,3 +74,22 @@ describe("edit times", () => {
     expect(mine.updatedAt).toBeGreaterThan(ahead);
   });
 });
+
+describe("the outbox in the store", () => {
+  it("queues this device's edits, not the server's", async () => {
+    save({ plan: freshPlan(), onboarded: true, txns: [] });
+    await reload();
+    useStore.setState({ outbox: [] });
+    useStore.getState().mergeTxns([txn("from-server", 5) as never]);
+    expect(useStore.getState().outbox).toEqual([]);
+    useStore.getState().saveTxn({ id: "mine", accountId: "chk", date: "2026-11-02", amount: -3, cleared: "uncleared", source: "manual" }, "2026-11-02");
+    expect(useStore.getState().outbox).toEqual(["mine"]);
+    useStore.getState().deleteTxn("from-server");
+    expect(useStore.getState().outbox).toEqual(["mine", "from-server"]);
+  });
+  it("an older saved copy gets its outbox from the old marker", async () => {
+    save({ plan: freshPlan(), onboarded: true, txns: [txn("up", 5), txn("waiting", 15)], txnPushed: { owner: "u1", at: 10 } });
+    const s = await reload();
+    expect(s.outbox).toEqual(["waiting"]);
+  });
+});

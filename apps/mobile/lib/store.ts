@@ -15,6 +15,18 @@ import { combineCategory, uncombineTxns } from "./combine";
 import { keepFamilyGroups } from "./subcats";
 import { salvagePlan, salvageTxns } from "./salvage";
 import { sawStamps, stamp } from "./stamp";
+import { addIds, changedIds, seedOutbox } from "./outbox";
+
+/** Changes made from inside this are the server's (other devices'), not this device's: they don't go in the outbox. */
+let remote = 0;
+export function asRemote<T>(fn: () => T): T {
+  remote++;
+  try {
+    return fn();
+  } finally {
+    remote--;
+  }
+}
 
 /** The device's saved copy has been read (until then nothing is written over it). */
 let loaded = false;
@@ -56,6 +68,8 @@ export type AppState = {
   txnCursor?: { owner: string; at: string };
   /** This device has uploaded its transactions edited up to `at` (ms) to `owner`'s plan. Missing: upload them all. */
   txnPushed?: { owner: string; at: number };
+  /** Transactions changed on this device and not yet confirmed by the server (lib/outbox.ts). */
+  outbox: string[];
   /** The last "reload all my devices" request for `owner`'s plan this device acted on (the server's time). */
   reloadSeen?: { owner: string; at: string };
   /** What it takes to undo the import from YNAB (saved with your account too, so Undo works on any device). */
@@ -124,6 +138,7 @@ export const useStore = create<AppState>()(
       todoDone: {},
       updatedAt: 0,
       hydrated: false,
+      outbox: [],
 
       update: (fn) => {
         const draft = structuredClone(get().plan);
@@ -218,7 +233,7 @@ export const useStore = create<AppState>()(
         const list = [...by.values()];
         const plan = structuredClone(get().plan);
         applyRegisterBalances(plan, list);
-        set({ txns: list, plan });
+        asRemote(() => set({ txns: list, plan }));
       },
       importBudget: (plan, incoming, replaced = []) => {
         const stamp = now();
@@ -319,7 +334,7 @@ export const useStore = create<AppState>()(
         const s = appStorage<Partial<AppState>>("coastfi.app");
         return { ...s, setItem: (name: string, value: Parameters<typeof s.setItem>[1]) => (loaded ? s.setItem(name, value) : undefined) };
       })(),
-      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty, lastUpdate }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty, lastUpdate }),
+      partialize: ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, outbox, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty, lastUpdate }) => ({ plan, checkins, txns, onboarded, todoDone, updatedAt, syncBase, txnCursor, txnPushed, outbox, reloadSeen, lastImport, importedAt, ynabSyncedAt, importDirty, lastUpdate }),
       // never trust stored data blindly: validate, and fall back to a blank plan
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<AppState> & { isSampleData?: boolean; seenWelcome?: boolean };
@@ -377,6 +392,10 @@ export const useStore = create<AppState>()(
             // what was uploaded still was (a dropped bad row is simply loaded from the account again)
             return x && typeof x.owner === "string" && typeof x.at === "number" ? x : undefined;
           })(),
+          // what still has to go up; a copy saved before the outbox existed fills it from the old marker
+          outbox: Array.isArray(p.outbox) && p.outbox.every((x) => typeof x === "string")
+            ? p.outbox
+            : seedOutbox(storedTxns, typeof p.txnPushed?.at === "number" ? p.txnPushed.at : undefined),
           todoDone: lost && base ? base.todoDone : p.todoDone && typeof p.todoDone === "object" ? p.todoDone : {},
           // a lost plan: as old as the synced copy (or 0), so it never counts as the newer one
           updatedAt: lost ? (base?.at ?? 0) : typeof p.updatedAt === "number" ? p.updatedAt : 0,
@@ -395,13 +414,26 @@ export const useStore = create<AppState>()(
           syncBase: base,
         };
       },
-      onRehydrateStorage: () => () => {
-        loaded = true;
-        useStore.setState({ hydrated: true });
+      // while the saved copy loads, its transactions aren't edits made here (nothing goes in the outbox)
+      onRehydrateStorage: () => {
+        remote++;
+        return () => {
+          remote--;
+          loaded = true;
+          useStore.setState({ hydrated: true });
+        };
       },
     },
   ),
 );
+
+// every transaction change made on this device goes in the outbox (whichever action made it);
+// changes from the server (asRemote) and the saved copy loading don't
+useStore.subscribe((s, prev) => {
+  if (s.txns === prev.txns || remote || !loaded) return;
+  const ids = changedIds(prev.txns, s.txns);
+  if (ids.length) useStore.setState({ outbox: addIds(s.outbox, ids) });
+});
 
 /** Every goal has exactly one plan step; new goals go just before "taxable" (as in the prototype). */
 export function syncGoalSteps(p: PlanState): void {

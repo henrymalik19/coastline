@@ -248,6 +248,19 @@ describe.skipIf(!env)("plans as rows, and who can see them (local Supabase)", ()
     for (const table of ["plan", "checkin", "profile", "account", "transaction"]) expect((await anon.from(table).select("*")).data ?? []).toEqual([]);
     expect((await anon.rpc("get_plan", { p: a.id })).data ?? null).toBeNull();
   });
+
+  it("a check-in keeps its newer copy: an older device's upload doesn't overwrite it", async () => {
+    const up = (invested: number, at: number) =>
+      a.client.from("checkin").upsert({ plan_id: a.id, month: "2026-10-01", invested, cash: 0, debt: 0, net_worth: 0, expected_next_invested: 0, client_updated_at: at }, { onConflict: "plan_id,month" });
+    expect((await up(120, 9)).error).toBeNull();
+    // a device that hasn't seen the fix uploads its older copy
+    expect((await up(100, 5)).error).toBeNull();
+    const row = await a.client.from("checkin").select("invested, client_updated_at").eq("plan_id", a.id).eq("month", "2026-10-01").single();
+    expect(row.data).toMatchObject({ invested: 120, client_updated_at: 9 });
+    // a newer one does
+    await up(130, 12);
+    expect((await a.client.from("checkin").select("invested").eq("plan_id", a.id).eq("month", "2026-10-01").single()).data?.invested).toBe(130);
+  });
 });
 
 describe.skipIf(!env)("delete my account (local Supabase)", () => {
