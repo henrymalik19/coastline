@@ -15,6 +15,8 @@ import { Icon, type IconName } from "../Icon";
 import { useFillPage } from "../MasterDetail";
 import { Card, Divider, Screen } from "../ui";
 import { findSection, SECTION_SCREENS, SECTIONS } from "./sections";
+import { useBanks } from "../BankConnections";
+import { usePlaid } from "../../lib/plaidState";
 
 /** These pages live in the Money tab (what you have today, and what retirement looks like); the rest stay in Settings. */
 export const MONEY_GROUPS = ["Today", "In retirement"];
@@ -31,6 +33,7 @@ function useSummaries(): Record<string, string> {
   const appearance = useAppearance((s) => s.appearance);
   const members = useSharing((s) => s.members);
   const retire = state.retirementIncome ?? [];
+  const banks = usePlaid();
   return {
     appearance: { system: "Match device", light: "Light", dark: "Dark" }[appearance],
     sharing: sharedBy ? `Shared by ${sharedBy}` : members.length ? `${members.length} ${members.length === 1 ? "person" : "people"}` : "Not shared",
@@ -56,6 +59,7 @@ function useSummaries(): Record<string, string> {
     assumptions: `${(state.ret * 100).toFixed(1)}% return · ${(state.swr * 100).toFixed(2)}% withdrawal`,
     limits: `${state.limits.length} years`,
     data: "Export, import, reset",
+    banks: banks.items.length ? `${banks.items.length} connected${banks.items.some((i) => i.status !== "ok") ? " · needs attention" : ""}` : "None yet",
   };
 }
 
@@ -166,12 +170,15 @@ export function SectionGroups({ base, heading }: { base: SectionBase; heading?: 
   const summary = useSummaries();
   const emergency = useEmergencyRow();
   // a group whose pages all moved elsewhere (the retirement ones to Forecast) isn't listed
-  const groups = groupsFor(base).filter((g) => g.items.some((s) => !s.hidden));
+  // Connected banks: only for people who can use them (until banks open to everyone)
+  const banks = useBanks();
+  const shown = (s: { key: string; hidden?: boolean }) => !s.hidden && (s.key !== "banks" || banks);
+  const groups = groupsFor(base).filter((g) => g.items.some(shown));
   return (
     <>
       {groups.map((group, gi) => {
         const rows = [
-          ...group.items.filter((s) => !s.hidden).map((s) => ({ key: s.key, title: s.title, summary: summary[s.key], icon: s.icon, href: `${base}/${s.key}` })),
+          ...group.items.filter(shown).map((s) => ({ key: s.key, title: s.title, summary: summary[s.key], icon: s.icon, href: `${base}/${s.key}` })),
           // Money: Emergency mode closes its list
           ...(base === "/money" && gi === groups.length - 1 ? [{ key: "emergency", ...emergency }] : []),
         ];

@@ -7,6 +7,7 @@ import { Icon, type IconName } from "../../components/Icon";
 import { Sidebar } from "../../components/Sidebar";
 import { useMonthRecord } from "../../lib/history";
 import { useBankAutoSync } from "../../lib/plaid";
+import { BankReview } from "../../components/BankReview";
 import { useIsWide } from "../../lib/layout";
 import { useTheme } from "../../lib/theme";
 
@@ -35,6 +36,8 @@ export default function TabsLayout() {
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <SyncBanner />
+      {/* setting up a newly connected bank's accounts, wherever you connected it from */}
+      <BankReview />
       <Tabs
         // Desktop web: sidebar on the left. Phones (native and narrow web): bottom tabs.
         tabBar={wide ? (props) => <Sidebar {...props} icons={ICONS} /> : undefined}

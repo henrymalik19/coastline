@@ -10,7 +10,6 @@ import { confirm } from "../lib/confirm";
 import { BANKS_ON } from "../lib/features";
 import { connectBank, connectTestBank, disconnectBank, loadBankAccess, loadBanks, reconnectBank, syncBanks, usePlaid, type BankItem } from "../lib/plaid";
 import { bankLabel, matchOf, type BankAccount } from "../lib/plaidMatch";
-import { BankReview } from "./BankReview";
 import { usePlan } from "../lib/plan";
 import { supabase } from "../lib/supabase";
 import { useSync } from "../lib/sync";
@@ -36,30 +35,97 @@ export function BankConnections() {
   return BANKS_ON ? <BankCard /> : null;
 }
 
+/**
+ * Load this plan's banks and whether you may connect new ones, and say whether banks show at all:
+ * until they open to everyone, only to people allowed to connect, or whose plan already has one
+ * (signed out, not allowed, or not known yet: nothing).
+ */
+export function useBanks(): boolean {
+  const planId = useSync((s) => s.planId);
+  const userId = useSync((s) => s.userId);
+  const { items, loaded, canLink } = usePlaid();
+  useEffect(() => {
+    if (BANKS_ON && supabase && planId && userId && (!loaded || usePlaid.getState().planId !== planId)) void loadBanks();
+  }, [planId, userId, loaded]);
+  useEffect(() => {
+    if (BANKS_ON && supabase && planId && userId) void loadBankAccess();
+  }, [planId, userId]);
+  return BANKS_ON && !!supabase && !!planId && !!userId && (canLink === true || items.length > 0);
+}
+
+/** "Connect an account": the question only picks which firms Plaid lists; every account at the firm comes along. */
+function ConnectButton() {
+  const { items, busy } = usePlaid();
+  return (
+    <Select
+      label="What are you connecting?"
+      value=""
+      options={[
+        { value: "bank", label: "A bank or credit card", hint: "Checking, savings, cards, loans" },
+        { value: "investments", label: "An investment or retirement account", hint: "Brokerage, IRA, 401(k), HSA" },
+      ]}
+      onChange={(k) => void connectBank(k as "bank" | "investments")}
+      trigger={(open) => <Button title={items.length ? "Connect another account" : "Connect an account"} icon="plus" disabled={busy} onPress={open} style={{ alignSelf: "flex-start" }} />}
+    />
+  );
+}
+
+/**
+ * Accounts: just the Connect button, and a line for anything that needs you (a bank to sign in to
+ * again, accounts not set up yet). Everything else about banks is in Settings → Connected banks.
+ */
+export function BankBar() {
+  const t = useTheme();
+  const router = useRouter();
+  const visible = useBanks();
+  const { items, accounts, canLink, error } = usePlaid();
+  const { state } = usePlan();
+  if (!visible || Platform.OS !== "web") return null;
+  const alerts = items.flatMap((it) => {
+    const out: { key: string; text: string; onPress: () => void }[] = [];
+    if (it.status === "login_required" || it.status === "pending_expiration")
+      out.push({ key: `${it.id}-login`, text: `${it.institution} needs you to sign in again`, onPress: () => void reconnectBank(it.id) });
+    else if (it.status === "error") out.push({ key: `${it.id}-err`, text: `${it.institution} couldn't update`, onPress: () => router.push("/settings/banks") });
+    const loose = accounts.filter((b) => b.item === it.id && !matchOf(state, b)).length;
+    if (loose) out.push({ key: `${it.id}-loose`, text: `${loose} ${it.institution} account${loose === 1 ? "" : "s"} not set up`, onPress: () => usePlaid.setState({ review: it.id }) });
+    return out;
+  });
+  return (
+    <View style={{ gap: space.sm }}>
+      <View style={[styles.between, { flexWrap: "wrap" }]}>
+        {canLink ? <ConnectButton /> : <View />}
+        {items.length ? (
+          <Text role="link" onPress={() => router.push("/settings/banks")} style={[type.caption, { color: t.accent, fontWeight: "700" }]}>
+            Manage banks
+          </Text>
+        ) : null}
+      </View>
+      {alerts.map((a) => (
+        <Text key={a.key} role="button" onPress={a.onPress} style={[type.caption, { color: t.warn, fontWeight: "600" }]}>
+          {a.text} ›
+        </Text>
+      ))}
+      {error ? <Text role="alert" style={[type.caption, { color: t.bad }]}>{error}</Text> : null}
+    </View>
+  );
+}
+
+/** Settings → Connected banks: every bank, its status, Refresh, Review accounts, Disconnect, and Connect. */
 function BankCard() {
   const t = useTheme();
   const router = useRouter();
   const openPage = useOpenPage();
+  const visible = useBanks();
   const planId = useSync((s) => s.planId);
   const userId = useSync((s) => s.userId);
-  const { items, accounts, busy, error, loaded, canLink } = usePlaid();
+  const { items, accounts, busy, error, canLink } = usePlaid();
   const [tip, setTip] = useState(false);
-  useEffect(() => {
-    if (supabase && planId && userId && (!loaded || usePlaid.getState().planId !== planId)) void loadBanks();
-  }, [planId, userId, loaded]);
-  useEffect(() => {
-    if (supabase && planId && userId) void loadBankAccess();
-  }, [planId, userId]);
-  if (!supabase) return null;
+  if (!visible) return <Text style={[type.body, { color: t.text2 }]}>Connecting banks isn't available for your account yet.</Text>;
   const signedIn = !!planId && !!userId;
-  // until banks open to everyone: only people allowed to connect see this card (signed out, not
-  // allowed, or not known yet: nothing), plus anyone whose plan already has a connection
-  if (!signedIn || (canLink !== true && !items.length)) return null;
   const web = Platform.OS === "web";
 
   return (
     <Card style={{ gap: space.md }}>
-      <BankReview />
       <View style={styles.between}>
         <View style={[styles.row, { flexShrink: 1 }]}>
           <SectionLabel flush>Connected banks</SectionLabel>
@@ -85,17 +151,7 @@ function BankCard() {
             <Text style={[type.caption, { color: t.text3 }]}>Connecting banks is coming soon. Until then, add your accounts and update their balances yourself.</Text>
           ) : web ? (
             <View style={{ gap: 6 }}>
-              {/* one button; the question only picks which firms Plaid lists (every account at the firm comes along) */}
-              <Select
-                label="What are you connecting?"
-                value=""
-                options={[
-                  { value: "bank", label: "A bank or credit card", hint: "Checking, savings, cards, loans" },
-                  { value: "investments", label: "An investment or retirement account", hint: "Brokerage, IRA, 401(k), HSA" },
-                ]}
-                onChange={(k) => void connectBank(k as "bank" | "investments")}
-                trigger={(open) => <Button title={items.length ? "Connect another account" : "Connect an account"} icon="plus" disabled={busy} onPress={open} style={{ alignSelf: "flex-start" }} />}
-              />
+              <ConnectButton />
               <Text style={[type.caption, { color: t.text3 }]}>Every account you have at that bank comes along, checking and brokerage alike. Use each one as whatever it is to you.</Text>
               <Text style={[type.caption, { color: t.text3 }]}>
                 How we handle bank data:{" "}

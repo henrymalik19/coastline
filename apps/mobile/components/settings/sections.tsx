@@ -22,7 +22,7 @@ import { SharingEditor } from "../SharingEditor";
 import { ContributionsCard } from "../ContributionsCard";
 import { RetirementIncomeEditor } from "../RetirementIncomeEditor";
 import { GoalEditor } from "../GoalEditor";
-import { BankConnections } from "../BankConnections";
+import { BankBar, BankConnections } from "../BankConnections";
 import { BudgetEditor } from "../BudgetEditor";
 import { RetirementEssentials } from "../RetirementEssentials";
 import { PlanSteps } from "../PlanSteps";
@@ -41,7 +41,7 @@ import { useOpenPage } from "../../lib/nav";
 
 /* ---------- registry ---------- */
 
-type SectionKey = "account" | "sharing" | "appearance" | "profile" | "retirementIncome" | "retirement" | "healthcare" | "income" | "budget" | "savings" | "accounts" | "properties" | "debts" | "goals" | "assumptions" | "priorities" | "limits" | "data";
+type SectionKey = "account" | "banks" | "sharing" | "appearance" | "profile" | "retirementIncome" | "retirement" | "healthcare" | "income" | "budget" | "savings" | "accounts" | "properties" | "debts" | "goals" | "assumptions" | "priorities" | "limits" | "data";
 type SectionMeta = { key: SectionKey; title: string; subtitle: string; icon: IconName; /** Not listed (moved elsewhere; old links still work). */ hidden?: boolean };
 
 export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
@@ -49,6 +49,8 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
     title: "Account",
     items: [
       { key: "account", title: "Account & sync", subtitle: "Sign in to use your plan on every device", icon: "user" },
+      // listed only for people who can use banks (SectionPages hides it otherwise)
+      { key: "banks", title: "Connected banks", subtitle: "Banks, cards and investment accounts that update your balances", icon: "card" },
       { key: "profile", title: "You", subtitle: "Age, retirement age and taxes", icon: "user" },
       { key: "sharing", title: "Sharing", subtitle: "Share your plan with a spouse or partner", icon: "user" },
       { key: "appearance", title: "Appearance", subtitle: "Light or dark, and what the Budget shows", icon: "sparkle" },
@@ -271,7 +273,7 @@ function AccountsSection() {
       <Text style={[type.body, { color: t.text2 }]}>
         Cash is your emergency fund. Everything else counts as invested. Tap an account to rename it, change its type or remove it. Tap Reorder to move one.
       </Text>
-      <BankConnections />
+      <BankBar />
       <AccountsEditor
         afterRetirement={
           <>
@@ -681,6 +683,7 @@ export const SECTION_SCREENS: Record<SectionKey, ComponentType> = {
   budget: () => <Redirect href="/budget" />,
   savings: () => <Redirect href="/budget" />,
   accounts: AccountsSection,
+  banks: () => <BankConnections />,
   properties: () => <PropertiesEditor titled={false} />,
   debts: DebtsSection,
   goals: GoalsSection,
