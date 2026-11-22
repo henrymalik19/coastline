@@ -349,7 +349,11 @@ async function pushTxns(owner: string): Promise<void> {
   const queued = new Set(outbox);
   const changed = txns.filter((t) => queued.has(t.id));
   // ids of rows no longer here (nothing to send) leave the queue
-  if (changed.length < outbox.length) useStore.setState((st) => ({ outbox: st.outbox.filter((id) => st.txns.some((t) => t.id === id)) }));
+  if (changed.length < outbox.length)
+    useStore.setState((st) => {
+      const here = new Set(st.txns.map((t) => t.id));
+      return { outbox: st.outbox.filter((id) => here.has(id)) };
+    });
   if (!changed.length) return;
   // in batches: an import is thousands of rows, too much for one request. Each batch's ids leave the
   // outbox once it's saved (a failed one keeps its ids for the next sync; saving again is harmless).

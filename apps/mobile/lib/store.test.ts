@@ -92,4 +92,10 @@ describe("the outbox in the store", () => {
     const s = await reload();
     expect(s.outbox).toEqual(["waiting"]);
   });
+  it("a marker for another plan doesn't count: everything is queued, as the old code would have sent it all", async () => {
+    const base = { owner: "u1", at: 1, plan: freshPlan(), todoDone: {} };
+    save({ plan: freshPlan(), onboarded: true, syncBase: base, txns: [txn("a", 5), txn("b", 15)], txnPushed: { owner: "someone-else", at: 10 } });
+    const s = await reload();
+    expect(s.outbox).toEqual(["a", "b"]);
+  });
 });

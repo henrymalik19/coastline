@@ -395,7 +395,8 @@ export const useStore = create<AppState>()(
           // what still has to go up; a copy saved before the outbox existed fills it from the old marker
           outbox: Array.isArray(p.outbox) && p.outbox.every((x) => typeof x === "string")
             ? p.outbox
-            : seedOutbox(storedTxns, typeof p.txnPushed?.at === "number" ? p.txnPushed.at : undefined),
+            // only a marker for the plan this device syncs counts (one for another plan meant "upload them all")
+            : seedOutbox(storedTxns, typeof p.txnPushed?.at === "number" && (!base || p.txnPushed.owner === base.owner) ? p.txnPushed.at : undefined),
           todoDone: lost && base ? base.todoDone : p.todoDone && typeof p.todoDone === "object" ? p.todoDone : {},
           // a lost plan: as old as the synced copy (or 0), so it never counts as the newer one
           updatedAt: lost ? (base?.at ?? 0) : typeof p.updatedAt === "number" ? p.updatedAt : 0,

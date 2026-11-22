@@ -19,6 +19,8 @@ type PlaidState = {
   planId?: string; items: BankItem[]; accounts: BankAccount[]; loaded: boolean; busy: boolean; error?: string;
   /** May this person connect new banks? Undefined until asked. */
   canLink?: boolean;
+  /** Asking whether you may connect banks failed (offline, the service down). */
+  accessFailed?: boolean;
   /** The connection whose accounts are being set up (the step-by-step window, components/BankReview.tsx). */
   review?: string;
 };

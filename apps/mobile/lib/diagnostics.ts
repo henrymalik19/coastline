@@ -25,6 +25,8 @@ export function reportFrom(s: {
   importedAt?: number;
   ynabSyncedAt?: number;
   pushedAt?: number;
+  /** What's queued to upload (the outbox); when given, it's the count, not edit times. */
+  outbox?: number;
   sync: { status: string; lastSyncedAt?: number; error?: string; progress?: string };
 }): Report {
   const live = s.txns.filter((t) => !t.deleted);
@@ -33,7 +35,7 @@ export function reportFrom(s: {
     transactions: live.length,
     history: live.filter(isHistoryTxn).length,
     deletedKept: s.txns.length - live.length,
-    waitingToUpload: s.txns.filter((t) => t.updatedAt > pushed).length,
+    waitingToUpload: s.outbox ?? s.txns.filter((t) => t.updatedAt > pushed).length,
     accounts: s.accounts,
     debts: s.debts,
     categories: s.categories,
@@ -59,7 +61,7 @@ export async function buildReport(): Promise<Report> {
     signedIn: sy.status !== "off" && sy.status !== "signedOut",
     ...reportFrom({
       txns: st.txns, accounts: st.plan.accounts.length, debts: st.plan.debts.length, categories: st.plan.budget.length, checkins: st.checkins.length,
-      importedAt: st.importedAt, ynabSyncedAt: st.ynabSyncedAt, pushedAt: st.txnPushed?.at, sync: sy,
+      importedAt: st.importedAt, ynabSyncedAt: st.ynabSyncedAt, pushedAt: st.txnPushed?.at, outbox: st.outbox.length, sync: sy,
     }),
   };
   try {

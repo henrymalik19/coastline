@@ -118,9 +118,18 @@ function BankCard() {
   const visible = useBanks();
   const planId = useSync((s) => s.planId);
   const userId = useSync((s) => s.userId);
-  const { items, accounts, busy, error, canLink } = usePlaid();
+  const { items, accounts, busy, error, canLink, accessFailed } = usePlaid();
   const [tip, setTip] = useState(false);
-  if (!visible) return <Text style={[type.body, { color: t.text2 }]}>Connecting banks isn't available for your account yet.</Text>;
+  if (!visible)
+    return (
+      <Text role="status" style={[type.body, { color: t.text2 }]}>
+        {canLink === false
+          ? "Connecting banks isn't available for your account yet."
+          : accessFailed
+            ? "Couldn't reach the bank connection service. Check your connection and try again."
+            : "Loading your banks…"}
+      </Text>
+    );
   const signedIn = !!planId && !!userId;
   const web = Platform.OS === "web";
 

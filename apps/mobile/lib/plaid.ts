@@ -44,8 +44,15 @@ type AccountRow = {
 };
 const num = (v: number | string | null) => (v == null ? null : Number(v));
 
+/** A load in flight: pages that show banks at the same time share it instead of each asking. */
+let loading: Promise<void> | undefined;
 /** Read this plan's connections and bank accounts (the app's own session; row level security). */
-export async function loadBanks(): Promise<void> {
+export function loadBanks(): Promise<void> {
+  if (!loading) loading = loadBanksNow().finally(() => { loading = undefined; });
+  return loading;
+}
+
+async function loadBanksNow(): Promise<void> {
   const planId = useSync.getState().planId;
   if (!supabase || !planId) return;
   const [items, accts] = await Promise.all([
@@ -240,13 +247,26 @@ export async function resumeBankLink(returnedFrom: string): Promise<boolean> {
 }
 
 /** May this person connect new banks? (Before banks open to everyone: admins and people on a list.) */
-export async function loadBankAccess(): Promise<void> {
-  try {
-    const r = await call<{ canLink: boolean }>("access");
-    usePlaid.setState({ canLink: r.canLink });
-  } catch {
-    // unknown: leave the buttons; the server still refuses if it must
-  }
+/** Who it was asked for, and the request in flight (asked once per plan, not on every page that shows banks). */
+let accessFor: string | undefined;
+let accessAsk: Promise<void> | undefined;
+export function loadBankAccess(): Promise<void> {
+  const planId = useSync.getState().planId;
+  if (accessAsk) return accessAsk;
+  if (planId && accessFor === planId && usePlaid.getState().canLink !== undefined) return Promise.resolve();
+  accessAsk = (async () => {
+    try {
+      const r = await call<{ canLink: boolean }>("access");
+      accessFor = planId;
+      usePlaid.setState({ canLink: r.canLink, accessFailed: false });
+    } catch {
+      // unknown: the server still refuses if it must; the page says it couldn't check
+      usePlaid.setState({ accessFailed: true });
+    } finally {
+      accessAsk = undefined;
+    }
+  })();
+  return accessAsk;
 }
 
 /** Disconnect a bank: it's removed at Plaid too; your plan accounts stay, just no longer matched. */
