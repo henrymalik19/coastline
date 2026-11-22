@@ -56,7 +56,7 @@ function useSummaries(): Record<string, string> {
     debts: state.debts.length ? `${state.debts.length} · ${money(result.d.debtTotal)}` : "None",
     goals: state.goals.length ? `${state.goals.length} goal${state.goals.length > 1 ? "s" : ""}` : "None",
     priorities: `${state.plan.steps.length} steps · emergency fund, debts, retirement accounts`,
-    assumptions: `${(state.ret * 100).toFixed(1)}% return · ${(state.swr * 100).toFixed(2)}% withdrawal`,
+    assumptions: `${+(state.ret * 100).toFixed(2)}% return · ${+(state.swr * 100).toFixed(2)}% withdrawal`,
     limits: `${state.limits.length} years`,
     data: "Export, import, reset",
     banks: banks.items.length ? `${banks.items.length} connected${banks.items.some((i) => i.status !== "ok") ? " · needs attention" : ""}` : "None yet",
@@ -65,8 +65,11 @@ function useSummaries(): Record<string, string> {
 
 /** A list of pages (Money tab or Settings), each row opening `${base}/${key}`. */
 export function SectionIndex({ base, title, subtitle }: { base: SectionBase; title: string; subtitle: string }) {
+  const router = useRouter();
+  // Settings isn't a tab: a way back to where you came from (Home if opened directly)
+  const back = base === "/settings" ? () => (router.canGoBack() ? router.back() : router.replace("/home")) : undefined;
   return (
-    <Screen title={title} subtitle={subtitle} narrow hideSettings={base === "/settings"}>
+    <Screen title={title} subtitle={subtitle} narrow hideSettings={base === "/settings"} back={back}>
       <SectionGroups base={base} />
       {base === "/settings" ? <FeedbackRow /> : null}
       {base === "/settings" ? <AdminRow /> : null}

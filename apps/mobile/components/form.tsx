@@ -10,11 +10,19 @@ import { Icon, type IconName } from "./Icon";
 
 export type NumberKind = "money" | "percent" | "int" | "decimal";
 
+/** A dollar amount for a box: whole dollars as they are; with cents, always two digits ("1,800.50", not "1,800.5"). */
+export const moneyText = (v: number, pretty = true) => {
+  if (!Number.isFinite(v)) return "";
+  const hasCents = Math.round(Math.abs(v) * 100) % 100 !== 0;
+  if (!pretty) return hasCents ? v.toFixed(2) : String(Math.round(v));
+  return v.toLocaleString("en-US", hasCents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : { maximumFractionDigits: 0 });
+};
+
 /** Display text for a stored value. Percent is stored as a decimal (0.05 → "5"). */
 const toText = (v: number, kind: NumberKind, pretty: boolean) => {
   if (!Number.isFinite(v)) return "";
   if (kind === "percent") return String(+(v * 100).toFixed(3));
-  if (kind === "money") return pretty ? v.toLocaleString("en-US", { maximumFractionDigits: 2 }) : String(+v.toFixed(2));
+  if (kind === "money") return moneyText(v, pretty);
   return String(v);
 };
 const fromText = (s: string, kind: NumberKind) => {
@@ -538,7 +546,7 @@ export function InlineText({ value, onChange, label, placeholder, commitOnBlur }
 /** `compact`: a narrower box, for phone rows. `allowNegative`: a leading minus is kept (taking money back). */
 export function InlineMoney({ value, onChange, label, compact, allowNegative }: { value: number; onChange: (v: number) => void; label: string; compact?: boolean; allowNegative?: boolean }) {
   const t = useTheme();
-  const show = (v: number) => (Number.isFinite(v) ? v.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "");
+  const show = (v: number) => moneyText(v);
   const [text, setText] = useState(show(value));
   const [focused, setFocused] = useState(false);
   useEffect(() => {

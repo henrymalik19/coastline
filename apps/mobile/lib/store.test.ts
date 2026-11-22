@@ -59,7 +59,7 @@ describe("reading the device's saved copy", () => {
     const s = await reload();
     expect(s.onboarded).toBe(false);
     expect(s.updatedAt).toBe(0);
-    expect(s.loadNotice).toMatch(/Sign in to load it/);
+    expect(s.loadNotice).toMatch(/setup starts again/);
   });
 });
 

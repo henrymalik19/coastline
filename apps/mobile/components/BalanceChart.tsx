@@ -89,7 +89,7 @@ export function BalanceChart({ o, history, start, height = 260 }: { o: RunResult
   const legend = [
     ...(back > 0 ? [{ key: "a", label: "Actual", color: t.series.k401 }] : []),
     { key: "p", label: "Plan (dashed)", color: t.series.k401 },
-    ...(near ? [{ key: "e", label: "Plan expected (○)", color: t.text3 }] : [{ key: "c", label: "Coast FI number", color: t.series.ira }]),
+    ...(near ? [{ key: "e", label: "Plan expected (○)", color: t.text3 }] : [{ key: "c", label: "Coast FI number", color: t.text2 }]),
   ];
 
   return (
@@ -97,9 +97,9 @@ export function BalanceChart({ o, history, start, height = 260 }: { o: RunResult
       <View style={styles.between}>
         <View style={{ flex: 1 }}>
           <SectionLabel>Invested balance</SectionLabel>
-          <Text style={[type.heading, { color: t.text, marginTop: -4, fontVariant: ["tabular-nums"] }]}>{money(d.invested, { whole: true })} now</Text>
+          <Text style={[type.heading, { color: t.text, marginTop: -4, fontVariant: ["tabular-nums"] }]}>{money(d.invested)} now</Text>
         </View>
-        <Button title={table ? "Chart" : "Table"} onPress={() => setTable((v) => !v)} />
+        <Button title={table ? "Show chart" : "By month"} tone="ghost" onPress={() => setTable((v) => !v)} />
       </View>
       {history.length > 1 ? (
         <View style={{ maxWidth: 260 }}>
@@ -119,7 +119,7 @@ export function BalanceChart({ o, history, start, height = 260 }: { o: RunResult
             .map((p) => (
               <View key={p.k} style={[styles.tr, { borderBottomColor: t.border }]}>
                 <Text style={[styles.td, styles.c0, { color: t.text }]}>{p.label}{p.k === 0 ? " (now)" : ""}</Text>
-                <Text style={[styles.td, styles.cn, { color: t.text }]}>{p.actual !== undefined ? money(p.actual, { whole: true }) : "–"}</Text>
+                <Text style={[styles.td, styles.cn, { color: t.text }]}>{p.actual !== undefined ? money(p.actual) : "–"}</Text>
                 <Text style={[styles.td, styles.cn, { color: t.text2 }]}>{p.plan !== undefined && p.k > 0 ? money(p.plan, { whole: true }) : "–"}</Text>
                 <Text style={[styles.td, styles.cn, { color: t.text2 }]}>{money(p.coast, { whole: true })}</Text>
               </View>
@@ -147,14 +147,14 @@ export function BalanceChart({ o, history, start, height = 260 }: { o: RunResult
                   ))}
                   {/* today */}
                   {back > 0 ? <Line x1={x(today)} x2={x(today)} y1={pad.t} y2={pad.t + ph} stroke={t.border} strokeDasharray="2 3" /> : null}
-                  {near ? null : <Path d={path((p) => p.coast)} fill="none" stroke={t.series.ira} strokeWidth={2} />}
+                  {near ? null : <Path d={path((p) => p.coast)} fill="none" stroke={t.text2} strokeWidth={2} strokeDasharray="6 4" />}
                   {near
                     ? pts.map((p, i) => (p.expected !== undefined ? <Circle key={`e${p.k}`} cx={x(i)} cy={y(p.expected)} r={4} fill={t.surface} stroke={t.text3} strokeWidth={2} /> : null))
                     : null}
                   <Path d={path((p) => (p.k >= 0 ? p.plan : undefined))} fill="none" stroke={t.series.k401} strokeWidth={2} strokeDasharray="6 4" />
                   {back > 0 ? <Path d={path((p) => p.actual)} fill="none" stroke={t.series.k401} strokeWidth={2} /> : null}
                   <Circle cx={x(today)} cy={y(d.invested)} r={4} fill={t.series.k401} stroke={t.surface} strokeWidth={2} />
-                  {!near && ci !== null && cross! > 0 ? <Circle cx={x(ci)} cy={y(pts[ci]!.coast)} r={5} fill={t.series.ira} stroke={t.surface} strokeWidth={2} /> : null}
+                  {!near && ci !== null && cross! > 0 ? <Circle cx={x(ci)} cy={y(pts[ci]!.coast)} r={5} fill={t.text2} stroke={t.surface} strokeWidth={2} /> : null}
                   {sel !== null ? <Line x1={x(sel)} x2={x(sel)} y1={pad.t} y2={pad.t + ph} stroke={t.text3} /> : null}
                 </Svg>
                 <View style={{ position: "absolute", left: pad.l - pw / n / 2, top: pad.t, width: pw + pw / n, height: ph, flexDirection: "row" }}>
@@ -176,7 +176,7 @@ export function BalanceChart({ o, history, start, height = 260 }: { o: RunResult
             {s ? (
               <View style={styles.detailGrid}>
                 <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{s.label}{s.k === 0 ? " (now)" : ""}</Text>
-                {s.actual !== undefined ? <Text style={[type.caption, { color: t.text2 }]}>Invested <Text style={{ color: t.text, fontWeight: "700" }}>{money(s.actual, { whole: true })}</Text></Text> : null}
+                {s.actual !== undefined ? <Text style={[type.caption, { color: t.text2 }]}>Invested <Text style={{ color: t.text, fontWeight: "700" }}>{money(s.actual)}</Text></Text> : null}
                 {s.expected !== undefined ? <Text style={[type.caption, { color: t.text2 }]}>Plan expected <Text style={{ color: t.text, fontWeight: "600" }}>{money(s.expected, { whole: true })}</Text></Text> : null}
                 {s.plan !== undefined && s.k > 0 ? <Text style={[type.caption, { color: t.text2 }]}>Plan <Text style={{ color: t.text, fontWeight: "700" }}>{money(s.plan, { whole: true })}</Text></Text> : null}
                 {near ? null : <Text style={[type.caption, { color: t.text2 }]}>Coast # <Text style={{ color: t.text, fontWeight: "600" }}>{money(s.coast, { whole: true })}</Text></Text>}

@@ -65,7 +65,8 @@ export default function Home() {
       return k === key;
     };
     const i = steps.findIndex(match);
-    return i < 0 ? undefined : `Priority ${i + 1}`;
+    // a non-breaking space: "Priority 3" wraps as one piece on a phone, never leaving "3" alone
+    return i < 0 ? undefined : `Priority ${i + 1}`;
   };
 
   const coastAge = o.crossing === null ? null : d.age + o.crossing;
@@ -116,6 +117,7 @@ export default function Home() {
         <Row
           label="Coast number today"
           value={money(o.coastNow, { whole: true })}
+          tone={whatIfOn ? t.warn : undefined}
           info={`What you'd need invested today for growth alone to reach your FIRE number (${money(o.fire, { whole: true })}) by age ${d.retireAge}, at ${percent(d.r, 1)} a year after inflation. It goes up a little every year you wait. You have ${money(d.invested)} of it (${percent(Math.min(o.progress, 9.99))}).`}
         />
         <Row
@@ -157,10 +159,10 @@ export default function Home() {
     />,
     <Stat
       key="odds"
-      label={`Odds of FIRE by ${d.retireAge}`}
+      label="FIRE odds"
       value={percent(o.mc.probFire)}
       tone={whatIfOn ? "warn" : oddsTone(o.mc.probFire)}
-      hint="Across 2,000 market paths"
+      hint={`By ${d.retireAge}, across 2,000 market paths`}
       info={`Markets don't grow in a straight line. We simulate 2,000 possible futures with ups and downs (${percent(d.vol)} volatility) and count how many reach your FIRE number by age ${d.retireAge} if you follow the plan.`}
     />,
     <Stat
@@ -326,6 +328,7 @@ function Row({ label, value, tone, info }: { label: string; value: string; tone?
 
 function TodoRow({ todo, done, onToggle, link }: { todo: Todo; done: boolean; onToggle: () => void; /** Opens its Budget line instead of ticking. */ link?: boolean }) {
   const t = useTheme();
+  const [tip, setTip] = useState(false);
   return (
     <Pressable
       onPress={onToggle}
@@ -338,10 +341,14 @@ function TodoRow({ todo, done, onToggle, link }: { todo: Todo; done: boolean; on
         {done ? <Icon name="check" size={16} color="#fff" /> : null}
       </View>
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[type.body, { color: done ? t.text3 : t.text, fontWeight: "500", textDecorationLine: done ? "line-through" : "none" }]}>
-          {todo.title}
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <Text style={[type.body, { color: done ? t.text3 : t.text, fontWeight: "500", textDecorationLine: done ? "line-through" : "none", flexShrink: 1 }]}>
+            {todo.title}
+          </Text>
+          {todo.info ? <InfoTip text={todo.info} label={todo.title} open={tip} onToggle={setTip} /> : null}
+        </View>
         {todo.detail ? <Text style={[type.caption, { color: t.text3 }]}>{todo.detail}</Text> : null}
+        {tip && todo.info ? <InfoText text={todo.info} /> : null}
       </View>
       {todo.amount ? (
         <View style={styles.amount}>

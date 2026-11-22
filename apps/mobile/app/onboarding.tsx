@@ -21,7 +21,7 @@ import { BetaNote } from "../components/Beta";
 import { SetRetirementAmount } from "../components/RetireAmount";
 import { Card, Divider, Screen } from "../components/ui";
 import { HealthcareSuggestion } from "../components/HealthcareSuggestion";
-import { ageLabel, money, percent } from "../lib/format";
+import { ageLabel, money, monthLabel, percent } from "../lib/format";
 import { usePlan } from "../lib/plan";
 import { syncConfigured } from "../lib/supabase";
 import { useSync } from "../lib/sync";
@@ -74,7 +74,8 @@ export default function Onboarding() {
   const [title, subtitle] = titles[step];
 
   return (
-    <Screen title={title} subtitle={subtitle} hideSettings maxWidth={1120} fill={fillPage && (step === "income" || step === "budget")}>
+    // a fresh page for each step, so each opens at the top (not scrolled to where the last one was)
+    <Screen key={step} title={title} subtitle={subtitle} hideSettings maxWidth={1120} fill={fillPage && (step === "income" || step === "budget")}>
       {step !== "start" ? (
         <View style={{ gap: 6 }}>
           <Text style={[type.caption, { color: t.text3 }]}>Step {i} of {STEPS.length - 1}</Text>
@@ -268,7 +269,7 @@ function MoneyStep() {
   const cash = state.accounts.filter((a) => a.type !== "property").reduce((a, x) => a + (+x.balance || 0), 0);
   return (
     <>
-      <SectionHead title="Accounts" total={money(cash, { whole: true })} info="Rough is fine. You'll update these at each monthly check-in. Tap an account to rename it, change its type or remove it." />
+      <SectionHead title="Accounts" total={money(cash)} info="Rough is fine. You'll update these at each monthly check-in. Tap an account to rename it, change its type or remove it." />
       <AccountsEditor />
     </>
   );
@@ -280,7 +281,7 @@ function PropertyStep() {
   const worth = (state.properties ?? []).reduce((a, x) => a + (+x.value || 0), 0);
   return (
     <>
-      <SectionHead title="What they're worth" total={money(worth, { whole: true })} info="What they're worth counts in your net worth, not in Coast FI (it isn't money you can invest). Add each one's mortgage right on it. A rental's costs come out of its rent, so they stay out of your retirement spending. No property? Skip this step." />
+      <SectionHead title="What they're worth" total={money(worth)} info="What they're worth counts in your net worth, not in Coast FI (it isn't money you can invest). Add each one's mortgage right on it. A rental's costs come out of its rent, so they stay out of your retirement spending. No property? Skip this step." />
       <PropertiesEditor titled={false} />
     </>
   );
@@ -372,7 +373,7 @@ function GoalsStep() {
 
 function ReviewStep({ toBudget }: { toBudget: () => void }) {
   const t = useTheme();
-  const { result: o } = usePlan();
+  const { result: o, start } = usePlan();
   const d = o.d;
   const short = d.leanMonthly - d.monthlyExpenses < 0;
   const coastAge = o.crossing === null ? null : d.age + o.crossing;
@@ -396,7 +397,8 @@ function ReviewStep({ toBudget }: { toBudget: () => void }) {
         <Text style={[type.title, { color: t.text, textAlign: "center" }]}>
           {coastAge === null ? "Not before your retirement age yet" : o.crossing === 0 ? "You're already there" : `You can coast at ${Math.floor(coastAge)}`}
         </Text>
-        {coastAge !== null && o.crossing! > 0 ? <Text style={[type.body, { color: t.text3 }]}>{ageLabel(coastAge)}</Text> : null}
+        {/* the month too (as on Home), so "53% to Coast FI" beside "coast at 35" reads as a date coming up */}
+        {coastAge !== null && o.crossing! > 0 ? <Text style={[type.body, { color: t.text3 }]}>{ageLabel(coastAge)} · {monthLabel(start, Math.round(o.crossing! * 12))}</Text> : null}
       </Card>
       <View style={{ flexDirection: "row", gap: space.md }}>
         <Card style={{ flex: 1 }}>

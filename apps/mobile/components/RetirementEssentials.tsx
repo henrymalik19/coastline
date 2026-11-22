@@ -46,7 +46,7 @@ export function RetirementEssentials() {
     <>
       <Card style={{ gap: space.sm }}>
         <FieldRow
-          label="Retirement spending"
+          label="Spending"
           info="Work it out from your budget (the categories you'd still pay, plus healthcare and home costs), or type the yearly amount you plan to spend, like $100,000. A set amount covers everything, healthcare from 65 included. Social Security and pensions still come off it."
         >
           <Select

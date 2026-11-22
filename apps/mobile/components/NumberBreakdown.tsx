@@ -173,8 +173,8 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
     startsIn === null
       ? `Nothing on your plan goes into investments yet: after bills, nothing's left over. What you have, ${whole(b.invested)}, still grows.`
       : startsIn > 0
-        ? `Starts ${monthLabel(start, startsIn)}: until then your plan pays debts or builds savings first. About a month this year.`
-        : "About a month this year on your plan, with any employer match";
+        ? `Starts ${monthLabel(start, startsIn)}: until then your plan pays debts or builds savings first. This is a typical month once it starts.`
+        : "A typical month this year on your plan, employer match included";
   // bills beyond income: the first part of any extra covers that
   const shortMo = o.plan.months.slice(0, 12).reduce((a, m) => a + m.shortfall, 0) / 12;
   const payoffs = mortgagePayoffs(state, o);

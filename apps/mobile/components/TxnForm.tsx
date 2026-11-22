@@ -16,7 +16,7 @@ import { usePlan } from "../lib/plan";
 import { budgetAccounts, trackingAccounts } from "../lib/register";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { Button, IconButton, NumberInput, Segmented, Select } from "./form";
+import { Button, IconButton, moneyText, NumberInput, Segmented, Select } from "./form";
 
 type Kind = "out" | "in" | "transfer";
 
@@ -58,7 +58,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const [date, setDate] = useState(txn?.date ?? isoDay(new Date()));
   const [memo, setMemo] = useState(txn?.memo ?? "");
   const [cleared, setCleared] = useState(txn ? txn.cleared !== "uncleared" : false);
-  const [amountText, setAmountText] = useState(txn ? String(Math.abs(txn.amount)) : initialAmount ? String(initialAmount) : "");
+  const [amountText, setAmountText] = useState(txn ? moneyText(Math.abs(txn.amount), false) : initialAmount ? moneyText(initialAmount, false) : "");
   const [picking, setPicking] = useState(false);
   // reconciled = matched to a bank statement: what would change the balance is locked unless you say so
   const [unlocked, setUnlocked] = useState(false);
@@ -269,7 +269,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                 accessibilityLabel="Amount"
                 value={amountText}
                 onChangeText={(v) => { const clean = v.replace(/[^0-9.]/g, ""); setAmountText(clean); setAmount(Number(clean) || 0); }}
-                onBlur={() => setAmountText(amount ? String(+amount.toFixed(2)) : "")}
+                onBlur={() => setAmountText(amount ? moneyText(amount, false) : "")}
                 placeholder="0"
                 placeholderTextColor={t.text3}
                 keyboardType="decimal-pad"

@@ -149,7 +149,7 @@ export function shortfallText(m: MonthRow): string {
   return `Short ${money(m.shortfall)} this month, covered from your cash. The plan refills it.`;
 }
 
-export type Todo = { key: string; title: string; detail?: string; amount?: number; color: string };
+export type Todo = { key: string; title: string; detail?: string; /** The longer explanation, in an ⓘ tip. */ info?: string; amount?: number; color: string };
 
 /** A month's actions, in plan order. Formatting only; amounts come from the engine. */
 /** Take-home an HSA contribution costs: pre-tax from a paycheck, or dollar for dollar. */
@@ -175,7 +175,7 @@ export function monthTodos(m: MonthRow, t: Theme, marginalTax: number, rothShare
   if (a.hsa > 0.5)
     out.push(
       hsaPayroll
-        ? { key: "hsa", title: `Add about ${money(perCheck(a.hsa), { whole: true })} per paycheck to your HSA`, detail: onceNote, amount: hsaTakeHome(m, marginalTax, true), color: t.series.hsa }
+        ? { key: "hsa", title: `Add about ${money(perCheck(a.hsa), { whole: true })} per paycheck to your HSA`, detail: "A one-time change with your employer", info: onceNote, amount: hsaTakeHome(m, marginalTax, true), color: t.series.hsa }
         : { key: "hsa", title: "Contribute to your HSA", amount: a.hsa, color: t.series.hsa },
     );
   const sp = m.iraSpouse ?? 0;
@@ -183,7 +183,7 @@ export function monthTodos(m: MonthRow, t: Theme, marginalTax: number, rothShare
   if (sp > 0.5) out.push({ key: "iraSpouse", title: `Contribute to ${spouseIra}`, amount: sp, color: t.series.ira });
   if (a.goals > 0.5) out.push({ key: "goals", title: "Save toward your goals", amount: a.goals, color: t.series.goals });
   if (a.k401Step > 0.5)
-    out.push({ key: "k401", title: `Add about ${money(perCheck(a.k401Step / k401Cost(marginalTax, rothShare)), { whole: true })} per paycheck to your 401(k)`, detail: onceNote, amount: a.k401Step, color: t.series.k401 });
+    out.push({ key: "k401", title: `Add about ${money(perCheck(a.k401Step / k401Cost(marginalTax, rothShare)), { whole: true })} per paycheck to your 401(k)`, detail: "A one-time change with your employer", info: onceNote, amount: a.k401Step, color: t.series.k401 });
   if (a.taxable > 0.5) out.push({ key: "taxable", title: "Invest in your brokerage", amount: a.taxable, color: t.series.taxable });
   return out;
 }

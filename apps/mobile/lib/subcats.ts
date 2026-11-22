@@ -77,6 +77,19 @@ export function archive(items: BudgetItem[], ids: string[]): BudgetItem[] {
 export function restore(items: BudgetItem[], id: string, group?: string): BudgetItem[] {
   const item = items.find((b) => b.id === id);
   if (!item?.hidden) return items;
+  // its sub categories were archived with it (archiveSet): they come back with it, under it
+  const kids = items.filter((b) => b.hidden && b.parentId === id).map((b) => b.id);
+  if (kids.length) {
+    let out = restoreOne(items, id, group);
+    for (const k of kids) out = restoreOne(out, k);
+    return out;
+  }
+  return restoreOne(items, id, group);
+}
+
+function restoreOne(items: BudgetItem[], id: string, group?: string): BudgetItem[] {
+  const item = items.find((b) => b.id === id);
+  if (!item?.hidden) return items;
   const { hidden: _h, archivedAmount, ...rest0 } = item;
   const parent = item.parentId ? items.find((b) => b.id === item.parentId && active(b) && !b.parentId) : undefined;
   const back: BudgetItem = { ...rest0, amount: archivedAmount ?? item.amount ?? 0 };

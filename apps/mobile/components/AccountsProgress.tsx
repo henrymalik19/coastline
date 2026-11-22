@@ -77,7 +77,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
     rows.push({
       key: "cash",
       name: "Emergency fund",
-      value: `${money(cash, { whole: true })} of ${money(pl.fullTarget, { whole: true })}`,
+      value: `${money(cash)} of ${money(pl.fullTarget, { whole: true })}`,
       progress: Math.min(1, cash / pl.fullTarget),
       later: dec ? Math.min(1, dec.cash / pl.fullTarget) : undefined,
       status: full ? "Full" : ev("fullEF") !== undefined ? `Full by ${when(ev("fullEF"))}` : "Not full in the plan yet",
@@ -122,7 +122,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
     rows.push({
       key: k,
       name: k === "iraSpouse" ? spouseIraLabel(state) : k === "ira" ? (spIra ? "Your IRA" : "IRA") : BUCKET_LABELS[k],
-      value: thisYear ? `${money(soFar, { whole: true })} of ${money(limitSel, { whole: true })}` : `${selY}: ${money(limitSel, { whole: true })} limit`,
+      value: thisYear ? `${money(soFar)} of ${money(limitSel, { whole: true })}` : `${selY}: ${money(limitSel, { whole: true })} limit`,
       progress: thisYear ? Math.min(1, soFar / limitSel) : 0,
       later: Math.min(1, byThen / limitSel),
       status: fullThen ? `Maxed by ${selLabel}` : `About ${money(byThen, { whole: true })} by ${selLabel}`,
@@ -150,7 +150,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
     rows.push({
       key: k,
       name: k === "taxable" ? "Brokerage" : "Other investments",
-      value: money(a.start, { whole: true }),
+      value: money(a.start),
       status: `About ${money(then, { whole: true })} by ${selLabel}`,
       info: later !== undefined ? `About ${money(later, { whole: true })} by your Coast FI date (${monthLabel(start, coastM!)}).` : undefined,
       color: k === "taxable" ? t.series.taxable : t.text3,
@@ -163,7 +163,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
     rows.push({
       key: ("goal:" + g.id) as AccountKey,
       name: g.name || "Goal",
-      value: `${money(g.saved, { whole: true })} of ${money(g.target, { whole: true })}`,
+      value: `${money(g.saved)} of ${money(g.target, { whole: true })}`,
       progress: Math.min(1, g.saved / g.target),
       later: dec ? Math.min(1, (dec.goals.find((x) => x.id === g.id)?.saved ?? g.saved) / g.target) : undefined,
       status: done ? "Reached" : m !== undefined ? `Reached ${when(m)}` : "Not reached in the plan yet",
@@ -178,7 +178,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
     rows.push({
       key: ("debt:" + x.id) as AccountKey,
       name: debtLabel(x),
-      value: `${money(x.balance, { whole: true })} owed`,
+      value: `${money(x.balance)} owed`,
       status:
         m !== undefined && m <= atI
           ? `Paid off ${when(m)}`

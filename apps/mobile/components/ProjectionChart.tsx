@@ -34,7 +34,10 @@ export function ProjectionChart({
       </View>
     );
   }
-  const ticks = niceTicks(Math.min(Math.max(fire * 1.08, ...bands.map((b) => b.p75)), fire * 2.2));
+  // room for the FIRE line and the 25–75% band, but never less than the median (the line people read):
+  // only the wide outer band may run off the top
+  const median = Math.max(...bands.map((b) => b.p50));
+  const ticks = niceTicks(Math.max(Math.min(Math.max(fire * 1.08, ...bands.map((b) => b.p75)), fire * 2.2), median * 1.05));
   const top = ticks[ticks.length - 1]!;
   const pw = Math.max(0, width - M.l - M.r);
   const ph = height - M.t - M.b;
@@ -75,11 +78,11 @@ export function ProjectionChart({
             <Path d={area((b) => b.p10, (b) => b.p90)} fill={t.series.k401} opacity={0.12} />
             <Path d={area((b) => b.p25, (b) => b.p75)} fill={t.series.k401} opacity={0.2} />
             <Line x1={M.l} x2={M.l + pw} y1={y(fire)} y2={y(fire)} stroke={t.text3} strokeWidth={1.5} strokeDasharray="5 4" />
-            <Path d={line(coastCurve)} fill="none" stroke={t.series.ira} strokeWidth={2} />
+            <Path d={line(coastCurve)} fill="none" stroke={t.text2} strokeWidth={2} strokeDasharray="6 4" />
             <Path d={line(bands.map((b) => b.p50))} fill="none" stroke={t.series.k401} strokeWidth={2} />
             {crossing !== null && crossing > 0 ? (
               <G>
-                <Circle cx={x(crossing)} cy={y(coastCurve[0]! * Math.pow(coastCurve[Y]! / coastCurve[0]!, crossing / Y))} r={5} fill={t.series.ira} stroke={t.surface} strokeWidth={2} />
+                <Circle cx={x(crossing)} cy={y(coastCurve[0]! * Math.pow(coastCurve[Y]! / coastCurve[0]!, crossing / Y))} r={5} fill={t.text2} stroke={t.surface} strokeWidth={2} />
               </G>
             ) : null}
             {roomy

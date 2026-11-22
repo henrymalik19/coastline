@@ -153,7 +153,8 @@ export function TransactionsList({
 
   // dated after today: upcoming, shown greyed at the top and not counted until their day
   const today = isoDay(start);
-  const happened = list.filter((x) => !isUpcoming(x, today) && !x.review);
+  // a starting balance isn't money in or spending: it's what the account held when you began
+  const happened = list.filter((x) => !isUpcoming(x, today) && !x.review && !isStartTxn(x));
   const inTotal = happened.reduce((a, x) => a + (x.amount > 0 && !x.transferAccountId ? x.amount : 0), 0);
   const outTotal = happened.reduce((a, x) => a + (x.amount < 0 && !x.transferAccountId ? -x.amount : 0), 0);
   // the count follows the account picker, like everything else here; ones in other accounts get a link instead
@@ -364,7 +365,7 @@ export function TransactionsList({
         {[
           { k: "Money in", v: money(inTotal), c: t.good },
           { k: "Spent", v: money(outTotal), c: t.text },
-          { k: "Transactions", v: String(list.length), c: t.text },
+          { k: "Transactions", v: String(shown.length), c: t.text },
         ].map((x) => (
           <View key={x.k} style={{ flex: 1, minWidth: 0 }}>
             <Text numberOfLines={1} style={[type.caption, { color: t.text3 }]}>{x.k}</Text>

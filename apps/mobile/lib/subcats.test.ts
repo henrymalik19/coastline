@@ -48,4 +48,13 @@ describe("sub categories", () => {
     expect(alone.find((x) => x.id === "gym")).toMatchObject({ group: "Fun", amount: 80 });
     expect(alone.find((x) => x.id === "gym")!.parentId).toBeUndefined();
   });
+
+  it("restoring a category brings back the sub categories archived with it, under it", () => {
+    const b = moveUnder(list(), "gym", "care");
+    const both = archive(b, archiveSet(b, "care"));
+    const r = restore(both, "care", "Home");
+    expect(r.filter((x) => x.hidden)).toEqual([]);
+    expect(r.find((x) => x.id === "gym")).toMatchObject({ parentId: "care", amount: 80 });
+    expect(r.find((x) => x.id === "care")).toMatchObject({ amount: 120 });
+  });
 });

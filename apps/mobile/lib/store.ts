@@ -362,7 +362,7 @@ export const useStore = create<AppState>()(
         const notice = lost
           ? base
             ? "Part of this device's saved plan couldn't be read, so it went back to the last copy synced with your account."
-            : "This device's saved plan couldn't be read. Sign in to load it from your account; a copy of the damaged data is kept on this device."
+            : "This device's saved plan couldn't be read, so setup starts again. If you have a Coastwise account, sign in and your plan loads from it. A copy of the damaged data is kept on this device: send a diagnostic report (Settings → Backup & restore) and we can help get it back."
           : sp.dropped || st.dropped
             ? `${sp.dropped + st.dropped} saved item${sp.dropped + st.dropped === 1 ? "" : "s"} on this device couldn't be read and ${sp.dropped + st.dropped === 1 ? "was" : "were"} left out. Your account still has ${sp.dropped + st.dropped === 1 ? "it" : "them"} if you sync.`
             : undefined;

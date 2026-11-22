@@ -23,7 +23,7 @@ const light = {
   bad: "#c23b3a",
   badSoft: "#fbe5e4",
   track: "#ece5d9",
-  series: { k401: "#2a78d6", ira: "#eb6834", taxable: "#1baf7a", ef: "#eda100", debt: "#e87ba4", hsa: "#008300", goals: "#6250d6" },
+  series: { k401: "#2a78d6", ira: "#7fb1ec", taxable: "#1baf7a", ef: "#eda100", debt: "#e87ba4", hsa: "#008300", goals: "#6250d6" },
   shadow: "rgba(40, 30, 15, 0.07)",
 };
 
@@ -46,7 +46,7 @@ const dark: Palette = {
   bad: "#e66767",
   badSoft: "#3a1b1b",
   track: "#1f3242",
-  series: { k401: "#3987e5", ira: "#d95926", taxable: "#199e70", ef: "#c98500", debt: "#d55181", hsa: "#008300", goals: "#9085e9" },
+  series: { k401: "#3987e5", ira: "#9ac4f5", taxable: "#199e70", ef: "#c98500", debt: "#d55181", hsa: "#008300", goals: "#9085e9" },
   shadow: "rgba(0, 0, 0, 0.4)",
 };
 

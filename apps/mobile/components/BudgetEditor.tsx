@@ -210,7 +210,7 @@ export function BudgetEditor() {
     <Card style={{ gap: space.sm, paddingVertical: space.md }}>
       <View style={[styles.figure, { justifyContent: "space-between", gap: space.md }]}>
         <View style={{ flex: 1 }}>
-          <Text style={[type.label, { color: t.text2 }]}>{leftover < 0 ? "Short in a normal month" : "Left over in a normal month"}</Text>
+          <Text style={[type.label, { color: t.text2 }]}>{leftover < 0 ? "Short each month" : "Left over each month"}</Text>
           <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]} numberOfLines={2}>
             {money(d.leanMonthly)} take-home − {money(d.budgetTotal)} budget{d.debtMins > 0 ? ` − ${money(d.debtMins)} debts` : ""}
             {setAsideNow > 0 ? ` − ${money(setAsideNow)} set aside` : ""}
@@ -253,7 +253,7 @@ export function BudgetEditor() {
         <View style={[styles.figure, styles.result, { backgroundColor: leftover < 0 ? t.badSoft : t.goodSoft }]}>
           <Text style={[type.heading, { color: t.text3, marginRight: space.sm }]}>=</Text>
           <View>
-            <Text style={[type.caption, { color: t.text2 }]}>{leftover < 0 ? "Short in a normal month" : "Left over in a normal month"}</Text>
+            <Text style={[type.caption, { color: t.text2 }]}>{leftover < 0 ? "Short each month" : "Left over each month"}</Text>
             <Text style={[type.stat, { color: leftover < 0 ? t.bad : t.good, fontVariant: ["tabular-nums"] }]}>{money(leftover)}/mo</Text>
           </View>
         </View>
@@ -347,8 +347,8 @@ export function BudgetEditor() {
             {reorder ? (
               <View style={[styles.reorderBar, { backgroundColor: t.accentSoft }]}>
                 <Text style={[type.caption, { color: t.text, flex: 1 }]}>Move this group</Text>
-                <Button title="Earlier" icon="up" disabled={groups[0]?.name === current.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, current.name, -1); })} style={styles.moveBtn} />
-                <Button title="Later" icon="down" disabled={groups.at(-1)?.name === current.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, current.name, 1); })} style={styles.moveBtn} />
+                <Button title="Move up" icon="up" disabled={groups[0]?.name === current.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, current.name, -1); })} style={styles.moveBtn} />
+                <Button title="Move down" icon="down" disabled={groups.at(-1)?.name === current.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, current.name, 1); })} style={styles.moveBtn} />
               </View>
             ) : null}
             <View style={[styles.cols, { paddingHorizontal: space.lg, paddingBottom: space.sm }]}>

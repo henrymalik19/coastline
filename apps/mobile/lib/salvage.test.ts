@@ -29,3 +29,13 @@ describe("reading a damaged saved copy", () => {
     expect(salvageTxns(undefined)).toEqual({ txns: [], dropped: 0 });
   });
 });
+
+describe("one bad account entry", () => {
+  for (const bad of [{ id: "x", name: "Broken", type: "cash", balance: "abc" }, { id: "x", name: 5 }, null, "junk"]) {
+    it(`keeps the plan with ${JSON.stringify(bad)}`, () => {
+      const p = freshPlan() as unknown as { accounts: unknown[] };
+      p.accounts = [...p.accounts, bad];
+      expect(salvagePlan(p).plan).toBeDefined();
+    });
+  }
+});

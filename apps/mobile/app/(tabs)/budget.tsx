@@ -391,10 +391,14 @@ export default function Budget() {
   const pill = (l: BudgetLine, c: BudgetCategory) => {
     const over = l.available < -0.005;
     const under = !over && c.target > 0.5 && l.assigned + 0.5 < c.target && c.kind !== "saving";
-    const bg = over ? t.badSoft : under ? t.warnSoft : l.available > 0.5 ? t.goodSoft : t.surface2;
-    const fg = over ? t.bad : under ? t.warn : l.available > 0.5 ? t.good : t.text3;
+    // short of its target: a dashed outline, not orange (orange means a what-if)
+    const bg = over ? t.badSoft : l.available > 0.5 && !under ? t.goodSoft : t.surface2;
+    const fg = over ? t.bad : under ? t.text : l.available > 0.5 ? t.good : t.text3;
     return (
-      <View style={[styles.pill, { backgroundColor: bg }]}>
+      <View
+        accessibilityLabel={under ? `${money(l.available)}, short of its target` : undefined}
+        style={[styles.pill, { backgroundColor: bg }, under ? { borderWidth: 1, borderStyle: "dashed", borderColor: t.text3 } : null]}
+      >
         <Text style={[type.caption, { color: fg, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(l.available)}</Text>
       </View>
     );
@@ -1021,7 +1025,7 @@ export default function Budget() {
             <View style={{ flexGrow: 1, flexShrink: 1, maxWidth: 440 }}>
               <Segmented
                 label="Budget view"
-                options={[{ value: "categories", label: "Categories" }, { value: "transactions", label: `${compact ? "Activity" : "Transactions"}${needsCount + reviewCount ? ` · ${needsCount + reviewCount}` : ""}` }, { value: "accounts", label: "Accounts" }]}
+                options={[{ value: "categories", label: "Categories" }, { value: "transactions", label: `Activity${needsCount + reviewCount ? ` · ${needsCount + reviewCount}` : ""}` }, { value: "accounts", label: "Accounts" }]}
                 value={tab}
                 onChange={(v) => { setTab(v); if (v !== "transactions" && (acctParam || viewParam || needsParam || reviewParam)) router.setParams({ account: undefined, view: undefined, needs: undefined, review: undefined }); }}
               />
