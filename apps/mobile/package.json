@@ -6,7 +6,7 @@
     "@coastfi/engine": "workspace:*",
     "@coastfi/schema": "workspace:*",
     "@react-native-async-storage/async-storage": "2.2.0",
-    "@supabase/supabase-js": "^2.119.0",
+    "@supabase/supabase-js": "^2.119.1",
     "expo": "~58.0.26",
     "expo-constants": "~58.0.16",
     "expo-linking": "~58.0.17",
@@ -25,7 +25,7 @@
     "zustand": "^5.1.0"
   },
   "devDependencies": {
-    "@playwright/test": "1.64.1",
+    "@playwright/test": "1.65.1",
     "@types/react": "~19.3.0",
     "typescript": "~6.0.3",
     "vitest": "^4.1.12"
