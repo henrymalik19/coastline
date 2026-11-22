@@ -5,12 +5,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AccountPanel } from "../components/AccountPanel";
 import { BetaTag } from "../components/Beta";
 import { Button } from "../components/form";
-import { Icon } from "../components/Icon";
+import { BrandMark } from "../components/BrandMark";
 import { Card } from "../components/ui";
 import { useStore } from "../lib/store";
 import { signOut, useSync } from "../lib/sync";
 import { useMembership } from "../lib/sharing";
-import { radius, space, type, useTheme } from "../lib/theme";
+import { space, type, useTheme } from "../lib/theme";
 
 /**
  * Returning users: sign in and load the plan from the account. One centered column (a phone's width,
@@ -47,9 +47,7 @@ export default function SignIn() {
     >
       <View style={styles.column}>
         <Pressable role="link" accessibilityLabel="Coastwise: back to the start page" onPress={home} hitSlop={8} style={styles.brand}>
-          <View style={[styles.logo, { backgroundColor: t.accent }]}>
-            <Icon name="trend" size={20} color="#fff" />
-          </View>
+          <BrandMark />
           <Text style={[type.heading, { color: t.text }]}>Coastwise</Text>
           <BetaTag />
         </Pressable>
@@ -102,5 +100,4 @@ const styles = StyleSheet.create({
   page: { flexGrow: 1, alignItems: "center", paddingHorizontal: 16 },
   column: { width: "100%", maxWidth: 420, gap: space.lg },
   brand: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm, alignSelf: "center" },
-  logo: { width: 36, height: 36, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
 });

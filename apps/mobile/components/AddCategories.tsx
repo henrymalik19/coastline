@@ -43,6 +43,8 @@ export function AddCategories({
   }, [request, onClose]);
   if (!request) return null;
   const isGroup = request.kind === "group";
+  const under = !isGroup && request.to.startsWith("under:") ? parents.find((p) => "under:" + p.id === request.to) : undefined;
+  const title = isGroup ? "Add a group" : under ? `Add sub categories to ${under.name || "Unnamed"}` : "Add categories";
   const named = lines.filter((l) => l.name.trim());
   const ready = isGroup ? !!group.trim() && named.length > 0 : named.length > 0;
   const toOptions = [
@@ -69,8 +71,8 @@ export function AddCategories({
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Cancel">
-        <Pressable onPress={() => {}} role="dialog" aria-label={isGroup ? "Add a group" : "Add categories"} style={[styles.card, { backgroundColor: t.surface, borderColor: t.border }]}>
-          <Text style={[type.heading, { color: t.text }]}>{isGroup ? "Add a group" : "Add categories"}</Text>
+        <Pressable onPress={() => {}} role="dialog" aria-label={title} style={[styles.card, { backgroundColor: t.surface, borderColor: t.border }]}>
+          <Text style={[type.heading, { color: t.text }]}>{title}</Text>
           <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: space.md }} keyboardShouldPersistTaps="handled">
             {isGroup ? (
               <View style={{ gap: 4 }}>
@@ -82,7 +84,7 @@ export function AddCategories({
             {lines.map((l, i) => (
               <View key={i} style={{ gap: 4 }}>
                 <View style={styles.row}>
-                  <View style={{ flex: 1 }}>{input(l.name, (v) => setLine(i, { name: v }), `Category ${i + 1} name`, i === 0 ? "e.g. Childcare" : "Another one", !isGroup && i === lines.length - 1)}</View>
+                  <View style={{ flex: 1 }}>{input(l.name, (v) => setLine(i, { name: v }), `Category ${i + 1} name`, i === 0 ? (under ? "e.g. Daycare" : "e.g. Childcare") : "Another one", !isGroup && i === lines.length - 1)}</View>
                   {lines.length > 1 ? (
                     <Pressable role="button" accessibilityLabel={`Remove line ${i + 1}`} hitSlop={8} onPress={() => setLines((ls) => ls.filter((_, j) => j !== i))}>
                       <Icon name="close" size={16} color={t.text3} />

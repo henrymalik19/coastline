@@ -215,7 +215,7 @@ export default function Forecast() {
       {tab === "overview" ? (
         <View style={{ flexDirection: "row", gap: space.sm }}>
           {[{ v: false, label: "Chart" }, { v: true, label: "Table" }].map((x) => (
-            <Pressable key={x.label} role="radio" aria-checked={asTable === x.v} onPress={() => { setAsTable(x.v); if (!x.v) setPick(undefined); }} hitSlop={4} style={[styles.chip, { borderColor: asTable === x.v ? t.accent : t.border, backgroundColor: asTable === x.v ? t.accentSoft : t.surface }]}>
+            <Pressable key={x.label} role="radio" aria-checked={asTable === x.v} aria-label={x.label} onPress={() => { setAsTable(x.v); if (!x.v) setPick(undefined); }} hitSlop={4} style={[styles.chip, { borderColor: asTable === x.v ? t.accent : t.border, backgroundColor: asTable === x.v ? t.accentSoft : t.surface }]}>
               <Text style={[type.caption, { color: asTable === x.v ? t.accent : t.text2, fontWeight: "700" }]}>{x.label}</Text>
             </Pressable>
           ))}

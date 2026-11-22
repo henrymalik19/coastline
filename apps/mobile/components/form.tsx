@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, type ViewStyle } from "react-native";
+import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View, type ViewStyle } from "react-native";
 import { useLayout } from "../lib/layout";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { formatDate, parseDate } from "../lib/dates";
@@ -408,6 +408,7 @@ export function Segmented<T extends string>({
             key={o.value}
             role="radio"
             aria-checked={on}
+            aria-label={o.label}
             onPress={() => onChange(o.value)}
             style={[styles.segItem, on ? { backgroundColor: t.surface, borderColor: t.border, borderWidth: StyleSheet.hairlineWidth } : null]}
           >
@@ -433,15 +434,36 @@ export function Select<T extends string>({
 }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
+  // where the box is on screen: the list opens right under it (or above, near the bottom), not mid-screen
+  const box = useRef<ComponentRef<typeof View>>(null);
+  const [anchor, setAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const win = useWindowDimensions();
+  const show = () => {
+    if (!box.current) { setAnchor(null); setOpen(true); return; }
+    box.current.measureInWindow((x, y, w, h) => { setAnchor(w > 0 ? { x, y, w, h } : null); setOpen(true); });
+  };
   const cur = options.find((o) => o.value === value);
+  const pad = 8;
+  const below = anchor ? win.height - (anchor.y + anchor.h) - pad * 2 : 0;
+  const above = anchor ? anchor.y - pad * 2 : 0;
+  const placed: ViewStyle | null = anchor && Math.max(below, above) >= 200
+    ? {
+        position: "absolute",
+        width: Math.min(Math.max(anchor.w, 240), 380, win.width - pad * 2),
+        left: Math.max(pad, Math.min(anchor.x, win.width - pad - Math.min(Math.max(anchor.w, 240), 380, win.width - pad * 2))),
+        ...(below >= 200 || below >= above ? { top: anchor.y + anchor.h + 4 } : { bottom: win.height - anchor.y + 4 }),
+        maxHeight: Math.max(below, above),
+      }
+    : null;
   return (
     <>
       {trigger ? trigger(() => setOpen(true)) : (
       <Pressable
+        ref={box}
         role="button"
         aria-haspopup="listbox"
         accessibilityLabel={`${label}: ${cur?.label ?? "none"}. Change`}
-        onPress={() => setOpen(true)}
+        onPress={show}
         style={plain ? styles.selectPlain : [styles.select, { borderColor: t.border, backgroundColor: t.surface2 }]}
       >
         <Text style={[type.body, { color: cur && cur.value ? t.text : t.text3, flex: 1, textAlign: plain ? "right" : "left" }]} numberOfLines={1}>{cur && cur.value ? cur.label : placeholder ?? cur?.label ?? "Pick one"}</Text>
@@ -449,10 +471,10 @@ export function Select<T extends string>({
       </Pressable>
       )}
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel={`Close ${label}`}>
-          <Pressable onPress={() => {}} aria-label={label} style={[styles.sheet, { backgroundColor: t.surface, borderColor: t.border }]}>
+        <Pressable style={[styles.backdrop, placed ? { backgroundColor: "rgba(0,0,0,0.15)" } : null]} onPress={() => setOpen(false)} accessibilityLabel={`Close ${label}`}>
+          <Pressable onPress={() => {}} aria-label={label} style={[styles.sheet, { backgroundColor: t.surface, borderColor: t.border }, placed ?? null]}>
             <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.md, paddingBottom: 4 }]}>{label}</Text>
-            <ScrollView style={{ maxHeight: 440 }}>
+            <ScrollView style={{ maxHeight: placed ? Math.min(440, (placed.maxHeight as number) - 48) : 440 }}>
               {options.map((o, i) => {
                 const on = o.value === value;
                 const heading = o.section && o.section !== options[i - 1]?.section ? o.section : undefined;

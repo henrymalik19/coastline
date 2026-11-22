@@ -781,7 +781,7 @@ export default function Budget() {
             {grip}
             {isOpen ? <Icon name="up" size={12} color={t.accent} /> : null}
             <View style={{ flexShrink: 1, minWidth: 0 }}>
-              <Text style={[type.body, { color: isOpen ? t.accent : t.text, fontWeight: isOpen ? "600" : "400" }]} numberOfLines={1}>{shownName}</Text>
+              <Text style={[type.body, { color: isOpen ? t.accent : t.text, fontWeight: isOpen ? "600" : "400" }]} numberOfLines={2}>{shownName}</Text>
               {opts.total ? <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>Available incl. its subs</Text> : null}
               {/* phones: under the name, so the name keeps its line */}
               {overLast.has(c.key) && compact ? (
@@ -793,7 +793,7 @@ export default function Budget() {
                 <Text style={[type.caption, { color: t.bad, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>{money(l.toDebt!)} left as card debt</Text>
               ) : null}
               {cardShort(c, l) > 0.5 ? (
-                <Text style={[type.caption, { color: t.bad, fontWeight: "700", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>{money(cardShort(c, l))} short of the balance</Text>
+                <Text style={[type.caption, { color: t.bad, fontWeight: "700", fontVariant: ["tabular-nums"] }]} numberOfLines={2}>{money(cardShort(c, l))} short of the balance</Text>
               ) : null}
             </View>
             {dup || loan || newPay !== undefined ? <Icon name="info" size={14} color={t.warn} /> : null}

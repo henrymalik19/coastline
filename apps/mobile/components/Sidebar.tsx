@@ -8,6 +8,7 @@ import { radius, space, type, useTheme } from "../lib/theme";
 import { Icon, type IconName } from "./Icon";
 import { SyncStatusLine } from "./AccountPanel";
 import { BetaTag } from "./Beta";
+import { BrandMark } from "./BrandMark";
 import { ProgressBar } from "./ProgressRing";
 
 /** Desktop web navigation: replaces the bottom tab bar on wide windows. */
@@ -21,9 +22,7 @@ export function Sidebar({ state, descriptors, emitter, navigateToTab, icons }: B
   return (
     <View role="navigation" aria-label="Main" style={[styles.bar, { backgroundColor: t.surface, borderRightColor: t.border }]}>
       <View style={styles.brand}>
-        <View style={[styles.logo, { backgroundColor: t.accent }]}>
-          <Icon name="trend" size={18} color="#fff" />
-        </View>
+        <BrandMark />
         <View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <Text style={[type.heading, { color: t.text }]}>Coastwise</Text>
@@ -101,7 +100,6 @@ export function Sidebar({ state, descriptors, emitter, navigateToTab, icons }: B
 const styles = StyleSheet.create({
   bar: { width: SIDEBAR_WIDTH, height: "100%", borderRightWidth: StyleSheet.hairlineWidth, padding: space.lg, gap: space.xl },
   brand: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.xs, paddingTop: space.sm },
-  logo: { width: 36, height: 36, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
   item: { flexDirection: "row", alignItems: "center", gap: space.md, height: 42, paddingHorizontal: space.md, borderRadius: 10 },
   summary: { borderRadius: radius.md, padding: space.md, gap: space.sm },
   between: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

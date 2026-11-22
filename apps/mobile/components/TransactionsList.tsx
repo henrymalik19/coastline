@@ -401,7 +401,7 @@ export function TransactionsList({
                           <View style={[styles.transferBadge, { backgroundColor: t.accentSoft }]}>
                             <Icon name="transfer" size={14} color={t.accent} />
                           </View>
-                          <Text numberOfLines={1} style={[type.body, { color: t.text, flexShrink: 1 }]}>
+                          <Text numberOfLines={2} style={[type.body, { color: t.text, flexShrink: 1 }]}>
                             {x.amount < 0 ? nameOf(x.accountId) : nameOf(x.transferAccountId)}
                             <Text style={{ color: t.text3 }}>{"  →  "}</Text>
                             {x.amount < 0 ? nameOf(x.transferAccountId) : nameOf(x.accountId)}

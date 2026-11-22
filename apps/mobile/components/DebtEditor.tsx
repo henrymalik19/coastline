@@ -93,6 +93,7 @@ export function DebtEditor({
               key={k.value}
               role="radio"
               aria-checked={on}
+              aria-label={k.label}
               onPress={() => setKind(k.value)}
               style={[styles.chip, { borderColor: on ? t.accent : t.border, backgroundColor: on ? t.accentSoft : t.surface }]}
             >

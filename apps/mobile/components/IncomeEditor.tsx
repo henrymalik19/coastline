@@ -431,6 +431,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
                       key={m.label}
                       role="radio"
                       aria-checked={on}
+                      aria-label={m.label}
                       onPress={() => { setCustom(false); change({ matchRate1: m.r1, matchUpTo1: m.u1, matchRate2: m.r2, matchUpTo2: m.u2 }); }}
                       style={[styles.chip, { borderColor: on ? t.accent : t.border, backgroundColor: on ? t.accentSoft : t.surface }]}
                     >
@@ -441,6 +442,7 @@ function JobPay({ inc, auto, change, marginalTax }: { inc: Income; auto: boolean
                 <Pressable
                   role="radio"
                   aria-checked={custom || !preset}
+                  aria-label="Something else"
                   onPress={() => setCustom(true)}
                   style={[styles.chip, { borderColor: custom || !preset ? t.accent : t.border, backgroundColor: custom || !preset ? t.accentSoft : t.surface }]}
                 >

@@ -2,6 +2,7 @@ import { Redirect, useRouter } from "expo-router";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient, Line, Path, Stop, Text as SvgText } from "react-native-svg";
+import { BrandMark } from "../components/BrandMark";
 import { Button } from "../components/form";
 import { BetaNote, BetaTag } from "../components/Beta";
 import { Icon, type IconName } from "../components/Icon";
@@ -63,7 +64,7 @@ function Landing() {
         {/* top bar */}
         <View style={styles.bar}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-            <Wave color={t.accent} />
+            <BrandMark size={32} />
             <Text style={[type.heading, { color: t.text, fontWeight: "700" }]}>Coastwise</Text>
             <BetaTag />
           </View>
@@ -162,18 +163,6 @@ function Landing() {
         </View>
       </View>
     </ScrollView>
-  );
-}
-
-/** Small brand mark: two waves. */
-function Wave({ color }: { color: string }) {
-  return (
-    <View aria-hidden style={{ width: 26, height: 26 }}>
-      <Svg width={26} height={26} viewBox="0 0 24 24">
-        <Path d="M2 10c2.5-2.5 5-2.5 7.5 0s5 2.5 7.5 0 3.5-2 5-1" stroke={color} strokeWidth={2.2} strokeLinecap="round" fill="none" />
-        <Path d="M2 16c2.5-2.5 5-2.5 7.5 0s5 2.5 7.5 0 3.5-2 5-1" stroke={color} strokeWidth={2.2} strokeLinecap="round" fill="none" opacity={0.5} />
-      </Svg>
-    </View>
   );
 }
 
