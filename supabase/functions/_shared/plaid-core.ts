@@ -221,12 +221,14 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
   const txnsOn = async () => !!store.saveTxns && !!store.txnCursor && (env.transactions === "all" || (store.canLink ? await store.canLink(userId) : false));
   /**
    * A bank connection's transactions since the last time (Plaid's transactions sync, from its cursor),
-   * saved for the app to merge. Not ready yet at a new connection, or not on this one: nothing, quietly.
-   * A sign-in the bank needs stops it like it stops balances.
+   * saved for the app to merge. Only a connection with an account you spend from (checking, savings, a
+   * card), whichever way it was connected: a brokerage connected for investments can hold your checking
+   * account; one with only investments never asks (asking would add transactions to it, and its cost).
+   * Not ready yet at a new connection, or not on this one: nothing, quietly. A sign-in the bank needs
+   * stops it like it stops balances.
    */
-  const syncTxns = async (item: string, access_token: string, now: string) => {
-    const it = await store.item(planId, item);
-    if (it?.kind !== "bank" || !(await txnsOn())) return;
+  const syncTxns = async (item: string, access_token: string, now: string, spending: boolean) => {
+    if (!spending || !(await txnsOn())) return;
     const start = await store.txnCursor!(item);
     for (let attempt = 0; attempt < 3; attempt++) {
       const got = new Map<string, PlaidTxn>();
@@ -290,7 +292,7 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
       const keep = new Set(accounts.map((a) => a.account_id));
       const gone = (await store.accountIds(item)).filter((id) => !keep.has(id));
       if (gone.length) await store.deleteAccounts(gone);
-      await syncTxns(item, access_token, now);
+      await syncTxns(item, access_token, now, accounts.some((a) => a.type === "depository" || a.type === "credit"));
       await store.updateItem(item, { status: "ok", error_code: null, last_synced_at: now });
     } catch (e) {
       const code = e instanceof PlaidHttpError ? e.code : undefined;

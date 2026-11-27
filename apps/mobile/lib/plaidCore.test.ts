@@ -47,6 +47,8 @@ function memStore(owner = "u1") {
 /** Plaid's transactions sync, by the cursor it's asked from (none: the first time). */
 type SyncPage = { added?: unknown[]; modified?: unknown[]; removed?: { transaction_id: string }[]; next_cursor: string; has_more?: boolean } | { error: string };
 let syncPages: Record<string, SyncPage> = {};
+/** The accounts /accounts/get lists instead of the usual checking and card. */
+let onlyAccounts: unknown[] | undefined;
 const ptx = (id: string, o: Record<string, unknown> = {}) => ({ transaction_id: id, account_id: "chk", amount: 5.25, date: "2026-11-10", name: "SQ *CAFE", merchant_name: "Cafe", pending: false, ...o });
 
 /** A fake Plaid: answers by path; `fail` makes /accounts/get return that error code. */
@@ -62,6 +64,7 @@ function fakePlaid(fail?: string) {
     if (path === "/institutions/get_by_id") return ok({ institution: { name: "First Platypus Bank" } });
     if (path === "/accounts/get") {
       if (fail) return new Response(JSON.stringify({ error_code: fail, error_message: "x" }), { status: 400 });
+      if (onlyAccounts) return ok({ accounts: onlyAccounts });
       return ok({
         accounts: [
           { account_id: "chk", name: "Plaid Checking", mask: "0000", type: "depository", subtype: "checking", balances: { current: 110, available: 100 } },
@@ -83,7 +86,7 @@ function fakePlaid(fail?: string) {
   return calls;
 }
 
-beforeEach(() => { vi.useRealTimers(); syncPages = {}; });
+beforeEach(() => { vi.useRealTimers(); syncPages = {}; onlyAccounts = undefined; });
 afterEach(() => vi.unstubAllGlobals());
 
 describe("who may connect new banks (production)", () => {
@@ -240,7 +243,7 @@ describe("bank transactions (server)", () => {
     expect(cursors[itemId]).toBe("c2");
   });
 
-  it("only for admins unless it's on for all, never for investments, and quietly not before it's ready", async () => {
+  it("only for admins unless it's on for all, never for investments only, and quietly not before it's ready", async () => {
     syncPages = { "": { added: [ptx("a")], next_cursor: "c1" } };
     const notAdmin = memStore();
     fakePlaid();
@@ -249,9 +252,16 @@ describe("bank transactions (server)", () => {
     const all = memStore();
     await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "bank" }, "u1", { ...env, transactions: "all" }, all.store);
     expect(Object.keys(all.txns)).toEqual(["a"]);
+    // a brokerage connected for investments that holds your checking: yes
+    const brokerage = memStore();
+    await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "investments" }, "u1", env, admin(brokerage.store));
+    expect(Object.keys(brokerage.txns)).toEqual(["a"]);
+    // investments only: never asked
+    onlyAccounts = [{ account_id: "ira", name: "IRA", type: "investment", subtype: "ira", balances: { current: 5000 } }];
     const inv = memStore();
+    const calls = fakePlaid();
     await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "investments" }, "u1", env, admin(inv.store));
-    expect(inv.txns).toEqual({});
+    expect([inv.txns, calls.some((c) => c.path === "/transactions/sync")]).toEqual([{}, false]);
     syncPages = {};
     const early = memStore();
     const { itemId } = (await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "bank" }, "u1", env, admin(early.store))) as { itemId: string };
