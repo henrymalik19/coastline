@@ -7,7 +7,7 @@ import { addMonths, isHistoryTxn, isStartTxn, isUpcoming, registerBalance, start
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { Button, DateField, NumberInput, Select, TextField } from "./form";
+import { Button, DateField, InfoText, InfoTip, NumberInput, Select, TextField } from "./form";
 import { Icon } from "./Icon";
 import { TxnForm } from "./TxnForm";
 import { Card, Divider } from "./ui";
@@ -164,7 +164,8 @@ export function TransactionsList({
   const missingElsewhere = missingAll.length - missing;
   const toReview = txns.filter((x) => !x.deleted && x.review && inView(x));
   const accept = (x: Txn) => { const { review: _r, ...rest } = x; saveTxn(rest, isoDay(start)); };
-  const acceptAll = () => { for (const x of toReview) accept(x); setReviewOnly(false); };
+  const [reviewTip, setReviewTip] = useState(false);
+  const reviewInfo = `${toReview.every((x) => x.source === "plaid") ? "New from your bank." : toReview.some((x) => x.source === "plaid") ? "New from your bank, or not approved in YNAB yet." : "Not approved in YNAB yet."} They count in your balances and budget once you accept them. Tap one to change it first.`;
 
   if (!state.budgetPlan || !accounts.length) {
     return (
@@ -297,6 +298,7 @@ export function TransactionsList({
             <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>To review ({toReview.length})</Text>
           </Pressable>
         ) : null}
+        {reviewOnly ? <InfoTip text={reviewInfo} label="To review" open={reviewTip} onToggle={setReviewTip} /> : null}
         {missing || needsCat ? (
           <Pressable role="checkbox" aria-checked={needsCat} onPress={() => { setNeedsCat((v) => !v); setReviewOnly(false); }} hitSlop={6} style={[styles.chip, { borderColor: needsCat ? t.warn : t.border, backgroundColor: needsCat ? t.warnSoft : t.surface }]}>
             <Text style={[type.caption, { color: needsCat ? t.text : t.warn, fontWeight: "700" }]}>Needs a category ({missing})</Text>
@@ -352,14 +354,7 @@ export function TransactionsList({
       </View>
       </View>
 
-      {reviewOnly ? (
-        <Card style={{ gap: space.sm }}>
-          <Text style={[type.body, { color: t.text2 }]}>
-            {toReview.every((x) => x.source === "plaid") ? "New from your bank." : toReview.some((x) => x.source === "plaid") ? "New from your bank, or not approved in YNAB yet." : "Not approved in YNAB yet."} They don't count in your balances or budget until you accept them. Tap one to change it first.
-          </Text>
-          {toReview.length ? <Button title={`Accept all ${toReview.length}`} tone="primary" icon="check" onPress={acceptAll} style={{ alignSelf: "flex-start", minHeight: 36 }} /> : null}
-        </Card>
-      ) : null}
+      {reviewOnly && reviewTip ? <InfoText text={reviewInfo} /> : null}
       {accountCard}
       <View style={[styles.summary, { backgroundColor: t.surface2 }]}>
         {[
@@ -415,7 +410,7 @@ export function TransactionsList({
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text numberOfLines={1} style={[type.body, { color: t.text }]}>{x.payee || "No payee"}</Text>
                         <Text numberOfLines={1} style={[type.caption, { color: x.review ? t.accent : uncategorized(x) ? t.warn : t.text3 }]}>
-                          {x.source === "plaid" && x.cleared === "uncleared" ? "Pending · " : ""}{x.review ? `To review · ${x.categoryId || x.splits?.length ? categoryText(cats, x, nameOf, since) : "no category"}` : categoryText(cats, x, nameOf, since)}
+                          {x.review ? `To review · ${x.categoryId || x.splits?.length ? categoryText(cats, x, nameOf, since) : "no category"}` : categoryText(cats, x, nameOf, since)}
                         </Text>
                       </View>
                     )}
