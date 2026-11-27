@@ -746,6 +746,9 @@ describe("retirement income, promo rates, minimum-only debts, employer HSA, Roth
     expect(nov!.alloc.ira).toBeCloseTo(1000, 6);
     expect(nov!.alloc.ef).toBeCloseTo(5000, 6);
     expect(dec!.alloc.ira).toBe(0);
+    // it counts as yours: what you set on a step that month (the table's "left" leaves it out)
+    expect(nov!.stepAsk).toBeCloseTo(1000, 6);
+    expect(dec!.stepAsk).toBe(0);
   });
 
   it("payroll steps don't shrink this year's 401(k) limit: earlier paychecks count instead", () => {

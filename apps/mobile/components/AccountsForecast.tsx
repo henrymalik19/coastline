@@ -16,6 +16,7 @@ import { Button, IconButton, NumberInput } from "./form";
 import { Icon } from "./Icon";
 import { ScheduleEditor } from "./ScheduleEditor";
 import { useLayout } from "../lib/layout";
+import { CellEditor, mineIn, type CellPick } from "./CellEditor";
 import { ProgressBar } from "./ProgressRing";
 import { TwoBar } from "./AccountsProgress";
 import { Card, Divider, SectionLabel } from "./ui";
@@ -121,7 +122,13 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
   // which account the table shows: one at a time (phones start there), or all side by side
   const [pickRaw, setPick] = useState<string | null>(initialPick ?? null);
   const [picking, setPicking] = useState(false);
-  const pick = pickRaw === "all" || (pickRaw && shown.some((a) => a.key === pickRaw)) ? pickRaw : compact ? shown[0]?.key ?? "all" : "all";
+  const pick = (pickRaw === "all" && !compact) || (pickRaw && pickRaw !== "all" && shown.some((a) => a.key === pickRaw)) ? pickRaw! : compact ? shown[0]?.key ?? "all" : "all";
+  /** Phones: the account before or after this one. */
+  const stepPick = (dir: -1 | 1) => {
+    const i = shown.findIndex((a) => a.key === pick);
+    const next = shown[(i + dir + shown.length) % shown.length];
+    if (next) { setPick(next.key); setSel(null); }
+  };
   const cols = pick === "all" ? shown : shown.filter((a) => a.key === pick);
   const isDebt = (k: AccountKey) => k.startsWith("debt:");
 
@@ -145,21 +152,59 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
       return false;
     });
   };
+  /** Left: this month's money you haven't given a job (take-home − bills − what you set). The plan fills it. */
+  const leftAt = (i: number) => {
+    const r = pl.months[i];
+    return r ? r.available - r.plannedAsk - (r.stepAsk ?? 0) : 0;
+  };
+  const paycheckKey = (k: AccountKey) => k === "k401" || (k === "hsa" && payrollHsa) || (isDebt(k) && !!state.debts.find((x) => "debt:" + x.id === k)?.payroll);
+  /** Blue: you set it. Gray: from your paychecks (or nothing). Black: the plan filled it. */
+  const yoursAt = (k: AccountKey, i: number) => !paycheckKey(k) && !!mineIn(state, k, ym(start, i));
+  const amountColor = (a: AccountForecast, i: number, value: number) =>
+    whatIfChanged(a, i, "amount") ? t.warn : yoursAt(a.key, i) ? t.accent : value <= 0.5 || (paycheckKey(a.key) && a.months[i]!.plan <= 0.5) ? t.text3 : t.text;
+  /** You set more than went in (a yearly limit, a paid-off balance, or not enough left): what you set. */
+  const cappedAt = (a: AccountForecast, i: number, value: number) => {
+    if (!yoursAt(a.key, i)) return 0;
+    const asked = mineIn(state, a.key, ym(start, i))?.amount ?? 0;
+    const got = isDebt(a.key) ? a.months[i]!.plan : value;
+    return asked - got > 0.5 ? asked : 0;
+  };
+  const cappedLine = (asked: number, width?: number) => (
+    <Text numberOfLines={1} style={[type.caption, { color: t.text3, fontSize: 11, fontVariant: ["tabular-nums"] }, width ? { width, textAlign: "right" } : null]}>of {money(asked, { whole: true })} set</Text>
+  );
+  const [cell, setCell] = useState<CellPick | null>(null);
+  const openCell = (a: AccountForecast, i: number) => {
+    if (a.key === "other") return;
+    const m = a.months[i]!;
+    setCell({ k: a.key, month: ym(start, i), label: label(a.key).replace(" (what you owe)", ""), got: paycheckKey(a.key) ? m.paycheck : m.plan, left: leftAt(i), paycheck: paycheckKey(a.key) });
+  };
+  /** Under the month: what's left that month (the plan fills it), and "+1" in a 3rd-paycheck month. */
+  const leftLine = (i: number) => {
+    const v = leftAt(i);
+    return (
+      <Text numberOfLines={1} style={[type.caption, { fontSize: 11, fontWeight: "800", color: v < -0.5 ? t.bad : t.good, fontVariant: ["tabular-nums"] }]}>
+        {money(v, { whole: true })} left
+        {pl.months[i]?.extraCheck ? <Text style={{ color: t.accent }}> · +1</Text> : null}
+      </Text>
+    );
+  };
   const extraText = (from: { name: string }[]) => `+1 paycheck from ${from.map((x) => x.name || "your job").join(" and ")}`;
   const amountCell = (a: AccountForecast, i: number, width: number) => {
     const k = a.key;
     const m = a.months[i]!;
     const month = ym(start, i);
-    const changed = oneOffs[k]?.[month] !== undefined;
-    const wi = whatIfChanged(a, i, "amount");
+    void month;
     const value = isDebt(k) ? m.paycheck + m.plan : m.total;
-    const main = <Text style={[type.caption, { color: wi ? t.warn : changed ? t.accent : t.text, fontWeight: changed || wi ? "700" : "500", width, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(value)}</Text>;
+    const bold = yoursAt(k, i) || whatIfChanged(a, i, "amount");
+    const main = <Text style={[type.caption, { color: amountColor(a, i, value), fontWeight: bold ? "700" : "500", width, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(value)}</Text>;
     const from = extraFrom(k, i);
+    const capped = cappedAt(a, i, value);
     // money put in January to March that counts toward last year's limit
-    if (!m.prior && !from.length) return main;
+    if (!m.prior && !from.length && !capped) return main;
     return (
       <View style={{ alignItems: "flex-end" }} accessibilityLabel={from.length ? `${money(value)}, ${extraText(from)}` : undefined}>
         {main}
+        {capped ? cappedLine(capped, width) : null}
         {from.length ? <Text numberOfLines={1} style={[type.caption, { color: t.accent, fontSize: 11, fontWeight: "700", width, textAlign: "right" }]}>+1 check</Text> : null}
         {!m.prior ? null : <Text numberOfLines={1} style={[type.caption, { color: t.accent, fontSize: 11, width, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(m.prior, { whole: true })} for {m.y - 1}</Text>}
       </View>
@@ -353,12 +398,12 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
       <View style={[styles.rule, { backgroundColor: t.border }]} />
       <Text style={[type.caption, { color: t.text3 }]}>You set (Budget)</Text>
       {mine.length ? mine.map((x) => line(label(x.k).replace(" (what you owe)", isDebt(x.k) ? " (extra)" : ""), `− ${money(x.ask)}`)) : (
-        <Text style={[type.caption, { color: t.text3 }]}>Nothing set yet. Assign amounts on the Budget tab.</Text>
+        <Text style={[type.caption, { color: t.text3 }]}>Nothing set yet. Tap an amount in the table to set one.</Text>
       )}
       {row0.plannedShort > 0.5
         ? line("Short this month", money(-row0.plannedShort), { strong: true, color: t.bad, hint: "Your plan asks for more than is left after bills. Lower an amount, or move one to a later month." })
         : notPlanned > 0.5
-          ? line("Not assigned", money(notPlanned), { color: t.text2, hint: "Not counted in the forecast. Assign it on the Budget tab to see it here." })
+          ? line("Left", money(notPlanned), { color: t.good, hint: "Your priority order fills it. Tap an amount in the table to set it yourself." })
           : null}
       {shortMonths.length && !(shortMonths.length === 1 && shortMonths[0]!.i === 0) ? (
         <Text style={[type.caption, { color: t.bad }]}>
@@ -371,7 +416,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
   /* ---------- the table: months down, accounts across, header and month column stay put ---------- */
   const web = Platform.OS === "web";
   const stick = (st: object) => (web ? ({ position: "sticky", ...st } as object) : null);
-  const MW = compact ? 70 : 104;
+  const MW = compact ? 100 : 120;
   const H1 = 30;
   const num = (v: string, color: string, w = COL, bold = false) => (
     <Text style={[type.caption, { width: w, paddingHorizontal: 8, textAlign: "right", color, fontWeight: bold ? "700" : "500", fontVariant: ["tabular-nums"] }]}>{v}</Text>
@@ -384,7 +429,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
   );
   const head1 = (
     <View style={[styles.gr, { height: H1, backgroundColor: t.surface, zIndex: 3 }, stick({ top: 0 })]}>
-      {monthCell(<Text style={[type.overline, { color: t.text3 }]}>Month</Text>, t.surface, 4)}
+      {monthCell(<Text style={[type.overline, { color: t.text3 }]}>Month · left</Text>, t.surface, 4)}
       {cols.map((x) => {
         const on = sel === x.key;
         const planned = (schedule[x.key]?.length ?? 0) > 0;
@@ -437,17 +482,20 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
     return (
       <View key={i} style={[styles.gr, { backgroundColor: bg }]}>
         {monthCell(
-          <Text style={[type.caption, { color: i === 0 ? t.text : t.text2, fontWeight: i === 0 ? "700" : "500" }]}>
-            {mLabel(i)}
-            {i === 0 ? <Text style={{ color: t.accent, fontWeight: "700" }}>{"\n"}NOW</Text> : null}
-          </Text>,
+          <View>
+            <Text style={[type.caption, { color: i === 0 ? t.text : t.text2, fontWeight: i === 0 ? "700" : "500" }]}>
+              {mLabel(i)}
+              {i === 0 ? <Text style={{ color: t.accent, fontWeight: "700" }}> NOW</Text> : null}
+            </Text>
+            {leftLine(i)}
+          </View>,
           bg,
           1,
           i === 0,
         )}
         {cols.map((x) => (
           <View key={x.key} style={[{ flexDirection: "row", alignItems: "center" }, groupEdge]}>
-            <View style={{ width: COL, paddingHorizontal: 8, alignItems: "flex-end" }}>{amountCell(x, i, COL - 16)}</View>
+            <Pressable role="button" accessibilityLabel={`${label(x.key)}, ${mLabel(i)}: change`} onPress={() => openCell(x, i)} style={{ width: COL, paddingHorizontal: 8, alignItems: "flex-end", alignSelf: "stretch", justifyContent: "center" }}>{amountCell(x, i, COL - 16)}</Pressable>
             {num(money(x.months[i]!.balance), whatIfChanged(x, i, "balance") ? t.warn : t.text2)}
           </View>
         ))}
@@ -515,7 +563,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
   const singleTable = one ? (
     <View style={[{ borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.border, overflow: "hidden", width: "100%" }, fill ? { flex: 1, minHeight: 0 } : { maxHeight: 620 }]}>
       <View style={[styles.sRow, { backgroundColor: t.surface, borderBottomWidth: 1, borderBottomColor: t.border }]}>
-        <Text style={[type.overline, styles.sMonth, { color: t.text3 }]}>Month</Text>
+        <Text style={[type.overline, styles.sMonth, { color: t.text3 }]}>Month · left</Text>
         <Text style={[type.overline, styles.sNum, { color: t.text3 }]}>{isDebt(one.key) ? "Paid" : "Added"}</Text>
         <Text style={[type.overline, styles.sNum, { color: t.text3 }]}>{isDebt(one.key) ? "Owed" : "Balance"}</Text>
       </View>
@@ -529,28 +577,35 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
           const r = pl.months[i]!;
           const m = one.months[i]!;
           const short = r.plannedShort > 0.5;
-          const changed = oneOffs[one.key]?.[ym(start, i)] !== undefined;
+          const changed = yoursAt(one.key, i);
           // a 401(k) loan repaid goes back in: shown apart from what you and your employer put in
           const loan = !isDebt(one.key) ? m.loan : 0;
           const added = isDebt(one.key) ? m.paycheck + m.plan : m.total - loan;
           const forLast = !isDebt(one.key) ? m.prior ?? 0 : 0;
           const from = extraFrom(one.key, i);
+          const capped = cappedAt(one, i, added);
           return (
             <View key={i} style={[styles.sRow, { backgroundColor: short ? t.badSoft : i === 0 ? t.accentSoft : i % 2 ? t.surface2 : t.surface, borderLeftWidth: 3, borderLeftColor: i === 0 ? t.accent : "transparent", paddingLeft: 9 }]}>
-              <Text style={[type.caption, styles.sMonth, { color: i === 0 ? t.text : t.text2, fontWeight: i === 0 ? "700" : "500" }]}>
-                {mLabel(i)}
-                {i === 0 ? <Text style={{ color: t.accent, fontWeight: "700" }}>{"\n"}NOW</Text> : null}
-              </Text>
-              {loan > 0.5 || forLast > 0.5 || from.length ? (
+              <View style={styles.sMonth}>
+                <Text style={[type.caption, { color: i === 0 ? t.text : t.text2, fontWeight: i === 0 ? "700" : "500" }]}>
+                  {mLabel(i)}
+                  {i === 0 ? <Text style={{ color: t.accent, fontWeight: "700" }}> NOW</Text> : null}
+                </Text>
+                {leftLine(i)}
+              </View>
+              <Pressable role="button" accessibilityLabel={`${label(one.key)}, ${mLabel(i)}: change`} onPress={() => openCell(one, i)} style={{ flex: 1, alignSelf: "stretch", flexDirection: "row", alignItems: "center" }}>
+              {loan > 0.5 || forLast > 0.5 || from.length || capped ? (
                 <View style={[styles.sNum, { alignItems: "flex-end" }]}>
-                  <Text numberOfLines={1} style={[type.caption, { color: changed ? t.accent : t.text, fontWeight: changed ? "700" : "500", fontVariant: ["tabular-nums"] }]}>{money(added)}</Text>
+                  <Text numberOfLines={1} style={[type.caption, { color: amountColor(one, i, added), fontWeight: changed ? "700" : "500", fontVariant: ["tabular-nums"] }]}>{money(added)}</Text>
                   {loan > 0.5 ? <Text numberOfLines={1} style={[type.caption, { color: t.text3, fontSize: 11, fontVariant: ["tabular-nums"] }]}>+{money(loan)} loan</Text> : null}
                   {forLast > 0.5 ? <Text numberOfLines={1} style={[type.caption, { color: t.accent, fontSize: 11, fontVariant: ["tabular-nums"] }]}>{money(forLast, { whole: true })} for {m.y - 1}</Text> : null}
+                  {capped ? cappedLine(capped) : null}
                   {from.length ? <Text numberOfLines={1} style={[type.caption, { color: t.accent, fontSize: 11, fontWeight: "700" }]}>+1 check: {from.map((x) => x.name || "your job").join(", ")}</Text> : null}
                 </View>
               ) : (
-                sCell(added > 0.5 ? money(added) : "–", whatIfChanged(one, i, "amount") ? t.warn : changed ? t.accent : added > 0.5 ? t.text : t.text3, changed)
+                sCell(added > 0.5 ? money(added) : "–", amountColor(one, i, added), changed)
               )}
+              </Pressable>
               {sCell(money(m.balance), whatIfChanged(one, i, "balance") ? t.warn : t.text, true)}
             </View>
           );
@@ -619,28 +674,38 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
     <Card padded={false} style={fill ? { flex: 1, minHeight: 0, overflow: "hidden" } : undefined}>
       <View style={{ padding: compact ? space.sm : space.md, gap: space.sm }}>
         {compact && selected ? null : (
-          <View style={[styles.editRow, { justifyContent: "space-between" }]}>
-            <View style={[styles.editRow, compact ? { flex: 1, flexWrap: "nowrap" } : null]}>
+          <View style={[styles.editRow, { justifyContent: "space-between" }, compact ? { flexDirection: "column", alignItems: "stretch", alignSelf: "stretch", gap: 8 } : null]}>
+            <View style={[styles.editRow, compact ? { flexWrap: "nowrap", width: "100%" } : null]}>
               {compact ? null : <SectionLabel>Forecast</SectionLabel>}
+              {compact ? (
+                <Pressable role="button" accessibilityLabel="Previous account" onPress={() => stepPick(-1)} hitSlop={4} style={[styles.arrows, styles.arrow, { borderColor: t.border }]}>
+                  <Icon name="back" size={16} color={t.accent} />
+                </Pressable>
+              ) : null}
               <Pressable
                 role="button"
                 aria-haspopup="listbox"
                 accessibilityLabel={`Account: ${pick === "all" ? "All accounts" : label(pick as AccountKey)}. Change`}
                 onPress={() => setPicking(true)}
                 hitSlop={4}
-                style={[styles.picker, { borderColor: t.border, backgroundColor: t.surface2 }, compact ? { flex: 1 } : null]}
+                style={[styles.picker, { borderColor: t.border, backgroundColor: t.surface2 }, compact ? { flex: 1, maxWidth: undefined } : null]}
               >
                 <Text numberOfLines={1} style={[type.caption, { color: t.text, fontWeight: "700", flexShrink: 1 }]}>
                   {pick === "all" ? `All accounts (${shown.length})` : label(pick as AccountKey).replace(" (what you owe)", "").replace(" (emergency fund)", "")}
                 </Text>
                 <Icon name="down" size={14} color={t.text2} />
               </Pressable>
-              <Pressable role="link" accessibilityLabel="Set monthly amounts (Budget tab)" onPress={() => router.push("/budget")} hitSlop={6} style={[styles.chip, { borderColor: t.accent, backgroundColor: t.accentSoft, flexDirection: "row", alignItems: "center", gap: 4 }]}>
+              {compact ? (
+                <Pressable role="button" accessibilityLabel="Next account" onPress={() => stepPick(1)} hitSlop={4} style={[styles.arrows, styles.arrow, { borderColor: t.border }]}>
+                  <Icon name="chevron" size={16} color={t.accent} />
+                </Pressable>
+              ) : null}
+              {compact ? null : <Pressable role="link" accessibilityLabel="Set monthly amounts (Budget tab)" onPress={() => router.push("/budget")} hitSlop={6} style={[styles.chip, { borderColor: t.accent, backgroundColor: t.accentSoft, flexDirection: "row", alignItems: "center", gap: 4 }]}>
                 <Icon name="plus" size={12} color={t.accent} />
-                <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{compact ? "Set" : "Set amounts"}</Text>
-              </Pressable>
+                <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Set amounts</Text>
+              </Pressable>}
             </View>
-            <View style={[styles.editRow, compact ? { flexWrap: "nowrap", gap: 6 } : null]}>
+            <View style={[styles.editRow, compact ? { flexWrap: "nowrap", gap: 6, justifyContent: "flex-end" } : null]}>
               {pick === "all" ? (
                 <View style={[styles.arrows, { borderColor: t.border }]}>
                   <Pressable role="button" accessibilityLabel="Scroll the table left" onPress={() => scrollSide(-1)} hitSlop={4} style={styles.arrow}>
@@ -669,12 +734,13 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
             </View>
           </View>
         )}
+        <CellEditor pick={cell} state={state} onClose={() => setCell(null)} />
         <Modal visible={picking} transparent animationType="fade" onRequestClose={() => setPicking(false)}>
           <Pressable style={styles.backdrop} onPress={() => setPicking(false)} accessibilityLabel="Close the account list">
             <Pressable onPress={() => {}} aria-label="Show which account" style={[styles.sheet, { backgroundColor: t.surface, borderColor: t.border }]}>
               <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.md, paddingBottom: 4 }]}>Show</Text>
               <ScrollView style={{ maxHeight: 440 }}>
-                {[{ key: "all", name: "All accounts, side by side", sub: `${shown.length} accounts` }, ...shown.map((x) => ({ key: x.key as string, name: label(x.key).replace(" (what you owe)", ""), sub: `${isDebt(x.key) ? "Owed" : "Today"} ${money(x.start)}${(schedule[x.key]?.length ?? 0) > 0 ? " · has a monthly amount" : ""}` }))].map((o) => {
+                {[...(compact ? [] : [{ key: "all", name: "All accounts, side by side", sub: `${shown.length} accounts` }]), ...shown.map((x) => ({ key: x.key as string, name: label(x.key).replace(" (what you owe)", ""), sub: `${isDebt(x.key) ? "Owed" : "Today"} ${money(x.start)}${(schedule[x.key]?.length ?? 0) > 0 ? " · has a monthly amount" : ""}` }))].map((o) => {
                   const on = pick === o.key;
                   return (
                     <Pressable
@@ -703,9 +769,12 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
         ) : null}
         {!selected ? (
           <View style={styles.key}>
-            <View style={styles.keyItem}>
-              <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>+1 check</Text>
-              <Text style={[type.caption, { color: t.text3 }]}>a 3rd paycheck</Text>
+            <View style={[styles.keyItem, { flexWrap: "wrap", flexShrink: 1 }]}>
+              <Text style={[type.caption, { color: t.text3 }]}>Gray: paycheck,</Text>
+              <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>blue: you set it,</Text>
+              <Text style={[type.caption, { color: t.text }]}>black: the plan filled it.</Text>
+              <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>+1</Text>
+              <Text style={[type.caption, { color: t.text3 }]}>3rd paycheck</Text>
             </View>
             <View style={styles.keyItem}>
               <View style={[styles.keySwatch, { backgroundColor: t.badSoft, borderColor: t.bad }]} />
@@ -753,7 +822,7 @@ const styles = StyleSheet.create({
   sheet: { width: "100%", maxWidth: 380, borderRadius: radius.lg, borderWidth: 1, paddingVertical: space.md },
   option: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, paddingVertical: 10 },
   sRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, minHeight: 38, gap: 8 },
-  sMonth: { width: 78 },
+  sMonth: { width: 112 },
   sNum: { flex: 1, textAlign: "right", fontVariant: ["tabular-nums"] },
   arrows: { flexDirection: "row", borderWidth: 1, borderRadius: 999, overflow: "hidden" },
   arrow: { paddingHorizontal: 12, paddingVertical: 5, alignItems: "center", justifyContent: "center" },
@@ -761,7 +830,7 @@ const styles = StyleSheet.create({
   key: { flexDirection: "row", alignItems: "center", gap: space.md, flexWrap: "wrap" },
   keyItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   keySwatch: { width: 10, height: 10, borderRadius: 2, borderWidth: 1 },
-  gr: { flexDirection: "row", alignItems: "stretch", minHeight: 32 },
+  gr: { flexDirection: "row", alignItems: "stretch", minHeight: 40 },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   check: { borderRadius: radius.md, padding: space.md, gap: 3 },
   checkLine: { flexDirection: "row", alignItems: "flex-start", gap: space.sm, paddingVertical: 1 },

@@ -415,6 +415,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     // what's left after bills this month, and how much of it your schedule asked for / got
     const available = avail;
     let plannedAsk = 0;
+    let stepAsk = 0;
     let plannedGot = 0;
     let plannedShort = 0;
     const alloc: Alloc = {
@@ -617,6 +618,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         const v = amountsBy[step]?.[monthStr] ?? amounts[step];
         if (v === undefined || !(v >= 0) || scheduledStep(step)) continue;
         handSet.add(step);
+        stepAsk += v;
         const held = Math.max(0, avail - v);
         avail -= held;
         doStep(step);
@@ -677,6 +679,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       loanBackExtra,
       available,
       plannedAsk,
+      stepAsk,
       plannedGot,
       plannedShort,
       post: payRoth + alloc.k401 * d.rothShare + payHsaEmployer + payHsa + alloc.hsa + alloc.ira + alloc.taxable,

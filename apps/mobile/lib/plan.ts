@@ -100,11 +100,12 @@ function computePlan(saved: PlanState, start: Date, limits: LimitsRow[]): PlanRu
   const whatIfOn = hasWhatIf(state.whatif) || oneOffs;
   const real = withoutWhatIfs(state);
   const actual = real !== state ? simulatePlan(real, derive(real, start)) : result.plan;
-  // the Forecast tab shows what-ifs; the same plan without any marks what they changed
+  // the Forecast tab shows what-ifs; the same plan without any marks what they changed. Both are the
+  // whole plan: what you set, then your priority order fills what's left (the same plan Home uses)
   const noWhatIf = whatIfOn ? withoutWhatIfs(state) : state;
   const realD = noWhatIf === state ? result.d : derive(noWhatIf, start);
-  const forecastReal = simulatePlan(noWhatIf, realD, { autoFill: false });
-  const forecast = whatIfOn ? simulatePlan(state, result.d, { autoFill: false }) : forecastReal;
+  const forecastReal = noWhatIf === state ? result.plan : actual;
+  const forecast = result.plan;
   const value = { state, result, start, actual, forecast, forecastReal, realD, whatIfOn };
   shared = { saved, start, limits, value };
   return value;

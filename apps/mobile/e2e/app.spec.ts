@@ -155,3 +155,32 @@ test("transactions move from an older save into the browser's database, and stay
   await expect(page.getByText("Corner Cafe").first()).toBeVisible();
 });
 
+
+test("an amount changed in the forecast table replaces the one on Your plan's steps", async ({ page }) => {
+  await onboard(page);
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app")!);
+    const p = raw.state.plan;
+    p.incomes = [{ id: "j1", name: "Job", kind: "job", freq: "monthly", net: 6000, matchMode: "pct" }];
+    p.accounts = [{ id: "a1", name: "Savings", type: "cash", balance: 30000 }, { id: "a4", name: "Roth IRA", type: "roth", balance: 1000 }];
+    p.budget = [{ id: "b1", name: "Rent", amount: 2500, inRetirement: true }];
+    p.plan.amountsBy = { ira: { "2027-03": 700 } };
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/plan?view=table");
+  await page.getByRole("button", { name: "Next year" }).click();
+  // phones show one account at a time; a desktop shows them all
+  const pick = page.getByRole("button", { name: /^Account:/ });
+  await pick.click();
+  await page.getByRole("option", { name: /^IRA/ }).click();
+  await page.getByRole("button", { name: "IRA, Mar: change" }).click();
+  await expect(page.getByText(/Set on Your plan's steps: \$700/)).toBeVisible();
+  const box = page.getByRole("textbox", { name: "Roth IRA, Mar 2027" });
+  await box.fill("1500");
+  await box.blur();
+  await page.getByRole("button", { name: "Save" }).click();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("coastfi.app")!).state.plan.plan);
+  expect(saved.scheduleMonths?.["acct:a4"]?.["2027-03"]).toBe(1500);
+  expect(saved.amountsBy?.ira?.["2027-03"]).toBeUndefined();
+});

@@ -696,6 +696,8 @@ export type MonthRow = {
   available: number;
   /** What your schedule asked for this month, what it got, and how much it was short because the money ran out. */
   plannedAsk: number;
+  /** What you set on your plan's steps this month (a step's amount, or one month changed by hand). */
+  stepAsk: number;
   plannedGot: number;
   plannedShort: number;
   /** Roth/taxable/HSA dollars invested this month. */

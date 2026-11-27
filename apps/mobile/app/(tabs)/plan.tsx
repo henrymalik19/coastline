@@ -248,7 +248,7 @@ function Forecast() {
       ) : null}
       {tab === "overview" && asTable ? (
         <Text style={[type.caption, { color: t.text3 }]}>
-          Only what you've set: your paychecks, your employer's match, debt payments, and what you assign in Budget. Money you haven't assigned isn't added anywhere.
+          Left is the money you haven't given a job each month. Your plan fills it in your priority order. Tap any amount to set it yourself.
         </Text>
       ) : null}
       {tab === "overview" && asTable ? <WhatIfsOnNote onOpen={() => go("whatif")} /> : null}

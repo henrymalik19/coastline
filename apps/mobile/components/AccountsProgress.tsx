@@ -37,7 +37,7 @@ type Row = {
   done?: boolean;
 };
 
-const INFO = "Where each account stands now (solid) and where your plan gets it by the date you pick (lighter), at the amounts you've set. Tap one for its month-by-month forecast.";
+const INFO = "Where each account stands now (solid) and where your plan gets it by the date you pick (lighter): the amounts you've set, with your priority order filling the rest. Tap one for its month-by-month forecast.";
 
 export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void }) {
   const t = useTheme();
