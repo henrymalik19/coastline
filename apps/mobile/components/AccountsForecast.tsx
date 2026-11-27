@@ -3,7 +3,7 @@
  * year against the limit, and the balance ahead. View only: monthly amounts are set under Money →
  * Monthly savings (and paychecks under Income).
  */
-import { accountForecasts, mergeAccountSchedules, BUCKET_LABELS, scheduleAmount, type AccountForecast, type AccountKey, type Derived, type PlanResult, type PlanState, type RunResult, type ScheduleEntry } from "@coastfi/engine";
+import { accountForecasts, mergeAccountSchedules, BASE_CHECKS, BUCKET_LABELS, checksInMonth, scheduleAmount, type AccountForecast, type AccountKey, type Derived, type PlanResult, type PlanState, type RunResult, type ScheduleEntry } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -127,6 +127,25 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
 
 
   /** The amount for a month (accent when it's a one-month change). */
+  /**
+   * The jobs with a 3rd (or 5th) paycheck in month i that pay into this account from the paycheck: a
+   * 401(k) or HSA set per paycheck, or a 401(k) loan repaid from it. Two jobs paid on different days
+   * have their extra paychecks in different months, so the mark goes on the account, not the month.
+   */
+  const extraFrom = (k: AccountKey, i: number) => {
+    const r = pl.months[i];
+    if (!r) return [];
+    return state.incomes.filter((x) => {
+      if ((x.kind ?? "job") !== "job") return false;
+      const c = checksInMonth(x, r.y, r.mo);
+      if (!Number.isInteger(c) || c <= BASE_CHECKS[x.freq] + 1e-9) return false;
+      if (k === "k401") return (x.pretax ?? 0) > 0 || (x.contribPct ?? 0) > 0;
+      if (k === "hsa") return (x.hsaPre ?? 0) > 0;
+      if (k.startsWith("debt:")) return (x.deductions ?? []).some((dd) => "debt:" + dd.debtId === k);
+      return false;
+    });
+  };
+  const extraText = (from: { name: string }[]) => `+1 paycheck from ${from.map((x) => x.name || "your job").join(" and ")}`;
   const amountCell = (a: AccountForecast, i: number, width: number) => {
     const k = a.key;
     const m = a.months[i]!;
@@ -135,12 +154,14 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
     const wi = whatIfChanged(a, i, "amount");
     const value = isDebt(k) ? m.paycheck + m.plan : m.total;
     const main = <Text style={[type.caption, { color: wi ? t.warn : changed ? t.accent : t.text, fontWeight: changed || wi ? "700" : "500", width, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(value)}</Text>;
+    const from = extraFrom(k, i);
     // money put in January to March that counts toward last year's limit
-    if (!m.prior) return main;
+    if (!m.prior && !from.length) return main;
     return (
-      <View style={{ alignItems: "flex-end" }}>
+      <View style={{ alignItems: "flex-end" }} accessibilityLabel={from.length ? `${money(value)}, ${extraText(from)}` : undefined}>
         {main}
-        <Text numberOfLines={1} style={[type.caption, { color: t.accent, fontSize: 11, width, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(m.prior, { whole: true })} for {m.y - 1}</Text>
+        {from.length ? <Text numberOfLines={1} style={[type.caption, { color: t.accent, fontSize: 11, fontWeight: "700", width, textAlign: "right" }]}>+1 check</Text> : null}
+        {!m.prior ? null : <Text numberOfLines={1} style={[type.caption, { color: t.accent, fontSize: 11, width, textAlign: "right", fontVariant: ["tabular-nums"] }]}>{money(m.prior, { whole: true })} for {m.y - 1}</Text>}
       </View>
     );
   };
@@ -418,7 +439,6 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
         {monthCell(
           <Text style={[type.caption, { color: i === 0 ? t.text : t.text2, fontWeight: i === 0 ? "700" : "500" }]}>
             {mLabel(i)}
-            {r.extraCheck ? <Text style={{ color: t.text3 }}> ·3</Text> : null}
             {i === 0 ? <Text style={{ color: t.accent, fontWeight: "700" }}>{"\n"}NOW</Text> : null}
           </Text>,
           bg,
@@ -514,18 +534,19 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
           const loan = !isDebt(one.key) ? m.loan : 0;
           const added = isDebt(one.key) ? m.paycheck + m.plan : m.total - loan;
           const forLast = !isDebt(one.key) ? m.prior ?? 0 : 0;
+          const from = extraFrom(one.key, i);
           return (
             <View key={i} style={[styles.sRow, { backgroundColor: short ? t.badSoft : i === 0 ? t.accentSoft : i % 2 ? t.surface2 : t.surface, borderLeftWidth: 3, borderLeftColor: i === 0 ? t.accent : "transparent", paddingLeft: 9 }]}>
               <Text style={[type.caption, styles.sMonth, { color: i === 0 ? t.text : t.text2, fontWeight: i === 0 ? "700" : "500" }]}>
                 {mLabel(i)}
-                {r.extraCheck ? <Text style={{ color: t.accent }}> ·3</Text> : null}
                 {i === 0 ? <Text style={{ color: t.accent, fontWeight: "700" }}>{"\n"}NOW</Text> : null}
               </Text>
-              {loan > 0.5 || forLast > 0.5 ? (
+              {loan > 0.5 || forLast > 0.5 || from.length ? (
                 <View style={[styles.sNum, { alignItems: "flex-end" }]}>
                   <Text numberOfLines={1} style={[type.caption, { color: changed ? t.accent : t.text, fontWeight: changed ? "700" : "500", fontVariant: ["tabular-nums"] }]}>{money(added)}</Text>
                   {loan > 0.5 ? <Text numberOfLines={1} style={[type.caption, { color: t.text3, fontSize: 11, fontVariant: ["tabular-nums"] }]}>+{money(loan)} loan</Text> : null}
                   {forLast > 0.5 ? <Text numberOfLines={1} style={[type.caption, { color: t.accent, fontSize: 11, fontVariant: ["tabular-nums"] }]}>{money(forLast, { whole: true })} for {m.y - 1}</Text> : null}
+                  {from.length ? <Text numberOfLines={1} style={[type.caption, { color: t.accent, fontSize: 11, fontWeight: "700" }]}>+1 check: {from.map((x) => x.name || "your job").join(", ")}</Text> : null}
                 </View>
               ) : (
                 sCell(added > 0.5 ? money(added) : "–", whatIfChanged(one, i, "amount") ? t.warn : changed ? t.accent : added > 0.5 ? t.text : t.text3, changed)
@@ -683,8 +704,8 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
         {!selected ? (
           <View style={styles.key}>
             <View style={styles.keyItem}>
-              <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>·3</Text>
-              <Text style={[type.caption, { color: t.text3 }]}>3 paychecks</Text>
+              <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>+1 check</Text>
+              <Text style={[type.caption, { color: t.text3 }]}>a 3rd paycheck</Text>
             </View>
             <View style={styles.keyItem}>
               <View style={[styles.keySwatch, { backgroundColor: t.badSoft, borderColor: t.bad }]} />
