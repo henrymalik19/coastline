@@ -187,12 +187,20 @@ export async function pullBankTxns(): Promise<number> {
   return added;
 }
 
+/** Plaid's message in plain words where it's one we know (the rest as Plaid says it). */
+export function plainBankError(msg: string): string {
+  if (/register your application with this institution|isn't available yet|institution registration/i.test(msg))
+    return "This bank isn't open to Coastwise yet: the connection to it is still being set up (it can take a day). Try again later, or connect another bank.";
+  if (/institution.*(down|not responding)|INSTITUTION_(DOWN|NOT_RESPONDING)/i.test(msg)) return "The bank isn't responding right now. Try again in a little while.";
+  return msg;
+}
+
 async function run<T>(fn: () => Promise<T>): Promise<T | undefined> {
   usePlaid.setState({ busy: true, error: undefined });
   try {
     return await fn();
   } catch (e) {
-    usePlaid.setState({ error: e instanceof Error ? e.message : String(e) });
+    usePlaid.setState({ error: plainBankError(e instanceof Error ? e.message : String(e)) });
     return undefined;
   } finally {
     usePlaid.setState({ busy: false });
