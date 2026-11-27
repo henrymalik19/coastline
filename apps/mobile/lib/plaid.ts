@@ -343,6 +343,9 @@ export const reconnectBank = (itemId: string, opts: { addTransactions?: boolean 
     const { linkToken } = await call<{ linkToken: string }>("link_token", { itemId, ...(opts.addTransactions ? { addTransactions: true } : {}) });
     savePending({ token: linkToken, kind: "bank", itemId, at: Date.now() });
     await finish(await openLink(linkToken), "bank", itemId);
+  }).then(() => {
+    // transactions just turned on: the bank gets their history ready first, so ask again a few times
+    if (opts.addTransactions) pullAfterSetup();
   });
 
 /**
