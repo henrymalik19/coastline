@@ -32,7 +32,7 @@ export function fullPlan(): PlanState {
       { id: "piti", name: "PITI", amount: 3572.77, inRetirement: true, group: "840 Madison", paysDebt: "m", retireAmount: 1235.5 },
     ],
     accounts: [
-      { id: "ira", name: "Roth IRA", type: "roth", balance: 12000.12, counts: "ira", owner: "spouse", plaidAccountId: "p1" },
+      { id: "ira", name: "Roth IRA", type: "roth", balance: 12000.12, counts: "ira", owner: "spouse", plaidAccountId: "p1", bankFrom: "2026-11-01" },
       { id: "chk", name: "Checking", company: "Ally", type: "cash", balance: 13962.11 },
     ],
     debts: [

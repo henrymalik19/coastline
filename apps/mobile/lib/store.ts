@@ -11,7 +11,7 @@ import { stampMs } from "./pages";
 import { canUndoImport, fromOldSnapshot, importSnapshot, parseUndo, readImportBackup, undoImportTxns, type ImportSnapshot } from "./importUndo";
 import { applyYnabUpdate, canUndoUpdate, snapshotUpdate, undoYnabUpdate as undoYnabUpdateTxns, type UndoMark, type UpdateSnapshot, type YnabUpdate } from "./ynabUpdate";
 import { renamePayeesIn } from "./payees";
-import { bankAccountMap, mergeBankTxns, type BankTxn } from "./bankTxns";
+import { bankStarts, mergeBankTxns, type BankTxn } from "./bankTxns";
 import { combineCategory, uncombineTxns } from "./combine";
 import { keepFamilyGroups } from "./subcats";
 import { salvagePlan, salvageTxns } from "./salvage";
@@ -113,7 +113,8 @@ export type AppState = {
   /** Rename a payee, or combine several into one (`to`), on every transaction. */
   renamePayees: (from: string[], to: string) => void;
   /** Merge your banks' transactions in (lib/bankTxns.ts). Returns how many came in new (held for review). */
-  mergeBank: (rows: BankTxn[]) => number;
+  /** `current`: the bank's balance now, by Plaid account id (for an account whose transactions start here). */
+  mergeBank: (rows: BankTxn[], current?: Map<string, number>) => number;
   /** Combine one budget category into another (lib/combine.ts). Returns its undo (puts both back as they were). */
   combineCategories: (from: string, into: string) => () => void;
   /** Put the plan and transactions back as they were just before the last import. `keepAdded`: ones you added since stay where they still fit. */
@@ -220,7 +221,10 @@ export const useStore = create<AppState>()(
       },
       clearTxns: () => {
         const stamp = now();
-        set({ txns: get().txns.map((x) => (x.deleted ? x : { ...x, deleted: true, updatedAt: stamp })), updatedAt: stamp });
+        // and the bank start dates: the banks' transactions come in again (from the budget's new start)
+        const plan = structuredClone(get().plan);
+        for (const x of [...plan.accounts, ...plan.debts]) delete x.bankFrom;
+        set({ plan, txns: get().txns.map((x) => (x.deleted ? x : { ...x, deleted: true, updatedAt: stamp })), updatedAt: stamp });
       },
       mergeTxns: (incoming) => {
         // the next edit here must come after these, whatever the other device's clock said
@@ -261,18 +265,21 @@ export const useStore = create<AppState>()(
           set({ plan: structuredClone(before), txns: uncombineTxns(get().txns, r.changed, at), updatedAt: at });
         };
       },
-      mergeBank: (rows) => {
+      mergeBank: (rows, current = new Map()) => {
         const s = get();
-        // a matched account in the budget with no transactions here yet starts today, at its balance
-        // (which already counts what came before): the bank's from then on come in
-        const map = bankAccountMap(s.plan);
-        const starts = [...new Set(rows.flatMap((r) => (map.has(r.accountId) ? [map.get(r.accountId)!] : [])))]
-          .map((id) => startTxnFor(s.plan, s.txns, id, todayIso()))
-          .filter((t): t is Txn => !!t);
-        const r = mergeBankTxns([...s.txns, ...starts], s.plan, rows, now());
-        const same = !starts.length && r.txns.length === s.txns.length && r.txns.every((t, i) => t === s.txns[i]);
+        // a matched account's bank start date, the first time its transactions come in (one with none
+        // here yet starts then, at what it held: lib/bankTxns.ts bankStarts)
+        const st = bankStarts(s.plan, s.txns, rows, current, todayIso(), now());
+        const plan = st.length ? structuredClone(s.plan) : s.plan;
+        for (const b of st) {
+          const x = plan.accounts.find((a) => a.id === b.accountId) ?? plan.debts.find((d) => d.id === b.accountId);
+          if (x) x.bankFrom = b.from;
+        }
+        const starts = st.flatMap((b) => (b.start ? [b.start] : []));
+        const r = mergeBankTxns([...s.txns, ...starts], plan, rows, now());
+        const same = !st.length && r.txns.length === s.txns.length && r.txns.every((t, i) => t === s.txns[i]);
         if (same) return 0;
-        const next = structuredClone(s.plan);
+        const next = structuredClone(plan);
         applyRegisterBalances(next, r.txns);
         set({ plan: next, txns: r.txns, updatedAt: now() });
         return r.added;

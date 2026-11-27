@@ -13,6 +13,7 @@ const rate = z.number().finite();
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const id = z.string().min(1);
 const MONTH_RE = /^[0-9]{4}-[0-9]{2}$/;
+const DAY_RE = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
 
 export const PayFreqSchema = z.enum(["weekly", "biweekly", "semimonthly", "monthly"]);
 
@@ -70,6 +71,7 @@ export const AccountSchema = z.object({
   type: AccountTypeSchema,
   balance: money,
   plaidAccountId: z.string().optional(),
+  bankFrom: z.string().regex(DAY_RE, "Use YYYY-MM-DD").optional(),
   counts: z.enum(["k401", "ira", "hsa", "taxable", "other"]).optional(),
   owner: z.literal("spouse").optional(),
   homeCosts: money.optional(),
@@ -85,6 +87,7 @@ export const DebtSchema = z.object({
   apr: rate.min(0),
   minPayment: nonNeg,
   plaidAccountId: z.string().optional(),
+  bankFrom: z.string().regex(DAY_RE, "Use YYYY-MM-DD").optional(),
   promoApr: rate.min(0).optional(),
   promoUntil: z.string().regex(MONTH_RE, "Use YYYY-MM").optional(),
   minimumOnly: z.boolean().optional(),

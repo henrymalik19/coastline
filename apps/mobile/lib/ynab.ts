@@ -13,7 +13,7 @@ import { OUTSIDE } from "./outside";
 import { CLOSED_ACCOUNTS_GROUP } from "./budgetOrder";
 import { linkDebtCategories, PAYS } from "./debtLink";
 import { moveUnder } from "./subcats";
-import { linkYnabToBank } from "./bankTxns";
+import { bankFromMap, linkYnabToBank } from "./bankTxns";
 
 /* ---------- reading the files ---------- */
 
@@ -576,6 +576,8 @@ export type ImportResult = {
     transactions: number; transactionsMatched: number; months: number;
     /** YNAB's that are ones your banks brought in (linked to those, not added again). */
     transactionsLinked: number;
+    /** YNAB's from an account's bank start date on that aren't one your bank brought in: the bank's to bring in, so not added. */
+    transactionsFromBank: number;
     /** Recent transactions (this month and last) that will need a category: YNAB had none, or you left their category out. */
     needsCategoryFromYnab: number; needsCategoryLeftOut: number;
     /**
@@ -791,7 +793,7 @@ function overspentBy(start: number, spending: { date: string; i: number; account
 /** Turn YNAB's data into the plan's categories, assignments, accounts and transactions. */
 export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): ImportResult {
   const plan = structuredClone(input);
-  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, transactionsLinked: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, notApprovedInYnab: 0, debtCategoriesLinked: 0, categoriesCombined: 0, categoriesAsSub: 0, olderWithoutCategory: 0, transfersOutside: 0, history: 0 };
+  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, transactionsLinked: 0, transactionsFromBank: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, notApprovedInYnab: 0, debtCategoriesLinked: 0, categoriesCombined: 0, categoriesAsSub: 0, olderWithoutCategory: 0, transfersOutside: 0, history: 0 };
   // only this month's and last month's transactions are asked for a category (older ones are history)
   const [ty, tm] = o.thisMonth.split("-").map(Number) as [number, number];
   const recentFrom = tm === 1 ? `${ty - 1}-12-01` : `${ty}-${String(tm - 1).padStart(2, "0")}-01`;
@@ -1064,6 +1066,13 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   const closedAcct = new Set(accts.filter((a) => (a.kind === "cash" || a.kind === "card") && Math.abs(a.balance) < 0.005 && Math.abs(a.upcoming) < 0.005).map((a) => a.name));
   const historyAccount = (name: string) => !idOf.has(name) && closedAcct.has(name);
   const history: Txn[] = [];
+  // an account whose bank brings its transactions in from a day before `from` starts on that day instead:
+  // YNAB's balance then, and from then on the bank's (an account's balance can't count a day twice)
+  const bankFrom = bankFromMap(plan);
+  const firstOf = (name: string) => {
+    const b = bankFrom.get(idOf.get(name) ?? "");
+    return b && b < `${from}-01` ? b : `${from}-01`;
+  };
   const original0 = (group: string, name: string) => (name || group ? [group, name].filter(Boolean).join(": ") : undefined);
   for (const t of d.txns) {
     if (!budgetAccount(t.account)) {
@@ -1097,7 +1106,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
       history.push(h);
       continue;
     }
-    if (!inRange(t.date)) { before.set(t.account, Math.round(((before.get(t.account) ?? 0) + t.amount) * 100) / 100); continue; }
+    if (t.date < firstOf(t.account)) { before.set(t.account, Math.round(((before.get(t.account) ?? 0) + t.amount) * 100) / 100); continue; }
     const base = [t.account, t.date, t.amount, t.payee].join("|");
     const n = (seen.get(base) ?? 0) + 1;
     seen.set(base, n);
@@ -1196,12 +1205,13 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
       continue;
     }
     txns.unshift({
-      id: startTxnId(id), accountId: id, date: `${from}-01`, amount: before.get(name) ?? 0, payee: "Starting balance",
+      id: startTxnId(id), accountId: id, date: firstOf(name), amount: before.get(name) ?? 0, payee: "Starting balance",
       ...(card ? {} : { categoryId: "ready" }), cleared: "reconciled", source: "ynab", updatedAt: now,
     });
   }
   // ones your banks already brought in: linked to the bank's (which keep what you set), not added again
-  const bank = linkYnabToBank(o.existing ?? [], txns, now);
+  // (and from an account's bank start date on, YNAB's only fill in the bank's)
+  const bank = linkYnabToBank(o.existing ?? [], txns, now, bankFrom);
   txns.splice(0, txns.length, ...bank.rest);
   // your own transactions that YNAB also has give way to YNAB's (same account and amount, within 3 days)
   const matches: { mine: Txn; ynab: Txn }[] = [];
@@ -1224,6 +1234,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   summary.transactionsMatched = replaced.length;
   summary.transactions = txns.length;
   summary.transactionsLinked = bank.linked.length;
+  summary.transactionsFromBank = bank.skipped;
   summary.history = history.length;
   return { plan, txns: [...txns, ...bank.linked, ...history], replaced, matches, summary };
 }

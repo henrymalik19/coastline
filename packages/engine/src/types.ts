@@ -120,6 +120,8 @@ export type Account = {
   type: AccountType;
   balance: number;
   plaidAccountId?: string;
+  /** Matched to a bank: the first day its transactions come from the bank ("YYYY-MM-DD"). From then on the bank brings them in, and YNAB only fills in their details. */
+  bankFrom?: string;
   /** What this account counts as in the plan. Missing = guessed from the name and type. */
   counts?: PlanAccount;
   /** Whose account this is. Missing = yours. Only an IRA's owner changes the math (each person has their own IRA limit). */
@@ -188,6 +190,8 @@ export type Debt = {
   apr: number;
   minPayment: number;
   plaidAccountId?: string;
+  /** Matched to a bank: the first day its transactions come from the bank ("YYYY-MM-DD"). */
+  bankFrom?: string;
   /** Intro/promo rate (e.g. 0% balance transfer) charged through `promoUntil`; `apr` applies after. */
   promoApr?: number;
   /** Last month of the promo rate, "YYYY-MM". */

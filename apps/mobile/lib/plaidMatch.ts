@@ -104,8 +104,8 @@ export function newFromBank(b: BankAccount, id: string, company?: string, asCash
 
 /** Match a bank account to a plan account or debt (or to nothing): one bank account, one match. */
 export function setMatch(p: PlanState, b: Pick<BankAccount, "accountId">, to: { kind: "account" | "debt"; id: string } | null): void {
-  for (const a of p.accounts) if (a.plaidAccountId === b.accountId) delete a.plaidAccountId;
-  for (const d of p.debts) if (d.plaidAccountId === b.accountId) delete d.plaidAccountId;
+  // (a new match gets its own bank start date, when its transactions first come in)
+  for (const x of [...p.accounts, ...p.debts]) if (x.plaidAccountId === b.accountId) { delete x.plaidAccountId; delete x.bankFrom; }
   if (!to) return;
   const x = to.kind === "account" ? p.accounts.find((a) => a.id === to.id) : p.debts.find((d) => d.id === to.id);
   if (x) x.plaidAccountId = b.accountId;
@@ -206,6 +206,7 @@ export function dropMatches(p: PlanState, accountIds: string[]): boolean {
   for (const x of [...p.accounts, ...p.debts]) {
     if (x.plaidAccountId && gone.has(x.plaidAccountId)) {
       delete x.plaidAccountId;
+      delete x.bankFrom;
       changed = true;
     }
   }

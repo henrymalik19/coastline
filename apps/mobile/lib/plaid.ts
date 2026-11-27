@@ -7,8 +7,8 @@ import { useEffect } from "react";
 import { Platform } from "react-native";
 import { BANKS_ON } from "./features";
 import { applyBankBalances, dropMatches, fillDebtTerms, type BankAccount } from "./plaidMatch";
-import { bankAccountMap, type BankTxn } from "./bankTxns";
-import { hasRegister } from "./register";
+import { type BankTxn } from "./bankTxns";
+import { hasRegister, isCard } from "./register";
 import { useStore } from "./store";
 import { supabase } from "./supabase";
 import { useSync } from "./sync";
@@ -151,11 +151,20 @@ const PAGE = 1000;
 export async function pullBankTxns(): Promise<number> {
   const planId = useSync.getState().planId;
   if (!supabase || !planId) return 0;
-  // matched to a bank: matching another one reads them all again
-  const accounts = [...bankAccountMap(useStore.getState().plan).keys()].sort().join(",");
+  // matched to a bank, and from when: matching another one, or one starting again (the budget started
+  // over), reads them all again; so does one still waiting for its start (the budget hasn't started)
+  const sig = () => {
+    const p = useStore.getState().plan;
+    return [...p.accounts, ...p.debts].flatMap((x) => (x.plaidAccountId ? [`${x.plaidAccountId}:${x.bankFrom ?? ""}`] : [])).sort().join(",");
+  };
+  const waiting = () => {
+    const p = useStore.getState().plan;
+    return [...p.accounts.filter((a) => a.type === "cash"), ...p.debts.filter(isCard)].some((x) => x.plaidAccountId && !x.bankFrom);
+  };
+  const accounts = sig();
   if (!accounts) return 0;
   const last = readTxnsAt(planId);
-  const since = last?.accounts === accounts ? last.at : undefined;
+  const since = last?.accounts === accounts && !waiting() ? last.at : undefined;
   const rows: BankTxnRow[] = [];
   for (let from = 0; ; from += PAGE) {
     // the same moment again too (>=): merging one twice changes nothing
@@ -171,8 +180,10 @@ export async function pullBankTxns(): Promise<number> {
     transactionId: r.transaction_id, accountId: r.account_id, date: String(r.date).slice(0, 10), amount: Number(r.amount), name: r.name,
     merchantName: r.merchant_name, pending: r.pending, pendingTransactionId: r.pending_transaction_id, removed: r.removed,
   }));
-  const added = useStore.getState().mergeBank(bank);
-  markTxnsAt(planId, { at: rows.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), since ?? ""), accounts });
+  // the bank's balance now (an account whose transactions start here starts from it)
+  const current = new Map(usePlaid.getState().accounts.flatMap((a) => (a.current == null ? [] : [[a.accountId, a.current] as const])));
+  const added = useStore.getState().mergeBank(bank, current);
+  markTxnsAt(planId, { at: rows.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), since ?? ""), accounts: sig() });
   return added;
 }
 

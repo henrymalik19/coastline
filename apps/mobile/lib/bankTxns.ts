@@ -14,6 +14,7 @@
  * it rather than adding it again).
  */
 import { isStartTxn, startTxnId, type PlanState, type Txn } from "@coastfi/engine";
+import { isCard } from "./register";
 
 /** One bank transaction as the server keeps it (latest state). Amount as Plaid gives it: money out is positive. */
 export type BankTxn = {
@@ -49,6 +50,17 @@ export function bankAccountMap(p: Pick<PlanState, "accounts" | "debts">): Map<st
   return m;
 }
 
+/** Each matched account's bank start date (`bankFrom`): from that day on, its transactions are the bank's. */
+export function bankFromMap(p: Pick<PlanState, "accounts" | "debts">): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const x of [...p.accounts, ...p.debts]) if (x.plaidAccountId && x.bankFrom) m.set(x.id, x.bankFrom);
+  return m;
+}
+
+/** How far back (days) a bank account's transactions start when you have none here for it yet. */
+export const BANK_BACK_DAYS = 30;
+const addDays = (d: string, n: number) => new Date(Date.parse(d) + n * 86_400_000).toISOString().slice(0, 10);
+
 /**
  * The first day a bank transaction can come into an account: only one whose transactions you keep here
  * (it has a starting balance), and only after that balance, which already counts what came before. A
@@ -58,8 +70,48 @@ function firstDay(txns: Txn[], accountId: string): string | null {
   const s = txns.find((t) => t.id === startTxnId(accountId) && !t.deleted);
   if (!s) return null;
   if (s.source === "ynab") return s.date;
-  const d = new Date(Date.parse(s.date) + 86_400_000);
-  return d.toISOString().slice(0, 10);
+  return addDays(s.date, 1);
+}
+
+export type BankStart = { accountId: string; from: string; start?: Txn };
+
+/**
+ * Bank start dates for the matched accounts in `rows` that need one (cash accounts and cards, once the
+ * budget has started):
+ * - One with transactions here already (from YNAB, or typed in): from the day of its newest one (that day
+ *   overlaps, and the same purchase links), at most BANK_BACK_DAYS back. What came before stays as it is.
+ * - One without (new, or the budget started over): it starts on the budget's first day, at most
+ *   BANK_BACK_DAYS back, with what it held then: the bank's balance now (`current`, by Plaid account id)
+ *   less what's posted since. Pending ones aren't in the bank's balance yet, so they count on top, as
+ *   in the bank's own available balance.
+ */
+export function bankStarts(plan: PlanState, txns: Txn[], rows: BankTxn[], current: Map<string, number>, today: string, stamp: number): BankStart[] {
+  if (!plan.budgetPlan) return [];
+  const accounts = bankAccountMap(plan);
+  const earliest = addDays(today, -BANK_BACK_DAYS);
+  const out: BankStart[] = [];
+  for (const pid of new Set(rows.map((r) => r.accountId))) {
+    const id = accounts.get(pid);
+    const cash = plan.accounts.find((a) => a.id === id && a.type === "cash");
+    const card = plan.debts.find((d) => d.id === id && isCard(d));
+    if (!id || (!cash && !card)) continue;
+    if (txns.some((t) => t.id === startTxnId(id) && !t.deleted)) {
+      if ((cash ?? card)!.bankFrom) continue;
+      const newest = txns.reduce<string | null>((m, t) => (!t.deleted && t.accountId === id && !isStartTxn(t) && t.date <= today && (!m || t.date > m) ? t.date : m), null) ?? firstDay(txns, id) ?? today;
+      out.push({ accountId: id, from: newest < earliest ? earliest : newest > today ? today : newest });
+      continue;
+    }
+    const budgetStart = `${plan.budgetPlan.start}-01`;
+    const from = budgetStart > today ? today : budgetStart < earliest ? earliest : budgetStart;
+    // a card's balance here is what you owe, as a negative
+    const now = current.has(pid) ? (card ? -current.get(pid)! : current.get(pid)!) : cash ? cash.balance : -card!.balance;
+    const posted = rows.filter((r) => r.accountId === pid && !r.removed && !r.pending && r.date >= from && r.date <= today).reduce((a, r) => a - r.amount, 0);
+    out.push({
+      accountId: id, from,
+      start: { id: startTxnId(id), accountId: id, date: from, amount: cents(now - posted), payee: "Starting balance", ...(cash ? { categoryId: "ready" } : {}), cleared: "reconciled", source: "manual", updatedAt: stamp },
+    });
+  }
+  return out;
 }
 
 const cleared = (pending: boolean, was?: Txn["cleared"]): Txn["cleared"] => (was === "reconciled" ? "reconciled" : pending ? "uncleared" : "cleared");
@@ -77,9 +129,14 @@ export function mergeBankTxns(txns: Txn[], plan: Pick<PlanState, "accounts" | "d
   // the bank's id → yours (deleted ones too, so one you deleted never comes back)
   const byBank = new Map<string, string>();
   for (const t of txns) if (t.source === "plaid" && t.importId) byBank.set(t.importId, t.id);
+  // from the account's bank start date when it has one (and still keeps transactions here)
+  const bankFrom = bankFromMap(plan);
   const first = new Map<string, string | null>();
   const startOf = (id: string) => {
-    if (!first.has(id)) first.set(id, firstDay(txns, id));
+    if (!first.has(id)) {
+      const day = firstDay(txns, id);
+      first.set(id, day && bankFrom.has(id) ? bankFrom.get(id)! : day);
+    }
     return first.get(id)!;
   };
   const relinks = new Map<string, string>();
@@ -161,14 +218,19 @@ export function dedupeBank(txns: Txn[], stamp: number): Txn[] {
  * YNAB id is on a bank one) isn't added again; one with the same account and amount within a few days
  * links to that bank one, which takes YNAB's payee, category and memo if you haven't set them. `rest`
  * is what's left to add as YNAB's; `linked` are the bank ones that changed.
+ *
+ * In an account with a bank start date (`bankFrom`: account id → day), YNAB's from that day on are the
+ * bank's to bring in: one that doesn't link to a bank one isn't added (`skipped`).
  */
-export function linkYnabToBank(existing: Txn[], ynab: Txn[], stamp: number): { rest: Txn[]; linked: Txn[] } {
+export function linkYnabToBank(existing: Txn[], ynab: Txn[], stamp: number, bankFrom: Map<string, string> = new Map()): { rest: Txn[]; linked: Txn[]; skipped: number } {
   const bank = existing.filter((t) => t.source === "plaid" && !t.deleted);
-  if (!bank.length) return { rest: ynab, linked: [] };
+  if (!bank.length && !bankFrom.size) return { rest: ynab, linked: [], skipped: 0 };
   const known = new Set(bank.flatMap((t) => (t.ynabId ? [t.ynabId] : [])));
   const changed = new Map<string, Txn>();
   const to = new Map<string, string>(); // YNAB's id → the bank one's
+  const dropped = new Set<string>();
   const rest: Txn[] = [];
+  const bankDays = (y: Txn) => bankFrom.has(y.accountId) && y.date >= bankFrom.get(y.accountId)!;
   for (const y of ynab) {
     const yid = y.importId ?? y.id;
     if (isStartTxn(y) || y.source !== "ynab") { rest.push(y); continue; }
@@ -180,7 +242,11 @@ export function linkYnabToBank(existing: Txn[], ynab: Txn[], stamp: number): { r
     const hit = bank
       .filter((t) => !t.ynabId && !changed.has(t.id) && t.accountId === y.accountId && sameAmount(t.amount, y.amount) && days(t.date, y.date) <= MATCH_DAYS)
       .sort((a, b) => days(a.date, y.date) - days(b.date, y.date) || a.id.localeCompare(b.id))[0];
-    if (!hit) { rest.push(y); continue; }
+    if (!hit) {
+      if (bankDays(y)) dropped.add(y.id);
+      else rest.push(y);
+      continue;
+    }
     const next: Txn = { ...hit, ynabId: yid, updatedAt: stamp };
     // still as the bank brought it (not looked at): YNAB's details fill it in
     if (hit.review && uncategorized(hit) && !hit.memo) {
@@ -193,6 +259,13 @@ export function linkYnabToBank(existing: Txn[], ynab: Txn[], stamp: number): { r
     changed.set(hit.id, next);
     to.set(y.id, hit.id);
   }
-  const relink = (t: Txn): Txn => (t.transferId && to.has(t.transferId) ? { ...t, transferId: to.get(t.transferId)! } : t);
-  return { rest: rest.map(relink), linked: [...changed.values()].map(relink) };
+  // a transfer's other side points at the bank one that took its place (or at nothing, when that side
+  // wasn't added: it's still a transfer to that account)
+  const relink = (t: Txn): Txn => {
+    if (!t.transferId) return t;
+    if (to.has(t.transferId)) return { ...t, transferId: to.get(t.transferId)! };
+    if (dropped.has(t.transferId)) { const { transferId: _x, ...u } = t; return u; }
+    return t;
+  };
+  return { rest: rest.map(relink), linked: [...changed.values()].map(relink), skipped: dropped.size };
 }
