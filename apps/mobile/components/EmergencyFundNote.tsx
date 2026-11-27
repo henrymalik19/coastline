@@ -9,6 +9,7 @@ import { radius, space, type, useTheme } from "../lib/theme";
 import { FieldRow, InfoText, InfoTip, NumberInput, Segmented, Select } from "./form";
 import { useLayout } from "../lib/layout";
 import { Icon } from "./Icon";
+import { EssentialsList } from "./EssentialsList";
 import { MonthlyAmount } from "./ScheduleEditor";
 import { Card, Divider, Pill } from "./ui";
 import { ProgressBar } from "./ProgressRing";
@@ -129,6 +130,7 @@ export function EmergencyFundGoal() {
   const { state, result, actual, start } = usePlan();
   const [planOpen, setPlanOpen] = useState(false);
   const [showAccounts, setShowAccounts] = useState(false);
+  const [showEssentials, setShowEssentials] = useState(false);
   const hasSchedule = (k: string) => (state.plan.schedule?.[k]?.length ?? 0) > 0 || Object.keys(state.plan.scheduleMonths?.[k] ?? {}).length > 0;
   const full = actual.fullTarget;
   const cash = result.d.bal.cash;
@@ -146,6 +148,21 @@ export function EmergencyFundGoal() {
         Kept in your cash accounts. Your plan builds the starter cushion first, then the full fund. Its size follows your essential costs.
       </Text>
       <EmergencyFundSize />
+      {/* what sizes it: your essential costs, and which categories count */}
+      <Pressable
+        role="button"
+        aria-expanded={showEssentials}
+        accessibilityLabel={`Essential costs ${money(monthly)} a month, ${showEssentials ? "hide" : "show"} what counts`}
+        onPress={() => setShowEssentials((v) => !v)}
+        hitSlop={6}
+        style={{ flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start" }}
+      >
+        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{showEssentials ? "Hide what's essential" : `What's essential (${money(monthly)}/mo)`}</Text>
+        <View style={{ transform: [{ rotate: showEssentials ? "90deg" : "0deg" }] }}>
+          <Icon name="chevron" size={12} color={t.accent} />
+        </View>
+      </Pressable>
+      {showEssentials ? <EssentialsList /> : null}
       <Divider />
       <View style={{ gap: 4 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>

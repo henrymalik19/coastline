@@ -2,7 +2,7 @@ import { k401Cost, type EmergencyMode } from "@coastfi/engine";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { longMonth } from "../../components/AdjustmentsCard";
 import { Button, Toggle, ToggleRow } from "../../components/form";
-import { Icon } from "../../components/Icon";
+import { EssentialsList } from "../../components/EssentialsList";
 import { Card, Divider, Screen, SectionLabel } from "../../components/ui";
 import { money } from "../../lib/format";
 import { usePlan } from "../../lib/plan";
@@ -106,31 +106,7 @@ export default function Emergency() {
           value={em.essentialsOnly}
           onChange={(v) => set({ essentialsOnly: v })}
         />
-        <View style={[styles.essentials, { backgroundColor: t.surface2 }]}>
-          <Text style={[type.caption, { color: t.text3 }]}>
-            Ticked = essential: you'd keep paying it in a money emergency. It also sets your Lean FI number.
-          </Text>
-          {state.budget.map((b, i) => {
-            if (b.accountId || b.hidden) return null; // money moved to an account (not spending), or a hidden category
-            const keep = b.essential !== false;
-            return (
-              <Pressable
-                key={b.id}
-                role="checkbox"
-                aria-checked={keep}
-                accessibilityLabel={`Keep paying ${b.name || "item"}`}
-                onPress={() => update((p) => { p.budget[i]!.essential = !keep; })}
-                style={styles.essentialRow}
-              >
-                <View style={[styles.box, { borderColor: keep ? t.accent : t.border, backgroundColor: keep ? t.accent : "transparent" }]}>
-                  {keep ? <Icon name="check" size={14} color="#fff" /> : null}
-                </View>
-                <Text style={[type.body, { color: keep ? t.text : t.text3, flex: 1 }]} numberOfLines={1}>{b.name || "Untitled item"}</Text>
-                <Text style={[type.body, { color: keep ? t.text : t.text3, fontVariant: ["tabular-nums"], textDecorationLine: keep ? "none" : "line-through" }]}>{money(b.amount)}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <EssentialsList />
 
         {payroll401k > 0 ? (
           <>
@@ -159,7 +135,4 @@ const styles = StyleSheet.create({
   runway: { flexDirection: "row", gap: space.lg, flexWrap: "wrap" },
   chips: { flexDirection: "row", gap: space.sm, flexWrap: "wrap", paddingVertical: space.sm },
   chip: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.lg, minHeight: 40, justifyContent: "center" },
-  essentials: { borderRadius: radius.md, padding: space.md, gap: 2, marginBottom: space.sm },
-  essentialRow: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 40 },
-  box: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, alignItems: "center", justifyContent: "center" },
 });
