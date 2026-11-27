@@ -5,7 +5,8 @@
 // POST { action, planId, ... } with the user's Supabase session (Authorization: Bearer <jwt>).
 // Secrets: PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV, PLAID_TOKEN_KEY. Optional: PLAID_REDIRECT_URI
 // (where OAuth banks send people back), PLAID_OPEN_TO_ALL=true (anyone may connect banks; otherwise
-// admins and PLAID_ALLOWED_USERS, a comma-separated list of user ids).
+// admins and PLAID_ALLOWED_USERS, a comma-separated list of user ids), PLAID_TRANSACTIONS=all (pull
+// every bank's transactions; otherwise only admins').
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by the runtime.
 
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
@@ -31,6 +32,7 @@ const env: PlaidEnv = {
   redirectUri: Deno.env.get("PLAID_REDIRECT_URI") || undefined,
   openToAll: Deno.env.get("PLAID_OPEN_TO_ALL") === "true",
   allowedUsers: (Deno.env.get("PLAID_ALLOWED_USERS") ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+  transactions: Deno.env.get("PLAID_TRANSACTIONS") === "all" ? "all" : "admins",
 };
 
 /** The Plaid tables, through the service role (server only). */
@@ -74,6 +76,16 @@ function supabaseStore(db: SupabaseClient): PlaidStore {
     },
     async deleteAccounts(accountIds) {
       ok(await db.from("plaid_accounts").delete().in("account_id", accountIds));
+    },
+    async txnCursor(item) {
+      return ok(await db.from("plaid_item_secrets").select("cursor").eq("item", item).maybeSingle())?.cursor ?? null;
+    },
+    async saveTxns(item, rows, removed, cursor) {
+      // the transactions first, then the cursor: stopping in between only means pulling the same ones again
+      for (let i = 0; i < rows.length; i += 500) ok(await db.from("plaid_transactions").upsert(rows.slice(i, i + 500), { onConflict: "transaction_id" }));
+      for (let i = 0; i < removed.length; i += 200)
+        ok(await db.from("plaid_transactions").update({ removed: true, updated_at: new Date().toISOString() }).eq("item", item).in("transaction_id", removed.slice(i, i + 200)));
+      ok(await db.from("plaid_item_secrets").update({ cursor }).eq("item", item));
     },
     async canLink(userId) {
       // admins: the app_admin table (added by hand on the server)

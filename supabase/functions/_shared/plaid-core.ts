@@ -34,9 +34,16 @@ export type PlaidEnv = {
   openToAll?: boolean;
   /** User ids that may connect new banks besides admins. */
   allowedUsers?: string[];
+  /** Whose banks' transactions are pulled: "all", or only admins' (the default, while it's new). */
+  transactions?: "all" | "admins";
 };
 
 export type ItemRow = { id: string; item_id: string; kind: string; last_synced_at: string | null };
+/** One bank transaction as kept for the app (plaid_transactions). Amount as Plaid gives it: money out is positive. */
+export type TxnRow = {
+  transaction_id: string; plan_id: string; item: string; account_id: string; date: string; amount: number; name: string;
+  merchant_name: string | null; pending: boolean; pending_transaction_id: string | null; removed: boolean; updated_at: string;
+};
 export type ItemUpdate = { status: string; error_code: string | null; last_synced_at?: string };
 export type AccountRow = {
   plan_id: string; item: string; account_id: string; name: string; official_name: string | null; mask: string | null;
@@ -60,6 +67,10 @@ export interface PlaidStore {
   deleteAccounts(accountIds: string[]): Promise<void>;
   /** May this person connect new banks (an admin)? Without it, only env.allowedUsers may (outside Sandbox). */
   canLink?(userId: string): Promise<boolean>;
+  /** Where the last transactions sync of a connection stopped (Plaid's cursor), if any. Without these two, no transactions. */
+  txnCursor?(item: string): Promise<string | null>;
+  /** Save what changed (new and changed ones, and the ids the bank took back), then the cursor after them. */
+  saveTxns?(item: string, rows: TxnRow[], removed: string[], cursor: string): Promise<void>;
 }
 
 export class PlaidHttpError extends Error {
@@ -138,6 +149,14 @@ function cipher(env: PlaidEnv) {
 
 /* ---------- Plaid's shapes (only what's used) ---------- */
 
+type PlaidTxn = {
+  transaction_id: string; account_id: string; amount: number; date: string; name?: string | null; merchant_name?: string | null;
+  pending: boolean; pending_transaction_id?: string | null;
+};
+type TxnSync = { added: PlaidTxn[]; modified: PlaidTxn[]; removed: { transaction_id: string }[]; next_cursor: string; has_more: boolean };
+/** A page of transactions (Plaid's most). */
+const TXN_PAGE = 500;
+
 type PlaidAccount = {
   account_id: string; name: string; official_name?: string | null; mask?: string | null; type: string; subtype?: string | null;
   balances: { current?: number | null; available?: number | null; limit?: number | null; iso_currency_code?: string | null };
@@ -199,6 +218,45 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
     return box.decrypt(enc);
   };
 
+  const txnsOn = async () => !!store.saveTxns && !!store.txnCursor && (env.transactions === "all" || (store.canLink ? await store.canLink(userId) : false));
+  /**
+   * A bank connection's transactions since the last time (Plaid's transactions sync, from its cursor),
+   * saved for the app to merge. Not ready yet at a new connection, or not on this one: nothing, quietly.
+   * A sign-in the bank needs stops it like it stops balances.
+   */
+  const syncTxns = async (item: string, access_token: string, now: string) => {
+    const it = await store.item(planId, item);
+    if (it?.kind !== "bank" || !(await txnsOn())) return;
+    const start = await store.txnCursor!(item);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const got = new Map<string, PlaidTxn>();
+      const removed = new Set<string>();
+      let cursor = start;
+      try {
+        for (let page = 0; page < 100; page++) {
+          const r = await plaid<TxnSync>("/transactions/sync", { access_token, count: TXN_PAGE, ...(cursor ? { cursor } : {}) });
+          for (const t of [...r.added, ...r.modified]) { got.set(t.transaction_id, t); removed.delete(t.transaction_id); }
+          for (const t of r.removed) { got.delete(t.transaction_id); removed.add(t.transaction_id); }
+          cursor = r.next_cursor;
+          if (!r.has_more) break;
+        }
+      } catch (e) {
+        const code = e instanceof PlaidHttpError ? e.code : undefined;
+        if (code === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION") continue; // the bank changed mid-way: from the start again
+        if (code && STATUS_FOR[code]) throw e;
+        return; // not ready yet (PRODUCT_NOT_READY), or not on this connection: balances still count
+      }
+      if (!cursor || (cursor === start && !got.size && !removed.size)) return;
+      const rows: TxnRow[] = [...got.values()].map((t) => ({
+        transaction_id: t.transaction_id, plan_id: planId, item, account_id: t.account_id, date: t.date, amount: t.amount,
+        name: t.name ?? "", merchant_name: t.merchant_name ?? null, pending: !!t.pending, pending_transaction_id: t.pending_transaction_id ?? null,
+        removed: false, updated_at: now,
+      }));
+      await store.saveTxns!(item, rows, [...removed], cursor);
+      return;
+    }
+  };
+
   /** Pull one connection's accounts and balances (and card/loan rates when shared). Records a bank error on the item. */
   const syncItem = async (item: string, token?: string) => {
     try {
@@ -232,6 +290,7 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
       const keep = new Set(accounts.map((a) => a.account_id));
       const gone = (await store.accountIds(item)).filter((id) => !keep.has(id));
       if (gone.length) await store.deleteAccounts(gone);
+      await syncTxns(item, access_token, now);
       await store.updateItem(item, { status: "ok", error_code: null, last_synced_at: now });
     } catch (e) {
       const code = e instanceof PlaidHttpError ? e.code : undefined;

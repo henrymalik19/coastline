@@ -1,6 +1,6 @@
 import { transferPair, type PlanState, type Txn } from "@coastfi/engine";
 import { CheckinSchema, PlanStateSchema, TxnSchema, withProperties, type Checkin } from "@coastfi/schema";
-import { applyRegisterBalances, applyTracked, budgetAccounts, foldSavingsLines, startTxnFor } from "./register";
+import { applyRegisterBalances, applyTracked, budgetAccounts, foldSavingsLines, startTxnFor, todayIso } from "./register";
 import { z } from "zod";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -11,6 +11,7 @@ import { stampMs } from "./pages";
 import { canUndoImport, fromOldSnapshot, importSnapshot, parseUndo, readImportBackup, undoImportTxns, type ImportSnapshot } from "./importUndo";
 import { applyYnabUpdate, canUndoUpdate, snapshotUpdate, undoYnabUpdate as undoYnabUpdateTxns, type UndoMark, type UpdateSnapshot, type YnabUpdate } from "./ynabUpdate";
 import { renamePayeesIn } from "./payees";
+import { bankAccountMap, mergeBankTxns, type BankTxn } from "./bankTxns";
 import { combineCategory, uncombineTxns } from "./combine";
 import { keepFamilyGroups } from "./subcats";
 import { salvagePlan, salvageTxns } from "./salvage";
@@ -111,6 +112,8 @@ export type AppState = {
   undoYnabUpdate: () => number;
   /** Rename a payee, or combine several into one (`to`), on every transaction. */
   renamePayees: (from: string[], to: string) => void;
+  /** Merge your banks' transactions in (lib/bankTxns.ts). Returns how many came in new (held for review). */
+  mergeBank: (rows: BankTxn[]) => number;
   /** Combine one budget category into another (lib/combine.ts). Returns its undo (puts both back as they were). */
   combineCategories: (from: string, into: string) => () => void;
   /** Put the plan and transactions back as they were just before the last import. `keepAdded`: ones you added since stay where they still fit. */
@@ -257,6 +260,22 @@ export const useStore = create<AppState>()(
           const at = now();
           set({ plan: structuredClone(before), txns: uncombineTxns(get().txns, r.changed, at), updatedAt: at });
         };
+      },
+      mergeBank: (rows) => {
+        const s = get();
+        // a matched account in the budget with no transactions here yet starts today, at its balance
+        // (which already counts what came before): the bank's from then on come in
+        const map = bankAccountMap(s.plan);
+        const starts = [...new Set(rows.flatMap((r) => (map.has(r.accountId) ? [map.get(r.accountId)!] : [])))]
+          .map((id) => startTxnFor(s.plan, s.txns, id, todayIso()))
+          .filter((t): t is Txn => !!t);
+        const r = mergeBankTxns([...s.txns, ...starts], s.plan, rows, now());
+        const same = !starts.length && r.txns.length === s.txns.length && r.txns.every((t, i) => t === s.txns[i]);
+        if (same) return 0;
+        const next = structuredClone(s.plan);
+        applyRegisterBalances(next, r.txns);
+        set({ plan: next, txns: r.txns, updatedAt: now() });
+        return r.added;
       },
       renamePayees: (from, to) => {
         const list = renamePayeesIn(get().txns, from, to, now());

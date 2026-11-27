@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { Platform } from "react-native";
 import { BANKS_ON } from "./features";
 import { applyBankBalances, dropMatches, fillDebtTerms, type BankAccount } from "./plaidMatch";
+import { bankAccountMap, type BankTxn } from "./bankTxns";
 import { hasRegister } from "./register";
 import { useStore } from "./store";
 import { supabase } from "./supabase";
@@ -116,6 +117,65 @@ export function applyBanks(force = false): void {
   });
 }
 
+/**
+ * Where this device last read the bank transactions to (the server's time), per plan, and for which of
+ * your accounts: matching another account to a bank reads them all again, so that one's come in too.
+ */
+const TXNS_AT = "coastwise.bankTxnsAt";
+type TxnsAt = { at: string; accounts: string };
+const readTxnsAt = (planId: string): TxnsAt | undefined => {
+  try {
+    return (JSON.parse(globalThis.localStorage?.getItem(TXNS_AT) ?? "{}") as Record<string, TxnsAt>)[planId];
+  } catch {
+    return undefined;
+  }
+};
+const markTxnsAt = (planId: string, v: TxnsAt) => {
+  try {
+    const all = JSON.parse(globalThis.localStorage?.getItem(TXNS_AT) ?? "{}") as Record<string, TxnsAt>;
+    globalThis.localStorage?.setItem(TXNS_AT, JSON.stringify({ ...all, [planId]: v }));
+  } catch {
+    // no storage: it reads them all again next time, which changes nothing
+  }
+};
+type BankTxnRow = {
+  transaction_id: string; account_id: string; date: string; amount: number | string; name: string; merchant_name: string | null;
+  pending: boolean; pending_transaction_id: string | null; removed: boolean; updated_at: string;
+};
+const PAGE = 1000;
+
+/**
+ * Bring in the bank transactions the server has that this device hasn't merged yet (only for accounts
+ * you've matched to a bank). Returns how many came in new.
+ */
+export async function pullBankTxns(): Promise<number> {
+  const planId = useSync.getState().planId;
+  if (!supabase || !planId) return 0;
+  // matched to a bank: matching another one reads them all again
+  const accounts = [...bankAccountMap(useStore.getState().plan).keys()].sort().join(",");
+  if (!accounts) return 0;
+  const last = readTxnsAt(planId);
+  const since = last?.accounts === accounts ? last.at : undefined;
+  const rows: BankTxnRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    // the same moment again too (>=): merging one twice changes nothing
+    let q = supabase.from("plaid_transactions").select("transaction_id, account_id, date, amount, name, merchant_name, pending, pending_transaction_id, removed, updated_at").eq("plan_id", planId);
+    if (since) q = q.gte("updated_at", since);
+    const r = await q.order("updated_at").order("transaction_id").range(from, from + PAGE - 1);
+    if (r.error) return 0; // not there yet (the table comes with the server change), or offline: next time
+    rows.push(...(r.data as BankTxnRow[]));
+    if (r.data.length < PAGE) break;
+  }
+  if (!rows.length) return 0;
+  const bank: BankTxn[] = rows.map((r) => ({
+    transactionId: r.transaction_id, accountId: r.account_id, date: String(r.date).slice(0, 10), amount: Number(r.amount), name: r.name,
+    merchantName: r.merchant_name, pending: r.pending, pendingTransactionId: r.pending_transaction_id, removed: r.removed,
+  }));
+  const added = useStore.getState().mergeBank(bank);
+  markTxnsAt(planId, { at: rows.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), since ?? ""), accounts });
+  return added;
+}
+
 async function run<T>(fn: () => Promise<T>): Promise<T | undefined> {
   usePlaid.setState({ busy: true, error: undefined });
   try {
@@ -134,6 +194,7 @@ export const syncBanks = (force = false) =>
     await call("sync", { force });
     await loadBanks();
     applyBanks();
+    await pullBankTxns();
   });
 
 /* ---------- Plaid Link (web) ---------- */

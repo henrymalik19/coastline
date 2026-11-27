@@ -33,3 +33,33 @@ begin
   end loop;
 end;
 $$;
+
+-- Bank transactions, step two: what Plaid has for each bank connection (latest state of each one).
+-- The server function writes it (transactions sync, from the cursor in plaid_item_secrets); the app reads
+-- the rows changed since it last looked and merges them into the plan's transactions itself.
+create table public.plaid_transactions (
+  transaction_id text primary key,
+  plan_id uuid not null references auth.users (id) on delete cascade,
+  item uuid not null references public.plaid_items (id) on delete cascade,
+  account_id text not null,
+  date date not null,
+  -- as Plaid gives it: money out is positive
+  amount numeric(14, 2) not null,
+  name text not null default '',
+  merchant_name text,
+  pending boolean not null default false,
+  pending_transaction_id text,
+  -- the bank took it back
+  removed boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+create index plaid_transactions_by_plan on public.plaid_transactions (plan_id, updated_at);
+create index plaid_transactions_by_item on public.plaid_transactions (item);
+
+alter table public.plaid_transactions enable row level security;
+create policy "plaid_transactions: read" on public.plaid_transactions
+  for select to authenticated using (plan_id = (select auth.uid()) or public.full_access(plan_id));
+create policy "two-step sign-in" on public.plaid_transactions
+  as restrictive for all to authenticated using ((select public.aal_ok())) with check ((select public.aal_ok()));
+revoke all on public.plaid_transactions from anon;
+revoke insert, update, delete, truncate on public.plaid_transactions from authenticated;

@@ -98,7 +98,7 @@ export function TransactionsList({
     ];
   }, [cats]);
   const [needsCat, setNeedsCat] = useState(!!onlyNeedsCategory);
-  // held for review (not approved in YNAB yet): listed apart, counted once you accept them
+  // held for review (new from your bank, or not approved in YNAB yet): listed apart, counted once you accept them
   const [reviewOnly, setReviewOnly] = useState(!!onlyReview);
   const [editing, setEditing] = useState<Txn | "new" | null>(null);
   // the filters' height, so each day's heading sticks just under them
@@ -355,7 +355,7 @@ export function TransactionsList({
       {reviewOnly ? (
         <Card style={{ gap: space.sm }}>
           <Text style={[type.body, { color: t.text2 }]}>
-            Not approved in YNAB yet. They don't count in your balances or budget until you accept them. Tap one to change it first.
+            {toReview.every((x) => x.source === "plaid") ? "New from your bank." : toReview.some((x) => x.source === "plaid") ? "New from your bank, or not approved in YNAB yet." : "Not approved in YNAB yet."} They don't count in your balances or budget until you accept them. Tap one to change it first.
           </Text>
           {toReview.length ? <Button title={`Accept all ${toReview.length}`} tone="primary" icon="check" onPress={acceptAll} style={{ alignSelf: "flex-start", minHeight: 36 }} /> : null}
         </Card>
@@ -415,7 +415,7 @@ export function TransactionsList({
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text numberOfLines={1} style={[type.body, { color: t.text }]}>{x.payee || "No payee"}</Text>
                         <Text numberOfLines={1} style={[type.caption, { color: x.review ? t.accent : uncategorized(x) ? t.warn : t.text3 }]}>
-                          {x.review ? `To review · ${x.categoryId || x.splits?.length ? categoryText(cats, x, nameOf, since) : "no category"}` : categoryText(cats, x, nameOf, since)}
+                          {x.source === "plaid" && x.cleared === "uncleared" ? "Pending · " : ""}{x.review ? `To review · ${x.categoryId || x.splits?.length ? categoryText(cats, x, nameOf, since) : "no category"}` : categoryText(cats, x, nameOf, since)}
                         </Text>
                       </View>
                     )}

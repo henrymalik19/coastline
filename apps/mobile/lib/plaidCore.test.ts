@@ -1,7 +1,7 @@
 // The Plaid core (supabase/functions/_shared/plaid-core.ts) runs here under Node with a fake store and a
 // fake Plaid: it doesn't depend on Supabase or Deno, and bank tokens are only ever stored encrypted.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handle, MAX_CONNECTIONS, needsSecondStep, PlaidHttpError, type AccountRow, type PlaidStore } from "../../../supabase/functions/_shared/plaid-core";
+import { handle, MAX_CONNECTIONS, needsSecondStep, PlaidHttpError, type AccountRow, type PlaidStore, type TxnRow } from "../../../supabase/functions/_shared/plaid-core";
 
 const KEY = btoa(String.fromCharCode(...new Uint8Array(32).map((_, i) => i)));
 const env = { clientId: "id", secret: "sec", env: "sandbox", tokenKey: KEY };
@@ -11,6 +11,8 @@ function memStore(owner = "u1") {
   const items: Record<string, { id: string; plan_id: string; item_id: string; kind: string; last_synced_at: string | null; status?: string; error_code?: string | null }> = {};
   const secrets: Record<string, string> = {};
   const accounts: Record<string, AccountRow> = {};
+  const txns: Record<string, TxnRow> = {};
+  const cursors: Record<string, string> = {};
   let n = 0;
   const store: PlaidStore = {
     access: async (planId, userId) => (planId === owner && userId === owner ? "owner" : null),
@@ -32,9 +34,20 @@ function memStore(owner = "u1") {
     upsertAccounts: async (rows) => rows.forEach((r) => (accounts[r.account_id] = r)),
     accountIds: async (item) => Object.values(accounts).filter((a) => a.item === item).map((a) => a.account_id),
     deleteAccounts: async (ids) => ids.forEach((id) => delete accounts[id]),
+    txnCursor: async (item) => cursors[item] ?? null,
+    saveTxns: async (item, rows, removed, cursor) => {
+      rows.forEach((r) => (txns[r.transaction_id] = r));
+      removed.forEach((id) => txns[id] && (txns[id] = { ...txns[id]!, removed: true }));
+      cursors[item] = cursor;
+    },
   };
-  return { store, items, secrets, accounts };
+  return { store, items, secrets, accounts, txns, cursors };
 }
+
+/** Plaid's transactions sync, by the cursor it's asked from (none: the first time). */
+type SyncPage = { added?: unknown[]; modified?: unknown[]; removed?: { transaction_id: string }[]; next_cursor: string; has_more?: boolean } | { error: string };
+let syncPages: Record<string, SyncPage> = {};
+const ptx = (id: string, o: Record<string, unknown> = {}) => ({ transaction_id: id, account_id: "chk", amount: 5.25, date: "2026-11-10", name: "SQ *CAFE", merchant_name: "Cafe", pending: false, ...o });
 
 /** A fake Plaid: answers by path; `fail` makes /accounts/get return that error code. */
 function fakePlaid(fail?: string) {
@@ -57,6 +70,12 @@ function fakePlaid(fail?: string) {
       });
     }
     if (path === "/liabilities/get") return ok({ liabilities: { credit: [{ account_id: "cc", aprs: [{ apr_percentage: 15.24, apr_type: "purchase_apr" }], minimum_payment_amount: 20 }] } });
+    if (path === "/transactions/sync") {
+      const p = syncPages[(body.cursor as string | undefined) ?? ""];
+      if (!p) return new Response(JSON.stringify({ error_code: "PRODUCT_NOT_READY", error_message: "x" }), { status: 400 });
+      if ("error" in p) return new Response(JSON.stringify({ error_code: p.error, error_message: "x" }), { status: 400 });
+      return ok({ added: [], modified: [], removed: [], has_more: false, ...p });
+    }
     if (path === "/item/remove") return ok({});
     if (path === "/link/token/create") return ok({ link_token: "link-sandbox-abc" });
     return new Response("{}", { status: 404 });
@@ -64,7 +83,7 @@ function fakePlaid(fail?: string) {
   return calls;
 }
 
-beforeEach(() => vi.useRealTimers());
+beforeEach(() => { vi.useRealTimers(); syncPages = {}; });
 afterEach(() => vi.unstubAllGlobals());
 
 describe("who may connect new banks (production)", () => {
@@ -204,5 +223,48 @@ describe("two-step sign-in", () => {
     expect(needsSecondStep(tok({ aal: "aal1" }), [{ status: "verified" }])).toBe(true);
     expect(needsSecondStep(tok({ aal: "aal2" }), [{ status: "verified" }])).toBe(false);
     expect(needsSecondStep("not-a-token", [{ status: "verified" }])).toBe(true);
+  });
+});
+
+describe("bank transactions (server)", () => {
+  const admin = (s: PlaidStore) => ({ ...s, canLink: async (u: string) => u === "u1" });
+  it("pulls every page from the cursor, keeps the latest of each, and saves the cursor after", async () => {
+    const { store, txns, cursors } = memStore();
+    syncPages = {
+      "": { added: [ptx("a"), ptx("b", { pending: true })], next_cursor: "c1", has_more: true },
+      c1: { modified: [ptx("b", { pending: false, amount: 6 })], removed: [{ transaction_id: "a" }], next_cursor: "c2" },
+    };
+    fakePlaid();
+    const { itemId } = (await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "bank" }, "u1", env, admin(store))) as { itemId: string };
+    expect(Object.values(txns).map((t) => [t.transaction_id, t.amount, t.pending, t.item])).toEqual([["b", 6, false, itemId]]);
+    expect(cursors[itemId]).toBe("c2");
+  });
+
+  it("only for admins unless it's on for all, never for investments, and quietly not before it's ready", async () => {
+    syncPages = { "": { added: [ptx("a")], next_cursor: "c1" } };
+    const notAdmin = memStore();
+    fakePlaid();
+    await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "bank" }, "u1", env, notAdmin.store);
+    expect(notAdmin.txns).toEqual({});
+    const all = memStore();
+    await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "bank" }, "u1", { ...env, transactions: "all" }, all.store);
+    expect(Object.keys(all.txns)).toEqual(["a"]);
+    const inv = memStore();
+    await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "investments" }, "u1", env, admin(inv.store));
+    expect(inv.txns).toEqual({});
+    syncPages = {};
+    const early = memStore();
+    const { itemId } = (await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "bank" }, "u1", env, admin(early.store))) as { itemId: string };
+    expect([early.txns, early.items[itemId]?.status]).toEqual([{}, "ok"]);
+  });
+
+  it("starts over when the bank changes things mid-way", async () => {
+    const { store, txns } = memStore();
+    let n = 0;
+    syncPages = { "": { added: [ptx("a")], next_cursor: "c1", has_more: true } };
+    Object.defineProperty(syncPages, "c1", { get: () => (++n === 1 ? { error: "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION" } : { added: [ptx("z")], next_cursor: "c2" }), enumerable: true });
+    fakePlaid();
+    await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "bank" }, "u1", env, admin(store));
+    expect(Object.keys(txns).sort()).toEqual(["a", "z"]);
   });
 });
