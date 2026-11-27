@@ -184,3 +184,30 @@ test("an amount changed in the forecast table replaces the one on Your plan's st
   expect(saved.scheduleMonths?.["acct:a4"]?.["2027-03"]).toBe(1500);
   expect(saved.amountsBy?.ira?.["2027-03"]).toBeUndefined();
 });
+
+test("an account's activity shows its own side of a transfer, once", async ({ page }) => {
+  await onboard(page);
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app")!);
+    raw.state.plan.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 1000 }, { id: "trv", name: "Travel", type: "cash", balance: 1000 }];
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/budget");
+  await page.getByRole("button", { name: /^Start with / }).click();
+  await expect(page.getByRole("button", { name: "Add categories" }).first()).toBeVisible();
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app") ?? "{}");
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const out = { id: "e2e-x1", accountId: "trv", transferAccountId: "chk", transferId: "e2e-x2", date: today, amount: -77.77, cleared: "cleared", source: "manual", updatedAt: 5 };
+    const back = { ...out, id: "e2e-x2", accountId: "chk", transferAccountId: "trv", transferId: "e2e-x1", amount: 77.77 };
+    raw.state.txns = [...(raw.state.txns ?? []), out, back];
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/budget?view=transactions");
+  await expect(page.getByText("$77.77").first()).toBeVisible();
+  await page.getByRole("button", { name: /^Account:/ }).first().click();
+  await page.getByRole("option", { name: /^Travel/ }).click();
+  await expect(page.getByText("−$77.77")).toHaveCount(1);
+  await expect(page.getByText("+$77.77")).toHaveCount(0);
+});

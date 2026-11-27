@@ -132,11 +132,15 @@ export function TransactionsList({
   };
   const uncategorized = (x: Txn) => needsCategory(x, since);
 
+  // an account with its own transactions shows its own side of a transfer only (the other account
+  // has the other side); one without (an IRA you move money to) shows the transfers into it
+  const ownsTxns = useMemo(() => acct !== "all" && acct !== CLOSED && txns.some((x) => !x.deleted && x.accountId === acct), [txns, acct]);
+  const inAcct = (x: Txn) => x.accountId === acct || (!ownsTxns && x.transferAccountId === acct);
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return txns
       .filter((x) => !x.deleted)
-      .filter((x) => acct === "all" || (acct === CLOSED ? isHistoryTxn(x) : x.accountId === acct || x.transferAccountId === acct))
+      .filter((x) => acct === "all" || (acct === CLOSED ? isHistoryTxn(x) : inAcct(x)))
       // the ones that need a category: from every month (the count beside it is all of them)
       .filter((x) => needsCat || reviewOnly || inRange(x.date))
       .filter((x) => !needsCat || uncategorized(x))
@@ -149,7 +153,7 @@ export function TransactionsList({
       })
       .sort((a, b) => (a.date === b.date ? b.updatedAt - a.updatedAt : b.date.localeCompare(a.date)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [txns, acct, month, range, from, to, q, needsCat, reviewOnly, cats, catKeys]);
+  }, [txns, acct, ownsTxns, month, range, from, to, q, needsCat, reviewOnly, cats, catKeys]);
 
   // dated after today: upcoming, shown greyed at the top and not counted until their day
   const today = isoDay(start);
@@ -158,7 +162,7 @@ export function TransactionsList({
   const inTotal = happened.reduce((a, x) => a + (x.amount > 0 && !x.transferAccountId ? x.amount : 0), 0);
   const outTotal = happened.reduce((a, x) => a + (x.amount < 0 && !x.transferAccountId ? -x.amount : 0), 0);
   // the count follows the account picker, like everything else here; ones in other accounts get a link instead
-  const inView = (x: Txn) => acct === "all" || x.accountId === acct || x.transferAccountId === acct;
+  const inView = (x: Txn) => acct === "all" || inAcct(x);
   const missingAll = txns.filter((x) => !x.deleted && uncategorized(x));
   const missing = missingAll.filter(inView).length;
   const missingElsewhere = missingAll.length - missing;
