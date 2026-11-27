@@ -183,7 +183,7 @@ export const EmergencyModeSchema = z.object({
   pause401k: z.boolean(),
 });
 
-export const WhatIfSchema = z.object({ extra: money, retDelta: rate, spendDelta: rate });
+export const WhatIfSchema = z.object({ extra: money, retDelta: rate, spendDelta: rate, retireAge: z.number().optional(), loanExtra: z.record(z.string(), money).optional() });
 
 export const PlanStateSchema = z.object({
   version: z.literal(2),

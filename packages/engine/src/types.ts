@@ -330,7 +330,15 @@ export type ScheduleEntry = {
   pct?: number;
 };
 
-export type WhatIf = { extra: number; retDelta: number; spendDelta: number };
+export type WhatIf = {
+  extra: number;
+  retDelta: number;
+  spendDelta: number;
+  /** Retire at this age instead (a what-if; missing: your plan's age). */
+  retireAge?: number;
+  /** More a month on a loan (debt id → amount), from now until you retire or it's paid off. */
+  loanExtra?: Record<string, number>;
+};
 
 /** One-off change to a single month: an unexpected bill, lost pay, or a bonus. */
 export type AdjustmentKind = "expense" | "incomeLoss" | "incomeGain";

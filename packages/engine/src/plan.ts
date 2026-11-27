@@ -380,7 +380,9 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       }
       dt.balance *= 1 + rateIn(dt, monthStr) / 12;
       // borrowed shortfall behaves like a card: minimum is 2% of the balance (at least $25)
-      const minimum = dt.id === SHORTFALL_ID ? Math.max(25, dt.balance * 0.02) : base - esc;
+      // a what-if paying more on a loan: on top of its payment, until you retire
+      const more = !dt.payroll && m < d.years * 12 ? Math.max(0, num(s.whatif?.loanExtra?.[dt.id])) : 0;
+      const minimum = dt.id === SHORTFALL_ID ? Math.max(25, dt.balance * 0.02) : base - esc + more;
       const pay = Math.min(minimum, dt.balance);
       dt.balance -= pay;
       if (isLoan(dt)) loanBack += pay;

@@ -198,3 +198,28 @@ describe("rent from your home in retirement (a basement)", () => {
     expect(not.fire - kept.fire).toBeCloseTo((1_200 * 0.95 * 12) / 0.04, 0);
   });
 });
+
+describe("what if: another retirement age, paying more on a loan", () => {
+  it("a what-if retirement age is used in place of yours, and your own stays", () => {
+    const s = blank({ debts: [mortgage()] });
+    const later = { ...s, whatif: { ...s.whatif, retireAge: 63 } };
+    expect(derive(later, START).retireAge).toBe(63);
+    expect(derive(later, START).years).toBe(13);
+    expect(later.retireAge).toBe(60);
+    // later: fewer mortgage payments left after retiring
+    expect(run(later, START).homeBridge).toBeLessThan(run(s, START).homeBridge);
+  });
+
+  it("more on a loan pays it down faster, from your investing, until you retire", () => {
+    const s = blank({ debts: [mortgage()] });
+    const more = { ...s, whatif: { ...s.whatif, loanExtra: { m: 500 } } };
+    const a = run(s, START);
+    const b = run(more, START);
+    expect(b.homeBridge).toBeLessThan(a.homeBridge);
+    // that money isn't invested
+    expect(b.plan.months[0]!.post).toBeCloseTo(a.plan.months[0]!.post - 500, 0);
+    // enough extra pays it off before you retire: nothing left then
+    const lots = { ...s, whatif: { ...s.whatif, loanExtra: { m: 3000 } } };
+    expect(run(lots, START).mortgagesAtRetire).toEqual([]);
+  });
+});

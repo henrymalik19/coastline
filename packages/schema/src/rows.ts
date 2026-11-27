@@ -77,7 +77,7 @@ const SETTINGS: Field[] = [
   ["marginalTax", "marginal_tax"], ["marginalTaxManual", "marginal_tax_manual"], ["hsaEligible", "hsa_eligible"], ["hsaFamily", "hsa_family"],
   ["projectWith", "project_with"], ["payrollSteps", "payroll_steps"], ["hsaPayroll", "hsa_payroll"],
 ];
-const WHATIF: Field[] = [["extra", "whatif_extra"], ["retDelta", "whatif_ret_delta"], ["spendDelta", "whatif_spend_delta"]];
+const WHATIF: Field[] = [["extra", "whatif_extra"], ["retDelta", "whatif_ret_delta"], ["spendDelta", "whatif_spend_delta"], ["retireAge", "whatif_retire_age"], ["loanExtra", "whatif_loan_extra"]];
 const SPOUSE: Field[] = [["name", "spouse_name"], ["age", "spouse_age"]];
 const EMERGENCY: Field[] = [["active", "emergency_active"], ["until", "emergency_until"], ["essentialsOnly", "emergency_essentials_only"], ["pause401k", "emergency_pause_401k"]];
 const CONTRIBUTED: Field[] = [["year", "contributed_year"], ["k401", "contributed_k401"], ["ira", "contributed_ira"], ["hsa", "contributed_hsa"], ["iraSpouse", "contributed_ira_spouse"]];

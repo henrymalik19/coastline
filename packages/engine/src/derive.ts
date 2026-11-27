@@ -7,6 +7,8 @@ import { isRentalDebt, isSpendingItem, rentInRetirement } from "./schedule";
 /** Static summary of the inputs. `startDate` is injected; the engine never reads the clock. */
 export function derive(s: PlanState, startDate: Date): Derived {
   const w: Partial<WhatIf> = s.whatif ?? {};
+  // a what-if can try another retirement age
+  const retireAge = w.retireAge !== undefined && w.retireAge > s.age ? w.retireAge : s.retireAge;
   const bal: Balances = { pretax: 0, roth: 0, taxable: 0, hsa: 0, cash: 0, property: 0 };
   for (const a of s.accounts ?? []) bal[a.type] = (bal[a.type] || 0) + num(a.balance);
   for (const p of s.properties ?? []) bal.property += num(p.value);
@@ -42,7 +44,7 @@ export function derive(s: PlanState, startDate: Date): Derived {
     sum((s.properties ?? []).filter((p) => p.kind !== "rental").map((p) => (Math.max(0, num(p.taxInsurance)) + Math.max(0, num(p.value)) * Math.max(0, num(p.upkeep))) / 12));
   // healthcare: your own insurance until Medicare at 65, then Medicare's cost; the difference until 65 is a bridge
   const healthRetired = s.medicare === undefined ? num(s.healthcare) : Math.max(0, num(s.medicare));
-  const healthBridge = s.medicare === undefined ? 0 : Math.max(0, num(s.healthcare) - healthRetired) * 12 * Math.max(0, 65 - s.retireAge);
+  const healthBridge = s.medicare === undefined ? 0 : Math.max(0, num(s.healthcare) - healthRetired) * 12 * Math.max(0, 65 - retireAge);
   // each category you'd still pay: its own retirement amount, else what you've spent on it lately (if you chose
   // that, and there's spending to average), else this month's assigned (if you chose that), else its plan amount
   const month = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, "0")}`;
@@ -57,7 +59,7 @@ export function derive(s: PlanState, startDate: Date): Derived {
   // a set yearly amount replaces the budget's total (it already covers healthcare from 65 and home costs)
   const retireSpendingSet = num(s.retireSpending) > 0;
   const retireMonthly = (retireSpendingSet ? num(s.retireSpending) / 12 : retireMonthlyBudget) * (1 + (w.spendDelta || 0));
-  const years = Math.max(0, Math.round(s.retireAge - s.age));
+  const years = Math.max(0, Math.round(retireAge - s.age));
 
   // income in retirement: the yearly total once everything has started, plus the savings
   // needed to cover whatever starts after you retire until it does (today's dollars)
@@ -79,7 +81,7 @@ export function derive(s: PlanState, startDate: Date): Derived {
   }
   const rentalIncomeAnnual = sum(rentals.map((x) => x.monthly * 12));
   const retireIncomeAnnual = sum(retIncome.map((x) => num(x.monthly) * 12)) + rentalIncomeAnnual;
-  const retireBridge = sum(retIncome.map((x) => num(x.monthly) * 12 * Math.max(0, num(x.startAge) - s.retireAge))) + healthBridge;
+  const retireBridge = sum(retIncome.map((x) => num(x.monthly) * 12 * Math.max(0, num(x.startAge) - retireAge))) + healthBridge;
 
   // Roth share of payroll 401(k), weighted by each job's contribution
   const prePerYear = incomes.map((i) => num(i.pretax) * PERIODS[i.freq]);
@@ -89,7 +91,7 @@ export function derive(s: PlanState, startDate: Date): Derived {
   return {
     start: startDate,
     age: s.age,
-    retireAge: s.retireAge,
+    retireAge,
     years,
     r: s.ret - s.fee + (w.retDelta || 0),
     vol: s.vol,

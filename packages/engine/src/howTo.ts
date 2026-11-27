@@ -81,7 +81,7 @@ export function extraToCoastBy(s: PlanState, startDate: Date, months: number): n
 export function retireAgeOnPlan(s: PlanState, startDate: Date, maxAge = 75): number | null {
   const from = Math.round(s.retireAge);
   for (let a = from; a <= Math.max(from, maxAge); a++) {
-    const x = finalAndFire({ ...s, retireAge: a }, startDate);
+    const x = finalAndFire({ ...s, retireAge: a, whatif: { ...s.whatif, retireAge: undefined } }, startDate);
     if (x.final + 0.5 >= x.fire) return a;
   }
   return null;
