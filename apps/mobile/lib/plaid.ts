@@ -158,8 +158,8 @@ export async function pullBankTxns(): Promise<number> {
     return [...p.accounts, ...p.debts].flatMap((x) => (x.plaidAccountId ? [`${x.plaidAccountId}:${x.bankFrom ?? ""}`] : [])).sort().join(",");
   };
   const waiting = () => {
-    const p = useStore.getState().plan;
-    return [...p.accounts.filter((a) => a.type === "cash"), ...p.debts.filter(isCard)].some((x) => x.plaidAccountId && !x.bankFrom);
+    const { plan: p, txns } = useStore.getState();
+    return [...p.accounts.filter((a) => a.type === "cash"), ...p.debts.filter(isCard)].some((x) => x.plaidAccountId && (!x.bankFrom || !hasRegister(txns, x.id)));
   };
   const accounts = sig();
   if (!accounts) return 0;

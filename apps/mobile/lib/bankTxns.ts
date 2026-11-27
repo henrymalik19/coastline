@@ -73,6 +73,15 @@ function firstDay(txns: Txn[], accountId: string): string | null {
   return addDays(s.date, 1);
 }
 
+/** A bank account's transactions can start on `day` at the earliest BANK_BACK_DAYS back, and no later than today. */
+export const bankStartDay = (day: string, today: string) => {
+  const earliest = addDays(today, -BANK_BACK_DAYS);
+  return day > today ? today : day < earliest ? earliest : day;
+};
+
+/** The day a bank-connected account's transactions would start: the one you picked, else the budget's first day. */
+export const bankStartFor = (plan: Pick<PlanState, "budgetPlan">, x: { bankFrom?: string }, today: string) => bankStartDay(x.bankFrom ?? `${plan.budgetPlan?.start ?? today.slice(0, 7)}-01`, today);
+
 export type BankStart = { accountId: string; from: string; start?: Txn };
 
 /**
@@ -101,8 +110,9 @@ export function bankStarts(plan: PlanState, txns: Txn[], rows: BankTxn[], curren
       out.push({ accountId: id, from: newest < earliest ? earliest : newest > today ? today : newest });
       continue;
     }
-    const budgetStart = `${plan.budgetPlan.start}-01`;
-    const from = budgetStart > today ? today : budgetStart < earliest ? earliest : budgetStart;
+    // the day you picked, else the budget's first day; never more than BANK_BACK_DAYS back
+    const want = (cash ?? card)!.bankFrom ?? `${plan.budgetPlan.start}-01`;
+    const from = bankStartDay(want, today);
     // a card's balance here is what you owe, as a negative
     const now = current.has(pid) ? (card ? -current.get(pid)! : current.get(pid)!) : cash ? cash.balance : -card!.balance;
     const posted = rows.filter((r) => r.accountId === pid && !r.removed && !r.pending && r.date >= from && r.date <= today).reduce((a, r) => a - r.amount, 0);

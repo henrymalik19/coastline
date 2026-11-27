@@ -359,7 +359,7 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
             {row("Today's monthly costs", `${whole(barista.costs)}/mo`)}
             {barista.saving > 0.5 ? row("Still to save to reach your number", `${whole(barista.saving)}/mo`) : null}
           </View>
-          {link("Mark what's essential on the Budget", () => router.push("/budget"))}
+          {link("Mark what's essential", () => router.push("/emergency"))}
         </>
       ) : null}
     </Card>

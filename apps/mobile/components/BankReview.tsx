@@ -14,6 +14,7 @@ import { radius, space, type, useTheme } from "../lib/theme";
 import { ACCOUNT_TYPES } from "./AccountsEditor";
 import { Button } from "./form";
 import { Icon } from "./Icon";
+import { TxnStart } from "./TxnStart";
 
 const typeLabel = (k: string) => ACCOUNT_TYPES.find((x) => x.value === k)?.label ?? k;
 /** The bank's own word for the account ("Checking", "Brokerage", "Credit card"). */
@@ -107,6 +108,8 @@ export function BankReview() {
                 {!m ? newOptions.map((o) => <Choice key={o.key} title={o.label} hint={o.hint} onPress={() => pick(o.key)} />) : null}
                 {!m ? <Choice title="It's one I already have" hint={existing.length ? `${existing.length} to choose from` : "You don't have any yet"} onPress={() => setPicking(true)} chevron disabled={!existing.length} /> : null}
                 {m ? <Choice title="Don't use it" hint="Stop updating it; it stays in your plan as it is" onPress={() => pick("none")} /> : <Choice title="Don't use it" hint="Leave it out of your plan" onPress={() => setStep(Math.min(step + 1, list.length - 1))} />}
+                {/* a cash account or card: when its transactions start (up to 30 days back) */}
+                {m && (b.type === "depository" || b.type === "credit") ? <TxnStart id={m.item.id} /> : null}
                 {m?.kind === "account" && kindDiffers(m.item, b) ? (
                   <Text style={[type.caption, { color: t.text3 }]}>
                     {company ?? "The bank"} calls this {bankSaysCash(b) ? "a checking or savings account" : "an investment account"}. It counts as {m.item.type === "cash" ? "cash" : "investments"} in your plan, the way you set it.{" "}

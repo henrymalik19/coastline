@@ -1,4 +1,3 @@
-import { useRouter } from "expo-router";
 import { k401Cost, type EmergencyMode } from "@coastfi/engine";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { longMonth } from "../../components/AdjustmentsCard";
@@ -15,7 +14,6 @@ const LENGTHS = [1, 2, 3, 6, 12];
 
 /** Emergency mode: pause the plan, keep cash, optionally cut to essentials / pause 401(k). */
 export default function Emergency() {
-  const router = useRouter();
   const openPage = useOpenPage();
   const t = useTheme();
   const { state, result: o, start, actual } = usePlan();
@@ -110,8 +108,7 @@ export default function Emergency() {
         />
         <View style={[styles.essentials, { backgroundColor: t.surface2 }]}>
           <Text style={[type.caption, { color: t.text3 }]}>
-            Ticked = you'd keep paying it.{" "}
-            <Text role="link" onPress={() => router.navigate("/plan?view=retirement")} style={{ color: t.accent, fontWeight: "700" }}>See them with retirement</Text>
+            Ticked = essential: you'd keep paying it in a money emergency. It also sets your Lean FI number.
           </Text>
           {state.budget.map((b, i) => {
             if (b.accountId || b.hidden) return null; // money moved to an account (not spending), or a hidden category

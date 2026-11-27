@@ -1,6 +1,6 @@
-import { transferPair, type PlanState, type Txn } from "@coastfi/engine";
+import { startTxnId, transferPair, type PlanState, type Txn } from "@coastfi/engine";
 import { CheckinSchema, PlanStateSchema, TxnSchema, withProperties, type Checkin } from "@coastfi/schema";
-import { applyRegisterBalances, applyTracked, budgetAccounts, foldSavingsLines, startTxnFor, todayIso } from "./register";
+import { applyRegisterBalances, applyTracked, budgetAccounts, foldSavingsLines, hasRegister, startTxnFor, todayIso } from "./register";
 import { z } from "zod";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -115,6 +115,8 @@ export type AppState = {
   /** Merge your banks' transactions in (lib/bankTxns.ts). Returns how many came in new (held for review). */
   /** `current`: the bank's balance now, by Plaid account id (for an account whose transactions start here). */
   mergeBank: (rows: BankTxn[], current?: Map<string, number>) => number;
+  /** Start an account's transactions on a day (cash: its balance then; card: what you owed then). */
+  startTxns: (accountId: string, date: string, balance: number) => void;
   /** Combine one budget category into another (lib/combine.ts). Returns its undo (puts both back as they were). */
   combineCategories: (from: string, into: string) => () => void;
   /** Put the plan and transactions back as they were just before the last import. `keepAdded`: ones you added since stay where they still fit. */
@@ -218,6 +220,22 @@ export const useStore = create<AppState>()(
         const changed =
           plan.accounts.some((a, i) => a.balance !== was.accounts[i]?.balance) || plan.debts.some((d, i) => d.balance !== was.debts[i]?.balance);
         if (changed) set({ plan, updatedAt: now() });
+      },
+      startTxns: (id, date, balance) => {
+        // an account you keep yourself: its transactions start on `date`, with what it held that day
+        const s = get();
+        if (!s.plan.budgetPlan || hasRegister(s.txns, id)) return;
+        const acct = budgetAccounts(s.plan).find((a) => a.id === id);
+        if (!acct) return;
+        const day = date > todayIso() ? todayIso() : date;
+        const start: Txn = {
+          id: startTxnId(id), accountId: id, date: day, amount: Math.round((acct.kind === "card" ? -balance : balance) * 100) / 100, payee: "Starting balance",
+          ...(acct.kind === "cash" ? { categoryId: "ready" } : {}), cleared: "reconciled", source: "manual", updatedAt: now(),
+        };
+        const list = [start, ...s.txns.filter((x) => x.id !== start.id)];
+        const plan = structuredClone(s.plan);
+        applyRegisterBalances(plan, list);
+        set({ txns: list, plan, updatedAt: now() });
       },
       clearTxns: () => {
         const stamp = now();

@@ -1,7 +1,7 @@
 /**
- * Retirement & essentials: for every spending category, whether you'd still pay it after you retire
- * (that's what builds your retirement number) and whether it's essential (what you'd keep in a money
- * emergency). One list, so you can answer it all at once.
+ * Retirement spending: for every spending category, whether you'd still pay it after you retire, and
+ * what it would cost then (that's what builds your retirement number). Whether it's essential is on
+ * Emergency mode (it isn't only about retirement).
  */
 import { StyleSheet, Text, View } from "react-native";
 import { Chip, FieldRow, InlineMoney, InlineSwitch, NumberInput, Select } from "./form";
@@ -21,7 +21,7 @@ export function RetirementEssentials() {
   const d = result.d;
   // investing categories (money moved into an account) aren't spending, so they aren't here
   const items = state.budget.filter((b) => !b.accountId && !b.hidden);
-  const set = (id: string, patch: { inRetirement?: boolean; essential?: boolean; retireAmount?: number; paysDebt?: string; noSuggest?: boolean }) =>
+  const set = (id: string, patch: { inRetirement?: boolean; retireAmount?: number; paysDebt?: string; noSuggest?: boolean }) =>
     update((p) => {
       const it = p.budget.find((x) => x.id === id);
       if (it) Object.assign(it, patch);
@@ -34,7 +34,6 @@ export function RetirementEssentials() {
   const clearOwn = (id: string) => update((p) => { const it = p.budget.find((x) => x.id === id); if (it) delete it.retireAmount; });
   const setOwn = (b: (typeof items)[number], v: number) => update((p) => { const it = p.budget.find((x) => x.id === b.id); if (!it) return; if (Math.abs(v - usual(b)) < 0.005) delete it.retireAmount; else it.retireAmount = v; });
   const afterRetiring = items.filter((b) => b.inRetirement && !b.paysDebt).reduce((a, b) => a + retireOf(b), 0);
-  const essential = items.filter((b) => b.essential !== false).reduce((a, b) => a + b.amount, 0);
   const groups = groupOrder(items);
 
   const fixed = d.retireSpendingSet;
@@ -79,7 +78,7 @@ export function RetirementEssentials() {
       </Card>
       <Card style={{ gap: space.sm }}>
         <Text style={[type.body, { color: t.text2 }]}>
-          For each category: would you still pay it after you retire, and what would it cost then? And is it essential (what you'd keep paying in a money emergency)?
+          For each category: would you still pay it after you retire, and what would it cost then?
         </Text>
         <FieldRow label="Amounts from" info="What a category costs in retirement unless you type its own amount: its plan amount (from YNAB, the average you assigned lately), or what you assigned it this month on the Budget.">
           <Select
@@ -99,11 +98,6 @@ export function RetirementEssentials() {
                 : `Plus healthcare and home costs, this sets your retirement number (${money(result.fire, { whole: true })})`}
             </Text>
           </View>
-          <View style={[styles.total, { backgroundColor: t.surface2 }]}>
-            <Text style={[type.title, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(essential, { whole: true })}<Text style={[type.caption, { color: t.text3 }]}>/mo</Text></Text>
-            <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Essential</Text>
-            <Text style={[type.caption, { color: t.text3 }]}>Plus debt minimums ({money(d.debtMins, { whole: true })}), what emergency mode keeps paying</Text>
-          </View>
         </View>
       </Card>
 
@@ -111,7 +105,6 @@ export function RetirementEssentials() {
         <View style={styles.row}>
           <Text style={[type.caption, { color: t.text3, flex: 1 }]} />
           <Text style={[type.caption, styles.col, { color: t.text3 }]}>After retiring</Text>
-          <Text style={[type.caption, styles.col, { color: t.text3 }]}>Essential</Text>
         </View>
         {groups.map((g, gi) => {
           const list = items.filter((b) => groupOf(b) === g);
@@ -163,9 +156,6 @@ export function RetirementEssentials() {
                       </View>
                       <View style={styles.col}>
                         <InlineSwitch label={`${name}: still paid after you retire`} value={b.inRetirement} onChange={(v) => set(b.id, { inRetirement: v })} />
-                      </View>
-                      <View style={styles.col}>
-                        <InlineSwitch label={`${name}: essential`} value={b.essential !== false} onChange={(v) => set(b.id, { essential: v })} />
                       </View>
                     </View>
                     {loan ? (

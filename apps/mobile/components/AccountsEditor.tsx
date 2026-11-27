@@ -10,6 +10,7 @@ import { space, type, useTheme } from "../lib/theme";
 import { Button, Choice, IconButton, NumberInput, TextField } from "./form";
 import { Icon } from "./Icon";
 import { BankLink } from "./BankLink";
+import { TxnStart } from "./TxnStart";
 import { Card, Divider } from "./ui";
 import { DragList, reorderAmong } from "./DragList";
 import { hasRegister, isCard, accountTxnsHref } from "../lib/register";
@@ -175,6 +176,7 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
                         <Icon name="chevron" size={12} color={t.accent} />
                       </Pressable>
                     ) : null}
+                    {a.type === "cash" ? <TxnStart id={a.id} /> : null}
                     {ck === "payroll" ? (
                       <PayrollNote what={accountGroup(a) === "k401" ? "401(k)" : "HSA"} />
                     ) : ck ? (

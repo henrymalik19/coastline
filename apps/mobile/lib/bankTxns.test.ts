@@ -1,6 +1,6 @@
 import { startTxnId, type PlanState, type Txn } from "@coastfi/engine";
 import { describe, expect, it } from "vitest";
-import { BANK_ID, bankStarts, dedupeBank, linkYnabToBank, mergeBankTxns, type BankTxn } from "./bankTxns";
+import { BANK_ID, bankStartDay, bankStarts, dedupeBank, linkYnabToBank, mergeBankTxns, type BankTxn } from "./bankTxns";
 import { freshPlan } from "./presets";
 import { buildImport, parseYnab } from "./ynab";
 import { applyYnabUpdate, planYnabUpdate } from "./ynabUpdate";
@@ -109,6 +109,15 @@ describe("bank start date", () => {
     const all = r.txns.map((t) => ({ ...t, review: undefined }));
     const bal = (id: string) => Math.round(all.filter((t) => t.accountId === id && !t.deleted).reduce((a, t) => a + t.amount, 0) * 100) / 100;
     expect([bal("chk"), bal("visa")]).toEqual([2450 - 20, -130]);
+  });
+
+  it("the day you picked, kept within the last 30 days", () => {
+    const plan = fresh();
+    plan.accounts[0]!.bankFrom = "2026-11-10";
+    const rows = [bank({ transactionId: "a", date: "2026-11-05", amount: 50 }), bank({ transactionId: "b", date: "2026-11-12", amount: 25 })];
+    expect(bankStarts(plan, [], rows, new Map([["pa1", 475]]), today, 1).map((s) => [s.from, s.start?.amount])).toEqual([["2026-11-10", 500]]);
+    expect(bankStartDay("2026-01-01", today)).toBe("2026-10-28");
+    expect(bankStartDay("2026-12-25", today)).toBe(today);
   });
 
   it("at most 30 days back, and none before the budget starts", () => {

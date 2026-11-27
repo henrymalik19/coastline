@@ -99,3 +99,21 @@ describe("the outbox in the store", () => {
     expect(s.outbox).toEqual(["a", "b"]);
   });
 });
+
+describe("starting an account's transactions", () => {
+  it("on a day you pick, with its balance then; the balance then follows its transactions", () => {
+    const plan = freshPlan();
+    plan.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 900 }];
+    plan.debts = [{ id: "visa", name: "Visa", kind: "credit_card", balance: 300, apr: 0.2, minPayment: 25 }];
+    plan.budgetPlan = { start: "2026-11", startCash: 0, months: {} };
+    useStore.setState({ plan, txns: [] });
+    useStore.getState().startTxns("chk", "2026-09-15", 1200);
+    useStore.getState().startTxns("visa", "2026-10-01", 250);
+    const s = useStore.getState();
+    expect(s.txns.map((t) => [t.id, t.date, t.amount, t.categoryId])).toEqual([["start:visa", "2026-10-01", -250, undefined], ["start:chk", "2026-09-15", 1200, "ready"]]);
+    expect([s.plan.accounts[0]!.balance, s.plan.debts[0]!.balance]).toEqual([1200, 250]);
+    // only once
+    useStore.getState().startTxns("chk", "2026-11-01", 5);
+    expect(useStore.getState().txns.find((t) => t.id === "start:chk")!.amount).toBe(1200);
+  });
+});

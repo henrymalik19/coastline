@@ -592,14 +592,16 @@ export default function Budget() {
               );
             })()}
             {linkedTo ? null : (
-              <FormRow
-                label="Retirement & essentials"
-                hint={`${it.inRetirement ? "Still paid after you retire" : "Not paid after you retire"} · ${it.essential !== false ? "Essential" : "Not essential"}`}
-              >
+              <FormRow label="After you retire" hint={it.inRetirement ? "Still paid after you retire" : "Not paid after you retire"}>
                 <Pressable role="link" onPress={() => router.navigate("/plan?view=retirement")} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
                   <Text style={[type.body, { color: t.accent, fontWeight: "600" }]}>Change</Text>
                   <Icon name="chevron" size={14} color={t.accent} />
                 </Pressable>
+              </FormRow>
+            )}
+            {linkedTo ? null : (
+              <FormRow label="Essential" hint="You'd keep paying it in a money emergency">
+                <InlineSwitch label={`${it.name || "Item"}: essential`} value={it.essential !== false} onChange={(v) => editItem(it.id, { essential: v })} />
               </FormRow>
             )}
             {parentItem ? null : (

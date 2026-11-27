@@ -2,6 +2,8 @@ import { isRentalDebt, PERIODS, type Debt, type DebtKind, type PlanState } from 
 import { useState } from "react";
 import { CompanyField } from "./CompanyField";
 import { BankLink } from "./BankLink";
+import { TxnStart } from "./TxnStart";
+import { isCard } from "../lib/register";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { DEBT_KINDS, debtKind, debtLabel } from "../lib/debts";
 import { money, percent } from "../lib/format";
@@ -119,6 +121,7 @@ export function DebtEditor({
           <NumberInput kind="money" label={`${debtLabel(debt)} balance`} value={debt.balance} onChange={(v) => onChange({ balance: v })} />
         )}
       </FieldRow>
+      {isCard(debt) ? <TxnStart id={debt.id} divider /> : null}
       <Divider />
       <FieldRow label="Interest rate (APR)" hint={`Typical ${kind.label.toLowerCase()}: ${(kind.typicalApr * 100).toFixed(1).replace(/\.0$/, "")}%. Use yours.`} info={HELP.apr}>
         <NumberInput kind="percent" label={`${debtLabel(debt)} APR`} value={debt.apr} max={1} onChange={(v) => onChange({ apr: v })} />
