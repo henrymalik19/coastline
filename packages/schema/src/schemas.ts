@@ -245,6 +245,7 @@ export const TxnSchema = z.object({
   cleared: z.enum(["uncleared", "cleared", "reconciled"]),
   source: z.enum(["manual", "csv", "ynab", "plaid"]),
   importId: z.string().optional(),
+  ynabId: z.string().optional(),
   trackedAmount: z.number().finite().optional(),
   updatedAt: z.number(),
   deleted: z.boolean().optional(),

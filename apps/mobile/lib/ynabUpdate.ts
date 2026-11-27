@@ -138,7 +138,7 @@ export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSy
   const r = buildImport(structuredClone(plan), d, { from, thisMonth, accounts, categories: {}, categoryMap, removeEmpty: false, existing: txns, replaceMatching: true, newId, history: true });
 
   // deleted ones too: one you deleted here stays deleted (but one the undo took out can come back)
-  const have = new Set(txns.filter((t) => !reAddable(t)).flatMap((t) => [t.id, ynabId(t)]));
+  const have = new Set(txns.filter((t) => !reAddable(t)).flatMap((t) => [t.id, ynabId(t), ...(t.ynabId ? [t.ynabId] : [])]));
   const incoming = r.txns.filter((t) => t.source === "ynab" && !t.id.startsWith("start:"));
   const fresh = incoming.filter((t) => !have.has(t.id));
   const now = new Set(incoming.map((t) => t.id));
@@ -155,7 +155,8 @@ export function planYnabUpdate(plan: PlanState, d: YnabData, txns: Txn[], lastSy
   // a transfer's other side keeps pointing at the right one
   const relink = (t: Txn): Txn => (t.transferId && idHere.has(t.transferId) ? { ...t, transferId: idHere.get(t.transferId)! } : t);
 
-  const changed: Txn[] = [];
+  // ones your banks brought in that YNAB also has: linked to YNAB's (taking its details if you hadn't set any)
+  const changed: Txn[] = r.txns.filter((t) => t.source === "plaid");
   const changedBoth: Txn[] = [];
   for (const [old, next] of pairs) {
     if (old.deleted) {

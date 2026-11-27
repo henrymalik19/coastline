@@ -13,6 +13,7 @@ import { OUTSIDE } from "./outside";
 import { CLOSED_ACCOUNTS_GROUP } from "./budgetOrder";
 import { linkDebtCategories, PAYS } from "./debtLink";
 import { moveUnder } from "./subcats";
+import { linkYnabToBank } from "./bankTxns";
 
 /* ---------- reading the files ---------- */
 
@@ -573,6 +574,8 @@ export type ImportResult = {
   summary: {
     accountsAdded: number; accountsRemoved: number; categoriesAdded: number; categoriesUpdated: number; categoriesRemoved: number; categoriesSkipped: number; categoriesHidden: number;
     transactions: number; transactionsMatched: number; months: number;
+    /** YNAB's that are ones your banks brought in (linked to those, not added again). */
+    transactionsLinked: number;
     /** Recent transactions (this month and last) that will need a category: YNAB had none, or you left their category out. */
     needsCategoryFromYnab: number; needsCategoryLeftOut: number;
     /**
@@ -788,7 +791,7 @@ function overspentBy(start: number, spending: { date: string; i: number; account
 /** Turn YNAB's data into the plan's categories, assignments, accounts and transactions. */
 export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): ImportResult {
   const plan = structuredClone(input);
-  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, notApprovedInYnab: 0, debtCategoriesLinked: 0, categoriesCombined: 0, categoriesAsSub: 0, olderWithoutCategory: 0, transfersOutside: 0, history: 0 };
+  const summary = { accountsAdded: 0, accountsRemoved: 0, categoriesAdded: 0, categoriesUpdated: 0, categoriesRemoved: 0, categoriesSkipped: 0, categoriesHidden: 0, transactions: 0, transactionsMatched: 0, transactionsLinked: 0, months: 0, needsCategoryFromYnab: 0, needsCategoryLeftOut: 0, notApprovedInYnab: 0, debtCategoriesLinked: 0, categoriesCombined: 0, categoriesAsSub: 0, olderWithoutCategory: 0, transfersOutside: 0, history: 0 };
   // only this month's and last month's transactions are asked for a category (older ones are history)
   const [ty, tm] = o.thisMonth.split("-").map(Number) as [number, number];
   const recentFrom = tm === 1 ? `${ty - 1}-12-01` : `${ty}-${String(tm - 1).padStart(2, "0")}-01`;
@@ -1197,12 +1200,15 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
       ...(card ? {} : { categoryId: "ready" }), cleared: "reconciled", source: "ynab", updatedAt: now,
     });
   }
+  // ones your banks already brought in: linked to the bank's (which keep what you set), not added again
+  const bank = linkYnabToBank(o.existing ?? [], txns, now);
+  txns.splice(0, txns.length, ...bank.rest);
   // your own transactions that YNAB also has give way to YNAB's (same account and amount, within 3 days)
   const matches: { mine: Txn; ynab: Txn }[] = [];
   if (o.existing?.length) {
     const days = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000;
     const ids = new Set(txns.map((x) => x.id));
-    const pool = o.existing.filter((x) => !x.deleted && x.source !== "ynab" && !ids.has(x.id) && !x.id.startsWith("start:"));
+    const pool = o.existing.filter((x) => !x.deleted && x.source !== "ynab" && x.source !== "plaid" && !ids.has(x.id) && !x.id.startsWith("start:"));
     const taken = new Set<string>();
     for (const y of txns) {
       if (y.id.startsWith("start:")) continue;
@@ -1217,6 +1223,7 @@ export function buildImport(input: PlanState, d: YnabData, o: ImportOptions): Im
   const replaced = o.replaceMatching === false ? [] : matches.filter((m) => !keep.has(m.mine.id)).map((m) => m.mine.id);
   summary.transactionsMatched = replaced.length;
   summary.transactions = txns.length;
+  summary.transactionsLinked = bank.linked.length;
   summary.history = history.length;
-  return { plan, txns: history.length ? [...txns, ...history] : txns, replaced, matches, summary };
+  return { plan, txns: [...txns, ...bank.linked, ...history], replaced, matches, summary };
 }

@@ -435,8 +435,13 @@ export type Txn = {
   transferId?: string;
   cleared: "uncleared" | "cleared" | "reconciled";
   source: "manual" | "csv" | "ynab" | "plaid";
-  /** The bank's or file's id, so an import never adds the same one twice. */
+  /**
+   * The bank's or file's id, so an import never adds the same one twice. From a bank (source "plaid"):
+   * the bank's current id for it (a pending one gets a new id when it posts; its own id here stays).
+   */
   importId?: string;
+  /** From a bank and also in YNAB: YNAB's id for it, so a YNAB import finds it instead of adding it again. */
+  ynabId?: string;
   /**
    * A transfer to or from an account you don't budget (an IRA, a loan): how much it moved that
    * account's balance, so changing or deleting it moves it back by exactly that much.

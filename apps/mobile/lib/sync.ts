@@ -294,6 +294,7 @@ type TxnRow = {
   cleared: Txn["cleared"]; source: Txn["source"]; import_id: string | null; deleted: boolean; client_updated_at: number | string;
   tracked_amount?: number | string | null;
   review?: boolean | null;
+  ynab_id?: string | null;
   /** When the server last saved it (its clock). */
   updated_at?: string;
   transaction_split?: SplitRow[];
@@ -302,7 +303,7 @@ type TxnRow = {
 const txnToRow = (t: Txn) => ({
   id: t.id, account_id: t.accountId, date: t.date, amount: t.amount, payee: t.payee ?? null, memo: t.memo ?? null,
   category_id: t.categoryId ?? null, transfer_account_id: t.transferAccountId ?? null,
-  transfer_id: t.transferId ?? null, cleared: t.cleared, source: t.source, import_id: t.importId ?? null,
+  transfer_id: t.transferId ?? null, cleared: t.cleared, source: t.source, import_id: t.importId ?? null, ynab_id: t.ynabId ?? null,
   deleted: !!t.deleted, client_updated_at: t.updatedAt, tracked_amount: t.trackedAmount ?? null, original_category: t.originalCategory ?? null, review: !!t.review,
   splits: (t.splits ?? []).map((x) => ({ category_id: x.categoryId, amount: x.amount, memo: x.memo ?? null, original_category: x.originalCategory ?? null })),
 });
@@ -317,7 +318,7 @@ const txnFromRow = (r: TxnRow): Txn | null => {
       : undefined,
     ...(r.original_category ? { originalCategory: r.original_category } : {}),
     transferAccountId: r.transfer_account_id ?? undefined, transferId: r.transfer_id ?? undefined,
-    cleared: r.cleared, source: r.source, importId: r.import_id ?? undefined, updatedAt: Number(r.client_updated_at),
+    cleared: r.cleared, source: r.source, importId: r.import_id ?? undefined, ...(r.ynab_id ? { ynabId: r.ynab_id } : {}), updatedAt: Number(r.client_updated_at),
     trackedAmount: r.tracked_amount === null || r.tracked_amount === undefined ? undefined : Number(r.tracked_amount),
     deleted: r.deleted || undefined,
     review: r.review || undefined,
