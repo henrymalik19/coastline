@@ -34,10 +34,13 @@ export function BankReview() {
   const [picking, setPicking] = useState(false);
   // accounts and debts made new in this review: you can name them here
   const [made, setMade] = useState<string[]>([]);
+  // bank accounts you said not to use (so the choice shows as picked)
+  const [skipped, setSkipped] = useState<string[]>([]);
   useEffect(() => {
     setStep(0);
     setPicking(false);
     setMade([]);
+    setSkipped([]);
   }, [review]);
   if (!review) return null;
   const item = items.find((i) => i.id === review);
@@ -72,6 +75,13 @@ export function BankReview() {
     });
     applyBanks();
     setPicking(false);
+    setSkipped((xs) => (to === "none" ? [...xs.filter((x) => x !== b.accountId), b.accountId] : xs.filter((x) => x !== b.accountId)));
+  };
+  /** Not used: nothing in your plan updates from it. On to the next account, or done after the last. */
+  const skip = () => {
+    pick("none");
+    if (last) close();
+    else setStep(step + 1);
   };
   // what's chosen now: nothing, a match (new or existing look the same once made)
   const chosen = m ? `${m.kind}:${m.item.id}` : "none";
@@ -128,7 +138,7 @@ export function BankReview() {
                 ) : null}
                 {!m ? newOptions.map((o) => <Choice key={o.key} title={o.label} hint={o.hint} onPress={() => pick(o.key)} />) : null}
                 {!m ? <Choice title="It's one I already have" hint={existing.length ? `${existing.length} to choose from` : "You don't have any yet"} onPress={() => setPicking(true)} chevron disabled={!existing.length} /> : null}
-                {m ? <Choice title="Don't use it" hint="Stop updating it; it stays in your plan as it is" onPress={() => pick("none")} /> : <Choice title="Don't use it" hint="Leave it out of your plan" onPress={() => setStep(Math.min(step + 1, list.length - 1))} />}
+                {m ? <Choice title="Don't use it" hint="Stop updating it; it stays in your plan as it is" onPress={() => pick("none")} /> : <Choice title="Don't use it" hint="Leave it out of your plan" on={skipped.includes(b.accountId)} onPress={skip} />}
                 {/* a cash account or card: when its transactions start (up to 30 days back) */}
                 {m && (b.type === "depository" || b.type === "credit") ? <TxnStart id={m.item.id} /> : null}
                 {m?.kind === "account" && kindDiffers(m.item, b) ? (

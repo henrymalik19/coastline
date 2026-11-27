@@ -37,7 +37,8 @@ export function categoryText(
     return t.amount < 0
       ? `Transfer · ${accountName(t.transferAccountId)} (from Unassigned)`
       : `Withdrawal · ${accountName(t.transferAccountId)} (Unassigned)`;
-  if (t.categoryId === "ready") return "Unassigned";
+  // money in with no category is income: it goes to Unassigned, to hand out
+  if (t.categoryId === "ready") return t.amount > 0 ? "Income" : "Unassigned";
   const c = t.categoryId ? cats.find((x) => x.key === t.categoryId)?.label : undefined;
   if (t.transferAccountId) return `Transfer · ${accountName(t.transferAccountId)}${c ? ` (${c})` : ""}`;
   return c ?? (since && t.date && t.date < since ? "No category" : "Needs a category");

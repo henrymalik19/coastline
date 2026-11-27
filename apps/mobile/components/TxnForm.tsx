@@ -150,7 +150,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
 
   const wasIn = new Set([txn?.categoryId, ...(txn?.splits ?? []).map((x) => x.categoryId)].filter((x): x is string => !!x));
   const catOptions = [
-    ...(kind === "in" ? [{ value: "ready", label: "Unassigned", hint: "Income: assign it on the Budget tab" }] : []),
+    ...(kind === "in" ? [{ value: "ready", label: "Income", hint: "Goes to Unassigned, for you to hand out on Budget" }] : []),
     // each category, then its sub categories ("Childcare › Babysitter")
     ...cats.filter((c) => !c.hidden && !c.parent).flatMap((c) => [
       { value: c.key, label: c.label, hint: c.group },
