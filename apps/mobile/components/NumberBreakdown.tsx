@@ -158,7 +158,7 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
   const setAsideFor = [
     b.healthBridge > 0.5 ? `health insurance until 65` : "",
     b.bridge > 0.5 ? "the years before Social Security or a pension" : "",
-    b.homeBridge > 0.5 ? "the mortgage left" : "",
+    b.homeBridge > 0.5 ? "the mortgage payments left" : "",
   ].filter(Boolean).join(", ");
   const incomeMo = b.income / 12;
   const onTrackWhy =
@@ -275,7 +275,7 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
           {b.taxExtra > 0.5 ? row("Income tax on pre-tax money", `+ ${whole(b.taxExtra)}`, { sub: `${percent(d.taxRate)} tax on the ${percent(o.preShareFinal)} that's pre-tax` }) : null}
           {b.bridge > 0.5 ? row("Until Social Security or a pension starts", `+ ${whole(b.bridge)}`) : null}
           {b.healthBridge > 0.5 ? row("Health insurance until 65", `+ ${whole(b.healthBridge)}`, { sub: `${whole(state.healthcare)}/mo from ${d.retireAge} until Medicare` }) : null}
-          {b.homeBridge > 0.5 ? row(o.mortgagesAtRetire.length > 1 ? "Mortgages still owed" : "Mortgage still owed", `+ ${whole(b.homeBridge)}`, { sub: `What's left when you retire: ${o.mortgagesAtRetire.map((x) => x.name || "Mortgage").join(", ")}` }) : null}
+          {b.homeBridge > 0.5 ? row("Mortgage payments left", `+ ${whole(b.homeBridge)}`, { sub: `From ${d.retireAge} until it's paid off, interest included: ${o.mortgagesAtRetire.map((x) => x.name || "Mortgage").join(", ")}` }) : null}
           <Divider />
           {row("FIRE number", whole(b.fire), { strong: true, sub: b.fire > 0.5 ? `About ${whole(inFutureDollars(b.fire, yearsToRetire))} in ${retireYear} dollars (${percent(DISPLAY_INFLATION)} inflation a year)` : undefined })}
           <View style={[styles.row, { flexWrap: "wrap", marginTop: space.xs }]}>

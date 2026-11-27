@@ -132,7 +132,7 @@ export default function Home() {
         {o.mortgagesAtRetire.length ? (
           <Pressable role="link" onPress={() => openPage("/money/debts")} style={[styles.homeNote, { backgroundColor: t.warnSoft }]}>
             <Text style={[type.caption, { color: t.text2, flex: 1 }]}>
-              {o.mortgagesAtRetire.length === 1 ? "Your mortgage" : "Your mortgages"} will still have {money(o.homeBridge, { whole: true })} owed when you retire, so your number includes it. <Text style={{ color: t.accent, fontWeight: "700" }}>See it on Debts</Text>
+              {o.mortgagesAtRetire.length === 1 ? "Your mortgage" : "Your mortgages"} will still have payments after you retire, about {money(o.homeBridge, { whole: true })} with interest, so your number includes them. <Text style={{ color: t.accent, fontWeight: "700" }}>See it on Debts</Text>
             </Text>
           </Pressable>
         ) : null}
@@ -158,7 +158,7 @@ export default function Home() {
       value={money(o.fire, { whole: true })}
       tone={whatIfOn ? "warn" : undefined}
       hint={`${money(d.retireAnnual, { whole: true })}/yr at ${percent(d.swr, 1)}`}
-      info={`What you'll want invested when you retire: your yearly retirement spending (${money(d.retireAnnual, { whole: true })}${d.retireIncomeAnnual > 0 ? ", minus Social Security or pensions" : ""}) divided by a ${percent(d.swr, 1)} withdrawal rate, with a little extra for taxes on pre-tax money${o.homeBridge > 0.5 ? `, plus the ${money(o.homeBridge, { whole: true })} still owed on your mortgage when you retire` : ""}. Withdrawing ${percent(d.swr, 1)} a year is meant to last for life. Everything here is in today's dollars; in ${retireYear} dollars, at ${percent(DISPLAY_INFLATION)} inflation, it's about ${money(inFutureDollars(o.fire, yearsToRetire), { whole: true })}.`}
+      info={`What you'll want invested when you retire: your yearly retirement spending (${money(d.retireAnnual, { whole: true })}${d.retireIncomeAnnual > 0 ? ", minus Social Security or pensions" : ""}) divided by a ${percent(d.swr, 1)} withdrawal rate, with a little extra for taxes on pre-tax money${o.homeBridge > 0.5 ? `, plus the ${money(o.homeBridge, { whole: true })} of mortgage payments left after you retire` : ""}. Withdrawing ${percent(d.swr, 1)} a year is meant to last for life. Everything here is in today's dollars; in ${retireYear} dollars, at ${percent(DISPLAY_INFLATION)} inflation, it's about ${money(inFutureDollars(o.fire, yearsToRetire), { whole: true })}.`}
     />,
     <Stat
       key="odds"

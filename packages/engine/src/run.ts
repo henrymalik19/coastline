@@ -3,15 +3,19 @@ import { monteCarlo } from "./montecarlo";
 import { simulatePlan } from "./plan";
 import { coastCrossing, coastNumberAt, fireNumber, project } from "./project";
 import type { Derived, MonteCarloResult, PlanResult, PlanState, RunResult } from "./types";
-import { mortgagesAtRetirement } from "./mortgage";
+import { mortgageBridge, mortgagesAtRetirement } from "./mortgage";
 
 /** Monte Carlo seed used by `run` (fixed, so results are reproducible). */
 export const MC_SEED = 20261106;
 
-/** The numbers the FIRE number needs, with what's still owed on a mortgage when you retire added to the bridge. */
+/**
+ * The numbers the FIRE number needs, with a mortgage still running when you retire added to the bridge:
+ * its payments from then until it's paid off (interest included), like health insurance until Medicare.
+ * One whose payment never pays it off counts what's owed then instead.
+ */
 function withHome(s: PlanState, d: Derived, plan: PlanResult) {
   const mortgagesAtRetire = mortgagesAtRetirement(s, d, plan);
-  const homeBridge = mortgagesAtRetire.reduce((a, x) => a + x.balance, 0);
+  const homeBridge = mortgagesAtRetire.reduce((a, x) => a + mortgageBridge(x), 0);
   return { mortgagesAtRetire, homeBridge, dFire: homeBridge > 0 ? { ...d, retireBridge: d.retireBridge + homeBridge } : d };
 }
 

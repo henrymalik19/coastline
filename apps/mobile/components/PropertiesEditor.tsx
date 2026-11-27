@@ -3,6 +3,7 @@
  * mortgage and its rent, and what it costs to keep that isn't in the mortgage payment.
  */
 import type { Debt, Property } from "@coastfi/engine";
+import { mortgageBridge } from "@coastfi/engine";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money } from "../lib/format";
@@ -57,7 +58,7 @@ export function PropertiesEditor({ titled = true }: { /** Off on its own page, w
             <Text style={[type.caption, { color: t.text2 }]}>
               {money(r.rent, { whole: true })} rent − {money(r.vacancy, { whole: true })} cushion{r.escrow > 0.5 ? ` − ${money(r.escrow, { whole: true })} escrow (tax + insurance keep going)` : ""}. It counts as income in retirement, so your number is lower.
               {x.kind === "rental"
-                ? owed ? ` Its mortgage, about ${money(owed.balance, { whole: true })} still owed when you retire, counts in your number instead of coming out of the rent.` : " Its mortgage is paid off by then."
+                ? owed ? ` Its mortgage payments left after you retire, about ${money(mortgageBridge(owed), { whole: true })} with interest, count in your number instead of coming out of the rent.` : " Its mortgage is paid off by then."
                 : " Your home's own costs are already in your retirement spending."}
             </Text>
           </View>

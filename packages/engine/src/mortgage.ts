@@ -84,13 +84,19 @@ export function loanSchedule(x: Debt, month: string): LoanSchedule | null {
 export type DebtAtRetirement = {
   id: string;
   name: string;
-  /** Still owed the month you retire (what your number counts). */
+  /** Still owed the month you retire. */
   balance: number;
   /** Payments left after you retire (null: the payment never pays it off; followed for 50 years). */
   months: number | null;
-  /** Those payments added up, interest included, if you keep paying monthly instead of paying it off. */
+  /** Those payments added up, interest included: what your number counts (mortgageBridge). */
   total: number;
 };
+
+/**
+ * What a mortgage still running when you retire adds to your number: the payments left, interest
+ * included, as you'd keep making them. One whose payment never pays it off: what's owed then.
+ */
+export const mortgageBridge = (x: Pick<DebtAtRetirement, "balance" | "months" | "total">) => (x.months === null ? x.balance : x.total);
 
 /**
  * Mortgages still owed when you retire, as your plan runs them (extra payments included): what's owed

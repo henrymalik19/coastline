@@ -66,11 +66,13 @@ export function mortgageStatus(debt: Debt, result: RunResult, start: Date, renta
   if (atRetire) {
     rows.push({
       label: `When you retire at ${result.d.retireAge}`,
-      value: `${money(atRetire.balance, { whole: true })} owed`,
-      note: `Counted in your number, so you could pay it off then.${atRetire.months !== null ? ` Keep paying monthly instead: ${atRetire.months} more payment${atRetire.months === 1 ? "" : "s"}, about ${money(atRetire.total, { whole: true })} with interest.` : ""}`,
+      value: atRetire.months !== null ? `${atRetire.months} payment${atRetire.months === 1 ? "" : "s"} left` : `${money(atRetire.balance, { whole: true })} owed`,
+      note: atRetire.months !== null
+        ? `Your number covers them: about ${money(atRetire.total, { whole: true })} with interest. Or pay off the ${money(atRetire.balance, { whole: true })} owed then.`
+        : "Its payment never pays it off, so your number counts paying off what's owed then.",
       tone: "warn",
     });
-    summary = `${money(atRetire.balance, { whole: true })} still owed when you retire`;
+    summary = atRetire.months !== null ? `${atRetire.months} payment${atRetire.months === 1 ? "" : "s"} left after you retire` : `${money(atRetire.balance, { whole: true })} still owed when you retire`;
   } else if (rental) rows.push({ label: `When you retire at ${result.d.retireAge}`, value: "Not counted", note: "A rental: its rent pays the mortgage, tax and insurance" });
   else if (owes) rows.push({ label: `When you retire at ${result.d.retireAge}`, value: "Paid off", note: "Only escrow (property tax + insurance) carries on", tone: "good" });
 

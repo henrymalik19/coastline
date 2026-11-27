@@ -21,7 +21,7 @@ export type EarlyAccess = {
   income: number;
   /** Health insurance until then, beyond what you'd pay on Medicare. */
   health: number;
-  /** Mortgages still owed when you retire (your number pays them off then). */
+  /** Mortgage payments left after you retire (your number covers them). A little high: some come after 59½. */
   mortgage: number;
   /** What you need you can reach early: spending − income + health + mortgage. */
   need: number;
