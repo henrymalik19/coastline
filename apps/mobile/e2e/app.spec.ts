@@ -68,7 +68,7 @@ test("money keeps its cents in a box ('1,800.50', not '1,800.5')", async ({ page
   await expect(box).toHaveValue("1,800.50");
 });
 
-test("the outcomes chart always fits its median line", async ({ page }) => {
+test("the What if chart always fits its plan line", async ({ page }) => {
   await onboard(page);
   await setRetirementSpending(page);
   // enough invested that the median ends over 2.2x the FIRE number (where the axis used to stop, so it ran off the top)
@@ -77,11 +77,11 @@ test("the outcomes chart always fits its median line", async ({ page }) => {
   await k401.fill("2000000");
   await k401.blur();
   await page.goto("/plan?view=whatif");
-  const chart = page.getByRole("img", { name: /Projected invested balance/ });
+  const chart = page.getByRole("img", { name: /Invested balance by age/ });
   await expect(chart).toBeVisible();
   const label = (await chart.getAttribute("aria-label")) ?? "";
-  const median = Number(/Median \$([\d,]+)/.exec(label)?.[1]?.replace(/,/g, "") ?? NaN);
-  // the axis labels ($1M, $2.5M, $600k...): the top one must be at least the median
+  const median = Number(/Your plan: \$([\d,]+)/.exec(label)?.[1]?.replace(/,/g, "") ?? NaN);
+  // the axis labels ($1M, $2.5M, $600k...): the top one must be at least the plan line's end
   const ticks = (await chart.locator("text").allTextContents())
     .map((s) => /^\$([\d.]+)([kM]?)$/.exec(s.trim()))
     .filter((m): m is RegExpExecArray => !!m)

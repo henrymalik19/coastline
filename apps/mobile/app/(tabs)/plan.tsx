@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { AccountsForecast } from "../../components/AccountsForecast";
-import { WhatIfBanner } from "../../components/WhatIfBanner";
 import { AccountsProgress } from "../../components/AccountsProgress";
 import { longMonth } from "../../components/AdjustmentsCard";
 import { BalanceChart } from "../../components/BalanceChart";
@@ -20,7 +19,7 @@ import { money, monthLabel } from "../../lib/format";
 import { investedHistory, vsPlan } from "../../lib/history";
 import { useStore } from "../../lib/store";
 import { useLayout } from "../../lib/layout";
-import { usePlan } from "../../lib/plan";
+import { hasWhatIf, RealPlan, usePlan } from "../../lib/plan";
 import { radius, space, type, useTheme } from "../../lib/theme";
 
 // the answer first (your plan: your number and how you get there), then your accounts growing, what-ifs
@@ -41,7 +40,30 @@ const keyLabel = (k: string) => `${MON[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
  * balance over time, each account filling up), the month-by-month table, and what-ifs. This month's
  * to-dos are on Home. Your priority order lives in Settings.
  */
-export default function Forecast() {
+/** Every Forecast view but What if is your real plan: what you're trying out stays on What if. */
+export default function ForecastScreen() {
+  const { view } = useLocalSearchParams<{ view?: string }>();
+  return (
+    <RealPlan.Provider value={viewOf(view) !== "whatif"}>
+      <Forecast />
+    </RealPlan.Provider>
+  );
+}
+
+/** What-ifs are on (they show on What if, not here). */
+function WhatIfsOnNote({ onOpen }: { onOpen: () => void }) {
+  const t = useTheme();
+  const on = useStore((s) => hasWhatIf(s.plan.whatif) || !!s.plan.adjustments?.length);
+  if (!on) return null;
+  return (
+    <Text style={[type.caption, { color: t.text3 }]}>
+      Your plan as you've set it.{" "}
+      <Text role="link" onPress={onOpen} style={{ color: t.warn, fontWeight: "700" }}>You're trying what-ifs: see them →</Text>
+    </Text>
+  );
+}
+
+function Forecast() {
   const t = useTheme();
   const { twoColumn, contentWidth } = useLayout();
   const compact = contentWidth < 600;
@@ -149,12 +171,15 @@ export default function Forecast() {
           <>
             <View style={[styles.vsRow, { borderTopColor: t.border }]}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flex: 1, minWidth: 0 }}>
-                <Text style={[type.label, { color: t.text2 }]} numberOfLines={1}>vs. plan since {keyLabel(vs.since)}</Text>
-                <InfoTip text={vsInfo} label="vs. plan" open={vsTip} onToggle={setVsTip} />
+                <View style={{ flexShrink: 1 }}>
+                  <Text style={[type.label, { color: vs.total >= 0 ? t.good : t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
+                    {vs.total >= 0 ? "Ahead of plan by " : "Behind plan by "}
+                    {money(Math.abs(vs.total), { whole: true })}
+                  </Text>
+                  <Text style={[type.caption, { color: t.text3 }]}>Your balances vs what your plan expected, since {keyLabel(vs.since)}</Text>
+                </View>
+                <InfoTip text={vsInfo} label="Ahead or behind plan" open={vsTip} onToggle={setVsTip} />
               </View>
-              <Text style={[type.label, { color: vs.total >= 0 ? t.good : t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>
-                {money(Math.abs(vs.total), { whole: true })} {vs.total >= 0 ? "ahead" : "behind"}
-              </Text>
             </View>
             {vsTip ? <InfoText text={vsInfo} /> : null}
           </>
@@ -226,7 +251,7 @@ export default function Forecast() {
           Only what you've set: your paychecks, your employer's match, debt payments, and what you assign in Budget. Money you haven't assigned isn't added anywhere.
         </Text>
       ) : null}
-      {tab === "overview" && asTable ? <WhatIfBanner /> : null}
+      {tab === "overview" && asTable ? <WhatIfsOnNote onOpen={() => go("whatif")} /> : null}
       {tab === "overview" && asTable ? (
         <AccountsForecast key={pick ?? "all"} state={state} o={real} start={start} fill initialPick={pick} compare={whatIfOn ? { plan: forecastReal, d: realD } : undefined} />
       ) : tab === "whatif" ? (
@@ -281,7 +306,7 @@ export default function Forecast() {
         </ScrollView>
       ) : (
         <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
-          <WhatIfBanner />
+          <WhatIfsOnNote onOpen={() => go("whatif")} />
           {state.emergency?.active ? (
             <Card style={{ backgroundColor: t.warnSoft, borderColor: t.warn }}>
               <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Paused for emergency mode through {longMonth(state.emergency.until)}</Text>

@@ -3,12 +3,12 @@
  * it's worked out in five steps that open one at a time, then the other kinds of FI (folded away).
  * What-ifs live on Forecast; the withdrawal rate is a real setting, so it stays in step 3.
  */
-import { ACCESS_AGE, baristaFi, DISPLAY_INFLATION, earlyAccess, extraToRetire, FAT_FACTOR, fireBreakdown, fiLevels, inFutureDollars, investingNow, investingStarts, mortgagePayoffs, retireAgeOnPlan } from "@coastfi/engine";
+import { ACCESS_AGE, baristaFi, DISPLAY_INFLATION, earlyAccess, extraToRetire, FAT_FACTOR, fireBreakdown, fiLevels, inFutureDollars, investingNow, investingSplit, investingStarts, mortgagePayoffs, retireAgeOnPlan, finalAndFire, type WhatIf } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { money, monthLabel, percent } from "../lib/format";
-import { usePlan } from "../lib/plan";
+import { NO_WHATIF, usePlan } from "../lib/plan";
 import { useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Select } from "./form";
@@ -166,54 +166,151 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
       ? `On your plan you'd have about ${whole(b.planValue)} at ${d.retireAge}. Paying for ${setAsideFor} (${whole(setAside)}) uses all of it first, so nothing is left for your monthly spending${incomeMo > 0.5 ? `: only the ${whole(incomeMo)}/mo that comes in on its own` : ""}.`
       : `On your plan you'd have about ${whole(b.planValue)} at ${d.retireAge}.${setAside > 0.5 ? ` After ${whole(setAside)} for ${setAsideFor},` : ""} taking out ${rate(b.swr)} a year pays about ${whole(Math.max(0, b.planSupports - b.income) / 12)}/mo${incomeMo > 0.5 ? `, plus ${whole(incomeMo)}/mo that comes in on its own` : ""}. You plan to spend ${whole(b.retireAnnual / 12)}/mo.`;
 
-  // how you get there: what you invest now, what it takes, and the other ways
+  // how you get there: what you invest now (and where it goes), then whether that's enough, and ways to close a gap
   const nowMo = investingNow(o);
+  const split = investingSplit(o);
   const startsIn = investingStarts(o);
   const nowSub =
     startsIn === null
       ? `Nothing on your plan goes into investments yet: after bills, nothing's left over. What you have, ${whole(b.invested)}, still grows.`
       : startsIn > 0
         ? `Starts ${monthLabel(start, startsIn)}: until then your plan pays debts or builds savings first. This is a typical month once it starts.`
-        : "A typical month this year on your plan, employer match included";
+        : "A typical month this year, employer match included";
+  const splitRows = [
+    { k: "401(k)", v: split.k401 },
+    { k: "Employer match", v: split.match },
+    { k: "IRA", v: split.ira },
+    { k: "HSA", v: split.hsa },
+    { k: "Brokerage", v: split.taxable },
+    { k: "Paying back your 401(k) loan", v: split.loanBack },
+    { k: "Other", v: split.other },
+  ].filter((x) => x.v > 0.5);
   // bills beyond income: the first part of any extra covers that
   const shortMo = o.plan.months.slice(0, 12).reduce((a, m) => a + m.shortfall, 0) / 12;
   const payoffs = mortgagePayoffs(state, o);
-  const owedSum = payoffs.reduce((a, p) => a + p.owedAtRetire, 0);
-  const tone = whatIf ? t.warn : t.text;
-  const more = (v: number) => (Number.isFinite(v) ? `${whole(v)}/mo more` : "Out of reach");
+  const spendMo = b.retireAnnual / 12;
+  const paysMo = b.planSupports / 12;
+  const gapMo = Math.max(0, spendMo - paysMo);
+  // the ways to close the gap, each enough on its own; tick any mix and see them together
+  type Way = { key: string; title: string; value: (f: number) => string; sub: string; apply: (w: WhatIf, f: number) => void };
+  const ways: Way[] = [];
+  if (Number.isFinite(extra) && extra > 0.5)
+    ways.push({ key: "extra", title: "Invest more", value: (f) => `${whole(extra * f)}/mo`, sub: `Every month until ${d.retireAge}, on top of today's ${whole(nowMo)}.${shortMo > 0.5 ? ` The first ${whole(shortMo)} covers bills beyond your pay.` : ""}`, apply: (w, f) => { w.extra = Math.round(extra * f); } });
+  if (laterAge !== null && laterAge > d.retireAge)
+    ways.push({ key: "later", title: "Retire later", value: (f) => `At ${d.retireAge + Math.ceil((laterAge - d.retireAge) * f - 1e-9)}`, sub: "Keep investing as you do now", apply: (w, f) => { const a = d.retireAge + Math.ceil((laterAge - d.retireAge) * f - 1e-9); if (a !== d.retireAge) w.retireAge = a; } });
+  if (spendMo > 0.5 && paysMo < spendMo - 0.5)
+    ways.push({ key: "spend", title: "Spend less in retirement", value: (f) => `${whole(spendMo - (spendMo - paysMo) * f)}/mo`, sub: `${whole(spendMo - paysMo)}/mo less than you planned, on its own`, apply: (w, f) => { w.spendDelta = -((spendMo - paysMo) * f) / spendMo; } });
+  for (const p of payoffs)
+    ways.push({ key: "loan:" + p.id, title: `Pay down ${p.name || "the mortgage"}`, value: (f) => `${whole(p.extra * f)}/mo`, sub: `More on the loan until ${d.retireAge} (on its own, enough to pay it off then)`, apply: (w, f) => { w.loanExtra = { ...(w.loanExtra ?? {}), [p.id]: Math.round(p.extra * f) }; } });
+  const [picked, setPicked] = useState<string[]>([]);
+  const chosen = ways.filter((x) => picked.includes(x.key));
+  const trial = useMemo(() => {
+    if (!chosen.length) return null;
+    const at = (f: number) => {
+      const w: WhatIf = { ...NO_WHATIF };
+      for (const x of chosen) x.apply(w, f);
+      const r = finalAndFire({ ...state, whatif: w }, start);
+      return { w, final: r.final, fire: r.fire, age: r.d.retireAge, f };
+    };
+    // one alone: all of it. Several: each at the same share, as small as gets you there together
+    if (chosen.length === 1) return at(1);
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 14; i++) {
+      const mid = (lo + hi) / 2;
+      const r = at(mid);
+      if (r.final + 0.5 >= r.fire) hi = mid;
+      else lo = mid;
+    }
+    return at(hi);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked.join(","), state, start]);
   const getThere = d.years <= 0 ? null : (
-    <Card style={{ gap: space.sm }}>
-      <SectionLabel>How you get there</SectionLabel>
-      {row("You invest now", `${whole(nowMo)}/mo`, { strong: true, sub: nowSub })}
-      <Divider />
-      {extra <= 0.5 ? (
-        <Text style={[type.caption, { color: t.good, fontWeight: "700" }]}>
-          You're on track: keep investing about {whole(nowMo)}/mo and you'll have {whole(b.fire)} by {d.retireAge}.
-        </Text>
-      ) : (
-        <>
-          {row(`To retire at ${d.retireAge}`, more(extra), { tone, sub: `Every month until ${d.retireAge}, on top of your plan.${shortMo > 0.5 ? ` Your bills run about ${whole(shortMo)}/mo more than your pay now, so that part covers them first.` : ""} It follows your plan's steps, so some may pay debts or build savings first.` })}
-          <Divider />
-          <Text style={[type.overline, { color: t.text3 }]}>Or, investing as you do now</Text>
-          {row("Retire later", laterAge === null ? "Not by 75" : `At ${laterAge}`, { tone, sub: laterAge === null ? "Your plan isn't enough at any age up to 75" : `Keep going until ${laterAge} and your plan is enough` })}
-          {row("Spend less in retirement", `${whole(b.planSupports / 12)}/mo`, { tone, sub: b.planSupports < 0.5 && setAsideFor ? `Your plan at ${d.retireAge} only covers ${setAsideFor}` : `What your plan pays for at ${d.retireAge}, instead of ${whole(b.retireAnnual / 12)}/mo` })}
-        </>
-      )}
-      {payoffs.length ? (
-        <>
-          <Divider />
-          {payoffs.map((p) => (
-            <View key={p.id}>
-              {row(`Pay off ${p.name || "the mortgage"} by ${d.retireAge}`, more(p.extra), {
-                tone,
-                sub: `Extra on the loan each month, on top of its payment. You'd owe ${whole(p.owedAtRetire)} at ${d.retireAge}; paid off, your FIRE number drops about ${whole(owedSum > 0 ? (b.homeBridge * p.owedAtRetire) / owedSum : 0)}.`,
-              })}
+    <>
+      <Card style={{ gap: space.sm }}>
+        <SectionLabel>What you invest</SectionLabel>
+        {row("You invest now", `${whole(nowMo)}/mo`, { strong: true, sub: nowSub })}
+        {splitRows.length > 1 ? (
+          <View style={[styles.split, { backgroundColor: t.surface2 }]}>
+            {splitRows.map((x) => <View key={x.k}>{row(x.k, `${whole(x.v)}/mo`)}</View>)}
+          </View>
+        ) : null}
+        <Text style={[type.caption, { color: t.text3 }]}>Where it goes follows your plan's priority order.</Text>
+        {link("Change the order", () => openPage("/settings/priorities"))}
+      </Card>
+      <Card style={{ gap: space.sm }}>
+        <SectionLabel>Are you on track?</SectionLabel>
+        {extra <= 0.5 ? (
+          <View style={[styles.verdict, { backgroundColor: t.goodSoft }]}>
+            <Text style={[type.label, { color: t.text, fontWeight: "800" }]}>On track ✓</Text>
+            <Text style={[type.caption, { color: t.text2 }]}>
+              Keep investing about {whole(nowMo)}/mo and at {d.retireAge} your savings would pay {whole(paysMo)}/mo, for the {whole(spendMo)}/mo you plan to spend.
+            </Text>
+          </View>
+        ) : null}
+        {extra <= 0.5 ? (
+          link("Try what-ifs (retire earlier, spend more)", () => toView("whatif"))
+        ) : (
+          <>
+            <View style={[styles.verdict, { backgroundColor: t.warnSoft }]}>
+              <Text style={[type.label, { color: t.text, fontWeight: "800" }]}>{gapMo > 0.5 ? `You're ${whole(gapMo)}/mo short` : "Not quite on track"}</Text>
+              <Text style={[type.caption, { color: t.text2 }]}>
+                At {d.retireAge} your savings would pay {whole(paysMo)}/mo. You want to spend {whole(spendMo)}/mo.
+              </Text>
             </View>
-          ))}
-        </>
-      ) : null}
-      {link("Try these in What if, or a Coast FI age", () => toView("whatif"))}
-    </Card>
+            {ways.length ? <Text style={[type.label, { color: t.text, fontWeight: "700", marginTop: space.xs }]}>Close the gap: tick any mix</Text> : null}
+            {ways.map((x, i) => {
+              const on = picked.includes(x.key);
+              return (
+                <View key={x.key}>
+                  {i > 0 ? <Divider /> : null}
+                  <Pressable
+                    role="checkbox"
+                    aria-checked={on}
+                    accessibilityLabel={`${x.title}: ${x.value(on && trial ? trial.f : 1)}`}
+                    onPress={() => setPicked((p) => (on ? p.filter((k) => k !== x.key) : [...p, x.key]))}
+                    style={styles.way}
+                  >
+                    <View style={[styles.box, { borderColor: on ? t.warn : t.border, backgroundColor: on ? t.warn : "transparent" }]}>
+                      {on ? <Icon name="check" size={14} color="#fff" /> : null}
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[type.body, { color: t.text }]}>{x.title}</Text>
+                      <Text style={[type.caption, { color: t.text3 }]}>{on && trial && chosen.length > 1 ? `With the others. On its own: ${x.value(1)}` : x.sub}</Text>
+                    </View>
+                    <Text style={[type.body, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{x.value(on && trial ? trial.f : 1)}</Text>
+                  </Pressable>
+                </View>
+              );
+            })}
+            {trial ? (
+              <View style={[styles.verdict, { backgroundColor: trial.final + 0.5 >= trial.fire ? t.goodSoft : t.warnSoft, marginTop: space.xs }]}>
+                <Text style={[type.label, { color: t.text, fontWeight: "800" }]}>
+                  {trial.final + 0.5 >= trial.fire
+                    ? `With ${chosen.length === 1 ? "this" : `these ${chosen.length}`}: on track ✓`
+                    : `With ${chosen.length === 1 ? "this" : `these ${chosen.length}`}: still ${whole(trial.fire - trial.final)} short`}
+                </Text>
+                <Text style={[type.caption, { color: t.text2 }]}>
+                  About {whole(trial.final)} invested at {trial.age}, for a FIRE number of {whole(trial.fire)}
+                  {trial.final > trial.fire + 0.5 ? ` (${whole(trial.final - trial.fire)} to spare)` : ""}.
+                </Text>
+              </View>
+            ) : null}
+            <Pressable
+              role="button"
+              onPress={() => {
+                if (trial) update((p) => { p.whatif = { ...trial.w }; });
+                toView("whatif");
+              }}
+              style={[styles.cta, { backgroundColor: t.warn }]}
+            >
+              <Text style={[type.label, { color: "#fff", fontWeight: "700" }]}>{trial ? "Open in What if" : "Try your own mix in What if"}</Text>
+            </Pressable>
+            <Text style={[type.caption, { color: t.text3 }]}>Fine-tune there; nothing changes your plan until you make it yours.</Text>
+          </>
+        )}
+      </Card>
+    </>
   );
 
   // retiring before 59½: the years until then are paid from money you can reach early (brokerage)
@@ -221,25 +318,34 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
   const yrs = (v: number) => (Math.abs(v - Math.round(v)) < 0.01 ? `${Math.round(v)}` : v.toFixed(1));
   const beforeAccess = !early ? null : (
     <Card style={{ gap: space.sm }}>
-      <SectionLabel>Before 59½</SectionLabel>
+      <SectionLabel>Can you reach enough before 59½?</SectionLabel>
       <Text style={[type.caption, { color: t.text2 }]}>
-        You retire at {d.retireAge}. 401(k)s and IRAs can't be touched without a 10% penalty until 59½, so the {yrs(early.years)} years in between are paid from your brokerage.
+        You retire at {d.retireAge}. 401(k)s and IRAs charge a 10% penalty until 59½, so those {yrs(early.years)} years come from money you can reach: your brokerage.
       </Text>
-      {row(`Spending for ${yrs(early.years)} years`, whole(early.spending))}
-      {early.income > 0.5 ? row("Income that comes in by then", `− ${whole(early.income)}`) : null}
-      {early.health > 0.5 ? row("Health insurance until then", `+ ${whole(early.health)}`, { sub: "Beyond what you'd pay on Medicare" }) : null}
-      {early.mortgage > 0.5 ? row("Mortgage left when you retire", `+ ${whole(early.mortgage)}`, { sub: "Your number pays it off when you retire" }) : null}
-      <Divider />
-      {row("You need early", whole(early.need), { strong: true })}
-      {row("Your brokerage then", whole(early.reachable), { sub: `On your plan at ${d.retireAge}` })}
+      {row(`You'll need from ${d.retireAge} to 59½`, whole(early.need), { strong: true })}
+      <View style={[styles.split, { backgroundColor: t.surface2 }]}>
+        {row(`Spending, ${yrs(early.years)} years`, whole(early.spending))}
+        {early.income > 0.5 ? row("Income that comes in by then", `− ${whole(early.income)}`) : null}
+        {early.health > 0.5 ? row("Health insurance until then", `+ ${whole(early.health)}`, { sub: "Beyond what you'd pay on Medicare" }) : null}
+        {early.mortgage > 0.5 ? row("Mortgage payments left", `+ ${whole(early.mortgage)}`, { sub: "After you retire, interest included" }) : null}
+      </View>
+      {row(`Your brokerage at ${d.retireAge}`, whole(early.reachable), { sub: "On your plan" })}
       {early.short > 0.5 ? (
         <>
-          {row("Short", whole(early.short), { strong: true, tone: t.bad })}
-          {row("Into brokerage", `${whole(early.extraMonthly)}/mo more`, { tone, sub: `Every month until ${d.retireAge}. Putting it there instead of a 401(k) or IRA keeps the total the same, but you can reach it early.` })}
+          <View style={[styles.verdict, { backgroundColor: t.warnSoft }]}>
+            <Text style={[type.label, { color: t.text, fontWeight: "800" }]}>{whole(early.short)} short of money you can reach</Text>
+            <Text style={[type.caption, { color: t.text2 }]}>This is about where your money is, not how much: too much of it is in accounts you can't touch until 59½.</Text>
+          </View>
+          <Text style={[type.label, { color: t.text, fontWeight: "700", marginTop: space.xs }]}>The fix: move, not more</Text>
+          {row("Send to your brokerage instead", `${whole(early.extraMonthly)}/mo`, {
+            sub: `Of what you already invest, so ${whole(early.extraMonthly)}/mo goes to your brokerage instead of a 401(k) or IRA until ${d.retireAge}. Same total. Keep your 401(k) at least up to your employer's full match.`,
+          })}
+          {link("Change my plan's order", () => openPage("/settings/priorities"))}
+          {extra > 0.5 ? <Text style={[type.caption, { color: t.text3 }]}>If you also invest more (above), put that in your brokerage too: it counts toward both.</Text> : null}
         </>
       ) : row("Covered", "✓", { strong: true, tone: t.good })}
       <Text style={[type.caption, { color: t.text3 }]}>
-        Only brokerage counts here. Roth IRA contributions (not growth), cash, and rules like regular early withdrawals from a 401(k) (72(t)) can also help, so this is on the safe side. In today's dollars; age {ACCESS_AGE} is when the penalty ends.
+        On the safe side: Roth IRA contributions (not growth), cash, and rules like regular early withdrawals from a 401(k) (72(t)) can also help, and aren't counted here. In today's dollars; age {ACCESS_AGE} is when the penalty ends.
       </Text>
     </Card>
   );
@@ -269,13 +375,23 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
           {link(b.income - b.rentalIncome > 0.5 ? "Change Social Security and pensions" : "Add Social Security or a pension", () => toView("retirement"))}
         </>)}
       {step(3, "Your FIRE number", whole(b.fire),
-        `Enough that taking out ${rate(b.swr)} a year covers it for life, plus what you need before other income starts and to finish any mortgage.`,
+        `Two parts: enough that taking out ${rate(b.swr)} a year covers your spending for life, plus money set aside for costs that end (paid monthly from your savings until they stop).`,
         <>
-          {row(`${whole(b.need)} ÷ ${rate(b.swr)}`, whole(b.base))}
+          <Text style={[type.overline, { color: t.text3, marginTop: space.xs }]}>For spending that lasts</Text>
+          {row(`${whole(b.need)} ÷ ${rate(b.swr)}`, whole(b.base), { sub: `What your savings pay a year, at a ${rate(b.swr)} withdrawal rate` })}
           {b.taxExtra > 0.5 ? row("Income tax on pre-tax money", `+ ${whole(b.taxExtra)}`, { sub: `${percent(d.taxRate)} tax on the ${percent(o.preShareFinal)} that's pre-tax` }) : null}
-          {b.bridge > 0.5 ? row("Until Social Security or a pension starts", `+ ${whole(b.bridge)}`) : null}
-          {b.healthBridge > 0.5 ? row("Health insurance until 65", `+ ${whole(b.healthBridge)}`, { sub: `${whole(state.healthcare)}/mo from ${d.retireAge} until Medicare` }) : null}
-          {b.homeBridge > 0.5 ? row("Mortgage payments left", `+ ${whole(b.homeBridge)}`, { sub: `From ${d.retireAge} until it's paid off, interest included: ${o.mortgagesAtRetire.map((x) => x.name || "Mortgage").join(", ")}` }) : null}
+          {b.bridge + b.healthBridge + b.homeBridge > 0.5 ? (
+            <Text style={[type.overline, { color: t.text3, marginTop: space.sm }]}>Set aside for costs that end</Text>
+          ) : null}
+          {b.bridge > 0.5 ? row("Until Social Security or a pension starts", `+ ${whole(b.bridge)}`, { sub: "Paid monthly from your savings until that income starts" }) : null}
+          {b.healthBridge > 0.5 ? row("Health insurance until 65", `+ ${whole(b.healthBridge)}`, { sub: `${whole(state.healthcare)}/mo from ${d.retireAge} until Medicare, beyond Medicare's cost` }) : null}
+          {o.mortgagesAtRetire.map((x) => (
+            <View key={x.id}>
+              {row(`Mortgage payments left: ${x.name || "Mortgage"}`, `+ ${whole(x.months === null ? x.balance : x.total)}`, {
+                sub: x.months === null ? "Its payment never pays it off, so this pays off what's owed then" : `Paid monthly from ${d.retireAge} until it ends in ${monthLabel(start, Math.round(yearsToRetire * 12) + x.months)}, interest included`,
+              })}
+            </View>
+          ))}
           <Divider />
           {row("FIRE number", whole(b.fire), { strong: true, sub: b.fire > 0.5 ? `About ${whole(inFutureDollars(b.fire, yearsToRetire))} in ${retireYear} dollars (${percent(DISPLAY_INFLATION)} inflation a year)` : undefined })}
           <View style={[styles.row, { flexWrap: "wrap", marginTop: space.xs }]}>
@@ -379,6 +495,11 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
 const styles = StyleSheet.create({
+  split: { borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.xs },
+  verdict: { borderRadius: radius.md, padding: space.md, gap: 4 },
+  way: { flexDirection: "row", alignItems: "flex-start", gap: space.md, paddingVertical: space.sm },
+  box: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, alignItems: "center", justifyContent: "center", marginTop: 1 },
+  cta: { borderRadius: radius.md, paddingVertical: 12, alignItems: "center", marginTop: space.sm },
   row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: 3 },
   stepHead: { flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 36 },
   num: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },

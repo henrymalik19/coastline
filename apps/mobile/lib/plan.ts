@@ -1,5 +1,6 @@
-import { averageSpent, derive, k401Cost, run, simulatePlan, type Derived, type LimitsRow, type MonthRow, type PlanResult, type PlanState, type RunResult, type SpentAverage, type Txn } from "@coastfi/engine";
+import { averageSpent, derive, k401Cost, run, simulatePlan, type Derived, type LimitsRow, type MonthRow, type PlanResult, type PlanState, type RunResult, type SpentAverage, type Txn, type WhatIf } from "@coastfi/engine";
 import { withProperties } from "@coastfi/schema";
+import { createContext, useContext } from "react";
 import { useLimits } from "./limits";
 import { money } from "./format";
 import { useStore } from "./store";
@@ -77,6 +78,14 @@ type PlanRun = {
   whatIfOn: boolean;
 };
 
+/** No what-ifs: the sliders at rest. */
+export const NO_WHATIF: WhatIf = { extra: 0, retDelta: 0, spendDelta: 0 };
+/** Any slider-style what-if on (extra saving, returns, spending, another retirement age, more on a loan). */
+export const hasWhatIf = (w?: Partial<WhatIf>): boolean =>
+  !!w && (!!w.extra || !!w.retDelta || !!w.spendDelta || w.retireAge !== undefined || Object.values(w.loanExtra ?? {}).some((v) => v > 0));
+/** The plan with no what-ifs (sliders or one-off months): your real plan. */
+export const withoutWhatIfs = (s: PlanState): PlanState => (hasWhatIf(s.whatif) || s.adjustments?.length ? { ...s, whatif: NO_WHATIF, adjustments: [] } : s);
+
 /**
  * One engine run per saved plan, shared by every screen piece that calls usePlan. (A useMemo in
  * each caller ran the whole engine once per component on every edit, which made typing lag.)
@@ -88,11 +97,11 @@ function computePlan(saved: PlanState, start: Date, limits: LimitsRow[]): PlanRu
   const state = effectivePlan(saved, limits);
   const result = run(state, start);
   const oneOffs = hasOneOffs(state, start);
-  const whatIfOn = !!(state.whatif && (state.whatif.extra || state.whatif.retDelta || state.whatif.spendDelta)) || oneOffs;
-  const real = state.whatif?.extra || state.adjustments?.length ? { ...state, whatif: { extra: 0, retDelta: 0, spendDelta: 0 }, adjustments: [] } : state;
+  const whatIfOn = hasWhatIf(state.whatif) || oneOffs;
+  const real = withoutWhatIfs(state);
   const actual = real !== state ? simulatePlan(real, derive(real, start)) : result.plan;
   // the Forecast tab shows what-ifs; the same plan without any marks what they changed
-  const noWhatIf = whatIfOn ? { ...state, whatif: { extra: 0, retDelta: 0, spendDelta: 0 }, adjustments: [] } : state;
+  const noWhatIf = whatIfOn ? withoutWhatIfs(state) : state;
   const realD = noWhatIf === state ? result.d : derive(noWhatIf, start);
   const forecastReal = simulatePlan(noWhatIf, realD, { autoFill: false });
   const forecast = whatIfOn ? simulatePlan(state, result.d, { autoFill: false }) : forecastReal;
@@ -166,7 +175,25 @@ export function usePlan(): PlanRun {
   // (a stable object: a transaction edit that doesn't move any average doesn't re-render)
   const avg = useStore((s) => spentAverages(s.txns, s.plan, month));
   const limits = useLimits((s) => s.rows);
-  return computePlan(withSpent(withBanks(saved, bank, txns), avg), start, limits);
+  const input = withSpent(withBanks(saved, bank, txns), avg);
+  return useContext(RealPlan) ? computeReal(input, start, limits) : computePlan(input, start, limits);
+}
+
+/**
+ * Inside this, usePlan is your real plan, with no what-ifs (Forecast → Overview and its table): what
+ * you've set, never what you're trying out.
+ */
+export const RealPlan = createContext(false);
+/** The real plan's run, kept apart from the shared one (so switching pages doesn't rerun either). */
+let realShared: { input: PlanState; start: Date; limits: LimitsRow[]; value: PlanRun } | null = null;
+function computeReal(input: PlanState, start: Date, limits: LimitsRow[]): PlanRun {
+  if (!hasWhatIf(input.whatif) && !input.adjustments?.length) return computePlan(input, start, limits);
+  if (realShared && realShared.input === input && realShared.start === start && realShared.limits === limits) return realShared.value;
+  const keep = shared;
+  const value = computePlan(withoutWhatIfs(input), start, limits);
+  shared = keep; // the what-if run stays cached for everyone else
+  realShared = { input, start, limits, value };
+  return value;
 }
 
 /** Plain-English line for a month that comes up short. */

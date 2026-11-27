@@ -15,7 +15,7 @@ import { debtItPays } from "../lib/debtLink";
 import { debtLabel } from "../lib/debts";
 import { Card, Divider } from "./ui";
 import { groupOf, groupOrder } from "../lib/budgetOrder";
-import { money } from "../lib/format";
+import { money, monthLabel } from "../lib/format";
 import { usePlan } from "../lib/plan";
 import { useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
@@ -24,7 +24,7 @@ type Source = "plan" | "avg" | "own";
 
 export function RetirementEssentials() {
   const t = useTheme();
-  const { state, result } = usePlan();
+  const { state, result, start } = usePlan();
   const update = useStore((s) => s.update);
   const d = result.d;
   // investing categories (money moved into an account) aren't spending, so they aren't here
@@ -129,8 +129,8 @@ export function RetirementEssentials() {
         <View style={[styles.sum, { borderTopColor: t.border }]}>{line("Total", d.retireMonthlyBudget, undefined, true)}</View>
         {homeBridge > 0.5 || d.healthBridge > 0.5 ? (
           <>
-            <Text style={[type.caption, { color: t.text3, marginTop: space.sm }]}>Plus, in your number for costs that end:</Text>
-            {homeBridge > 0.5 ? line("Mortgage payments left", homeBridge, `after you retire, interest included`) : null}
+            <Text style={[type.caption, { color: t.text3, marginTop: space.sm }]}>Plus, set aside in your number for costs that end (paid monthly from your savings until they stop):</Text>
+            {homeBridge > 0.5 ? line("Mortgage payments left", homeBridge, "until it ends, interest included") : null}
             {d.healthBridge > 0.5 ? line("Health insurance until 65", d.healthBridge, "beyond Medicare's cost") : null}
           </>
         ) : null}
@@ -176,28 +176,57 @@ export function RetirementEssentials() {
                 if (linked) {
                   const left = owedAtRetire.find((x) => x.id === linked.id);
                   const escrow = linked.kind === "mortgage" ? Math.min(Math.max(0, linked.escrow ?? 0), linked.minPayment) : 0;
-                  const note = left
-                    ? left.months !== null
-                      ? `${left.months} payment${left.months === 1 ? "" : "s"} left after you retire, about ${money(left.total, { whole: true })} with interest, in your number.`
-                      : `${money(left.balance, { whole: true })} still owed when you retire, in your number.`
-                    : linked.kind === "mortgage" && linked.balance > 0
-                      ? "Paid off before you retire."
-                      : "Counted from Debts until it's paid off.";
+                  const retireM = d.years * 12;
+                  // when it's paid off on your plan, if before you retire
+                  const paidAt = left ? null : result.plan.months.findIndex((m) => (m.debts.find((x) => x.id === linked.id)?.balance ?? 0) <= 0.5);
+                  const endM = left ? (left.months === null ? null : retireM + left.months) : paidAt !== null && paidAt >= 0 ? paidAt : null;
+                  const stage = (when: string, amount: number, note: string, end?: boolean) => (
+                    <View style={styles.stage}>
+                      <View style={[styles.dot, { backgroundColor: end ? t.good : t.accent }]} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[type.body, { color: t.text }]}>{when}</Text>
+                        <Text style={[type.caption, { color: t.text3 }]}>{note}</Text>
+                      </View>
+                      <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(amount, { whole: true })}/mo</Text>
+                    </View>
+                  );
                   return (
                     <View key={b.id}>
                       {sep}
                       <View style={styles.item}>
                         <View style={styles.row}>
                           <Text style={[type.body, { color: t.text, fontWeight: "600", flex: 1 }]} numberOfLines={1}>{name}</Text>
-                          <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(escrow, { whole: true })}<Text style={[type.caption, { color: t.text3 }]}>/mo</Text></Text>
+                          <Icon name="lock" size={12} color={t.text3} />
+                          <Text style={[type.caption, { color: t.text3 }]}>from Debts</Text>
                         </View>
-                        <View style={{ flexDirection: "row", gap: 6 }}>
-                          <View style={{ paddingTop: 2 }}><Icon name="lock" size={12} color={t.text3} /></View>
-                          <Text style={[type.caption, { color: t.text3, flex: 1 }]}>
-                            Pays your {debtLabel(linked)} {what(linked)}, from Debts. {note}
-                            {escrow > 0.5 ? ` Its taxes & insurance (${money(escrow, { whole: true })}/mo) keep going.` : ""}
-                          </Text>
+                        <Text style={[type.caption, { color: t.text3 }]}>Pays your {debtLabel(linked)} {what(linked)}.</Text>
+                        <View style={[styles.timeline, { borderLeftColor: t.border }]}>
+                          {left ? (
+                            <>
+                              {stage(`Now – age ${d.retireAge}`, linked.minPayment, "From your paycheck")}
+                              {left.months === null
+                                ? stage(`From ${d.retireAge}`, escrow, `Its payment never pays it off, so your number pays off the ${money(left.balance, { whole: true })} owed then.${escrow > 0.5 ? " Taxes & insurance keep going." : ""}`, true)
+                                : (
+                                  <>
+                                    {stage(
+                                      `${d.retireAge} – ${monthLabel(start, endM!)}`,
+                                      linked.minPayment,
+                                      `The loan part (${money(linked.minPayment - escrow, { whole: true })}) comes from savings set aside in your number: ${money(left.total, { whole: true })}, interest included${escrow > 0.5 ? `. Plus taxes & insurance (${money(escrow, { whole: true })})` : ""}`,
+                                    )}
+                                    {stage(`${monthLabel(start, endM!)} on`, escrow, escrow > 0.5 ? "Loan paid off. Taxes & insurance keep going" : "Loan paid off", true)}
+                                  </>
+                                )}
+                            </>
+                          ) : linked.balance > 0.5 && endM !== null ? (
+                            <>
+                              {stage(`Now – ${monthLabel(start, endM)}`, linked.minPayment, "From your paycheck")}
+                              {stage(`${monthLabel(start, endM)} on`, escrow, `Paid off before you retire${escrow > 0.5 ? ". Taxes & insurance keep going" : ""}`, true)}
+                            </>
+                          ) : (
+                            stage("Now on", escrow, escrow > 0.5 ? "Paid off. Taxes & insurance keep going" : "Paid off", true)
+                          )}
                         </View>
+                        {left ? <Text style={[type.caption, { color: t.text3 }]}>Nothing assumes you pay it off early. To see that, try "Pay down" on Your plan or What if.</Text> : null}
                       </View>
                     </View>
                   );
@@ -265,5 +294,8 @@ const styles = StyleSheet.create({
   item: { gap: 6, paddingVertical: space.sm },
   line: { flexDirection: "row", alignItems: "baseline", gap: space.sm, paddingVertical: 3 },
   sum: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: space.xs, paddingTop: space.xs },
+  stage: { flexDirection: "row", alignItems: "flex-start", gap: space.sm, paddingVertical: 4 },
+  dot: { width: 10, height: 10, borderRadius: 5, marginTop: 6, marginLeft: -16 },
+  timeline: { borderLeftWidth: 2, paddingLeft: space.md, marginLeft: 4, gap: 2 },
   loanBox: { gap: 6, borderRadius: 10, padding: space.sm, marginBottom: space.xs },
 });

@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
-import { usePlan } from "../lib/plan";
+import { hasWhatIf, NO_WHATIF, usePlan } from "../lib/plan";
 import { useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button } from "./form";
@@ -17,7 +17,7 @@ export function WhatIfBanner() {
   const update = useStore((s) => s.update);
   if (!whatIfOn) return null;
   const w = state.whatif;
-  const sliders = !!(w.extra || w.retDelta || w.spendDelta);
+  const sliders = hasWhatIf(w);
   return (
     <View role="status" style={[styles.box, { backgroundColor: t.warnSoft, borderColor: t.warn }]}>
       <Icon name="sliders" size={18} color={t.warn} />
@@ -28,7 +28,7 @@ export function WhatIfBanner() {
         </Text>
       </View>
       <View style={styles.actions}>
-        {sliders ? <Button title="Turn off" tone="primary" onPress={() => update((p) => { p.whatif = { extra: 0, retDelta: 0, spendDelta: 0 }; })} /> : null}
+        {sliders ? <Button title="Turn off" tone="primary" onPress={() => update((p) => { p.whatif = NO_WHATIF; })} /> : null}
         <Button title="See them" tone="ghost" onPress={() => router.push("/plan?view=whatif")} />
       </View>
     </View>

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   checksInMonth,
+  investingNow,
+  investingSplit,
   coastNumberAt,
   DEFAULT_LIMITS,
   derive,
@@ -895,5 +897,15 @@ describe("contributions already made this year, and the April 15 deadline", () =
     const s = base({ contributed: { year: 2026, k401: 0, ira: 7000, hsa: 0 } });
     const plan = simulatePlan(s, derive(s, apr));
     expect(plan.months[0]!.priorIra).toBe(0);
+  });
+});
+
+describe("where your investing goes", () => {
+  it("splits a typical month by account, and adds up to what you invest", () => {
+    const o = run(sampleState(), START);
+    const split = investingSplit(o);
+    const sum = Object.values(split).reduce((a, v) => a + v, 0);
+    expect(sum).toBeCloseTo(investingNow(o), 0);
+    expect(split.other).toBeLessThan(investingNow(o) * 0.05 + 1);
   });
 });
