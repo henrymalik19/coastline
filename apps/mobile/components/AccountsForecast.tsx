@@ -705,7 +705,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
                 <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Set amounts</Text>
               </Pressable>}
             </View>
-            <View style={[styles.editRow, compact ? { flexWrap: "nowrap", gap: 6, justifyContent: "flex-end" } : null]}>
+            <View style={[styles.editRow, compact ? { flexWrap: "nowrap", gap: 6, width: "100%" } : null]}>
               {pick === "all" ? (
                 <View style={[styles.arrows, { borderColor: t.border }]}>
                   <Pressable role="button" accessibilityLabel="Scroll the table left" onPress={() => scrollSide(-1)} hitSlop={4} style={styles.arrow}>
@@ -717,7 +717,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
                   </Pressable>
                 </View>
               ) : null}
-              <View style={[styles.arrows, { borderColor: t.border, alignItems: "center" }]}>
+              <View style={[styles.arrows, { borderColor: t.border, alignItems: "center" }, compact ? { flex: 1, justifyContent: "space-between" } : null]}>
                 <Pressable role="button" accessibilityLabel="Previous year" disabled={yr <= y0} onPress={() => setYear(yr - 1)} hitSlop={4} style={[styles.arrow, { opacity: yr <= y0 ? 0.35 : 1 }]}>
                   <Icon name="back" size={16} color={t.accent} />
                 </Pressable>
