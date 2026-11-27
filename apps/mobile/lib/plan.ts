@@ -1,11 +1,11 @@
-import { averageSpent, derive, k401Cost, run, simulatePlan, type Derived, type LimitsRow, type MonthRow, type PlanResult, type PlanState, type RunResult, type SpentAverage, type Txn, type WhatIf } from "@coastfi/engine";
+import { averageSpent, budgetCategories, budgetView, derive, k401Cost, run, simulatePlan, type Derived, type LimitsRow, type MonthRow, type PlanResult, type PlanState, type RunResult, type SpentAverage, type Txn, type WhatIf } from "@coastfi/engine";
 import { withProperties } from "@coastfi/schema";
 import { createContext, useContext } from "react";
 import { useLimits } from "./limits";
 import { money } from "./format";
 import { useStore } from "./store";
 import { syncPaycheckLoans } from "./loans";
-import { cardMap, foldSavingsLines, hasOldSavingsLines, hasRegister } from "./register";
+import { cardMap, foldSavingsLines, hasOldSavingsLines, hasRegister, liveBudget, todayIso } from "./register";
 import { usePlaid } from "./plaidState";
 import { withBankBalances, type BankAccount } from "./plaidMatch";
 import { estimateBracket } from "./tax";
@@ -166,6 +166,41 @@ function withSpent(base: PlanState, avg: SpentAverage): PlanState {
   return value;
 }
 
+/**
+ * Each credit card's payment money on Budget this month (what's set aside to pay it). That part of the
+ * card is spending you'll pay off, not debt you carry, so the plan doesn't pay it a second time. The
+ * same object while the amounts don't change (so a transaction that doesn't move them doesn't rerun it).
+ */
+let coverCache: { base: PlanState; txns: Txn[]; start: Date; limits: LimitsRow[]; value: Record<string, number> | undefined } | null = null;
+function cardsCovered(base: PlanState, txns: Txn[], start: Date, limits: LimitsRow[]): Record<string, number> | undefined {
+  if (coverCache && coverCache.base === base && coverCache.txns === txns && coverCache.start === start && coverCache.limits === limits) return coverCache.value;
+  const cards = cardMap(base);
+  const month = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`;
+  let value: Record<string, number> | undefined;
+  if (base.budgetPlan && month >= base.budgetPlan.start && Object.keys(cards).length) {
+    const state = effectivePlan(base, limits);
+    const r = run(state, start);
+    const v = budgetView(liveBudget(state, txns), budgetCategories(state, r.d, r.plan, start, month), month, { txns, cards, asOf: todayIso(start) });
+    const out: Record<string, number> = {};
+    for (const [id, key] of Object.entries(cards)) {
+      const a = v.lines[key]?.available ?? 0;
+      if (a > 0.005) out[id] = Math.round(a * 100) / 100;
+    }
+    if (Object.keys(out).length) value = out;
+  }
+  if (coverCache && JSON.stringify(coverCache.value) === JSON.stringify(value)) value = coverCache.value;
+  coverCache = { base, txns, start, limits, value };
+  return value;
+}
+let coverOverlay: { base: PlanState; covered: Record<string, number>; value: PlanState } | null = null;
+function withCover(base: PlanState, covered: Record<string, number> | undefined): PlanState {
+  if (!covered) return base;
+  if (coverOverlay && coverOverlay.base === base && coverOverlay.covered === covered) return coverOverlay.value;
+  const value = { ...base, cardsCovered: covered };
+  coverOverlay = { base, covered, value };
+  return value;
+}
+
 export function usePlan(): PlanRun {
   const saved = useStore((s) => s.plan);
   const bank = usePlaid((s) => s.accounts);
@@ -176,7 +211,9 @@ export function usePlan(): PlanRun {
   // (a stable object: a transaction edit that doesn't move any average doesn't re-render)
   const avg = useStore((s) => spentAverages(s.txns, s.plan, month));
   const limits = useLimits((s) => s.rows);
-  const input = withSpent(withBanks(saved, bank, txns), avg);
+  const allTxns = useStore((s) => s.txns);
+  const base = withSpent(withBanks(saved, bank, txns), avg);
+  const input = withCover(base, cardsCovered(base, allTxns, start, limits));
   return useContext(RealPlan) ? computeReal(input, start, limits) : computePlan(input, start, limits);
 }
 

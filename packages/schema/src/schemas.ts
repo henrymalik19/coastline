@@ -198,6 +198,8 @@ export const PlanStateSchema = z.object({
   retireAmountsFrom: z.literal("assigned").optional(),
   // worked out from your transactions by the app, never saved (the database has no place for it)
   spentAvg: z.object({ months: z.number(), by: z.record(z.string(), z.number()) }).optional(),
+  // laid over the plan by the app from Budget (never saved)
+  cardsCovered: z.record(z.string(), z.number()).optional(),
   currentInvestMonthly: nonNeg,
   incomes: z.array(IncomeSchema),
   budget: z.array(BudgetItemSchema),

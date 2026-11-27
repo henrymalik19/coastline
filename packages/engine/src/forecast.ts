@@ -1,5 +1,5 @@
 import { limitsFor } from "./limits";
-import { rateIn } from "./plan";
+import { coveredOf, coveredTotal, rateIn } from "./plan";
 import { num } from "./util";
 import { accountGroup, hsaEligibleIn, isSpouseIra } from "./schedule";
 import type { Derived, PlanAccount, PlanResult, PlanState } from "./types";
@@ -79,7 +79,7 @@ export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: 
     mk("taxable", startOf("taxable"), true, (i) => [0, rows[i]!.alloc.taxable, 0]),
     // accounts you marked as other investments: they grow, the plan doesn't add to them
     mk("other", startOf("other"), true, () => [0, 0, 0]),
-    mk("cash", d.bal.cash, false, (i) => [0, rows[i]!.alloc.ef + (plan.autoFill === false ? 0 : rows[i]!.alloc.leftover), 0], (i) => rows[i]!.cash),
+    mk("cash", d.bal.cash - coveredTotal(s), false, (i) => [0, rows[i]!.alloc.ef + (plan.autoFill === false ? 0 : rows[i]!.alloc.leftover), 0], (i) => rows[i]!.cash),
   ];
   // one-off goals: what's saved toward each
   for (const g of s.goals ?? []) {
@@ -96,8 +96,9 @@ export function accountForecasts(s: PlanState, d: Derived, plan: PlanResult, r: 
   }
   // each debt: what you pay it each month (minimum + extra) and what it still owes
   for (const dt of s.debts ?? []) {
-    const start = Math.max(0, num(dt.balance));
-    if (start <= 0) continue;
+    // a card covered by money set aside for it: only what isn't covered (none: it isn't listed)
+    const start = Math.max(0, num(dt.balance) - coveredOf(s, dt));
+    if (start <= 0.005) continue;
     const bal = (i: number) => (i < 0 ? start : rows[i]!.debts.find((x) => x.id === dt.id)?.balance ?? 0);
     out.push(
       mk(`debt:${dt.id}`, start, false, (i) => {

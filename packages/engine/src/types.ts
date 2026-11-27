@@ -392,6 +392,13 @@ export type PlanState = {
    * and laid over the plan by the app. Never saved. `months`: how many months it averages (0: none yet).
    */
   spentAvg?: SpentAverage;
+  /**
+   * Per credit card (debt id): how much of what it owes is already covered by the money set aside in its
+   * payment category on Budget (spending you'll pay off, not debt you carry). Laid over the plan by the
+   * app, never saved. The plan starts that card owing less and your cash lower by the same amount (that
+   * money pays the card); balances you see stay as they are.
+   */
+  cardsCovered?: Record<string, number>;
   currentInvestMonthly: number;
   incomes: Income[];
   budget: BudgetItem[];

@@ -57,6 +57,16 @@ export const k401Cost = (marginalTax: number, rothShare = 0): number => 1 - marg
  * minimums are paid; `avail = income - budget - minimums + whatif.extra` is poured
  * down `plan.steps`. Leftover goes to cash; a negative month draws from cash.
  */
+/** How much of a debt's balance is covered by money set aside for it (PlanState.cardsCovered), up to what it owes. */
+export function coveredOf(s: Pick<PlanState, "cardsCovered">, x: { id: string; balance: number }): number {
+  const c = num(s.cardsCovered?.[x.id]);
+  return c > 0 ? Math.min(c, Math.max(0, num(x.balance))) : 0;
+}
+/** All of it, across your debts. */
+export function coveredTotal(s: Pick<PlanState, "cardsCovered" | "debts">): number {
+  return s.cardsCovered ? (s.debts ?? []).reduce((a, x) => a + coveredOf(s, x), 0) : 0;
+}
+
 export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {}): PlanResult {
   // each account's own monthly amount adds into its kind (cash, IRA, HSA, brokerage)
   // what you assigned in the monthly budget counts for those months (savings and extra debt payments)
@@ -85,10 +95,11 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   const cg = num(s.contribGrowth);
   const thr = num(p.highApr) || 0.07;
 
-  let cash = d.bal.cash;
+  // a card's balance covered by money set aside for it on Budget: already paid, from your cash
+  let cash = d.bal.cash - coveredTotal(s);
   const debts: Debt[] = (s.debts ?? []).map((x) => ({
     ...x,
-    balance: num(x.balance),
+    balance: num(x.balance) - coveredOf(s, x),
     apr: num(x.apr),
     minPayment: num(x.minPayment),
   }));

@@ -8,7 +8,7 @@ export { checksInMonth } from "./paychecks";
 export { matchFor, rentalMonthly, resolveIncome } from "./match";
 export { limitsFor, DEFAULT_LIMITS } from "./limits";
 export { derive } from "./derive";
-export { simulatePlan, scheduleAmount, isHighInterest, paysExtra, rateIn, k401Cost, nextDue, setAsideFor, SHORTFALL_ID, DEFAULT_CARD_APR } from "./plan";
+export { simulatePlan, coveredOf, coveredTotal, scheduleAmount, isHighInterest, paysExtra, rateIn, k401Cost, nextDue, setAsideFor, SHORTFALL_ID, DEFAULT_CARD_APR } from "./plan";
 export { project, fireNumber, coastNumberAt, coastCrossing } from "./project";
 export { investFromTakeHome } from "./schedule";
 export { accountPlanKey, isKeptRentalDebt, keptRental, rentInRetirement, isRentalDebt, isSpouseIra, isSpendingItem, linkedAccount, linkedItemSchedules, budgetScheduleMonths, mergeAccountSchedules, payPerCheck, valueIn, hsaEligibleIn, isValueKey, ACCOUNT_KEY, PAY401, PAYHSA, PAYGROSS, PAYNET, PAYDED, HSAEMP, BUDGET_ITEM, HSA_ELIGIBLE } from "./schedule";
