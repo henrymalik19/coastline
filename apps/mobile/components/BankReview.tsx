@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { money } from "../lib/format";
-import { applyBanks, usePlaid } from "../lib/plaid";
+import { applyBanks, pullAfterSetup, usePlaid } from "../lib/plaid";
 import { bankLabel, bankSaysCash, isDebtLike, kindDiffers, matchOf, matchOptions, newFromBank, setMatch, type BankAccount } from "../lib/plaidMatch";
 import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
@@ -42,7 +42,11 @@ export function BankReview() {
   if (!review) return null;
   const item = items.find((i) => i.id === review);
   const list = all.filter((a) => a.item === review);
-  const close = () => usePlaid.setState({ review: undefined });
+  // done: bring in the matched accounts' transactions now (no reload needed)
+  const close = () => {
+    usePlaid.setState({ review: undefined });
+    pullAfterSetup();
+  };
   if (!item || !list.length) return null;
   const b = list[Math.min(step, list.length - 1)]!;
   const company = item.institution && item.institution !== "Bank" ? item.institution : undefined;

@@ -208,6 +208,29 @@ export const syncBanks = (force = false) =>
     await pullBankTxns();
   });
 
+/**
+ * After you set up a connection's accounts: bring in their transactions without a reload. A new
+ * connection's history often isn't ready at the bank yet, so it asks again a little later (twice),
+ * stopping once transactions come in.
+ */
+let following = false;
+export function pullAfterSetup(): void {
+  if (following || !BANKS_ON || !supabase) return;
+  following = true;
+  void (async () => {
+    try {
+      for (const wait of [0, 30_000, 120_000]) {
+        if (wait) await new Promise((r) => setTimeout(r, wait));
+        const before = useStore.getState().txns.length;
+        await syncBanks(true);
+        if (useStore.getState().txns.length > before) break;
+      }
+    } finally {
+      following = false;
+    }
+  })();
+}
+
 /* ---------- Plaid Link (web) ---------- */
 
 type LinkMeta = { institution?: { institution_id?: string; name?: string } | null };
