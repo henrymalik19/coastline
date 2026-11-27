@@ -77,6 +77,8 @@ export default function Home() {
   const yearsToRetire = Math.max(0, d.retireAge - d.age);
   const retireYear = start.getFullYear() + Math.round(yearsToRetire);
   const coastAgeCons = o.crossingC === null ? null : d.age + o.crossingC;
+  // the birthday you could stop investing: the first one by which you have enough (41 yrs 2 mo → 42)
+  const stopAt = (a: number) => Math.ceil(a - 1e-9);
 
   /* ---------- pieces ---------- */
   // no retirement spending yet: there's no number to show, so ask for the budget instead
@@ -92,22 +94,27 @@ export default function Home() {
         <View style={{ flex: 1, gap: space.xs }}>
           <Text style={[type.label, { color: t.text3 }]}>You can stop investing at</Text>
           <Text style={[type.display, { color: whatIfOn ? t.warn : t.text, fontSize: wide ? 40 : 30, lineHeight: wide ? 46 : 36 }]}>
-            {coastAge === null ? "Not yet" : o.crossing === 0 ? "Now" : `Age ${Math.floor(coastAge)}`}
+            {coastAge === null ? "Not yet" : o.crossing === 0 ? "Now" : `Age ${stopAt(coastAge)}`}
           </Text>
           <Text style={[type.caption, { color: t.text3 }]}>
             {coastAge === null
               ? "Not before your retirement age"
               : o.crossing! > 0
-                ? `${ageLabel(coastAge)} · ${monthLabel(start, Math.round(o.crossing! * 12))}`
+                ? `Enough by ${monthLabel(start, Math.round(o.crossing! * 12))} (${ageLabel(coastAge)})`
                 : "You've already reached Coast FI"}
           </Text>
+          {state.coastAge !== undefined && o.crossing !== 0 ? (
+            <Text style={[type.caption, { color: coastAge !== null && stopAt(coastAge) <= state.coastAge ? t.good : t.warn, fontWeight: "700" }]}>
+              {coastAge !== null && stopAt(coastAge) <= state.coastAge ? `Your goal: ${state.coastAge} ✓` : `Your goal: ${state.coastAge}`}
+            </Text>
+          ) : null}
         </View>
       </View>
       <View style={[styles.note, { backgroundColor: t.surface2 }]}>
         <Text style={[type.caption, { color: t.text2, flex: 1 }]}>
           If returns are 1.5 pts lower:{" "}
           <Text style={{ fontWeight: "600", color: t.text }}>
-            {coastAgeCons === null ? "not before retirement" : `age ${Math.floor(coastAgeCons)}`}
+            {coastAgeCons === null ? "not before retirement" : `age ${stopAt(coastAgeCons)}`}
           </Text>
         </Text>
       </View>

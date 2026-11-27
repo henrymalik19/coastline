@@ -312,7 +312,9 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     }
     const monthStr = y + "-" + String(mo + 1).padStart(2, "0");
     const inEmergency = !!em && monthStr <= em.until;
-    if (inEmergency && em!.pause401k && payPre > 0) {
+    // coasting (Coast FI reached, and you chose to stop investing): no 401(k), nothing new invested, until you retire
+    const coasting = d.coastStopMonth !== undefined && m >= d.coastStopMonth && m < d.years * 12;
+    if (((inEmergency && em!.pause401k) || coasting) && payPre > 0) {
       // stopping payroll 401(k) puts it back in the paycheck (after tax); the match stops with it
       income += payPre * backCost;
       payPre = 0;
@@ -470,8 +472,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       }
     };
 
-    if (inEmergency) {
-      // emergency: keep everything left over as cash (debt minimums were already paid)
+    if (inEmergency || coasting) {
+      // emergency, or coasting: keep everything left over as cash (debt minimums were already paid)
     } else if (mode === "current") {
       let inv = Math.min(avail, investFromTakeHome(s).monthly + extraMonthly);
       const toIra = Math.min(inv, capIra);
@@ -664,7 +666,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     }
 
     out.push({
-      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payRoth, payHsaEmployer, payHsa, setAside, setAsideBy, priorIra, priorHsa, ...(hasSpIra ? { iraSpouse: iraSp, priorIraSpouse: priorIraSp } : {}), payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency,
+      m, y, mo, income, checks, extraCheck, expenses, minPay, payPre, payMatch, payRoth, payHsaEmployer, payHsa, setAside, setAsideBy, priorIra, priorHsa, ...(hasSpIra ? { iraSpouse: iraSp, priorIraSpouse: priorIraSp } : {}), payCut, adjIncome, adjExpense, shortfall, borrowed, emergency: inEmergency, ...(coasting ? { coasting: true } : {}),
       alloc,
       cash,
       debtTotal: sum(debts.map((x) => x.balance)),

@@ -6,7 +6,7 @@
  * - The chart: your plan (teal) and the what-if (orange), with the range of market outcomes if you want it.
  * - Your accounts when you retire, on your plan and on the what-if.
  */
-import { accountForecasts, BUCKET_LABELS, finalAndFire, mortgagePayoffs, mortgagesAtRetirement, run, type AccountKey, type PlanState } from "@coastfi/engine";
+import { accountForecasts, BUCKET_LABELS, coastAgeOnPlan, finalAndFire, mortgagePayoffs, mortgagesAtRetirement, run, type AccountKey, type PlanState } from "@coastfi/engine";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { AdjustmentsCard } from "./AdjustmentsCard";
@@ -48,6 +48,10 @@ export function WhatIf() {
   const payoffs = useMemo(() => mortgagePayoffs(real, { d: realD, mortgagesAtRetire: mortgagesAtRetirement(real, realD, actual) }), [real, realD, actual]);
   const spendPlan = realD.retireMonthly;
   const retireAge = w.retireAge ?? state.retireAge;
+  // Coast FI: your goal (or, without one, the plan's own age), and what you're trying
+  const coastPlan = useMemo(() => coastAgeOnPlan(real, start), [real, start]);
+  const coastMine = state.coastAge ?? coastPlan ?? state.retireAge;
+  const coastAt = w.coastAge ?? coastMine;
 
   const setW = (fn: (x: PlanState["whatif"]) => void) => update((p) => { fn(p.whatif); });
   const reset = async () => {
@@ -62,6 +66,7 @@ export function WhatIf() {
   // what's on, in words
   const trying = [
     w.extra > 0 ? `invest ${money(w.extra, { whole: true })}/mo more` : "",
+    w.coastAge !== undefined ? `Coast FI at ${w.coastAge}` : "",
     w.retireAge !== undefined ? `retire at ${w.retireAge}` : "",
     w.spendDelta ? `spend ${money(spendPlan * (1 + w.spendDelta), { whole: true })}/mo` : "",
     w.retDelta ? `${percent(state.ret + w.retDelta, 2)} returns` : "",
@@ -111,6 +116,17 @@ export function WhatIf() {
         <View style={[styles.sliders, { flexDirection: twoColumn ? "row" : "column", flexWrap: "wrap" }]}>
           <SliderRow label="Invest more each month" value={`+${money(w.extra, { whole: true })}`} on={w.extra > 0}>
             <Slider label="Invest more each month" valueText={money(w.extra)} value={w.extra} min={0} max={3000} step={25} onChange={(v) => setW((x) => { x.extra = v; })} />
+          </SliderRow>
+          <SliderRow label={`Coast FI at (${state.coastAge !== undefined ? `yours: ${state.coastAge}` : `plan: ${coastPlan ?? state.retireAge}`})`} value={String(coastAt)} on={w.coastAge !== undefined}>
+            <Slider
+              label="Coast FI at, to try"
+              valueText={`age ${coastAt}`}
+              value={coastAt}
+              min={Math.floor(state.age) + 1}
+              max={Math.max(Math.floor(state.age) + 1, retireAge - 1)}
+              step={1}
+              onChange={(v) => setW((x) => { if (v === coastMine) delete x.coastAge; else x.coastAge = v; })}
+            />
           </SliderRow>
           <SliderRow label={`Retire at (yours: ${state.retireAge})`} value={String(retireAge)} on={w.retireAge !== undefined}>
             <Slider
@@ -243,11 +259,23 @@ export function WhatIf() {
 
       {whatIfOn ? (
         <Card style={{ gap: space.sm }}>
-          {w.retireAge !== undefined ? (
-            <Button title={`Make ${w.retireAge} my retirement age`} tone="primary" onPress={() => update((p) => { p.retireAge = w.retireAge!; delete p.whatif.retireAge; })} style={{ alignSelf: "flex-start" }} />
+          {w.retireAge !== undefined || w.coastAge !== undefined ? (
+            <Button
+              title={w.retireAge !== undefined && w.coastAge !== undefined ? "Make these my ages" : w.retireAge !== undefined ? `Make ${w.retireAge} my retirement age` : `Make ${w.coastAge} my Coast FI age`}
+              tone="primary"
+              onPress={() =>
+                update((p) => {
+                  if (w.retireAge !== undefined) p.retireAge = w.retireAge;
+                  if (w.coastAge !== undefined && w.coastAge < p.retireAge) p.coastAge = w.coastAge;
+                  delete p.whatif.retireAge;
+                  delete p.whatif.coastAge;
+                })
+              }
+              style={{ alignSelf: "flex-start" }}
+            />
           ) : null}
           <Text style={[type.caption, { color: t.text3 }]}>
-            {hasWhatIf({ ...w, retireAge: undefined })
+            {hasWhatIf({ ...w, retireAge: undefined, coastAge: undefined })
               ? "To make the rest real: invest more by lowering your budget or raising your income; change spending under Retirement spending; pay more on a mortgage from Debts and your priority order."
               : "One-month changes stay what-ifs until the month comes."}
           </Text>

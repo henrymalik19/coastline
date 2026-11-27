@@ -58,7 +58,8 @@ export function fullPlan(): PlanState {
       schedule: { cash: [{ from: "2026-11", amount: 500 }, { from: "2027-06", amount: 0, pct: 0.1 }], "debt:cc": [{ from: "2026-11", amount: 200 }] },
       scheduleMonths: { cash: { "2027-01": 1000, "2027-02": 0 } },
     },
-    whatif: { extra: 100, retDelta: -0.01, spendDelta: 0.1, retireAge: 52, loanExtra: { m: 250 } },
+    whatif: { extra: 100, retDelta: -0.01, spendDelta: 0.1, retireAge: 52, loanExtra: { m: 250 }, coastAge: 45 },
+    coastAge: 44,
     properties: [
       { id: "h", name: "840 Madison", kind: "home", value: 520000, mortgageId: "m", upkeep: 0.01 },
       { id: "rp", name: "710 Dillon", kind: "rental", value: 310000.5, mortgageId: "r", incomeId: "j2", taxInsurance: 4200 },

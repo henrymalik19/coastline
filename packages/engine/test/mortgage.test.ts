@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { amortize, derive, loanSchedule, run, scheduledPayment, type Debt, type PlanState } from "../src";
+import { amortize, coastAgeOnPlan, coastOk, coastWays, derive, loanSchedule, run, scheduledPayment, type Debt, type PlanState } from "../src";
 import { START } from "./fixtures";
 
 const blank = (over: Partial<PlanState> = {}): PlanState => ({
@@ -240,5 +240,55 @@ describe("what if: another retirement age, paying more on a loan", () => {
     // enough extra pays it off before you retire: nothing left then
     const lots = { ...s, whatif: { ...s.whatif, loanExtra: { m: 3000 } } };
     expect(run(lots, START).mortgagesAtRetire).toEqual([]);
+  });
+});
+
+describe("Coast FI by an age", () => {
+  it("a Coast FI age: whether your plan gets there, and from then no more investing until you retire", () => {
+    const s = blank({ age: 40, retireAge: 60, budget: [{ id: "f", name: "Food", amount: 2500, inRetirement: true }], accounts: [{ id: "k", name: "401(k)", type: "pretax", balance: 60_000, counts: "k401" }] });
+    const on = coastAgeOnPlan(s, START);
+    expect(on).not.toBeNull();
+    expect(coastOk(s, START, on!)).toBe(true);
+    expect(on!).toBeGreaterThan(40);
+    expect(coastOk(s, START, on! - 1)).toBe(false);
+    // stop investing at it: nothing new invested from then, until you retire
+    const stop = { ...s, coastAge: on! };
+    expect(derive(stop, START).coastAge).toBe(on);
+    const k = (on! - 40) * 12;
+    expect(derive(stop, START).coastStopMonth).toBe(k);
+    const o = run(stop, START);
+    expect(o.plan.months[k]!.coasting).toBe(true);
+    expect(o.plan.months[k]!.pre + o.plan.months[k]!.post).toBeCloseTo(0, 6);
+    expect(o.plan.months[k - 1]!.coasting).toBeUndefined();
+    // and growth alone still gets you to your number (Coast FI is reached by then)
+    expect(o.projectedFinal + 1).toBeGreaterThanOrEqual(o.fire);
+  });
+
+  it("a goal age that isn't reached: ways to get there, each enough on its own", () => {
+    // nothing invested yet and more to spend: by 41 is too soon
+    const s = blank({ age: 40, retireAge: 60, budget: [{ id: "f", name: "Food", amount: 3000, inRetirement: true }] });
+    const goal = 41;
+    expect(coastOk(s, START, goal)).toBe(false);
+    const w = coastWays(s, START, goal);
+    expect(w.extra).toBeGreaterThan(0);
+    expect(coastOk({ ...s, whatif: { ...s.whatif, extra: w.extra } }, START, goal)).toBe(true);
+    if (w.spendDelta !== null) expect(coastOk({ ...s, whatif: { ...s.whatif, spendDelta: w.spendDelta } }, START, goal)).toBe(true);
+    if (w.retireAge !== null) expect(coastOk({ ...s, whatif: { ...s.whatif, retireAge: w.retireAge } }, START, goal)).toBe(true);
+  });
+
+  it("a goal at or after your retirement age isn't a coast goal", () => {
+    const s = blank({ age: 40, retireAge: 60, coastAge: 60 });
+    expect(derive(s, START).coastAge).toBeUndefined();
+    expect(derive(s, START).coastStopMonth).toBeUndefined();
+  });
+});
+
+describe("when you could stop investing, with a Coast FI age set", () => {
+  it("is worked out as if you keep investing, so it still says when", () => {
+    const s = blank({ age: 40, retireAge: 60 });
+    const keep = run(s, START);
+    const stop = run({ ...s, coastAge: 41 }, START);
+    expect(keep.crossing).not.toBeNull();
+    expect(stop.crossing).toBeCloseTo(keep.crossing!, 6);
   });
 });

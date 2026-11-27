@@ -26,7 +26,7 @@ import { BankBar, BankConnections } from "../BankConnections";
 import { BudgetEditor } from "../BudgetEditor";
 import { RetirementEssentials } from "../RetirementEssentials";
 import { PlanSteps } from "../PlanSteps";
-import { Button, FieldRow, IconButton, NumberInput, Segmented, TextField, ToggleRow } from "../form";
+import { Button, FieldRow, IconButton, NumberInput, Segmented, Select, TextField, ToggleRow } from "../form";
 import { Icon, type IconName } from "../Icon";
 import { IncomesEditor } from "../IncomeEditor";
 import { EmergencyFundGoal, looksLikeEmergencyFund } from "../EmergencyFundNote";
@@ -193,8 +193,23 @@ function Profile() {
             <FieldRow key="age" label="Your age" info={HELP.age}>
               <NumberInput kind="int" label="Your age" value={state.age} max={100} onChange={(v) => update((p) => { p.age = v; })} />
             </FieldRow>,
-            <FieldRow key="ret" label="Age you'd like to retire" hint="When work becomes optional" info={HELP.retireAge}>
-              <NumberInput kind="int" label="Retirement age" value={state.retireAge} max={100} onChange={(v) => update((p) => { p.retireAge = v; })} />
+            <FieldRow
+              key="coast"
+              label="Coast FI at"
+              info="Coast FI is when what you've invested grows into your FIRE number by retirement on its own. Pick an age and your plan stops investing then: until you retire you only cover your bills (no 401(k) either). Plan decides: no coast years, your plan invests until you retire and shows when you could stop."
+            >
+              <Select
+                label="Coast FI at"
+                value={state.coastAge !== undefined ? String(state.coastAge) : "plan"}
+                options={[
+                  { value: "plan", label: "Plan decides" },
+                  ...Array.from({ length: Math.max(0, Math.round(state.retireAge) - Math.floor(state.age) - 1) }, (_, i) => Math.floor(state.age) + 1 + i).map((a) => ({ value: String(a), label: `Age ${a}` })),
+                ]}
+                onChange={(v) => update((p) => { if (v === "plan") delete p.coastAge; else p.coastAge = Number(v); })}
+              />
+            </FieldRow>,
+            <FieldRow key="ret" label="Retire at" hint="When work becomes optional" info={HELP.retireAge}>
+              <NumberInput kind="int" label="Retirement age" value={state.retireAge} max={100} onChange={(v) => update((p) => { p.retireAge = v; if (p.coastAge !== undefined && p.coastAge >= v) delete p.coastAge; })} />
             </FieldRow>,
             <FieldRow key="fs" label="How you file taxes" info={HELP.filingStatus} stacked>
   <Segmented

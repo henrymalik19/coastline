@@ -60,6 +60,10 @@ export function derive(s: PlanState, startDate: Date): Derived {
   const retireSpendingSet = num(s.retireSpending) > 0;
   const retireMonthly = (retireSpendingSet ? num(s.retireSpending) / 12 : retireMonthlyBudget) * (1 + (w.spendDelta || 0));
   const years = Math.max(0, Math.round(retireAge - s.age));
+  // Coast FI: your goal age (a what-if can try another), only when it's after today and before you retire
+  const coastWant = w.coastAge ?? s.coastAge;
+  const coastAge = coastWant !== undefined && coastWant > s.age && coastWant < retireAge ? coastWant : undefined;
+  const coastStopMonth = coastAge !== undefined ? Math.max(0, Math.round((coastAge - s.age) * 12)) : undefined;
 
   // income in retirement: the yearly total once everything has started, plus the savings
   // needed to cover whatever starts after you retire until it does (today's dollars)
@@ -92,6 +96,8 @@ export function derive(s: PlanState, startDate: Date): Derived {
     start: startDate,
     age: s.age,
     retireAge,
+    ...(coastAge !== undefined ? { coastAge } : {}),
+    ...(coastStopMonth !== undefined ? { coastStopMonth } : {}),
     years,
     r: s.ret - s.fee + (w.retDelta || 0),
     vol: s.vol,

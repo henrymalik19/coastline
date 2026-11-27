@@ -345,6 +345,8 @@ export type WhatIf = {
   retireAge?: number;
   /** More a month on a loan (debt id → amount), from now until you retire or it's paid off. */
   loanExtra?: Record<string, number>;
+  /** Coast FI by this age instead (a what-if; missing: your plan's goal). */
+  coastAge?: number;
 };
 
 /** One-off change to a single month: an unexpected bill, lost pay, or a bonus. */
@@ -363,6 +365,11 @@ export type PlanState = {
   version: 2;
   age: number;
   retireAge: number;
+  /**
+   * Coast FI at this age: from then your plan stops investing and you just cover your bills until you retire
+   * (missing: no coast years, your plan invests until you retire). Before your retirement age.
+   */
+  coastAge?: number;
   /** Health insurance a month from retirement until Medicare at 65. */
   healthcare: number;
   /**
@@ -554,6 +561,10 @@ export type Derived = {
   age: number;
   retireAge: number;
   years: number;
+  /** Your Coast FI goal age (what-if first), when it's before you retire. */
+  coastAge?: number;
+  /** Months from now until you stop investing (your Coast FI age), when you set one. */
+  coastStopMonth?: number;
   r: number;
   vol: number;
   swr: number;
@@ -667,6 +678,8 @@ export type MonthRow = {
   borrowed: number;
   /** This month is in emergency mode (waterfall paused, leftover kept as cash). */
   emergency: boolean;
+  /** Coasting: Coast FI reached and you chose to stop investing (nothing new invested, leftover kept as cash). */
+  coasting?: boolean;
   alloc: Alloc;
   cash: number;
   debtTotal: number;

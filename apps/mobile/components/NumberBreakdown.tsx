@@ -3,7 +3,7 @@
  * it's worked out in five steps that open one at a time, then the other kinds of FI (folded away).
  * What-ifs live on Forecast; the withdrawal rate is a real setting, so it stays in step 3.
  */
-import { ACCESS_AGE, baristaFi, DISPLAY_INFLATION, earlyAccess, extraToRetire, FAT_FACTOR, fireBreakdown, fiLevels, inFutureDollars, investingNow, investingSplit, investingStarts, mortgagePayoffs, retireAgeOnPlan, finalAndFire, type WhatIf } from "@coastfi/engine";
+import { ACCESS_AGE, baristaFi, DISPLAY_INFLATION, earlyAccess, extraToRetire, FAT_FACTOR, fireBreakdown, fiLevels, inFutureDollars, investingNow, investingSplit, investingStarts, mortgagePayoffs, retireAgeOnPlan, finalAndFire, coastAgeOnPlan, coastOk, coastWays, type WhatIf } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -125,26 +125,6 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
         </View>
       </View>
 
-      {/* how the two connect: your savings catch up with the Coast number, then growth does the rest */}
-      <View style={{ gap: 0 }}>
-        <Text style={[type.overline, { color: t.text3, marginBottom: space.sm }]}>On your plan</Text>
-        {pointRow(t.accent, `Today: ${whole(b.invested)} invested`, reached ? "Already past your Coast number." : `${whole(b.coastNow - b.invested)} short of your Coast number. It goes up a little each year (less time left to grow), so your savings have to catch it.`)}
-        {pointRow(
-          reached ? t.good : coastMonths === null ? t.bad : t.text3,
-          reached ? "Coast FI: reached" : coastMonths === null ? `Coast FI: not before ${d.retireAge}` : `Coast FI: ${when(coastMonths)}`,
-          reached || coastMonths !== null
-            ? `From here you could stop investing: what you have grows into ${whole(b.fire)} by ${d.retireAge}. You'd only need to cover today's bills.`
-            : "Your plan doesn't catch up before you retire. Saving more, spending less in retirement or retiring later would change that.",
-        )}
-        {pointRow(
-          fireMonths !== null && fireMonths <= retireMonths ? t.good : t.text3,
-          fireMonths !== null && fireMonths < retireMonths ? `FIRE number: ${when(fireMonths)}` : `Retire at ${d.retireAge}: ${whole(b.fire)}`,
-          fireMonths !== null && fireMonths < retireMonths
-            ? `Keep investing as planned and you'd have your FIRE number before ${d.retireAge}: you could retire then.`
-            : `About ${whole(b.planValue)} by then on your plan${b.planValue + 0.5 >= b.fire ? ", enough." : `, ${whole(b.fire - b.planValue)} short.`}`,
-          true,
-        )}
-      </View>
       {whatIf ? (
         <Text style={[type.caption, { color: t.warn, fontWeight: "700" }]}>
           Includes a what-if from Forecast (retirement spending {num(state.whatif?.spendDelta) >= 0 ? "+" : "−"}{Math.round(Math.abs(num(state.whatif?.spendDelta)) * 100)}%).
@@ -201,8 +181,7 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
   const spendMo = b.retireAnnual / 12;
   const paysMo = b.planSupports / 12;
   const gapMo = Math.max(0, spendMo - paysMo);
-  // the ways to close the gap, each enough on its own; tick any mix and see them together
-  type Way = { key: string; title: string; value: (f: number) => string; sub: string; apply: (w: WhatIf, f: number) => void };
+  // the ways to close the retirement gap, each enough on its own; tick any mix and see them together
   const ways: Way[] = [];
   if (Number.isFinite(extra) && extra > 0.5)
     ways.push({ key: "extra", title: "Invest more", value: (f) => `${whole(extra * f)}/mo`, sub: `Every month until ${d.retireAge}, on top of today's ${whole(nowMo)}.${shortMo > 0.5 ? ` The first ${whole(shortMo)} covers bills beyond your pay.` : ""}`, apply: (w, f) => { w.extra = Math.round(extra * f); } });
@@ -212,29 +191,94 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
     ways.push({ key: "spend", title: "Spend less in retirement", value: (f) => `${whole(spendMo - (spendMo - paysMo) * f)}/mo`, sub: `${whole(spendMo - paysMo)}/mo less than you planned, on its own`, apply: (w, f) => { w.spendDelta = -((spendMo - paysMo) * f) / spendMo; } });
   for (const p of payoffs)
     ways.push({ key: "loan:" + p.id, title: `Pay down ${p.name || "the mortgage"}`, value: (f) => `${whole(p.extra * f)}/mo`, sub: `More on the loan until ${d.retireAge} (on its own, enough to pay it off then)`, apply: (w, f) => { w.loanExtra = { ...(w.loanExtra ?? {}), [p.id]: Math.round(p.extra * f) }; } });
-  const [picked, setPicked] = useState<string[]>([]);
-  const chosen = ways.filter((x) => picked.includes(x.key));
-  const trial = useMemo(() => {
-    if (!chosen.length) return null;
-    const at = (f: number) => {
-      const w: WhatIf = { ...NO_WHATIF };
-      for (const x of chosen) x.apply(w, f);
-      const r = finalAndFire({ ...state, whatif: w }, start);
-      return { w, final: r.final, fire: r.fire, age: r.d.retireAge, f };
+  const retireTest = (w: WhatIf) => {
+    const r = finalAndFire({ ...state, whatif: w }, start);
+    const ok = r.final + 0.5 >= r.fire;
+    return {
+      ok,
+      title: ok ? "on track ✓" : `still ${whole(r.fire - r.final)} short`,
+      text: `About ${whole(r.final)} invested at ${r.d.retireAge}, for a FIRE number of ${whole(r.fire)}${r.final > r.fire + 0.5 ? ` (${whole(r.final - r.fire)} to spare)` : ""}.`,
     };
-    // one alone: all of it. Several: each at the same share, as small as gets you there together
-    if (chosen.length === 1) return at(1);
-    let lo = 0;
-    let hi = 1;
-    for (let i = 0; i < 14; i++) {
-      const mid = (lo + hi) / 2;
-      const r = at(mid);
-      if (r.final + 0.5 >= r.fire) hi = mid;
-      else lo = mid;
-    }
-    return at(hi);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [picked.join(","), state, start]);
+  };
+
+  // Coast FI: your goal age (if you set one), when your plan gets there, and ways to get there by your goal
+  const coastGoal = d.coastAge;
+  const reachedCoast = b.invested >= b.coastNow;
+  const planCoast = useMemo(() => (d.years > 0 ? coastAgeOnPlan(state, start) : null), [state, start, d.years]);
+  const goalOk = useMemo(() => (coastGoal === undefined ? true : reachedCoast || coastOk(state, start, coastGoal)), [state, start, coastGoal, reachedCoast]);
+  const cw = useMemo(() => (coastGoal !== undefined && !goalOk ? coastWays(state, start, coastGoal) : null), [state, start, coastGoal, goalOk]);
+  const coastWayList: Way[] = [];
+  if (coastGoal !== undefined && cw) {
+    const T = coastGoal;
+    if (Number.isFinite(cw.extra) && cw.extra > 0.5)
+      coastWayList.push({ key: "extra", title: `Invest more until ${T}`, value: (f) => `${whole(cw.extra * f)}/mo`, sub: "Then you could stop investing", apply: (w, f) => { w.extra = Math.round(cw.extra * f); } });
+    if (planCoast !== null && planCoast > T)
+      coastWayList.push({ key: "later", title: "Coast a bit later", value: (f) => `At ${T + Math.ceil((planCoast - T) * f - 1e-9)}`, sub: "Keep investing as you do now", apply: (w, f) => { const a = T + Math.ceil((planCoast - T) * f - 1e-9); if (a !== T) w.coastAge = a; } });
+    if (cw.spendDelta !== null)
+      coastWayList.push({ key: "spend", title: "Spend less in retirement", value: (f) => `${whole(spendMo * (1 + cw.spendDelta! * f))}/mo`, sub: "A smaller FIRE number is quicker to coast to", apply: (w, f) => { w.spendDelta = cw.spendDelta! * f; } });
+    if (cw.retireAge !== null)
+      coastWayList.push({ key: "retire", title: "Retire later", value: (f) => `At ${d.retireAge + Math.ceil((cw.retireAge! - d.retireAge) * f - 1e-9)}`, sub: `More years to grow, so less needed by ${T}`, apply: (w, f) => { const a = d.retireAge + Math.ceil((cw.retireAge! - d.retireAge) * f - 1e-9); if (a !== d.retireAge) w.retireAge = a; } });
+  }
+  const coastTest = (w: WhatIf) => {
+    const T = w.coastAge ?? coastGoal ?? d.retireAge;
+    const ok = coastOk({ ...state, whatif: w }, start, T);
+    return { ok, title: ok ? `Coast FI at ${T} ✓` : `still not Coast FI by ${T}`, text: ok ? `What you'd have by ${T} grows into your FIRE number by ${w.retireAge ?? d.retireAge} on its own.` : "Tick more, or open it in What if." };
+  };
+  const openMix = (w: WhatIf | null) => {
+    if (w) update((p) => { p.whatif = { ...w }; });
+    toView("whatif");
+  };
+
+  // the three ages: now, Coast FI, retire
+  const coastShown = reachedCoast ? Math.floor(d.age) : coastGoal ?? planCoast;
+  const merged = coastShown === null || coastShown >= d.retireAge;
+  const timeline =
+    d.years <= 0 ? null : (
+      <Card style={{ gap: space.sm }}>
+        <View style={styles.timeline}>
+          <View style={[styles.tlLine, { backgroundColor: t.border }]} />
+          <View style={styles.tlPoint}>
+            <View style={[styles.tlDot, { backgroundColor: t.accent, borderColor: t.surface }]} />
+            <Text style={[type.caption, { color: t.text3 }]}>Now</Text>
+            <Text style={[type.title, { color: t.text }]}>{Math.floor(d.age)}</Text>
+            <Text style={[type.caption, { color: t.text3, textAlign: "center" }]}>{whole(b.invested)} invested</Text>
+          </View>
+          {!merged ? (
+            <View style={styles.tlPoint}>
+              <View style={[styles.tlDot, { backgroundColor: goalOk ? t.accent : t.warnSoft, borderColor: goalOk ? t.surface : t.warn }]} />
+              <Text style={[type.caption, { color: t.text3 }]}>Coast FI</Text>
+              <Text style={[type.title, { color: t.text }]}>{reachedCoast ? "Now" : coastShown}</Text>
+              <Text style={[type.caption, { color: t.text3, textAlign: "center" }]}>
+                {reachedCoast ? "reached ✓" : coastGoal !== undefined ? (goalOk ? "your goal ✓" : "your goal") : "on your plan"}
+              </Text>
+              {coastGoal !== undefined && !goalOk ? (
+                <Text style={[type.caption, { color: t.warn, fontWeight: "700", textAlign: "center" }]}>on your plan: {planCoast ?? `after ${d.retireAge}`}</Text>
+              ) : null}
+            </View>
+          ) : null}
+          <View style={styles.tlPoint}>
+            <View style={[styles.tlDot, { backgroundColor: t.good, borderColor: t.surface }]} />
+            <Text style={[type.caption, { color: t.text3 }]}>{merged ? "Coast FI & retire" : "Retire"}</Text>
+            <Text style={[type.title, { color: t.text }]}>{d.retireAge}</Text>
+            <Text style={[type.caption, { color: t.text3, textAlign: "center" }]}>FIRE number {whole(b.fire)}</Text>
+          </View>
+        </View>
+        {!merged && coastShown !== null ? (
+          <View style={[styles.band, { backgroundColor: t.accentSoft }]}>
+            <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{reachedCoast ? `Now → ${d.retireAge}` : `${coastShown} → ${d.retireAge}`}: coasting</Text>
+            <Text style={[type.caption, { color: t.text2 }]}>
+              What you've invested grows into your FIRE number on its own. You only need to cover your bills (about {whole(d.monthlyExpenses)}/mo today); saving more is optional.
+              {coastGoal !== undefined ? " Your plan stops investing then." : " Your plan keeps investing anyway; set a Coast FI age (Settings → You) to stop then."}
+            </Text>
+          </View>
+        ) : (
+          <Text style={[type.caption, { color: t.text3 }]}>
+            {coastGoal === undefined ? "Your plan reaches Coast FI when you retire: no coasting years. Set a Coast FI age in Settings to aim for some." : "Coast FI and retiring are the same age: no coasting years."}
+          </Text>
+        )}
+      </Card>
+    );
+
   const getThere = d.years <= 0 ? null : (
     <>
       <Card style={{ gap: space.sm }}>
@@ -250,76 +294,31 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
       </Card>
       <Card style={{ gap: space.sm }}>
         <SectionLabel>Are you on track?</SectionLabel>
-        {extra <= 0.5 ? (
-          <View style={[styles.verdict, { backgroundColor: t.goodSoft }]}>
-            <Text style={[type.label, { color: t.text, fontWeight: "800" }]}>On track ✓</Text>
+        {coastGoal !== undefined && !reachedCoast ? (
+          <View style={[styles.verdict, { backgroundColor: goalOk ? t.goodSoft : t.warnSoft }]}>
+            <View style={styles.row}>
+              <Text style={[type.label, { color: t.text, fontWeight: "800", flex: 1 }]}>Coast FI by {coastGoal}</Text>
+              <Text style={[type.label, { color: goalOk ? t.good : t.warn, fontWeight: "800" }]}>{goalOk ? "On track ✓" : "Behind"}</Text>
+            </View>
             <Text style={[type.caption, { color: t.text2 }]}>
-              Keep investing about {whole(nowMo)}/mo and at {d.retireAge} your savings would pay {whole(paysMo)}/mo, for the {whole(spendMo)}/mo you plan to spend.
+              {goalOk
+                ? `What you'll have by ${coastGoal} grows into your FIRE number by ${d.retireAge} on its own.`
+                : `On your plan you'd get there ${planCoast !== null ? `at ${planCoast}, ${planCoast - coastGoal} year${planCoast - coastGoal === 1 ? "" : "s"} late` : `only when you retire at ${d.retireAge}`}. Your plan stops investing at ${coastGoal}, so you'd come up short when you retire (below).`}
             </Text>
           </View>
         ) : null}
-        {extra <= 0.5 ? (
-          link("Try what-ifs (retire earlier, spend more)", () => toView("whatif"))
-        ) : (
-          <>
-            <View style={[styles.verdict, { backgroundColor: t.warnSoft }]}>
-              <Text style={[type.label, { color: t.text, fontWeight: "800" }]}>{gapMo > 0.5 ? `You're ${whole(gapMo)}/mo short` : "Not quite on track"}</Text>
-              <Text style={[type.caption, { color: t.text2 }]}>
-                At {d.retireAge} your savings would pay {whole(paysMo)}/mo. You want to spend {whole(spendMo)}/mo.
-              </Text>
-            </View>
-            {ways.length ? <Text style={[type.label, { color: t.text, fontWeight: "700", marginTop: space.xs }]}>Close the gap: tick any mix</Text> : null}
-            {ways.map((x, i) => {
-              const on = picked.includes(x.key);
-              return (
-                <View key={x.key}>
-                  {i > 0 ? <Divider /> : null}
-                  <Pressable
-                    role="checkbox"
-                    aria-checked={on}
-                    accessibilityLabel={`${x.title}: ${x.value(on && trial ? trial.f : 1)}`}
-                    onPress={() => setPicked((p) => (on ? p.filter((k) => k !== x.key) : [...p, x.key]))}
-                    style={styles.way}
-                  >
-                    <View style={[styles.box, { borderColor: on ? t.warn : t.border, backgroundColor: on ? t.warn : "transparent" }]}>
-                      {on ? <Icon name="check" size={14} color="#fff" /> : null}
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={[type.body, { color: t.text }]}>{x.title}</Text>
-                      <Text style={[type.caption, { color: t.text3 }]}>{on && trial && chosen.length > 1 ? `With the others. On its own: ${x.value(1)}` : x.sub}</Text>
-                    </View>
-                    <Text style={[type.body, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{x.value(on && trial ? trial.f : 1)}</Text>
-                  </Pressable>
-                </View>
-              );
-            })}
-            {trial ? (
-              <View style={[styles.verdict, { backgroundColor: trial.final + 0.5 >= trial.fire ? t.goodSoft : t.warnSoft, marginTop: space.xs }]}>
-                <Text style={[type.label, { color: t.text, fontWeight: "800" }]}>
-                  {trial.final + 0.5 >= trial.fire
-                    ? `With ${chosen.length === 1 ? "this" : `these ${chosen.length}`}: on track ✓`
-                    : `With ${chosen.length === 1 ? "this" : `these ${chosen.length}`}: still ${whole(trial.fire - trial.final)} short`}
-                </Text>
-                <Text style={[type.caption, { color: t.text2 }]}>
-                  About {whole(trial.final)} invested at {trial.age}, for a FIRE number of {whole(trial.fire)}
-                  {trial.final > trial.fire + 0.5 ? ` (${whole(trial.final - trial.fire)} to spare)` : ""}.
-                </Text>
-              </View>
-            ) : null}
-            <Pressable
-              role="button"
-              onPress={() => {
-                if (trial) update((p) => { p.whatif = { ...trial.w }; });
-                toView("whatif");
-              }}
-              // the what-if colour, as everywhere else: its text on its soft background (readable light or dark)
-              style={[styles.cta, { backgroundColor: t.warnSoft, borderColor: t.warn, borderWidth: 1.5 }]}
-            >
-              <Text style={[type.label, { color: t.warn, fontWeight: "800" }]}>{trial ? "Open in What if" : "Try your own mix in What if"}</Text>
-            </Pressable>
-            <Text style={[type.caption, { color: t.text3 }]}>Fine-tune there; nothing changes your plan until you make it yours.</Text>
-          </>
-        )}
+        <View style={[styles.verdict, { backgroundColor: extra <= 0.5 ? t.goodSoft : t.warnSoft }]}>
+          <View style={styles.row}>
+            <Text style={[type.label, { color: t.text, fontWeight: "800", flex: 1 }]}>Retire at {d.retireAge}</Text>
+            <Text style={[type.label, { color: extra <= 0.5 ? t.good : t.warn, fontWeight: "800" }]}>{extra <= 0.5 ? "On track ✓" : gapMo > 0.5 ? `${whole(gapMo)}/mo short` : "Not quite"}</Text>
+          </View>
+          <Text style={[type.caption, { color: t.text2 }]}>
+            At {d.retireAge} your savings would pay {whole(paysMo)}/mo{extra <= 0.5 ? `, for the ${whole(spendMo)}/mo you plan to spend.` : `. You want to spend ${whole(spendMo)}/mo.`}
+          </Text>
+        </View>
+        {coastWayList.length ? <MixPicker key={"coast" + coastGoal} heading={`Coast by ${coastGoal}: tick any mix`} ways={coastWayList} test={coastTest} planKey={state} onOpen={openMix} /> : null}
+        {extra > 0.5 && ways.length ? <MixPicker key="retire" heading={coastWayList.length ? `Retire at ${d.retireAge}: tick any mix` : "Close the gap: tick any mix"} ways={ways} test={retireTest} planKey={state} onOpen={openMix} /> : null}
+        {extra <= 0.5 && !coastWayList.length ? link("Try what-ifs (retire earlier, spend more)", () => toView("whatif")) : null}
       </Card>
     </>
   );
@@ -503,6 +502,7 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
 
   return (
     <>
+      {timeline}
       {answer}
       {getThere}
       {beforeAccess}
@@ -514,7 +514,87 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
+/** One way to close a gap: enough on its own at f = 1; `apply` sets it (at a share `f` of that) as a what-if. */
+type Way = { key: string; title: string; value: (f: number) => string; sub: string; apply: (w: WhatIf, f: number) => void };
+
+/**
+ * Tick any mix of ways to close a gap. One alone: all of it. Several: each at the same share, as small as
+ * gets there together (`test` runs the forecast with them as a what-if). Opens the mix in What if.
+ */
+function MixPicker({ heading, ways, test, planKey, onOpen }: { heading: string; ways: Way[]; test: (w: WhatIf) => { ok: boolean; title: string; text: string }; planKey: unknown; onOpen: (w: WhatIf | null) => void }) {
+  const t = useTheme();
+  const [picked, setPicked] = useState<string[]>([]);
+  const chosen = ways.filter((x) => picked.includes(x.key));
+  const trial = useMemo(() => {
+    if (!chosen.length) return null;
+    const at = (f: number) => {
+      const w: WhatIf = { ...NO_WHATIF };
+      for (const x of chosen) x.apply(w, f);
+      return { w, f, res: test(w) };
+    };
+    if (chosen.length === 1) return at(1);
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 14; i++) {
+      const mid = (lo + hi) / 2;
+      if (at(mid).res.ok) hi = mid;
+      else lo = mid;
+    }
+    return at(hi);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked.join(","), planKey]);
+  return (
+    <View style={{ gap: 2, marginTop: space.xs }}>
+      <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>{heading}</Text>
+      {ways.map((x, i) => {
+        const on = picked.includes(x.key);
+        return (
+          <View key={x.key}>
+            {i > 0 ? <Divider /> : null}
+            <Pressable
+              role="checkbox"
+              aria-checked={on}
+              accessibilityLabel={`${x.title}: ${x.value(on && trial ? trial.f : 1)}`}
+              onPress={() => setPicked((p) => (on ? p.filter((k) => k !== x.key) : [...p, x.key]))}
+              style={styles.way}
+            >
+              <View style={[styles.box, { borderColor: on ? t.warn : t.border, backgroundColor: on ? t.warn : "transparent" }]}>
+                {on ? <Icon name="check" size={14} color="#fff" /> : null}
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[type.body, { color: t.text }]}>{x.title}</Text>
+                <Text style={[type.caption, { color: t.text3 }]}>{on && trial && chosen.length > 1 ? `With the others. On its own: ${x.value(1)}` : x.sub}</Text>
+              </View>
+              <Text style={[type.body, { color: t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{x.value(on && trial ? trial.f : 1)}</Text>
+            </Pressable>
+          </View>
+        );
+      })}
+      {trial ? (
+        <View style={[styles.verdict, { backgroundColor: trial.res.ok ? t.goodSoft : t.warnSoft, marginTop: space.xs }]}>
+          <Text style={[type.label, { color: t.text, fontWeight: "800" }]}>With {chosen.length === 1 ? "this" : `these ${chosen.length}`}: {trial.res.title}</Text>
+          <Text style={[type.caption, { color: t.text2 }]}>{trial.res.text}</Text>
+        </View>
+      ) : null}
+      <Pressable
+        role="button"
+        onPress={() => onOpen(trial ? trial.w : null)}
+        // the what-if colour, as everywhere else: its text on its soft background (readable light or dark)
+        style={[styles.cta, { backgroundColor: t.warnSoft, borderColor: t.warn, borderWidth: 1.5 }]}
+      >
+        <Text style={[type.label, { color: t.warn, fontWeight: "800" }]}>{trial ? "Open in What if" : "Try your own mix in What if"}</Text>
+      </Pressable>
+      <Text style={[type.caption, { color: t.text3 }]}>Fine-tune there; nothing changes your plan until you make it yours.</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  timeline: { flexDirection: "row", alignItems: "flex-start", position: "relative" },
+  tlLine: { position: "absolute", top: 8, left: "16%", right: "16%", height: 3 },
+  tlPoint: { flex: 1, alignItems: "center", gap: 2 },
+  tlDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 3, marginBottom: 4 },
+  band: { borderRadius: radius.md, padding: space.md, gap: 4 },
   split: { borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.xs },
   verdict: { borderRadius: radius.md, padding: space.md, gap: 4 },
   way: { flexDirection: "row", alignItems: "flex-start", gap: space.md, paddingVertical: space.sm },

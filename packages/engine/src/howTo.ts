@@ -101,6 +101,61 @@ export function extraToCoastBy(s: PlanState, startDate: Date, months: number): n
   });
 }
 
+/** The first month (0 = now) your plan, investing until then, has enough to coast to your FIRE number. Null if never before you retire. */
+function firstCoastMonth(s: PlanState, startDate: Date): { k: number | null; age: number } {
+  const r = finalAndFire({ ...s, coastAge: undefined, whatif: { ...s.whatif, coastAge: undefined } }, startDate);
+  const M = r.d.years * 12;
+  for (let k = 0; k <= M; k++) if ((r.series[k] ?? 0) + 0.5 >= coastNumberAt(r.fire, r.d.r, (M - k) / 12)) return { k, age: r.d.age };
+  return { k: null, age: r.d.age };
+}
+
+/**
+ * Coast FI by `age`: by that birthday (when your plan would stop investing), what you'd have invested grows
+ * into your FIRE number by retirement on its own.
+ */
+export function coastOk(s: PlanState, startDate: Date, age: number): boolean {
+  const { k, age: now } = firstCoastMonth(s, startDate);
+  return k !== null && now + k / 12 <= age + 1e-9;
+}
+
+/** The first birthday by which your plan has reached Coast FI (42 for 41 years 2 months): the age you could stop investing. Null when it doesn't before you retire. */
+export function coastAgeOnPlan(s: PlanState, startDate: Date): number | null {
+  const { k, age } = firstCoastMonth(s, startDate);
+  return k === null ? null : Math.ceil(age + k / 12 - 1e-9);
+}
+
+/**
+ * Ways to reach Coast FI by `age`, each enough on its own: invest more a month until then, spend less in
+ * retirement (as a what-if spending change), or retire later. Null where it doesn't get there.
+ */
+export function coastWays(s: PlanState, startDate: Date, age: number): { extra: number; spendDelta: number | null; retireAge: number | null } {
+  // by that birthday
+  const months = Math.round((age - s.age) * 12);
+  const extra = extraToCoastBy({ ...s, coastAge: undefined, whatif: { ...s.whatif, coastAge: undefined } }, startDate, months);
+  const w = s.whatif ?? { extra: 0, retDelta: 0, spendDelta: 0 };
+  const with_ = (x: Partial<PlanState["whatif"]>) => ({ ...s, whatif: { ...w, ...x } });
+  // spending: the smallest cut that gets there (up to 80% less)
+  let spendDelta: number | null = null;
+  if (coastOk(with_({ spendDelta: -0.8 }), startDate, age)) {
+    let lo = -0.8;
+    let hi = 0;
+    for (let i = 0; i < 16; i++) {
+      const mid = (lo + hi) / 2;
+      if (coastOk(with_({ spendDelta: mid }), startDate, age)) lo = mid;
+      else hi = mid;
+    }
+    spendDelta = lo;
+  }
+  let retireAge: number | null = null;
+  for (let a = Math.round(s.retireAge) + 1; a <= 75; a++) {
+    if (coastOk(with_({ retireAge: a }), startDate, age)) {
+      retireAge = a;
+      break;
+    }
+  }
+  return { extra, spendDelta, retireAge };
+}
+
 /**
  * The first whole age, up to `maxAge`, at which your plan as it is (still saving until then) reaches its
  * FIRE number at that age. Your retirement age when it already does; null when no age up to `maxAge` does.

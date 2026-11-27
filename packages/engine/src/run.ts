@@ -46,9 +46,12 @@ export function run(s: PlanState, startDate: Date): RunResult {
   const { mortgagesAtRetire, homeBridge, dFire } = withHome(s, d, plan);
   const fire = fireNumber(dFire, proj.preShareFinal);
   const coastNow = coastNumberAt(fire, d.r, d.years);
-  const crossing = coastCrossing(proj, d, fire, d.r);
+  // when you could stop investing: worked out as if you keep investing (with a Coast FI age, the plan
+  // stops at it, so it would never say)
+  const keep = d.coastStopMonth !== undefined ? (() => { const sk = { ...s, coastAge: undefined, whatif: { ...s.whatif, coastAge: undefined } }; const dk = derive(sk, startDate); return { dk, pk: simulatePlan(sk, dk) }; })() : null;
+  const crossing = coastCrossing(keep ? project(keep.dk, keep.pk, d.r) : proj, d, fire, d.r);
   const rCons = d.r - 0.015;
-  const projC = project(d, plan, rCons);
+  const projC = keep ? project(keep.dk, keep.pk, rCons) : project(d, plan, rCons);
   const fireC = fireNumber(dFire, projC.preShareFinal);
   const crossingC = coastCrossing(projC, d, fireC, rCons);
   const mc: MonteCarloResult =

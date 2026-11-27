@@ -9,7 +9,6 @@ import { BalanceChart } from "../../components/BalanceChart";
 import { InfoText, InfoTip, Segmented, Select } from "../../components/form";
 import { Icon } from "../../components/Icon";
 import { WhatIf } from "../../components/WhatIf";
-import { CoastBy } from "../../components/CoastBy";
 import { NumberBreakdown } from "../../components/NumberBreakdown";
 import { RetirementEssentials } from "../../components/RetirementEssentials";
 import { HealthcareSection, RetirementIncomeSection } from "../../components/settings/sections";
@@ -99,7 +98,8 @@ function Forecast() {
 
   // the finish line: when growth alone can carry you, so saving more becomes optional
   const coastM = o.crossing === null ? null : Math.round(o.crossing * 12);
-  const coastAge = o.crossing === null ? null : Math.floor(o.d.age + o.crossing);
+  // the birthday you could stop investing (the first by which you have enough)
+  const coastAge = o.crossing === null ? null : Math.ceil(o.d.age + o.crossing - 1e-9);
   const coastAt = o.crossing === null ? 0 : coastNumberAt(o.fire, o.d.r, o.d.years - o.crossing);
   const why = !compact || whyOpen;
   const whyToggle = compact ? (
@@ -257,7 +257,6 @@ function Forecast() {
       ) : tab === "whatif" ? (
         <ScrollView {...({ dataSet: { ledger: "1" } } as object)} style={{ flex: 1, minHeight: 0, marginHorizontal: -space.sm }} contentContainerStyle={{ gap: space.lg, paddingHorizontal: space.sm, paddingBottom: space.xxl }}>
           <WhatIf />
-          <CoastBy />
           <Pressable role="link" onPress={() => go("number")} hitSlop={6} style={{ alignSelf: "flex-start" }}>
             <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>See your plan →</Text>
           </Pressable>

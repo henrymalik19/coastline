@@ -82,7 +82,7 @@ type PlanRun = {
 export const NO_WHATIF: WhatIf = { extra: 0, retDelta: 0, spendDelta: 0 };
 /** Any slider-style what-if on (extra saving, returns, spending, another retirement age, more on a loan). */
 export const hasWhatIf = (w?: Partial<WhatIf>): boolean =>
-  !!w && (!!w.extra || !!w.retDelta || !!w.spendDelta || w.retireAge !== undefined || Object.values(w.loanExtra ?? {}).some((v) => v > 0));
+  !!w && (!!w.extra || !!w.retDelta || !!w.spendDelta || w.retireAge !== undefined || w.coastAge !== undefined || Object.values(w.loanExtra ?? {}).some((v) => v > 0));
 /** The plan with no what-ifs (sliders or one-off months): your real plan. */
 export const withoutWhatIfs = (s: PlanState): PlanState => (hasWhatIf(s.whatif) || s.adjustments?.length ? { ...s, whatif: NO_WHATIF, adjustments: [] } : s);
 
