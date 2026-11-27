@@ -75,6 +75,7 @@ export const AccountSchema = z.object({
   bankFrom: z.string().regex(DAY_RE, "Use YYYY-MM-DD").optional(),
   counts: z.enum(["k401", "ira", "hsa", "taxable", "other"]).optional(),
   owner: z.literal("spouse").optional(),
+  contributions: money.optional(),
   homeCosts: money.optional(),
   upkeep: rate.min(0).optional(),
 });

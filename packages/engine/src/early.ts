@@ -1,8 +1,8 @@
 /**
  * Retiring before 59½: 401(k)s and IRAs can't be touched without a 10% penalty until then, so the
- * years in between are paid from money you can reach early: your brokerage, what you put into a Roth IRA
- * from now on (contributions, not growth, come out any time), and cash beyond your emergency fund. Roth
- * contributions made before today and early-withdrawal rules (72(t)) aren't counted.
+ * years in between are paid from money you can reach early: your brokerage, what you've put into a Roth IRA
+ * (so far, as you entered it, and from now on: contributions, not growth, come out any time), and cash
+ * beyond your emergency fund. Early-withdrawal rules (72(t)) aren't counted.
  * Today's dollars; the brokerage money isn't grown during those years (a little conservative).
  */
 import { accountForecasts, accountGroup } from "./forecast";
@@ -28,8 +28,10 @@ export type EarlyAccess = {
   need: number;
   /** Your brokerage on your plan when you retire. */
   brokerage: number;
-  /** What your plan puts into a Roth IRA from now until you retire (contributions come out any time). */
+  /** What you've put into a Roth IRA: so far (as you entered it) plus what your plan adds until you retire. Contributions come out any time. */
   rothContrib: number;
+  /** Of `rothContrib`, what you'd put in before today (Account.contributions). */
+  rothSoFar: number;
   /** Cash beyond your emergency fund when you retire. */
   spareCash: number;
   /** All of it: brokerage + Roth IRA contributions + spare cash. */
@@ -61,13 +63,14 @@ export function earlyAccess(s: PlanState, o: Pick<RunResult, "d" | "plan" | "hom
   // IRA money counts only when your IRAs are Roth (a traditional IRA is locked like a 401(k))
   const iras = (s.accounts ?? []).filter((a) => accountGroup(a) === "ira");
   const roth = iras.length > 0 && iras.every((a) => a.type === "roth");
-  const rothContrib = roth
-    ? forecasts.filter((a) => a.key === "ira" || a.key === "iraSpouse").reduce((t, a) => t + a.months.slice(0, M).reduce((x, m) => x + m.plan + m.paycheck, 0), 0)
-    : 0;
+  const rothSoFar = roth ? iras.reduce((t, a) => t + Math.max(0, Math.min(num(a.contributions), num(a.balance))), 0) : 0;
+  const rothContrib =
+    rothSoFar +
+    (roth ? forecasts.filter((a) => a.key === "ira" || a.key === "iraSpouse").reduce((t, a) => t + a.months.slice(0, M).reduce((x, m) => x + m.plan + m.paycheck, 0), 0) : 0);
   const cashThen = M > 0 ? (o.plan.months[M - 1]?.cash ?? 0) : 0;
   const spareCash = Math.max(0, cashThen - Math.max(0, num(o.plan.fullTarget)));
   const reachable = brokerage + rothContrib + spareCash;
   const short = Math.max(0, need - reachable);
   const f = monthlyGrowthFactor(Math.pow(1 + d.r, 1 / 12) - 1, M);
-  return { years, spending, income, health, mortgage, need, brokerage, rothContrib, spareCash, reachable, short, extraMonthly: short > 0.5 && f > 0 ? Math.ceil(short / f) : 0 };
+  return { years, spending, income, health, mortgage, need, brokerage, rothContrib, rothSoFar, spareCash, reachable, short, extraMonthly: short > 0.5 && f > 0 ? Math.ceil(short / f) : 0 };
 }

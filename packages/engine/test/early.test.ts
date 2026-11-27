@@ -29,6 +29,20 @@ describe("before 59½", () => {
     expect(e.short).toBeCloseTo(Math.max(0, e.need - e.reachable), 6);
   });
 
+  it("Roth IRA money you put in before today counts too, once you enter it (never more than the account holds)", () => {
+    const s = at(55);
+    const before = earlyAccess(s, run(s, START))!;
+    expect(before.rothSoFar).toBe(0);
+    const roth = s.accounts.find((a) => a.type === "roth")!;
+    const withSoFar = { ...s, accounts: s.accounts.map((a) => (a.id === roth.id ? { ...a, contributions: 10_000 } : a)) };
+    const after = earlyAccess(withSoFar, run(withSoFar, START))!;
+    expect(after.rothSoFar).toBe(Math.min(10_000, roth.balance));
+    expect(after.rothContrib).toBeCloseTo(before.rothContrib + after.rothSoFar, 6);
+    expect(after.reachable).toBeCloseTo(before.reachable + after.rothSoFar, 6);
+    const tooMuch = { ...s, accounts: s.accounts.map((a) => (a.id === roth.id ? { ...a, contributions: roth.balance * 10 } : a)) };
+    expect(earlyAccess(tooMuch, run(tooMuch, START))!.rothSoFar).toBeCloseTo(roth.balance, 6);
+  });
+
   it("a traditional IRA is locked until 59½ like a 401(k): its money doesn't count", () => {
     const s = at(55);
     s.accounts = s.accounts.map((a) => (a.type === "roth" ? { ...a, type: "pretax" as const, counts: "ira" as const } : a));

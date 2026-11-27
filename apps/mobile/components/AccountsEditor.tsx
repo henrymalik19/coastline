@@ -7,7 +7,7 @@ import { HELP } from "../lib/help";
 import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
-import { Button, Choice, IconButton, NumberInput, TextField } from "./form";
+import { Button, Choice, FieldRow, IconButton, NumberInput, TextField } from "./form";
 import { Icon } from "./Icon";
 import { BankLink } from "./BankLink";
 import { TxnStart } from "./TxnStart";
@@ -215,6 +215,14 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
                           </>
                         ) : null}
                       </>
+                    ) : null}
+                    {a.type === "roth" && accountGroup(a) === "ira" ? (
+                      <FieldRow
+                        label="Put in so far"
+                        info={"What you've contributed over the years, not its growth. Contributions can come out of a Roth IRA any time, without tax or penalty, so they count toward retiring before 59½. Your brokerage may show it as \"contribution basis\", or add up your yearly contributions (Form 5498)."}
+                      >
+                        <NumberInput kind="money" label={`${name} contributions so far`} value={a.contributions ?? 0} onChange={(v) => update((p) => { if (v > 0) p.accounts[i]!.contributions = v; else delete p.accounts[i]!.contributions; })} />
+                      </FieldRow>
                     ) : null}
                     <BankLink kind="account" id={a.id} name={a.name} company={a.company} />
                     <View style={[styles.row, { justifyContent: "flex-end" }]}>

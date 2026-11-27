@@ -131,6 +131,8 @@ export type Account = {
   counts?: PlanAccount;
   /** Whose account this is. Missing = yours. Only an IRA's owner changes the math (each person has their own IRA limit). */
   owner?: "spouse";
+  /** A Roth IRA: what you've put in so far (contributions, not growth). It can come out any time, so it counts before 59½. */
+  contributions?: number;
   /** A home with no mortgage escrow: property tax + insurance a year, which keeps going in retirement. */
   homeCosts?: number;
   /** Repairs and upkeep a year, as a share of the home's value (0.01 = 1%), counted in retirement. */

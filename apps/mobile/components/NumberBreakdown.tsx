@@ -343,7 +343,7 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
       {row(`Money you can reach at ${d.retireAge}`, whole(early.reachable), { strong: true, sub: "On your plan" })}
       <View style={[styles.split, { backgroundColor: t.surface2 }]}>
         {row("Brokerage", whole(early.brokerage))}
-        {early.rothContrib > 0.5 ? row("Roth IRA contributions", `+ ${whole(early.rothContrib)}`, { sub: "What you put in from now on (not its growth): it comes out any time" }) : null}
+        {early.rothContrib > 0.5 ? row("Roth IRA contributions", `+ ${whole(early.rothContrib)}`, { sub: `What you put in (not its growth): it comes out any time.${early.rothSoFar > 0.5 ? ` ${whole(early.rothSoFar)} so far, the rest from now on` : " From now on; add what you've put in so far on your Roth IRA in Money → Accounts"}` }) : null}
         {early.spareCash > 0.5 ? row("Cash beyond your emergency fund", `+ ${whole(early.spareCash)}`) : null}
       </View>
       {early.short > 0.5 ? (
@@ -361,7 +361,7 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
         </>
       ) : row("Covered", "✓", { strong: true, tone: t.good })}
       <Text style={[type.caption, { color: t.text3 }]}>
-        Counted: your brokerage, what you put into a Roth IRA from now on, and cash beyond your emergency fund. Not counted: Roth IRA money you put in before today, and early-withdrawal rules like 72(t) (fixed yearly withdrawals from a 401(k) or IRA without the penalty), so the real shortfall may be smaller. Amounts are in today's dollars.
+        Counted: your brokerage, what you put into a Roth IRA (so far, if you've entered it, and from now on), and cash beyond your emergency fund. Not counted: early-withdrawal rules like 72(t) (fixed yearly withdrawals from a 401(k) or IRA without the penalty), so the real shortfall may be smaller. Amounts are in today's dollars.
       </Text>
     </Card>
   );

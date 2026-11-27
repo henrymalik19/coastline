@@ -55,7 +55,7 @@ const bySort = (a: Row, b: Row) => Number(a.sort) - Number(b.sort);
 const entries = <T>(rec: Record<string, T> | undefined) => Object.entries(rec ?? {});
 
 /* ---------- each table's columns ---------- */
-const ACCOUNT = auto("id", "name", "company", "type", "balance", "plaidAccountId", "bankFrom", "counts", "owner");
+const ACCOUNT = auto("id", "name", "company", "type", "balance", "plaidAccountId", "bankFrom", "counts", "owner", "contributions");
 const DEBT = auto("id", "name", "company", "kind", "balance", "apr", "minPayment", "plaidAccountId", "bankFrom", "atRetire", "promoApr", "promoUntil", "minimumOnly", "escrow", "term", "firstPayment", "original", "payroll", "budgetGroup");
 const INCOME = auto(
   "id", "name", "kind", "freq", "net", "nextPayday", "matchMode", "gross", "contribPct", "matchRate1", "matchUpTo1", "matchRate2", "matchUpTo2",
