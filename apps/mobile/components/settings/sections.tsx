@@ -295,7 +295,7 @@ function SelfInvestCard() {
   return (
     <Card style={{ gap: space.sm }}>
       <FieldRow
-        label="You invest from take-home"
+        label="From take-home"
         hint="Per month: IRA or brokerage, not your 401(k)"
         info="What you move into an IRA or brokerage yourself each month. Your paycheck 401(k) and HSA come from Income, so don't add them here. Used to compare your current habits with following the plan (Forecast → Overview)."
       >
