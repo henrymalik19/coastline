@@ -302,9 +302,10 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
                 if (trial) update((p) => { p.whatif = { ...trial.w }; });
                 toView("whatif");
               }}
-              style={[styles.cta, { backgroundColor: t.warn }]}
+              // the what-if colour, as everywhere else: its text on its soft background (readable light or dark)
+              style={[styles.cta, { backgroundColor: t.warnSoft, borderColor: t.warn, borderWidth: 1.5 }]}
             >
-              <Text style={[type.label, { color: "#fff", fontWeight: "700" }]}>{trial ? "Open in What if" : "Try your own mix in What if"}</Text>
+              <Text style={[type.label, { color: t.warn, fontWeight: "800" }]}>{trial ? "Open in What if" : "Try your own mix in What if"}</Text>
             </Pressable>
             <Text style={[type.caption, { color: t.text3 }]}>Fine-tune there; nothing changes your plan until you make it yours.</Text>
           </>
