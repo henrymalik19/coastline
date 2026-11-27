@@ -12,7 +12,7 @@ import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { ACCOUNT_TYPES } from "./AccountsEditor";
-import { Button } from "./form";
+import { Button, TextField } from "./form";
 import { Icon } from "./Icon";
 import { TxnStart } from "./TxnStart";
 
@@ -32,9 +32,12 @@ export function BankReview() {
   const update = useStore((s) => s.update);
   const [step, setStep] = useState(0);
   const [picking, setPicking] = useState(false);
+  // accounts and debts made new in this review: you can name them here
+  const [made, setMade] = useState<string[]>([]);
   useEffect(() => {
     setStep(0);
     setPicking(false);
+    setMade([]);
   }, [review]);
   if (!review) return null;
   const item = items.find((i) => i.id === review);
@@ -57,6 +60,8 @@ export function BankReview() {
         const n = newFromBank(b, newId(), company, to === "new-cash");
         if (n.kind === "debt") p.debts.push(n.debt);
         else p.accounts.push(n.account);
+        const id = n.kind === "debt" ? n.debt.id : n.account.id;
+        setMade((xs) => [...xs, id]);
         return;
       }
       setMatch(p, b, to);
@@ -74,7 +79,13 @@ export function BankReview() {
           { key: "new", label: "Add as a new investment account", hint: "Counts toward your investments" },
           { key: "new-cash", label: "Add as a new cash account", hint: "If you use it like checking or savings" },
         ];
-  const existing = matchOptions(state, b, company);
+  const existing = matchOptions(state, b, company, new Set(all.map((x) => x.accountId)));
+  const rename = (name: string) =>
+    update((p) => {
+      if (!m) return;
+      const x = m.kind === "account" ? p.accounts.find((a) => a.id === m.item.id) : p.debts.find((d) => d.id === m.item.id);
+      if (x) x.name = name;
+    });
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={close}>
@@ -104,6 +115,12 @@ export function BankReview() {
               <>
                 {m ? (
                   <Choice on title={`Updates “${m.item.name || "your account"}”`} hint={m.kind === "account" ? typeLabel(m.item.type) : "Debt"} onPress={() => setPicking(true)} action="Change" />
+                ) : null}
+                {m && made.includes(m.item.id) ? (
+                  <View style={{ gap: 4 }}>
+                    <Text style={[type.label, { color: t.text2 }]}>Its name in your plan</Text>
+                    <TextField label="Account name" value={m.item.name} placeholder={bankLabel(b)} onChange={rename} />
+                  </View>
                 ) : null}
                 {!m ? newOptions.map((o) => <Choice key={o.key} title={o.label} hint={o.hint} onPress={() => pick(o.key)} />) : null}
                 {!m ? <Choice title="It's one I already have" hint={existing.length ? `${existing.length} to choose from` : "You don't have any yet"} onPress={() => setPicking(true)} chevron disabled={!existing.length} /> : null}

@@ -110,6 +110,17 @@ describe("what a bank account can be used as", () => {
     // the same bank first, though it's cash
     expect(opts[0]!.id).toBe("sch");
   });
+  it("leaves out ones another connected bank account already updates", () => {
+    const p = plan();
+    p.accounts.push({ id: "sav", name: "Savings", type: "cash", balance: 10, plaidAccountId: "other" });
+    p.accounts.push({ id: "old", name: "Old savings", type: "cash", balance: 10, plaidAccountId: "gone" });
+    p.accounts[0]!.plaidAccountId = "acc";
+    const ids = matchOptions(p, bank({}), undefined, new Set(["acc", "other"])).map((o) => o.id).sort();
+    // its own match stays; one linked to a bank account that's no longer connected is free again
+    expect(ids).toEqual(["chk", "k", "old"]);
+    p.debts[0]!.plaidAccountId = "other";
+    expect(matchOptions(p, bank({ type: "credit" }), undefined, new Set(["acc", "other"]))).toEqual([]);
+  });
   it("cards and loans can only be debts", () => {
     expect(matchOptions(plan(), bank({ type: "credit" })).map((o) => o.kind)).toEqual(["debt"]);
   });

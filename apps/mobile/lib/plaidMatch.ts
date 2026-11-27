@@ -44,8 +44,11 @@ export function matchOf(p: Pick<PlanState, "accounts" | "debts">, b: Pick<BankAc
  * What a bank account can be used as: every debt for a card or loan; every account (not a property)
  * otherwise. Nothing is left out by type: people use a brokerage as their checking account, and that's
  * theirs to say. The likeliest come first: the same bank, then the same kind (cash or investments).
+ * One bank account per plan account: one another connected bank account (`connected`) already updates
+ * isn't offered.
  */
-export function matchOptions(p: Pick<PlanState, "accounts" | "debts">, b: BankAccount, company?: string): { kind: "account" | "debt"; id: string; name: string; type?: Account["type"]; likely: boolean }[] {
+export function matchOptions(p: Pick<PlanState, "accounts" | "debts">, b: BankAccount, company?: string, connected?: ReadonlySet<string>): { kind: "account" | "debt"; id: string; name: string; type?: Account["type"]; likely: boolean }[] {
+  const free = (x: { plaidAccountId?: string }) => !x.plaidAccountId || x.plaidAccountId === b.accountId || !connected?.has(x.plaidAccountId);
   // the bank's telling words ("Charles Schwab" → charles, schwab; not "bank", "credit", "union")
   const words = (company ?? "")
     .toLowerCase()
@@ -57,12 +60,13 @@ export function matchOptions(p: Pick<PlanState, "accounts" | "debts">, b: BankAc
   };
   if (isDebtLike(b))
     return p.debts
+      .filter(free)
       .map((d) => ({ kind: "debt" as const, id: d.id, name: d.name || "Debt", likely: sameBank(d) }))
       .sort((x, y) => Number(y.likely) - Number(x.likely));
   const fits = (t: Account["type"]) => (bankSaysCash(b) ? t === "cash" : t !== "cash");
   const score = (a: Account) => (sameBank(a) ? 2 : 0) + (fits(a.type) ? 1 : 0);
   return p.accounts
-    .filter((a) => a.type !== "property")
+    .filter((a) => a.type !== "property" && free(a))
     .sort((x, y) => score(y) - score(x))
     .map((a) => ({ kind: "account" as const, id: a.id, name: a.name || "Account", type: a.type, likely: score(a) > 0 }));
 }
