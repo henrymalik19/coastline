@@ -1,10 +1,16 @@
 /**
- * Retirement spending: for every spending category, whether you'd still pay it after you retire, and
- * what it would cost then (that's what builds your retirement number). Whether it's essential is on
- * Emergency mode (it isn't only about retirement).
+ * Retirement spending: what you'll spend a month once you retire, and where it comes from.
+ * - The total: the categories you'll still pay, home taxes and insurance, healthcare, plus what your number
+ *   sets aside for costs that end (mortgage payments left, health insurance until Medicare).
+ * - Each category on two lines: whether you'd still pay it, then where its amount comes from: its plan
+ *   amount (what you budget), what you've spent on it a month over the last 12 months, or your own.
+ * - A category that pays a loan is locked: Debts counts the loan.
+ * Whether a category is essential is on Emergency mode (it isn't only about retirement).
  */
+import type { BudgetItem } from "@coastfi/engine";
 import { StyleSheet, Text, View } from "react-native";
-import { Chip, FieldRow, InlineMoney, InlineSwitch, NumberInput, Select } from "./form";
+import { Chip, FieldRow, InlineMoney, InlineSwitch, NumberInput, Segmented, Select } from "./form";
+import { Icon } from "./Icon";
 import { debtItPays } from "../lib/debtLink";
 import { debtLabel } from "../lib/debts";
 import { Card, Divider } from "./ui";
@@ -14,32 +20,63 @@ import { usePlan } from "../lib/plan";
 import { useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
 
+type Source = "plan" | "avg" | "own";
+
 export function RetirementEssentials() {
   const t = useTheme();
-  const { state, result, start } = usePlan();
+  const { state, result } = usePlan();
   const update = useStore((s) => s.update);
   const d = result.d;
   // investing categories (money moved into an account) aren't spending, so they aren't here
   const items = state.budget.filter((b) => !b.accountId && !b.hidden);
-  const set = (id: string, patch: { inRetirement?: boolean; retireAmount?: number; paysDebt?: string; noSuggest?: boolean }) =>
+  const edit = (id: string, fn: (it: BudgetItem) => void) =>
     update((p) => {
       const it = p.budget.find((x) => x.id === id);
-      if (it) Object.assign(it, patch);
+      if (it) fn(it);
     });
-  // what each costs in retirement: its own amount, else (by your choice) its plan amount or this month's assigned
-  const fromAssigned = state.retireAmountsFrom === "assigned";
-  const assignedNow = state.budgetPlan?.months?.[`${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`]?.assigned ?? {};
-  const usual = (b: (typeof items)[number]) => (fromAssigned ? Math.max(0, assignedNow[b.id] ?? 0) : b.amount);
-  const retireOf = (b: (typeof items)[number]) => (b.retireAmount !== undefined ? b.retireAmount : usual(b));
-  const clearOwn = (id: string) => update((p) => { const it = p.budget.find((x) => x.id === id); if (it) delete it.retireAmount; });
-  const setOwn = (b: (typeof items)[number], v: number) => update((p) => { const it = p.budget.find((x) => x.id === b.id); if (!it) return; if (Math.abs(v - usual(b)) < 0.005) delete it.retireAmount; else it.retireAmount = v; });
-  const afterRetiring = items.filter((b) => b.inRetirement && !b.paysDebt).reduce((a, b) => a + retireOf(b), 0);
+  // what you've spent lately (12 months), when there's anything to average
+  const avgOn = !!state.spentAvg?.months;
+  const avgOf = (b: BudgetItem) => state.spentAvg?.by[b.id] ?? 0;
+  const sourceOf = (b: BudgetItem): Source => (b.retireAmount !== undefined ? "own" : b.retireFrom === "avg" && avgOn ? "avg" : "plan");
+  // what it counts in retirement (the engine's number), and the same for one you won't pay then
+  const amountOf = (b: BudgetItem) => d.retireItems[b.id] ?? b.amount;
+  const choose = (b: BudgetItem, v: Source) =>
+    edit(b.id, (it) => {
+      if (v === "own") {
+        it.retireAmount = Math.round(amountOf(b) * 100) / 100;
+        return;
+      }
+      delete it.retireAmount;
+      if (v === "avg") it.retireFrom = "avg";
+      else delete it.retireFrom;
+    });
+  const setAll = (v: "plan" | "avg") =>
+    update((p) => {
+      for (const it of p.budget) {
+        if (it.accountId || it.hidden || it.paysDebt || it.retireAmount !== undefined) continue;
+        if (v === "avg") it.retireFrom = "avg";
+        else delete it.retireFrom;
+      }
+    });
   const groups = groupOrder(items);
 
   const fixed = d.retireSpendingSet;
   const budgetYearly = d.retireMonthlyBudget * 12;
   const target = state.retireSpending ?? 0;
   const gap = budgetYearly - target;
+  const categories = Object.values(d.retireItems).reduce((a, v) => a + v, 0);
+  const homeBridge = result.homeBridge;
+  const owedAtRetire = result.mortgagesAtRetire;
+
+  const line = (label: string, value: number, note?: string, bold?: boolean) => (
+    <View style={styles.line}>
+      <Text style={[type.body, { color: t.text, flex: 1, fontWeight: bold ? "700" : "400" }]}>
+        {label}
+        {note ? <Text style={[type.caption, { color: t.text3 }]}> {note}</Text> : null}
+      </Text>
+      <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"], fontWeight: bold ? "700" : "400" }]}>{money(value, { whole: true })}</Text>
+    </View>
+  );
 
   return (
     <>
@@ -76,87 +113,126 @@ export function RetirementEssentials() {
           </>
         ) : null}
       </Card>
-      <Card style={{ gap: space.sm }}>
-        <Text style={[type.body, { color: t.text2 }]}>
-          For each category: would you still pay it after you retire, and what would it cost then?
+
+      {/* the total: what you'll spend a month, and what your number sets aside for costs that end */}
+      <Card style={{ gap: 2 }}>
+        <Text style={[type.caption, { color: t.text3 }]}>{fixed ? "From your budget, for comparison" : "Your spending in retirement"}</Text>
+        <Text style={[type.title, { color: t.text, fontVariant: ["tabular-nums"] }]}>
+          {money(d.retireMonthlyBudget, { whole: true })}
+          <Text style={[type.caption, { color: t.text3 }]}>/mo</Text>
         </Text>
-        <FieldRow label="Amounts from" info="What a category costs in retirement unless you type its own amount: its plan amount (from YNAB, the average you assigned lately), or what you assigned it this month on the Budget.">
-          <Select
-            label="Retirement amounts from"
-            value={fromAssigned ? "assigned" : "plan"}
-            options={[{ value: "plan", label: "Plan amounts" }, { value: "assigned", label: "This month's assigned" }]}
-            onChange={(v) => update((p) => { if (v === "assigned") p.retireAmountsFrom = "assigned"; else delete p.retireAmountsFrom; })}
-          />
-        </FieldRow>
-        <View style={styles.totals}>
-          <View style={[styles.total, { backgroundColor: t.surface2 }]}>
-            <Text style={[type.title, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(afterRetiring, { whole: true })}<Text style={[type.caption, { color: t.text3 }]}>/mo</Text></Text>
-            <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Still paid after retiring</Text>
-            <Text style={[type.caption, { color: t.text3 }]}>
-              {fixed
-                ? "For comparison only: your set amount drives your retirement number"
-                : `Plus healthcare and home costs, this sets your retirement number (${money(result.fire, { whole: true })})`}
-            </Text>
-          </View>
-        </View>
+        {line("Categories you'll still pay", categories)}
+        {d.setAsideRetired > 0.5 ? line("Bills you set aside for", d.setAsideRetired) : null}
+        {d.escrowMonthly > 0.5 ? line("Home taxes & insurance", d.escrowMonthly, "keep going") : null}
+        {d.homeMonthly > 0.5 ? line("Home costs & upkeep", d.homeMonthly) : null}
+        {d.healthRetired > 0.5 ? line("Healthcare", d.healthRetired, state.medicare !== undefined && state.retireAge < 65 ? "Medicare from 65" : undefined) : null}
+        <View style={[styles.sum, { borderTopColor: t.border }]}>{line("Total", d.retireMonthlyBudget, undefined, true)}</View>
+        {homeBridge > 0.5 || d.healthBridge > 0.5 ? (
+          <>
+            <Text style={[type.caption, { color: t.text3, marginTop: space.sm }]}>Plus, in your number for costs that end:</Text>
+            {homeBridge > 0.5 ? line("Mortgage payments left", homeBridge, `after you retire, interest included`) : null}
+            {d.healthBridge > 0.5 ? line("Health insurance until 65", d.healthBridge, "beyond Medicare's cost") : null}
+          </>
+        ) : null}
+        <Text style={[type.caption, { color: t.text3, marginTop: space.sm }]}>
+          {fixed
+            ? "Your set amount drives your retirement number instead."
+            : `This sets your retirement number (${money(result.fire, { whole: true })}). Social Security and pensions come off it.`}
+        </Text>
       </Card>
 
       <Card style={{ gap: 2 }}>
-        <View style={styles.row}>
-          <Text style={[type.caption, { color: t.text3, flex: 1 }]} />
-          <Text style={[type.caption, styles.col, { color: t.text3 }]}>After retiring</Text>
-        </View>
+        <Text style={[type.caption, { color: t.text3 }]}>
+          Each category: its plan amount (what you budget), what you've spent on it a month over the last 12 months, or your own.
+        </Text>
+        {avgOn ? (
+          <Text style={[type.caption, { color: t.text3 }]}>
+            Set all to{" "}
+            <Text role="button" onPress={() => setAll("plan")} style={{ color: t.accent, fontWeight: "700" }}>Plan</Text>
+            {" · "}
+            <Text role="button" onPress={() => setAll("avg")} style={{ color: t.accent, fontWeight: "700" }}>Avg</Text>
+            <Text> (your own amounts stay)</Text>
+          </Text>
+        ) : (
+          <Text style={[type.caption, { color: t.text3 }]}>No transactions yet to average: Avg shows up once you have some.</Text>
+        )}
         {groups.map((g, gi) => {
           const list = items.filter((b) => groupOf(b) === g);
-          const sum = list.filter((b) => b.inRetirement && !b.paysDebt).reduce((a, b) => a + retireOf(b), 0);
+          const sum = list.filter((b) => b.inRetirement && !b.paysDebt).reduce((a, b) => a + amountOf(b), 0);
           return (
             <View key={g} style={{ gap: 2 }}>
               {gi > 0 ? <Divider /> : null}
               <View style={[styles.row, { marginTop: space.sm }]}>
                 <Text style={[type.overline, { color: t.text2, flex: 1 }]}>{g}</Text>
-                <Text style={[type.caption, { color: t.text3 }]}>{money(sum, { whole: true })}/mo after retiring</Text>
+                <Text style={[type.caption, { color: t.text3 }]}>{money(sum, { whole: true })}/mo</Text>
               </View>
-              {list.map((b) => {
+              {list.map((b, i) => {
                 const name = b.name || "Category";
                 const linked = b.paysDebt ? state.debts.find((x) => x.id === b.paysDebt) : undefined;
                 const loan = linked ? undefined : debtItPays(state, b);
-                const what = (d: { kind?: string }) => (d.kind === "mortgage" ? "mortgage" : "loan");
-                // a category that pays a loan: counted from Debts (until it's paid off), so not here
-                if (linked)
+                const what = (x: { kind?: string }) => (x.kind === "mortgage" ? "mortgage" : "loan");
+                const sep = i > 0 ? <Divider /> : null;
+                // a category that pays a loan: locked, Debts counts the loan (and what's left after you retire)
+                if (linked) {
+                  const left = owedAtRetire.find((x) => x.id === linked.id);
+                  const escrow = linked.kind === "mortgage" ? Math.min(Math.max(0, linked.escrow ?? 0), linked.minPayment) : 0;
+                  const note = left
+                    ? left.months !== null
+                      ? `${left.months} payment${left.months === 1 ? "" : "s"} left after you retire, about ${money(left.total, { whole: true })} with interest, in your number.`
+                      : `${money(left.balance, { whole: true })} still owed when you retire, in your number.`
+                    : linked.kind === "mortgage" && linked.balance > 0
+                      ? "Paid off before you retire."
+                      : "Counted from Debts until it's paid off.";
                   return (
-                    <View key={b.id} style={styles.row}>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={[type.body, { color: t.text3 }]} numberOfLines={1}>{name}</Text>
-                        <Text style={[type.caption, { color: t.text3 }]}>
-                          Pays your {debtLabel(linked)} {what(linked)}: counted from Debts until it's paid off{linked.kind === "mortgage" ? ", then the home's taxes and insurance" : ""}.
-                        </Text>
+                    <View key={b.id}>
+                      {sep}
+                      <View style={styles.item}>
+                        <View style={styles.row}>
+                          <Text style={[type.body, { color: t.text, fontWeight: "600", flex: 1 }]} numberOfLines={1}>{name}</Text>
+                          <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(escrow, { whole: true })}<Text style={[type.caption, { color: t.text3 }]}>/mo</Text></Text>
+                        </View>
+                        <View style={{ flexDirection: "row", gap: 6 }}>
+                          <View style={{ paddingTop: 2 }}><Icon name="lock" size={12} color={t.text3} /></View>
+                          <Text style={[type.caption, { color: t.text3, flex: 1 }]}>
+                            Pays your {debtLabel(linked)} {what(linked)}, from Debts. {note}
+                            {escrow > 0.5 ? ` Its taxes & insurance (${money(escrow, { whole: true })}/mo) keep going.` : ""}
+                          </Text>
+                        </View>
                       </View>
                     </View>
                   );
-                const own = b.retireAmount !== undefined;
+                }
+                const src = sourceOf(b);
+                const alt = [src !== "plan" ? `plan ${money(b.amount, { whole: true })}` : "", src !== "avg" && avgOn ? `avg ${money(avgOf(b), { whole: true })}` : ""].filter(Boolean).join(" · ");
                 return (
-                  <View key={b.id} style={{ gap: 2 }}>
-                    <View style={styles.row}>
-                      {/* the name on its own line, the amount under it (so the name isn't cut short on a phone) */}
-                      <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                        <Text style={[type.body, { color: b.inRetirement ? t.text : t.text3 }]} numberOfLines={1}>{name}</Text>
-                        {b.inRetirement ? (
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flexWrap: "wrap" }}>
-                            <InlineMoney compact label={`${name}: a month in retirement`} value={retireOf(b)} onChange={(v) => setOwn(b, v)} />
-                            {own ? (
-                              <Text style={[type.caption, { color: t.text3 }]}>
-                                now {money(usual(b), { whole: true })} ·{" "}
-                                <Text role="button" onPress={() => clearOwn(b.id)} style={{ color: t.accent, fontWeight: "700" }}>Same</Text>
-                              </Text>
-                            ) : null}
+                  <View key={b.id}>
+                    {sep}
+                    <View style={styles.item}>
+                      <View style={styles.row}>
+                        <Text style={[type.body, { color: b.inRetirement ? t.text : t.text3, fontWeight: "600", flex: 1 }]} numberOfLines={1}>{name}</Text>
+                        <InlineSwitch label={`${name}: still paid after you retire`} value={b.inRetirement} onChange={(v) => edit(b.id, (it) => { it.inRetirement = v; })} />
+                      </View>
+                      {b.inRetirement ? (
+                        <>
+                          <View style={styles.row}>
+                            <Segmented
+                              label={`${name}: amount in retirement from`}
+                              value={src}
+                              options={[{ value: "plan" as const, label: "Plan" }, ...(avgOn ? [{ value: "avg" as const, label: "Avg" }] : []), { value: "own" as const, label: "Own" }]}
+                              onChange={(v) => choose(b, v)}
+                            />
+                            <View style={{ flex: 1 }} />
+                            {src === "own" ? (
+                              <InlineMoney compact label={`${name}: a month in retirement`} value={b.retireAmount ?? 0} onChange={(v) => edit(b.id, (it) => { it.retireAmount = v; })} />
+                            ) : (
+                              <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"], fontWeight: "600" }]}>{money(amountOf(b), { whole: true })}</Text>
+                            )}
                           </View>
-                        ) : (
-                          <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]}>{money(usual(b), { whole: true })}/mo now</Text>
-                        )}
-                      </View>
-                      <View style={styles.col}>
-                        <InlineSwitch label={`${name}: still paid after you retire`} value={b.inRetirement} onChange={(v) => set(b.id, { inRetirement: v })} />
-                      </View>
+                          {alt ? <Text style={[type.caption, { color: t.text3, textAlign: "right" }]}>{alt}</Text> : null}
+                        </>
+                      ) : (
+                        <Text style={[type.caption, { color: t.text3 }]}>Not paid after you retire · {money(b.amount, { whole: true })}/mo now</Text>
+                      )}
                     </View>
                     {loan ? (
                       <View style={[styles.loanBox, { backgroundColor: t.warnSoft }]}>
@@ -164,8 +240,8 @@ export function RetirementEssentials() {
                           Pays your {debtLabel(loan)} {what(loan)}? Its payment is already in your plan from Debts, so right now it's counted twice.
                         </Text>
                         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs }}>
-                          <Chip title="Yes, link it" tone="accent" icon="check" onPress={() => set(b.id, { paysDebt: loan.id })} />
-                          <Chip title="It's something else" icon="close" onPress={() => set(b.id, { noSuggest: true })} />
+                          <Chip title="Yes, link it" tone="accent" icon="check" onPress={() => edit(b.id, (it) => { it.paysDebt = loan.id; })} />
+                          <Chip title="It's something else" icon="close" onPress={() => edit(b.id, (it) => { it.noSuggest = true; })} />
                         </View>
                       </View>
                     ) : null}
@@ -185,9 +261,9 @@ export function RetirementEssentials() {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: 4 },
-  col: { width: 84, alignItems: "center", textAlign: "center" },
+  row: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  item: { gap: 6, paddingVertical: space.sm },
+  line: { flexDirection: "row", alignItems: "baseline", gap: space.sm, paddingVertical: 3 },
+  sum: { borderTopWidth: StyleSheet.hairlineWidth, marginTop: space.xs, paddingTop: space.xs },
   loanBox: { gap: 6, borderRadius: 10, padding: space.sm, marginBottom: space.xs },
-  totals: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  total: { flexGrow: 1, flexBasis: 200, borderRadius: 10, padding: space.md, gap: 2 },
 });

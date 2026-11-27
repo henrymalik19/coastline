@@ -97,7 +97,7 @@ function expectParity(input: PlanState) {
   expect((od.bal as Record<string, number>).property).toBe(0);
   delete (od.bal as Record<string, number>).property;
   // new in the port (no Roth 401(k), employer HSA or retirement income on these plans)
-  for (const k of ["retireIncomeAnnual", "retireBridge", "rothShare", "hsaEmployerAnnual", "setAsideMonthly", "escrowMonthly", "homeMonthly", "healthBridge"]) {
+  for (const k of ["retireIncomeAnnual", "retireBridge", "rothShare", "hsaEmployerAnnual", "setAsideMonthly", "escrowMonthly", "homeMonthly", "healthBridge", "setAsideRetired"]) {
     expect(od[k]).toBe(0);
     delete od[k];
   }

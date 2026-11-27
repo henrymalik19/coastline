@@ -95,6 +95,11 @@ export type BudgetItem = {
    */
   retireAmount?: number;
   /**
+   * With no retirement amount of its own: "avg", what you've spent on it a month lately (PlanState.spentAvg),
+   * instead of its plan amount.
+   */
+  retireFrom?: "avg";
+  /**
    * The debt this category pays (a debt's id), like a "PITI" category that pays your mortgage. The plan
    * counts that debt from Debts (its payment until it's paid off, a home's taxes and insurance after), so
    * the category isn't counted again as spending, now or in retirement. It still shows on the Budget.
@@ -360,6 +365,11 @@ export type PlanState = {
    * (missing), or what you assigned it this month on the Budget ("assigned").
    */
   retireAmountsFrom?: "assigned";
+  /**
+   * What you've spent a month on each category lately (averageSpent), worked out from your transactions
+   * and laid over the plan by the app. Never saved. `months`: how many months it averages (0: none yet).
+   */
+  spentAvg?: SpentAverage;
   currentInvestMonthly: number;
   incomes: Income[];
   budget: BudgetItem[];
@@ -548,6 +558,8 @@ export type Derived = {
   retireMonthly: number;
   /** Retirement spending a month added up from the budget (before what-ifs), whether or not a set amount replaces it. */
   retireMonthlyBudget: number;
+  /** Repeating bills you set aside for that keep going in retirement, a month. */
+  setAsideRetired: number;
   /** Each budget item still paid after you retire (id → what it costs a month then). */
   retireItems: Record<string, number>;
   /** Retirement spending comes from a set yearly amount, not the budget. */
@@ -726,3 +738,6 @@ export type RunResult = {
   /** Their payments left after you retire, interest included (part of the FIRE number, like the retirement income bridge). */
   homeBridge: number;
 };
+
+/** Each category's spending a month, averaged over the last `months` full months (category id → amount). */
+export type SpentAverage = { months: number; by: Record<string, number> };

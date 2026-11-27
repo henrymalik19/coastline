@@ -3,7 +3,7 @@
  * budget: money in to assign, money out of categories, and credit-card spending moving into the
  * card's payment category (the envelope way), so the payment is always covered.
  */
-import type { Txn } from "./types";
+import type { SpentAverage, Txn } from "./types";
 import { num } from "./util";
 
 /** What a month's transactions do to the budget. */
@@ -77,6 +77,27 @@ export function txnActivity(txns: Txn[], month: string, cards: Record<string, st
     }
   }
   return out;
+}
+
+/**
+ * What you've spent on each category a month, over the `months` full months before `thisMonth` ("YYYY-MM"):
+ * from the first of those months that has any transactions (so a newer budget averages what it has).
+ * Refunds count against it; a category with nothing spent is 0. Same rules as the budget (txnActivity).
+ */
+export function averageSpent(txns: Txn[], thisMonth: string, cards: Record<string, string>, months = 12): SpentAverage {
+  const [y, m] = thisMonth.split("-").map(Number) as [number, number];
+  const list: string[] = [];
+  for (let i = months; i >= 1; i--) {
+    const d = new Date(Date.UTC(y, m - 1 - i, 1));
+    list.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+  }
+  const first = list[0]!;
+  const inWindow = txns.filter((t) => !t.deleted && !t.id.startsWith("start:") && ymOf(t.date) >= first && ymOf(t.date) < thisMonth);
+  const used = list.filter((mo) => mo >= (inWindow.reduce<string | null>((a, t) => (!a || ymOf(t.date) < a ? ymOf(t.date) : a), null) ?? thisMonth));
+  const by: Record<string, number> = {};
+  for (const mo of used) for (const [k, v] of Object.entries(txnActivity(inWindow, mo, cards).spent)) by[k] = (by[k] ?? 0) + v;
+  for (const k of Object.keys(by)) by[k] = Math.max(0, Math.round((by[k]! / used.length) * 100) / 100);
+  return { months: used.length, by };
 }
 
 /**

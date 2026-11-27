@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { derive, fireBreakdown, fiLevels, run, type PlanState } from "../src";
+import { averageSpent, derive, fireBreakdown, fiLevels, run, type PlanState } from "../src";
 import { START } from "./fixtures";
 
 const plan = (over: Partial<PlanState> = {}): PlanState => ({
@@ -88,5 +88,38 @@ describe("a category that pays a debt", () => {
     expect(d.retireMonthlyBudget).toBe(without.retireMonthlyBudget);
     expect(d.monthlyExpenses).toBe(without.monthlyExpenses);
     expect(d.retireItems.piti).toBeUndefined();
+  });
+});
+
+describe("what you've spent lately (12-month average)", () => {
+  const t = (id: string, date: string, amount: number, categoryId: string, accountId = "chk") => ({ id, accountId, date, amount, categoryId, cleared: "cleared" as const, source: "manual" as const, updatedAt: 1 });
+
+  it("averages each category over the full months before this one, from the first month with transactions", () => {
+    const txns = [
+      t("start:chk", "2026-07-01", 5000, "ready"),
+      t("a", "2026-08-03", -120, "food"),
+      t("b", "2026-09-10", -90, "food"),
+      t("c", "2026-10-02", -150, "food"),
+      t("r", "2026-10-15", 30, "food"), // a refund
+      t("d", "2026-10-20", -60, "fun"),
+      t("now", "2026-11-02", -999, "food"), // this month: not a full month yet
+      { ...t("gone", "2026-09-11", -500, "food"), deleted: true },
+    ];
+    const a = averageSpent(txns, "2026-11", {});
+    expect(a.months).toBe(3); // Aug, Sep, Oct
+    expect(a.by).toEqual({ food: 110, fun: 20 }); // (120 + 90 + 150 − 30) ÷ 3, 60 ÷ 3
+    // at most 12 months back: one older than that doesn't stretch it
+    expect(averageSpent([t("old", "2024-01-05", -100, "food"), ...txns], "2026-11", {}).months).toBe(3);
+    expect(averageSpent([t("yr", "2025-11-05", -100, "food"), ...txns], "2026-11", {}).months).toBe(12);
+    expect(averageSpent([], "2026-11", {})).toEqual({ months: 0, by: {} });
+  });
+
+  it("a category set to its average uses it; nothing to average yet: its plan amount", () => {
+    const p = plan({ spentAvg: { months: 6, by: { food: 640 } } });
+    p.budget[1]!.retireFrom = "avg";
+    p.budget[2]!.retireFrom = "avg"; // nothing spent on it lately: 0
+    p.budget[0]!.retireAmount = 1500; // its own amount wins
+    expect(derive(p, START).retireItems).toEqual({ rent: 1500, food: 640, fun: 0 });
+    expect(derive({ ...p, spentAvg: { months: 0, by: {} } }, START).retireItems).toEqual({ rent: 1500, food: 1000, fun: 500 });
   });
 });

@@ -1,10 +1,10 @@
-import { derive, k401Cost, run, simulatePlan, type Derived, type LimitsRow, type MonthRow, type PlanResult, type PlanState, type RunResult, type Txn } from "@coastfi/engine";
+import { averageSpent, derive, k401Cost, run, simulatePlan, type Derived, type LimitsRow, type MonthRow, type PlanResult, type PlanState, type RunResult, type SpentAverage, type Txn } from "@coastfi/engine";
 import { withProperties } from "@coastfi/schema";
 import { useLimits } from "./limits";
 import { money } from "./format";
 import { useStore } from "./store";
 import { syncPaycheckLoans } from "./loans";
-import { foldSavingsLines, hasOldSavingsLines, hasRegister } from "./register";
+import { cardMap, foldSavingsLines, hasOldSavingsLines, hasRegister } from "./register";
 import { usePlaid } from "./plaidState";
 import { withBankBalances, type BankAccount } from "./plaidMatch";
 import { estimateBracket } from "./tax";
@@ -128,14 +128,45 @@ function withBanks(saved: PlanState, bank: BankAccount[], txns: Txn[]): PlanStat
   return value;
 }
 
+/**
+ * What you've spent on each category a month lately (the engine's averageSpent, over 12 months), for a
+ * category whose retirement amount follows it. The same object while the numbers don't change, so a new
+ * transaction this month (which isn't in the average) doesn't rerun the plan.
+ */
+let avgCache: { txns: Txn[]; month: string; cards: string; value: SpentAverage } | null = null;
+const sameAvg = (a: SpentAverage, b: SpentAverage) =>
+  a.months === b.months && Object.keys(a.by).length === Object.keys(b.by).length && Object.entries(a.by).every(([k, v]) => b.by[k] === v);
+export function spentAverages(txns: Txn[], plan: PlanState, month: string): SpentAverage {
+  const cards = cardMap(plan);
+  const key = JSON.stringify(cards);
+  if (avgCache && avgCache.txns === txns && avgCache.month === month && avgCache.cards === key) return avgCache.value;
+  const next = averageSpent(txns, month, cards);
+  const value = avgCache && sameAvg(avgCache.value, next) ? avgCache.value : next;
+  avgCache = { txns, month, cards: key, value };
+  return value;
+}
+
+/** The plan with those averages laid over it (never saved), the same object while nothing changes. */
+let avgOverlay: { base: PlanState; avg: SpentAverage; value: PlanState } | null = null;
+function withSpent(base: PlanState, avg: SpentAverage): PlanState {
+  if (!avg.months) return base;
+  if (avgOverlay && avgOverlay.base === base && avgOverlay.avg === avg) return avgOverlay.value;
+  const value = { ...base, spentAvg: avg };
+  avgOverlay = { base, avg, value };
+  return value;
+}
+
 export function usePlan(): PlanRun {
   const saved = useStore((s) => s.plan);
   const bank = usePlaid((s) => s.accounts);
   // transactions matter only with a bank (an account with a register keeps its own balance)
   const txns = useStore((s) => (bank.length ? s.txns : NO_TXNS));
-  const limits = useLimits((s) => s.rows);
   const start = sharedToday(new Date().toDateString());
-  return computePlan(withBanks(saved, bank, txns), start, limits);
+  const month = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`;
+  // (a stable object: a transaction edit that doesn't move any average doesn't re-render)
+  const avg = useStore((s) => spentAverages(s.txns, s.plan, month));
+  const limits = useLimits((s) => s.rows);
+  return computePlan(withSpent(withBanks(saved, bank, txns), avg), start, limits);
 }
 
 /** Plain-English line for a month that comes up short. */
