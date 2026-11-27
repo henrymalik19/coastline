@@ -434,6 +434,12 @@ export function Select<T extends string>({
 }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
+  // a long list: type to narrow it (a category, a payee, an account)
+  const [q, setQ] = useState("");
+  const searchable = options.length > 8;
+  useEffect(() => { if (open) setQ(""); }, [open]);
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = words.length ? options.filter((o) => { const text = `${o.label} ${o.hint ?? ""} ${o.section ?? ""}`.toLowerCase(); return words.every((w) => text.includes(w)); }) : options;
   // where the box is on screen: the list opens right under it (or above, near the bottom), not mid-screen
   const box = useRef<ComponentRef<typeof View>>(null);
   const [anchor, setAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -474,10 +480,28 @@ export function Select<T extends string>({
         <Pressable style={[styles.backdrop, placed ? { backgroundColor: "rgba(0,0,0,0.15)" } : null]} onPress={() => setOpen(false)} accessibilityLabel={`Close ${label}`}>
           <Pressable onPress={() => {}} aria-label={label} style={[styles.sheet, { backgroundColor: t.surface, borderColor: t.border }, placed ?? null]}>
             <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.md, paddingBottom: 4 }]}>{label}</Text>
-            <ScrollView style={{ maxHeight: placed ? Math.min(440, (placed.maxHeight as number) - 48) : 440 }}>
-              {options.map((o, i) => {
+            {searchable ? (
+              <View style={{ paddingHorizontal: space.md, paddingBottom: space.xs }}>
+                <TextInput
+                  value={q}
+                  onChangeText={setQ}
+                  placeholder="Type to search"
+                  placeholderTextColor={t.text3}
+                  accessibilityLabel={`Search ${label}`}
+                  autoFocus={Platform.OS === "web"}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  returnKeyType="done"
+                  onSubmitEditing={() => { const first = shown[0]; if (first) { onChange(first.value); setOpen(false); } }}
+                  style={[type.body, styles.search, { color: t.text, borderColor: t.border, backgroundColor: t.surface2 }]}
+                />
+              </View>
+            ) : null}
+            <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: placed ? Math.min(440, (placed.maxHeight as number) - (searchable ? 96 : 48)) : 440 }}>
+              {shown.length ? null : <Text style={[type.body, { color: t.text3, paddingHorizontal: space.md, paddingVertical: space.sm }]}>Nothing matches “{q.trim()}”</Text>}
+              {shown.map((o, i) => {
                 const on = o.value === value;
-                const heading = o.section && o.section !== options[i - 1]?.section ? o.section : undefined;
+                const heading = o.section && o.section !== shown[i - 1]?.section ? o.section : undefined;
                 return (
                   <View key={o.value}>
                   {heading ? <Text style={[type.overline, { color: t.text3, paddingHorizontal: space.md, paddingTop: i ? space.md : 0, paddingBottom: 2 }]}>{heading}</Text> : null}
@@ -674,6 +698,7 @@ export function IconButton({ icon, label, onPress, disabled, color }: { icon: Ic
 }
 
 const styles = StyleSheet.create({
+  search: { borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 8 },
   formList: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, overflow: "hidden" },
   formRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: 8, minHeight: 50 },
   inlineText: { textAlign: "right", paddingVertical: 10, minWidth: 140 },

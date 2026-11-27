@@ -78,6 +78,7 @@ export function DebtEditor({
               <Text style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>
                 {money(debt.balance)} · {debt.promoUntil ? `${pct(debt.promoApr ?? 0)} until ${shortMonth(debt.promoUntil)}, then ${pct(debt.apr)}` : pct(debt.apr)} ·{" "}
                 {paidFrom ? `${money(paidFrom.perCheck)}/paycheck` : `${money(debt.minPayment)}/mo`}{debt.minimumOnly ? " · minimum only" : ""}
+                {debt.plaidAccountId ? <Text style={{ color: t.good, fontWeight: "700" }}> · Linked</Text> : null}
               </Text>
             ) : null}
             {!open && kind.value === "mortgage" ? <MortgageLine debt={debt} /> : null}
