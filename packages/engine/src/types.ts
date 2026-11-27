@@ -675,6 +675,8 @@ export type MonthRow = {
   pre: number;
   /** Paid on your own 401(k) loans this month: it goes back into your 401(k) (not toward the yearly limit). */
   loanBack: number;
+  /** Of `loanBack`, what your plan paid beyond the loan's own payment (paying it off early). */
+  loanBackExtra: number;
   /** Left after bills this month (take-home − budget − debt minimums − set-asides − one-offs), before any saving. */
   available: number;
   /** What your schedule asked for this month, what it got, and how much it was short because the money ran out. */

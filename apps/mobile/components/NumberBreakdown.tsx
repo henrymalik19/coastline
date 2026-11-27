@@ -176,13 +176,23 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
       : startsIn > 0
         ? `Starts ${monthLabel(start, startsIn)}: until then your plan pays debts or builds savings first. This is a typical month once it starts.`
         : "A typical month this year, employer match included";
-  const splitRows = [
+  // a 401(k) loan: its own payment, and any extra your plan sends to pay it off early (both go back into your 401(k))
+  const k401Loan = state.debts.find((x) => x.kind === "k401_loan" && x.balance > 0);
+  // paid off within the year: the line is a 12-month average, so say when it ends
+  const loanEnds = k401Loan ? o.plan.months.slice(0, 12).findIndex((m) => (m.debts.find((x) => x.id === k401Loan.id)?.balance ?? 0) <= 0.5) : -1;
+  const loanAvg = loanEnds >= 0 ? `. Paid off in ${monthLabel(start, loanEnds)}, so this is spread over the year` : "";
+  const splitRows: { k: string; v: number; sub?: string }[] = [
     { k: "401(k)", v: split.k401 },
     { k: "Employer match", v: split.match },
     { k: "IRA", v: split.ira },
     { k: "HSA", v: split.hsa },
     { k: "Brokerage", v: split.taxable },
-    { k: "Paying back your 401(k) loan", v: split.loanBack },
+    { k: "401(k) loan payment", v: split.loanBack, sub: `From your paycheck. It goes back into your 401(k)${loanAvg}` },
+    {
+      k: "Paying off your 401(k) loan early",
+      v: split.loanExtra,
+      sub: `Your plan pays this loan off faster than its payment would${k401Loan && k401Loan.apr >= state.plan.highApr ? `: its interest (${percent(k401Loan.apr, 2)}) is more than the ${percent(state.plan.highApr, 1)} you count as "high-interest" (Settings → Assumptions & plan rules), and high-interest debt gets paid down before investing more` : ""}. This also goes back into your 401(k)${loanAvg}`,
+    },
     { k: "Other", v: split.other },
   ].filter((x) => x.v > 0.5);
   // bills beyond income: the first part of any extra covers that
@@ -232,7 +242,7 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
         {row("You invest now", `${whole(nowMo)}/mo`, { strong: true, sub: nowSub })}
         {splitRows.length > 1 ? (
           <View style={[styles.split, { backgroundColor: t.surface2 }]}>
-            {splitRows.map((x) => <View key={x.k}>{row(x.k, `${whole(x.v)}/mo`)}</View>)}
+            {splitRows.map((x) => <View key={x.k}>{row(x.k, `${whole(x.v)}/mo`, x.sub ? { sub: x.sub } : {})}</View>)}
           </View>
         ) : null}
         <Text style={[type.caption, { color: t.text3 }]}>Where it goes follows your plan's priority order.</Text>
@@ -321,7 +331,7 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
     <Card style={{ gap: space.sm }}>
       <SectionLabel>Can you reach enough before 59½?</SectionLabel>
       <Text style={[type.caption, { color: t.text2 }]}>
-        You retire at {d.retireAge}. 401(k)s and IRAs charge a 10% penalty until 59½, so those {yrs(early.years)} years come from money you can reach: your brokerage.
+        You retire at {d.retireAge}. 401(k)s and IRAs charge a 10% penalty until 59½, so those {yrs(early.years)} years come from money you can reach early.
       </Text>
       {row(`You'll need from ${d.retireAge} to 59½`, whole(early.need), { strong: true })}
       <View style={[styles.split, { backgroundColor: t.surface2 }]}>
@@ -330,7 +340,12 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
         {early.health > 0.5 ? row("Health insurance until then", `+ ${whole(early.health)}`, { sub: "Beyond what you'd pay on Medicare" }) : null}
         {early.mortgage > 0.5 ? row("Your mortgage", `+ ${whole(early.mortgage)}`, { sub: o.mortgagesAtRetire.every((x) => x.choice === "payoff") ? "Paying it off when you retire" : "Keeping up its payments after you retire" }) : null}
       </View>
-      {row(`Your brokerage at ${d.retireAge}`, whole(early.reachable), { sub: "On your plan" })}
+      {row(`Money you can reach at ${d.retireAge}`, whole(early.reachable), { strong: true, sub: "On your plan" })}
+      <View style={[styles.split, { backgroundColor: t.surface2 }]}>
+        {row("Brokerage", whole(early.brokerage))}
+        {early.rothContrib > 0.5 ? row("Roth IRA contributions", `+ ${whole(early.rothContrib)}`, { sub: "What you put in from now on (not its growth): it comes out any time" }) : null}
+        {early.spareCash > 0.5 ? row("Cash beyond your emergency fund", `+ ${whole(early.spareCash)}`) : null}
+      </View>
       {early.short > 0.5 ? (
         <>
           <View style={[styles.verdict, { backgroundColor: t.warnSoft }]}>
@@ -339,14 +354,14 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
           </View>
           <Text style={[type.label, { color: t.text, fontWeight: "700", marginTop: space.xs }]}>The fix: move, not more</Text>
           {row("Send to your brokerage instead", `${whole(early.extraMonthly)}/mo`, {
-            sub: `Of what you already invest, so ${whole(early.extraMonthly)}/mo goes to your brokerage instead of a 401(k) or IRA until ${d.retireAge}. Same total. Keep your 401(k) at least up to your employer's full match.`,
+            sub: `Of what you already invest, so ${whole(early.extraMonthly)}/mo goes to your brokerage instead of a 401(k) or traditional IRA until ${d.retireAge}. Same total. Keep your 401(k) at least up to your employer's full match.`,
           })}
           {link("Change my plan's order", () => openPage("/settings/priorities"))}
           {extra > 0.5 ? <Text style={[type.caption, { color: t.text3 }]}>If you also invest more (above), put that in your brokerage too: it counts toward both.</Text> : null}
         </>
       ) : row("Covered", "✓", { strong: true, tone: t.good })}
       <Text style={[type.caption, { color: t.text3 }]}>
-        On the safe side: Roth IRA contributions (not growth), cash, and rules like regular early withdrawals from a 401(k) (72(t)) can also help, and aren't counted here. In today's dollars; age {ACCESS_AGE} is when the penalty ends.
+        Counted: your brokerage, what you put into a Roth IRA from now on, and cash beyond your emergency fund. Not counted: Roth IRA money you put in before today, and early-withdrawal rules like 72(t) (fixed yearly withdrawals from a 401(k) or IRA without the penalty), so the real shortfall may be smaller. Amounts are in today's dollars.
       </Text>
     </Card>
   );

@@ -19,8 +19,20 @@ describe("before 59½", () => {
     expect(e.spending).toBeCloseTo(o.d.retireAnnual * 4.5, 6);
     expect(e.need).toBeCloseTo(Math.max(0, e.spending - e.income) + e.health + e.mortgage, 6);
     const tx = accountForecasts(s, o.d, o.plan, o.d.r).find((a) => a.key === "taxable")!;
-    expect(e.reachable).toBeCloseTo(tx.months[o.d.years * 12 - 1]!.balance, 6);
+    expect(e.brokerage).toBeCloseTo(tx.months[o.d.years * 12 - 1]!.balance, 6);
+    // plus Roth IRA contributions from now on (the sample's IRA is Roth) and cash beyond the emergency fund
+    const M = o.d.years * 12;
+    const ira = accountForecasts(s, o.d, o.plan, o.d.r).find((a) => a.key === "ira")!;
+    expect(e.rothContrib).toBeCloseTo(ira.months.slice(0, M).reduce((x, m) => x + m.plan + m.paycheck, 0), 6);
+    expect(e.spareCash).toBeCloseTo(Math.max(0, o.plan.months[M - 1]!.cash - o.plan.fullTarget), 6);
+    expect(e.reachable).toBeCloseTo(e.brokerage + e.rothContrib + e.spareCash, 6);
     expect(e.short).toBeCloseTo(Math.max(0, e.need - e.reachable), 6);
+  });
+
+  it("a traditional IRA is locked until 59½ like a 401(k): its money doesn't count", () => {
+    const s = at(55);
+    s.accounts = s.accounts.map((a) => (a.type === "roth" ? { ...a, type: "pretax" as const, counts: "ira" as const } : a));
+    expect(earlyAccess(s, run(s, START))!.rothContrib).toBe(0);
   });
 
   it("income that starts before 59½ counts for the years after it starts", () => {

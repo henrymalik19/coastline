@@ -365,6 +365,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     let payrollFreed = 0;
     // repaying a 401(k) loan puts the money (interest too) back into your own 401(k)
     let loanBack = 0;
+    let loanBackExtra = 0;
     const isLoan = (x: Debt) => x.kind === "k401_loan";
     for (const dt of debts) {
       // a loan repaid from a paycheck: the real deduction this month (per check × this month's paydays),
@@ -465,7 +466,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         dt.balance -= put;
         avail -= put;
         alloc.debt += put;
-        if (isLoan(dt)) loanBack += put;
+        if (isLoan(dt)) { loanBack += put; loanBackExtra += put; }
       }
     };
 
@@ -592,7 +593,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
           const put = Math.min(avail, v, Math.max(0, dt.balance));
           dt.balance -= put;
           alloc.debt += put;
-          if (isLoan(dt)) loanBack += put;
+          if (isLoan(dt)) { loanBack += put; loanBackExtra += put; }
           avail -= put;
         } else if (k === "ira" || k === "iraSpouse" || k === "taxable" || (k === "hsa" && !hsaPayroll) || k.startsWith("goal:")) {
           const held = Math.max(0, avail - v);
@@ -671,6 +672,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       debts: debts.map((x) => ({ id: x.id, balance: x.balance })),
       pre: payPre - payRoth + payMatch + alloc.k401 * (1 - d.rothShare) + alloc.matchGain + loanBack,
       loanBack,
+      loanBackExtra,
       available,
       plannedAsk,
       plannedGot,

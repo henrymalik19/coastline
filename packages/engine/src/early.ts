@@ -1,10 +1,11 @@
 /**
  * Retiring before 59½: 401(k)s and IRAs can't be touched without a 10% penalty until then, so the
- * years in between are paid from money you can reach early. Here that's your brokerage (taxable)
- * accounts only: Roth contributions, cash and the other early-access rules aren't counted.
+ * years in between are paid from money you can reach early: your brokerage, what you put into a Roth IRA
+ * from now on (contributions, not growth, come out any time), and cash beyond your emergency fund. Roth
+ * contributions made before today and early-withdrawal rules (72(t)) aren't counted.
  * Today's dollars; the brokerage money isn't grown during those years (a little conservative).
  */
-import { accountForecasts } from "./forecast";
+import { accountForecasts, accountGroup } from "./forecast";
 import { monthlyGrowthFactor } from "./howTo";
 import type { PlanState, RunResult } from "./types";
 import { num } from "./util";
@@ -26,6 +27,12 @@ export type EarlyAccess = {
   /** What you need you can reach early: spending − income + health + mortgage. */
   need: number;
   /** Your brokerage on your plan when you retire. */
+  brokerage: number;
+  /** What your plan puts into a Roth IRA from now until you retire (contributions come out any time). */
+  rothContrib: number;
+  /** Cash beyond your emergency fund when you retire. */
+  spareCash: number;
+  /** All of it: brokerage + Roth IRA contributions + spare cash. */
   reachable: number;
   /** need − reachable, at least 0. */
   short: number;
@@ -48,9 +55,19 @@ export function earlyAccess(s: PlanState, o: Pick<RunResult, "d" | "plan" | "hom
   const mortgage = Math.max(0, o.homeBridge);
   const need = Math.max(0, spending - income) + health + mortgage;
   const M = d.years * 12;
-  const taxable = accountForecasts(s, d, o.plan, d.r).find((a) => a.key === "taxable");
-  const reachable = taxable ? (M > 0 ? (taxable.months[M - 1]?.balance ?? taxable.start) : taxable.start) : 0;
+  const forecasts = accountForecasts(s, d, o.plan, d.r);
+  const taxable = forecasts.find((a) => a.key === "taxable");
+  const brokerage = taxable ? (M > 0 ? (taxable.months[M - 1]?.balance ?? taxable.start) : taxable.start) : 0;
+  // IRA money counts only when your IRAs are Roth (a traditional IRA is locked like a 401(k))
+  const iras = (s.accounts ?? []).filter((a) => accountGroup(a) === "ira");
+  const roth = iras.length > 0 && iras.every((a) => a.type === "roth");
+  const rothContrib = roth
+    ? forecasts.filter((a) => a.key === "ira" || a.key === "iraSpouse").reduce((t, a) => t + a.months.slice(0, M).reduce((x, m) => x + m.plan + m.paycheck, 0), 0)
+    : 0;
+  const cashThen = M > 0 ? (o.plan.months[M - 1]?.cash ?? 0) : 0;
+  const spareCash = Math.max(0, cashThen - Math.max(0, num(o.plan.fullTarget)));
+  const reachable = brokerage + rothContrib + spareCash;
   const short = Math.max(0, need - reachable);
   const f = monthlyGrowthFactor(Math.pow(1 + d.r, 1 / 12) - 1, M);
-  return { years, spending, income, health, mortgage, need, reachable, short, extraMonthly: short > 0.5 && f > 0 ? Math.ceil(short / f) : 0 };
+  return { years, spending, income, health, mortgage, need, brokerage, rothContrib, spareCash, reachable, short, extraMonthly: short > 0.5 && f > 0 ? Math.ceil(short / f) : 0 };
 }

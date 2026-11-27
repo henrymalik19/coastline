@@ -25,12 +25,13 @@ export function investingNow(o: Pick<RunResult, "plan">): number {
 /**
  * Where investingNow goes, a typical month this year (the same 12 months): your 401(k) (from your paycheck
  * and any more your plan puts there), your employer's match, IRAs, HSA (yours and your employer's),
- * brokerage, and paying your own 401(k) loans back. `other`: anything else, so it adds up.
+ * brokerage, and paying your own 401(k) loans back (its own payment, and any extra your plan sends to pay it
+ * off early; both go back into your 401(k)). `other`: anything else, so it adds up.
  */
-export type InvestingSplit = { k401: number; match: number; ira: number; hsa: number; taxable: number; loanBack: number; other: number };
+export type InvestingSplit = { k401: number; match: number; ira: number; hsa: number; taxable: number; loanBack: number; loanExtra: number; other: number };
 export function investingSplit(o: Pick<RunResult, "plan">): InvestingSplit {
   const ms = o.plan.months.slice(0, 12);
-  const out: InvestingSplit = { k401: 0, match: 0, ira: 0, hsa: 0, taxable: 0, loanBack: 0, other: 0 };
+  const out: InvestingSplit = { k401: 0, match: 0, ira: 0, hsa: 0, taxable: 0, loanBack: 0, loanExtra: 0, other: 0 };
   if (!ms.length) return out;
   for (const m of ms) {
     out.k401 += m.payPre + m.alloc.k401;
@@ -38,9 +39,10 @@ export function investingSplit(o: Pick<RunResult, "plan">): InvestingSplit {
     out.ira += m.alloc.ira;
     out.hsa += m.payHsa + m.payHsaEmployer + m.alloc.hsa;
     out.taxable += m.alloc.taxable;
-    out.loanBack += m.loanBack;
+    out.loanBack += m.loanBack - m.loanBackExtra;
+    out.loanExtra += m.loanBackExtra;
   }
-  const known = out.k401 + out.match + out.ira + out.hsa + out.taxable + out.loanBack;
+  const known = out.k401 + out.match + out.ira + out.hsa + out.taxable + out.loanBack + out.loanExtra;
   const total = ms.reduce((a, m) => a + m.pre + m.post, 0);
   out.other = Math.max(0, total - known);
   for (const k of Object.keys(out) as (keyof InvestingSplit)[]) out[k] /= ms.length;
