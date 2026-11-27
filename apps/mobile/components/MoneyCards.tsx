@@ -135,7 +135,7 @@ export function GoalsCard() {
         </Pressable>
       </View>
       {result.plan.fullTarget > 0 ? (
-        <GoalRow name="Emergency fund" hint={`${state.plan.efMonths} months of expenses · your cash`} saved={cash} target={result.plan.fullTarget} color={t.good} />
+        <GoalRow name="Emergency fund" hint={`${state.plan.efMonths} months of essential costs · your cash`} saved={cash} target={result.plan.fullTarget} color={t.good} />
       ) : null}
       {goals.map((g) => (
         <GoalRow

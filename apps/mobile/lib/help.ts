@@ -50,7 +50,7 @@ export const HELP = {
     "Your average tax rate on money you take out of pre-tax accounts in retirement. It raises how much you need, because you'll owe some of each withdrawal.",
   contribGrowth: "How much your income grows per year beyond inflation. 0% is conservative; raises are a bonus, not a plan.",
   starterEF: "A small cash cushion to build first, so a surprise bill doesn't go on a credit card.",
-  efMonths: "How many months of your budget (plus debt minimums) to keep in cash before investing beyond the basics.",
+  efMonths: "How many months of your essential costs (the categories marked essential, plus debt minimums and bills) to keep in cash before investing beyond the basics.",
   highApr: "Debts at or above this rate get paid off before you invest beyond the employer match. Below it, investing usually wins.",
   marginalTax:
     "Your top tax bracket (federal + state). Putting $1 more into a pre-tax 401(k) only costs about $1 × (1 − this rate) of take-home pay. We estimate it from everyone's pay in the plan and your filing status (2025 federal brackets, about 4% state). Set your own if your state's rate is different or you have other income.",

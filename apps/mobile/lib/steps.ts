@@ -48,7 +48,7 @@ function titleAndWhy(step: StepKey, s: PlanState, o: RunResult, start: Date, fal
     case "starterEF":
       return { title: `Emergency cushion: ${money(pl.starterTarget, { whole: true })}`, why: "A small cushion first, so a surprise bill doesn't go on a card" };
     case "fullEF":
-      return { title: `Emergency fund: ${money(pl.fullTarget, { whole: true })}`, why: `${s.plan.efMonths} months of expenses in case your income stops` };
+      return { title: `Emergency fund: ${money(pl.fullTarget, { whole: true })}`, why: `${s.plan.efMonths} months of essential costs in case your income stops` };
     case "match": {
       const jobs = o.d.incomes.filter((i) => i.match > 0).map((i) => i.name);
       return { title: jobs.length ? `Full match at ${listNames(jobs)}` : "Get the full employer match", why: "Free money: your employer adds to what you put in" };

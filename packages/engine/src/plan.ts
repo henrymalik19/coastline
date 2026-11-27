@@ -111,7 +111,8 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
   // a short month beyond your cash goes on a card at your card's rate (highest card APR, else a typical 22%)
   const cardAprs = debts.filter((x) => x.kind === "credit_card" && x.apr > 0).map((x) => x.apr);
   const cardApr = cardAprs.length ? Math.max(...cardAprs) : DEFAULT_CARD_APR;
-  const efBase = d.monthlyExpenses;
+  // the emergency fund: months of your essential costs (what you'd keep paying if your income stopped)
+  const efBase = d.essentialExpenses;
 
   // A job's 401(k) / HSA per paycheck can change by month ("pay401:<job id>", "payhsa:<job id>"):
   // $0 for Nov–Dec, then back on in January. Without a change it's what the job says today.

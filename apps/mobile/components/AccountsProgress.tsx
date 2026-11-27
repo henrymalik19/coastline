@@ -81,7 +81,7 @@ export function AccountsProgress({ onOpen }: { onOpen: (key: AccountKey) => void
       progress: Math.min(1, cash / pl.fullTarget),
       later: dec ? Math.min(1, dec.cash / pl.fullTarget) : undefined,
       status: full ? "Full" : ev("fullEF") !== undefined ? `Full by ${when(ev("fullEF"))}` : "Not full in the plan yet",
-      info: `${state.plan.efMonths} months of expenses (${money(pl.fullTarget / Math.max(1, state.plan.efMonths), { whole: true })} a month), kept in cash. By ${selLabel}: ${money(dec.cash, { whole: true })}.`,
+      info: `${state.plan.efMonths} months of essential costs (${money(pl.fullTarget / Math.max(1, state.plan.efMonths), { whole: true })} a month), kept in cash. By ${selLabel}: ${money(dec.cash, { whole: true })}.`,
       color: t.good,
       done: full,
     });

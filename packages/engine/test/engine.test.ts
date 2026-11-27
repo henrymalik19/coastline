@@ -264,6 +264,16 @@ describe("one-off adjustments and short months", () => {
     });
   const months = (s: PlanState) => simulatePlan(s, derive(s, START)).months;
 
+  it("the emergency fund is months of your essential costs, not your whole budget", () => {
+    const s = blank({
+      budget: [{ id: "rent", name: "Rent", amount: 2000, inRetirement: true }, { id: "fun", name: "Fun", amount: 1000, inRetirement: true, essential: false }],
+      plan: { ...blank().plan, efMonths: 6, starterEFMonths: 1 },
+    });
+    const p = simulatePlan(s, derive(s, START));
+    expect(p.fullTarget).toBe(12000); // 6 × $2,000 (Fun isn't essential)
+    expect(p.starterTarget).toBe(2000);
+  });
+
   it("an unexpected expense only changes its own month", () => {
     const s = base({ adjustments: [{ id: "a", month: "2027-01", kind: "expense", amount: 1500, note: "Car repair" }] });
     const [nov, dec, jan, feb] = months(s);

@@ -23,7 +23,7 @@ export function EmergencyFundNote({ linkToSettings = true }: { linkToSettings?: 
   const full = result.plan.fullTarget;
   const cash = result.d.bal.cash;
   const [tip, setTip] = useState(false);
-  const info = `No need to add it as a goal. The plan builds a starter cushion of ${money(result.plan.starterTarget, { whole: true })} first, then grows it to ${state.plan.efMonths} months of expenses (${money(full, { whole: true })}), kept in your cash accounts.${linkToSettings ? "" : " You can change its size later under Money → Savings goals."}`;
+  const info = `No need to add it as a goal. The plan builds a starter cushion of ${money(result.plan.starterTarget, { whole: true })} first, then grows it to ${state.plan.efMonths} months of essential costs (${money(full, { whole: true })}), kept in your cash accounts.${linkToSettings ? "" : " You can change its size later under Money → Savings goals."}`;
   return (
     <View style={[styles.box, { backgroundColor: t.accentSoft }]}>
       <View style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
@@ -52,14 +52,14 @@ export function EmergencyFundNote({ linkToSettings = true }: { linkToSettings?: 
   );
 }
 
-/** How big the emergency fund is: the starter cushion (built first) and the full fund, in months of expenses. */
+/** How big the emergency fund is: the starter cushion (built first) and the full fund, in months of essential costs. */
 export function EmergencyFundSize() {
   const t = useTheme();
   const { state, result, actual } = usePlan();
   const update = useStore((s) => s.update);
   const byMonths = state.plan.starterEFMonths != null;
   const full = actual.fullTarget;
-  const monthly = result.d.monthlyExpenses;
+  const monthly = result.d.essentialExpenses;
   // phones: the label on its own line, then a small Months/Amount dropdown beside the number
   const compact = useLayout().contentWidth < 600;
   const setKind = (v: "months" | "amount") => update((p) => {
@@ -76,7 +76,7 @@ export function EmergencyFundSize() {
       <FieldRow
         stacked={compact}
         label="Starter cushion"
-        hint={byMonths ? `${state.plan.starterEFMonths} month${state.plan.starterEFMonths === 1 ? "" : "s"} of expenses = ${money(actual.starterTarget)}. Built first, before paying down high-interest debt` : "Built first, before paying down high-interest debt"}
+        hint={byMonths ? `${state.plan.starterEFMonths} month${state.plan.starterEFMonths === 1 ? "" : "s"} of essential costs = ${money(actual.starterTarget)}. Built first, before paying down high-interest debt` : "Built first, before paying down high-interest debt"}
         info={HELP.starterEF}
       >
         <View style={compact ? { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm } : { gap: space.xs, alignItems: "flex-end" }}>
@@ -96,7 +96,7 @@ export function EmergencyFundSize() {
         </View>
       </FieldRow>
     <Divider />
-      <FieldRow label="Full fund" hint={`${state.plan.efMonths} months of expenses (${money(monthly)}/mo) = ${money(full)}. 0 for none.`} info={HELP.efMonths}>
+      <FieldRow label="Full fund" hint={`${state.plan.efMonths} months of essential costs (${money(monthly)}/mo) = ${money(full)}. 0 for none.`} info={HELP.efMonths}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
           <NumberInput kind="decimal" label="Full emergency fund in months" value={state.plan.efMonths} max={24} step={1} width={compact ? 110 : 140} onChange={(v) => update((p) => { p.plan.efMonths = v; })} />
           <Text style={[type.caption, { color: t.text3 }]}>mo</Text>
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
 });
 
 /**
- * The emergency fund as a built-in savings goal: its size (months of expenses, and the starter
+ * The emergency fund as a built-in savings goal: its size (months of essential costs, and the starter
  * cushion), what's saved (your cash accounts), when it's done, and your monthly plan for it. Not a
  * regular goal underneath: its target follows your spending and it holds your actual cash.
  */
@@ -132,7 +132,7 @@ export function EmergencyFundGoal() {
   const hasSchedule = (k: string) => (state.plan.schedule?.[k]?.length ?? 0) > 0 || Object.keys(state.plan.scheduleMonths?.[k] ?? {}).length > 0;
   const full = actual.fullTarget;
   const cash = result.d.bal.cash;
-  const monthly = result.d.monthlyExpenses;
+  const monthly = result.d.essentialExpenses;
   const done = actual.events.find((e) => e.key === "fullEF");
   const cashAccounts = state.accounts.filter((a) => a.type === "cash");
   return (
@@ -143,7 +143,7 @@ export function EmergencyFundGoal() {
         <Pill tone="accent">Built in</Pill>
       </View>
       <Text style={[type.caption, { color: t.text3 }]}>
-        Kept in your cash accounts. Your plan builds the starter cushion first, then the full fund. Its size follows your spending.
+        Kept in your cash accounts. Your plan builds the starter cushion first, then the full fund. Its size follows your essential costs.
       </Text>
       <EmergencyFundSize />
       <Divider />
