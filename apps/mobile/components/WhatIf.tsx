@@ -134,6 +134,7 @@ export function WhatIf() {
           <>
             <Divider />
             <SectionLabel flush>Extra on your mortgages</SectionLabel>
+            <View style={[styles.sliders, { flexDirection: twoColumn ? "row" : "column", flexWrap: "wrap" }]}>
             {mortgages.map((x) => {
               const pay = payoffs.find((p) => p.id === x.id);
               const more = w.loanExtra?.[x.id] ?? 0;
@@ -158,6 +159,7 @@ export function WhatIf() {
                 </SliderRow>
               );
             })}
+            </View>
           </>
         ) : null}
         <Divider />
@@ -171,7 +173,7 @@ export function WhatIf() {
               {onTrack ? "On track ✓" : `${money(o.fire - o.projectedFinal, { whole: true })} short at ${d.retireAge}`}
             </Text>
             <Text style={[type.caption, { color: t.text2 }]}>
-              {whatIfOn ? "With the what-if: " : ""}about {money(o.projectedFinal, { whole: true })} invested at {d.retireAge}, for a FIRE number of {money(o.fire, { whole: true })}.
+              {whatIfOn ? "With the what-if: about " : "About "}{money(o.projectedFinal, { whole: true })} invested at {d.retireAge}, for a FIRE number of {money(o.fire, { whole: true })}.
               {whatIfOn ? ` Your plan: ${money(planFinal, { whole: true })} at ${realD.retireAge} for ${money(planFire, { whole: true })} (${planOnTrack ? "on track" : "short"}).` : ""}
             </Text>
           </View>
@@ -272,8 +274,8 @@ function Key({ color, text, dashed }: { color: string; text: string; dashed?: bo
 function SliderRow({ label, sub, value, on, children }: { label: string; sub?: string; value: string; on?: boolean; children: React.ReactNode }) {
   const t = useTheme();
   return (
-    // side by side on a wide screen (each at least 260 wide); stacked on a phone
-    <View style={[{ gap: 2, minWidth: 0 }, useLayout().twoColumn ? { flexGrow: 1, flexBasis: 260 } : null]}>
+    // side by side on a wide screen (each at least 200 wide); stacked on a phone
+    <View style={[{ gap: 2, minWidth: 0 }, useLayout().twoColumn ? { flexGrow: 1, flexBasis: 200 } : null]}>
       <View style={styles.between}>
         <Text style={[type.label, { color: t.text2, flexShrink: 1 }]} numberOfLines={1}>{label}</Text>
         <Text style={[type.label, { color: on ? t.warn : t.text, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{value}</Text>

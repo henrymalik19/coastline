@@ -327,7 +327,7 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
         {row(`Spending, ${yrs(early.years)} years`, whole(early.spending))}
         {early.income > 0.5 ? row("Income that comes in by then", `− ${whole(early.income)}`) : null}
         {early.health > 0.5 ? row("Health insurance until then", `+ ${whole(early.health)}`, { sub: "Beyond what you'd pay on Medicare" }) : null}
-        {early.mortgage > 0.5 ? row("Mortgage payments left", `+ ${whole(early.mortgage)}`, { sub: "After you retire, interest included" }) : null}
+        {early.mortgage > 0.5 ? row("Your mortgage", `+ ${whole(early.mortgage)}`, { sub: o.mortgagesAtRetire.every((x) => x.choice === "payoff") ? "Paying it off when you retire" : "Keeping up its payments after you retire" }) : null}
       </View>
       {row(`Your brokerage at ${d.retireAge}`, whole(early.reachable), { sub: "On your plan" })}
       {early.short > 0.5 ? (
@@ -387,9 +387,13 @@ export function NumberBreakdown({ onView }: { onView?: (v: "retirement" | "whati
           {b.healthBridge > 0.5 ? row("Health insurance until 65", `+ ${whole(b.healthBridge)}`, { sub: `${whole(state.healthcare)}/mo from ${d.retireAge} until Medicare, beyond Medicare's cost` }) : null}
           {o.mortgagesAtRetire.map((x) => (
             <View key={x.id}>
-              {row(`Mortgage payments left: ${x.name || "Mortgage"}`, `+ ${whole(x.months === null ? x.balance : x.total)}`, {
-                sub: x.months === null ? "Its payment never pays it off, so this pays off what's owed then" : `Paid monthly from ${d.retireAge} until it ends in ${monthLabel(start, Math.round(yearsToRetire * 12) + x.months)}, interest included`,
-              })}
+              {x.choice === "keep" && x.keepCost !== null && x.months !== null
+                ? row(`Keep paying ${x.name || "the mortgage"}`, `+ ${whole(x.keepCost)}`, {
+                    sub: `Set aside for its payments from ${d.retireAge} until it ends in ${monthLabel(start, Math.round(yearsToRetire * 12) + x.months)}; it keeps growing while it's paid out. Paying it off then: ${whole(x.payoffCost)}`,
+                  })
+                : row(`Pay off ${x.name || "the mortgage"} at ${d.retireAge}`, `+ ${whole(x.payoffCost)}`, {
+                    sub: x.keepCost === null ? "Its payment never pays it off, so this pays off what's owed then" : `What's owed then. Keeping up the payments instead: ${whole(x.keepCost)}`,
+                  })}
             </View>
           ))}
           <Divider />

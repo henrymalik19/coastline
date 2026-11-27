@@ -31,7 +31,7 @@ describe("mortgages in retirement", () => {
     expect(o.fire).toBeCloseTo(run(blank(), START).fire, 6);
   });
 
-  it("one that runs past retirement adds its payments left then to your number (interest included)", () => {
+  it("one that runs past retirement: keeping up the payments from money that keeps growing, or paying it off, whichever costs less", () => {
     // ~$200k left at 6% with $1,699 a month: about 15 years, so ~5 years into retirement
     const s = blank({ debts: [mortgage()] });
     const o = run(s, START);
@@ -39,12 +39,31 @@ describe("mortgages in retirement", () => {
     const left = o.mortgagesAtRetire[0]!;
     expect(left.months).toBeGreaterThan(50);
     expect(left.months).toBeLessThan(70);
-    expect(o.homeBridge).toBeCloseTo(left.total, 6);
-    expect(o.fire - run(blank(), START).fire).toBeCloseTo(left.total, 0);
     // the payments left: about $1,699 for each month, more than what's owed (interest)
     expect(left.total).toBeGreaterThan(1_699.1 * (left.months! - 1)); // the last one is smaller
-    expect(left.total).toBeLessThanOrEqual(1_699.1 * left.months! + 0.01);
     expect(left.total).toBeGreaterThan(left.balance);
+    // but set aside, that money earns 5% after inflation (about 8% before): less than the loan's 6% costs,
+    // so keeping up the payments needs less than paying it off
+    expect(left.keepCost!).toBeLessThan(left.balance);
+    expect(left.payoffCost).toBe(left.balance);
+    expect(left.choice).toBe("keep");
+    expect(o.homeBridge).toBeCloseTo(left.keepCost!, 6);
+    expect(o.fire - run(blank(), START).fire).toBeCloseTo(left.keepCost!, 0);
+  });
+
+  it("a loan that costs more than your savings earn: paying it off is cheaper", () => {
+    const o = run(blank({ debts: [mortgage({ apr: 0.12, minPayment: 2_400 })] }), START);
+    const left = o.mortgagesAtRetire[0]!;
+    expect(left.keepCost!).toBeGreaterThan(left.balance);
+    expect(left.choice).toBe("payoff");
+    expect(o.homeBridge).toBeCloseTo(left.balance, 6);
+  });
+
+  it("your choice wins, even when it costs more", () => {
+    const o = run(blank({ debts: [mortgage({ atRetire: "payoff" })] }), START);
+    const left = o.mortgagesAtRetire[0]!;
+    expect([left.choice, left.chosen]).toEqual(["payoff", "payoff"]);
+    expect(o.homeBridge).toBeCloseTo(left.balance, 6);
   });
 
   it("escrow isn't part of the loan, and keeps counting in retirement", () => {

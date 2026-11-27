@@ -197,6 +197,11 @@ export type Debt = {
   plaidAccountId?: string;
   /** Matched to a bank: the first day its transactions come from the bank ("YYYY-MM-DD"). */
   bankFrom?: string;
+  /**
+   * A mortgage still running when you retire: keep up the payments (from money set aside), or pay it off
+   * then. Missing: whichever costs your number less.
+   */
+  atRetire?: "keep" | "payoff";
   /** Intro/promo rate (e.g. 0% balance transfer) charged through `promoUntil`; `apr` applies after. */
   promoApr?: number;
   /** Last month of the promo rate, "YYYY-MM". */

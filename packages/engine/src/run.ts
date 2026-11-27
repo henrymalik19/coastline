@@ -10,8 +10,8 @@ export const MC_SEED = 20261106;
 
 /**
  * The numbers the FIRE number needs, with a mortgage still running when you retire added to the bridge:
- * its payments from then until it's paid off (interest included), like health insurance until Medicare.
- * One whose payment never pays it off counts what's owed then instead.
+ * keeping up its payments from money set aside (like health insurance until Medicare), or paying it off
+ * then, whichever you chose (else the cheaper).
  */
 function withHome(s: PlanState, d: Derived, plan: PlanResult) {
   const mortgagesAtRetire = mortgagesAtRetirement(s, d, plan);

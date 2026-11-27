@@ -89,6 +89,7 @@ export const DebtSchema = z.object({
   minPayment: nonNeg,
   plaidAccountId: z.string().optional(),
   bankFrom: z.string().regex(DAY_RE, "Use YYYY-MM-DD").optional(),
+  atRetire: z.enum(["keep", "payoff"]).optional(),
   promoApr: rate.min(0).optional(),
   promoUntil: z.string().regex(MONTH_RE, "Use YYYY-MM").optional(),
   minimumOnly: z.boolean().optional(),

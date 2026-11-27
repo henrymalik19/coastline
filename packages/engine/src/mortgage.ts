@@ -1,10 +1,11 @@
 /**
  * Mortgages and retirement: when the loan really ends (from what you owe now, so extra payments you
- * made already count), how that compares with the loan's original schedule, and what's still owed
- * when you retire. Your number counts what's owed then: that's what paying it off costs, and it's
- * what the remaining payments are worth in today's money (their interest is the loan's own rate).
+ * made already count), how that compares with the loan's original schedule, and what one still running
+ * when you retire costs your number: paying it off then (what's owed), or keeping up the payments from
+ * money set aside, which keeps growing while it's paid out (and the payment, fixed, buys less each year).
  */
 import type { Debt, Derived, PlanResult, PlanState } from "./types";
+import { DISPLAY_INFLATION } from "./inflation";
 import { addMonths, monthsBetween, num } from "./util";
 import { isKeptRentalDebt, isRentalDebt } from "./schedule";
 
@@ -19,9 +20,12 @@ export const loanPayment = (x: Pick<Debt, "minPayment" | "escrow">): number =>
  * Paying `payment` a month on `balance` at `apr`: how many payments it takes (null if the payment
  * never pays it off) and the total paid.
  */
-export function amortize(balance: number, apr: number, payment: number): { months: number | null; total: number } {
+export function amortize(balance: number, apr: number, payment: number, discount = 0): { months: number | null; total: number; worth: number } {
   let b = Math.max(0, num(balance));
   let total = 0;
+  // `worth`: the payments as money set aside today, earning `discount` a month until each is paid
+  let worth = 0;
+  let f = 1;
   let m = 0;
   const r = Math.max(0, num(apr)) / 12;
   while (b > 0.005 && m < CAP) {
@@ -30,9 +34,11 @@ export function amortize(balance: number, apr: number, payment: number): { month
     if (p <= 0) break;
     b -= p;
     total += p;
+    f /= 1 + Math.max(0, discount);
+    worth += p * f;
     m++;
   }
-  return { months: b > 0.005 ? null : m, total };
+  return { months: b > 0.005 ? null : m, total, worth };
 }
 
 /** The regular payment on a loan of `amount` at `apr` over `term` months. */
@@ -88,22 +94,32 @@ export type DebtAtRetirement = {
   balance: number;
   /** Payments left after you retire (null: the payment never pays it off; followed for 50 years). */
   months: number | null;
-  /** Those payments added up, interest included: what your number counts (mortgageBridge). */
+  /** Those payments added up, interest included. */
   total: number;
+  /**
+   * Keeping up the payments: what to set aside when you retire, which keeps growing at your plan's return
+   * while it's paid out (null when the payment never pays it off).
+   */
+  keepCost: number | null;
+  /** Paying it off when you retire: what's owed then. */
+  payoffCost: number;
+  /** What your plan does: your choice (Debt.atRetire), else the cheaper one. */
+  choice: "keep" | "payoff";
+  /** Your choice, when you made one. */
+  chosen?: "keep" | "payoff";
 };
 
-/**
- * What a mortgage still running when you retire adds to your number: the payments left, interest
- * included, as you'd keep making them. One whose payment never pays it off: what's owed then.
- */
-export const mortgageBridge = (x: Pick<DebtAtRetirement, "balance" | "months" | "total">) => (x.months === null ? x.balance : x.total);
+/** What a mortgage still running when you retire adds to your number: keeping it up, or paying it off (its `choice`). */
+export const mortgageBridge = (x: Pick<DebtAtRetirement, "choice" | "keepCost" | "payoffCost">) => (x.choice === "keep" && x.keepCost !== null ? x.keepCost : x.payoffCost);
 
 /**
  * Mortgages still owed when you retire, as your plan runs them (extra payments included): what's owed
  * then, and what the payments left add up to if you keep paying monthly.
  */
-export function mortgagesAtRetirement(s: Pick<PlanState, "debts" | "properties">, d: Pick<Derived, "years">, plan: Pick<PlanResult, "months">): DebtAtRetirement[] {
+export function mortgagesAtRetirement(s: Pick<PlanState, "debts" | "properties">, d: Pick<Derived, "years" | "r">, plan: Pick<PlanResult, "months">): DebtAtRetirement[] {
   const M = d.years * 12;
+  // what money set aside earns a month, before inflation (the payment is a fixed dollar amount)
+  const grow = Math.pow((1 + num(d.r)) * (1 + DISPLAY_INFLATION), 1 / 12) - 1;
   const row = M > 0 ? plan.months[M - 1] : undefined;
   const out: DebtAtRetirement[] = [];
   for (const x of s.debts ?? []) {
@@ -111,8 +127,11 @@ export function mortgagesAtRetirement(s: Pick<PlanState, "debts" | "properties">
     if (x.kind !== "mortgage" || x.payroll || (isRentalDebt(s, x) && !isKeptRentalDebt(s, x))) continue;
     const balance = row ? (row.debts?.find((y) => y.id === x.id)?.balance ?? 0) : num(x.balance);
     if (!(balance > 0.5)) continue;
-    const a = amortize(balance, num(x.apr), loanPayment(x));
-    out.push({ id: x.id, name: x.name, balance, months: a.months, total: a.total });
+    const a = amortize(balance, num(x.apr), loanPayment(x), grow);
+    const keepCost = a.months === null ? null : a.worth;
+    const chosen = x.atRetire;
+    const choice = keepCost === null ? "payoff" : chosen ?? (keepCost < balance ? "keep" : "payoff");
+    out.push({ id: x.id, name: x.name, balance, months: a.months, total: a.total, keepCost, payoffCost: balance, choice, ...(chosen ? { chosen } : {}) });
   }
   return out;
 }

@@ -130,7 +130,7 @@ export function RetirementEssentials() {
         {homeBridge > 0.5 || d.healthBridge > 0.5 ? (
           <>
             <Text style={[type.caption, { color: t.text3, marginTop: space.sm }]}>Plus, set aside in your number for costs that end (paid monthly from your savings until they stop):</Text>
-            {homeBridge > 0.5 ? line("Mortgage payments left", homeBridge, "until it ends, interest included") : null}
+            {homeBridge > 0.5 ? line(owedAtRetire.length === 1 && owedAtRetire[0]!.choice === "payoff" ? "Paying off your mortgage" : "Your mortgage", homeBridge, owedAtRetire.every((x) => x.choice === "payoff") ? "what's owed when you retire" : "keeping up the payments from money set aside") : null}
             {d.healthBridge > 0.5 ? line("Health insurance until 65", d.healthBridge, "beyond Medicare's cost") : null}
           </>
         ) : null}
@@ -204,18 +204,21 @@ export function RetirementEssentials() {
                           {left ? (
                             <>
                               {stage(`Now – age ${d.retireAge}`, linked.minPayment, "From your paycheck")}
-                              {left.months === null
-                                ? stage(`From ${d.retireAge}`, escrow, `Its payment never pays it off, so your number pays off the ${money(left.balance, { whole: true })} owed then.${escrow > 0.5 ? " Taxes & insurance keep going." : ""}`, true)
-                                : (
-                                  <>
-                                    {stage(
-                                      `${d.retireAge} – ${monthLabel(start, endM!)}`,
-                                      linked.minPayment,
-                                      `The loan part (${money(linked.minPayment - escrow, { whole: true })}) comes from savings set aside in your number: ${money(left.total, { whole: true })}, interest included${escrow > 0.5 ? `. Plus taxes & insurance (${money(escrow, { whole: true })})` : ""}`,
-                                    )}
-                                    {stage(`${monthLabel(start, endM!)} on`, escrow, escrow > 0.5 ? "Loan paid off. Taxes & insurance keep going" : "Loan paid off", true)}
-                                  </>
-                                )}
+                              {left.choice === "payoff" || left.months === null ? (
+                                <>
+                                  {stage(`At ${d.retireAge}`, 0, `Pay off the ${money(left.payoffCost, { whole: true })} owed then, from savings set aside in your number`)}
+                                  {stage(`From ${d.retireAge}`, escrow, escrow > 0.5 ? "No loan payment. Taxes & insurance keep going" : "No loan payment", true)}
+                                </>
+                              ) : (
+                                <>
+                                  {stage(
+                                    `${d.retireAge} – ${monthLabel(start, endM!)}`,
+                                    linked.minPayment,
+                                    `The loan part (${money(linked.minPayment - escrow, { whole: true })}) comes from ${money(left.keepCost ?? 0, { whole: true })} set aside in your number, which keeps growing while it's paid out${escrow > 0.5 ? `. Plus taxes & insurance (${money(escrow, { whole: true })})` : ""}`,
+                                  )}
+                                  {stage(`${monthLabel(start, endM!)} on`, escrow, escrow > 0.5 ? "Loan paid off. Taxes & insurance keep going" : "Loan paid off", true)}
+                                </>
+                              )}
                             </>
                           ) : linked.balance > 0.5 && endM !== null ? (
                             <>
@@ -226,7 +229,29 @@ export function RetirementEssentials() {
                             stage("Now on", escrow, escrow > 0.5 ? "Paid off. Taxes & insurance keep going" : "Paid off", true)
                           )}
                         </View>
-                        {left ? <Text style={[type.caption, { color: t.text3 }]}>Nothing assumes you pay it off early. To see that, try "Pay down" on Your plan or What if.</Text> : null}
+                        {left && left.keepCost !== null ? (
+                          <View style={{ gap: 4 }}>
+                            <View style={styles.row}>
+                              <Text style={[type.label, { color: t.text2, flex: 1 }]}>When you retire</Text>
+                              <Segmented
+                                label={`${debtLabel(linked)}: when you retire`}
+                                value={left.choice}
+                                options={[{ value: "keep" as const, label: "Keep paying" }, { value: "payoff" as const, label: "Pay it off" }]}
+                                onChange={(v) => update((p) => { const x = p.debts.find((y) => y.id === linked.id); if (x) x.atRetire = v; })}
+                              />
+                            </View>
+                            <Text style={[type.caption, { color: t.text3 }]}>
+                              Keep paying: {money(left.keepCost, { whole: true })} set aside. Pay it off: {money(left.payoffCost, { whole: true })}.{" "}
+                              {left.keepCost < left.payoffCost
+                                ? "Keeping it costs your number less: what's set aside earns more than the loan costs."
+                                : "Paying it off costs your number less: the loan costs more than what's set aside would earn."}
+                              {left.chosen && left.chosen !== (left.keepCost < left.payoffCost ? "keep" : "payoff") ? (
+                                <Text role="button" onPress={() => update((p) => { const x = p.debts.find((y) => y.id === linked.id); if (x) delete x.atRetire; })} style={{ color: t.accent, fontWeight: "700" }}> Use the cheaper</Text>
+                              ) : null}
+                            </Text>
+                            <Text style={[type.caption, { color: t.text3 }]}>Paying it down early (before you retire) is a What if: "Pay down" on Your plan.</Text>
+                          </View>
+                        ) : null}
                       </View>
                     </View>
                   );
