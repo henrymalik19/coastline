@@ -292,7 +292,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
   const fromPay: { label: string; amount: number; where: string; href: string }[] = [
     { label: "401(k) from your paychecks", amount: row0.payPre, where: perCheck((x) => x.pretax ?? 0), href: "/money/income" },
     { label: "HSA from your paychecks", amount: row0.payHsa ?? 0, where: perCheck((x) => x.hsaPre ?? 0), href: "/money/income" },
-    ...loanDebts.map((x) => ({ label: `${debtLabel(x)} from your paycheck`, amount: x.minPayment, where: "goes back into your 401(k)", href: "/money/debts" })),
+    ...loanDebts.map((x) => ({ label: `${debtLabel(x)} from your paycheck`, amount: x.minPayment, where: "goes back into your 401(k)", href: "/money/accounts" })),
   ].filter((x) => x.amount > 0.5);
   const mine = all
     .filter((a) => scheduleAmount(merged, a.key, thisMonth) !== undefined)
@@ -326,7 +326,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
       ) : null}
       {line("Take-home", money(row0.income))}
       {line("Budget", `− ${money(Math.max(0, row0.expenses - row0.minPay - row0.setAside))}`, { href: "/budget" })}
-      {row0.minPay > 0.5 ? line("Debt payments", `− ${money(row0.minPay)}`, { href: "/money/debts", hint: escrowNow > 0.5 ? `includes ${money(escrowNow)} escrow` : undefined }) : null}
+      {row0.minPay > 0.5 ? line("Debt payments", `− ${money(row0.minPay)}`, { href: "/money/accounts", hint: escrowNow > 0.5 ? `includes ${money(escrowNow)} escrow` : undefined }) : null}
       {row0.setAside > 0.5 ? line("Set aside for recurring goals", `− ${money(row0.setAside)}`, { href: "/money/goals" }) : null}
       {line("Left after bills", money(row0.available), { strong: true, color: row0.available < 0 ? t.bad : t.text })}
       <View style={[styles.rule, { backgroundColor: t.border }]} />

@@ -137,7 +137,7 @@ export default function Home() {
           tone={Number.isFinite(d.emergencyMonths) && d.emergencyMonths < 3 ? t.warn : undefined}
         />
         {o.mortgagesAtRetire.length ? (
-          <Pressable role="link" onPress={() => openPage("/money/debts")} style={[styles.homeNote, { backgroundColor: t.warnSoft }]}>
+          <Pressable role="link" onPress={() => openPage("/money/accounts")} style={[styles.homeNote, { backgroundColor: t.warnSoft }]}>
             <Text style={[type.caption, { color: t.text2, flex: 1 }]}>
               {o.mortgagesAtRetire.length === 1 ? "Your mortgage" : "Your mortgages"} will still be running when you retire, so your number includes {money(o.homeBridge, { whole: true })} for it ({o.mortgagesAtRetire.every((x) => x.choice === "payoff") ? "paying it off then" : "keeping up the payments"}). <Text style={{ color: t.accent, fontWeight: "700" }}>See it on Debts</Text>
             </Text>

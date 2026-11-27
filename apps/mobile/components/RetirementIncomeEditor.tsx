@@ -98,8 +98,8 @@ export function RetirementIncomeEditor() {
               </View>
             </View>
           ))}
-          <Pressable role="link" onPress={() => openPage("/money/properties")} hitSlop={6} style={{ alignSelf: "flex-start", paddingBottom: space.sm }}>
-            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change under Property →</Text>
+          <Pressable role="link" onPress={() => openPage("/money/accounts")} hitSlop={6} style={{ alignSelf: "flex-start", paddingBottom: space.sm }}>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Change on Accounts →</Text>
           </Pressable>
         </Card>
       ) : null}

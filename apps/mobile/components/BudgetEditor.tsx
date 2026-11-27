@@ -149,7 +149,7 @@ export function BudgetEditor() {
       else delete x.budgetGroup;
     });
     const home = kind === "debt" ? DEBTS_GROUP : BILLS_GROUP;
-    setNotice(`Moved to ${group ?? home}. It's still counted once and changes on the ${kind === "debt" ? "Debts" : "Savings goals"} page.`);
+    setNotice(`Moved to ${group ?? home}. It's still counted once and changes on the ${kind === "debt" ? "Accounts" : "Savings goals"} page.`);
   };
   const debtFrom = (x: Debt) => {
     const link = paycheckFor(state, x.id);
@@ -496,7 +496,7 @@ export function BudgetEditor() {
         </Text>
       ) : onDebts ? (
         <Text style={[type.caption, { color: t.text3, padding: space.sm }]}>
-          These come from your debts, so they're counted once. Change them on the Debts page. Tap one to list it under another group (like a mortgage under Housing).
+          These come from your debts, so they're counted once. Change them on Accounts. Tap one to list it under another group (like a mortgage under Housing).
           {payrollLoans.length ? " 401(k) loan repayments aren't listed: they come out of your paycheck, before take-home." : ""}
         </Text>
       ) : current ? <Button title={`Add item to ${current.name}`} icon="plus" tone="ghost" onPress={() => addItem(current.name)} style={{ alignSelf: "flex-start" }} /> : undefined}

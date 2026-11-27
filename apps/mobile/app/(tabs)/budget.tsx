@@ -564,7 +564,7 @@ export default function Budget() {
             {linkedTo || parentItem ? null : (
               <FormRow
                 label="Pays a loan?"
-                hint={it.paysDebt ? "Counted from Debts, not as spending" : "Pick the loan it pays, so it isn't counted twice"}
+                hint={it.paysDebt ? "Counted as a loan payment, not as spending" : "Pick the loan it pays, so it isn't counted twice"}
               >
                 <Select
                   plain
@@ -579,7 +579,7 @@ export default function Budget() {
               const loan = it.paysDebt ? state.debts.find((x) => x.id === it.paysDebt) : undefined;
               return loan ? (
                 <FormRow label="Payment" hint={`From your ${debtLabel(loan)} ${debtKind(loan.kind).label.toLowerCase()}${loan.escrow ? ` (${money(loan.escrow)} of it taxes and insurance)` : ""}`}>
-                  <Pressable role="link" onPress={() => openPage("/money/debts")} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <Pressable role="link" onPress={() => openPage("/money/accounts")} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                     <Text style={[type.body, { color: t.text, fontVariant: ["tabular-nums"] }]}>{money(loan.minPayment)}</Text>
                     <Text style={[type.body, { color: t.accent, fontWeight: "600" }]}>Change</Text>
                     <Icon name="chevron" size={14} color={t.accent} />
@@ -708,8 +708,8 @@ export default function Budget() {
             </FormRow>
           </FormList>
         ) : null}
-        <Pressable role="link" onPress={() => router.push(isBill ? "/money/goals" : "/money/debts")} hitSlop={6} style={styles.link}>
-          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{isBill ? "Change this bill (Savings goals)" : "Change this debt (Debts)"}</Text>
+        <Pressable role="link" onPress={() => router.push(isBill ? "/money/goals" : "/money/accounts")} hitSlop={6} style={styles.link}>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>{isBill ? "Change this bill (Savings goals)" : "Change this debt (Accounts)"}</Text>
           <Icon name="chevron" size={12} color={t.accent} />
         </Pressable>
       </View>
@@ -832,7 +832,7 @@ export default function Budget() {
               <View style={[styles.dupBox, { backgroundColor: t.warnSoft, borderColor: t.warn }]}>
                 <Text style={[type.label, { color: t.text, fontWeight: "700" }]}>Does this pay your {debtLabel(loan)} {loan.kind === "mortgage" ? "mortgage" : "loan"}?</Text>
                 <Text style={[type.caption, { color: t.text2 }]}>
-                  Its payment is {money(loan.minPayment)} a month, already in your plan from Debts. Right now this category counts too, so the payment is counted twice (in your retirement number too). Link it and it's counted once.
+                  Its payment is {money(loan.minPayment)} a month, already in your plan from Accounts. Right now this category counts too, so the payment is counted twice (in your retirement number too). Link it and it's counted once.
                 </Text>
                 <View style={styles.chips}>
                   <Chip title="Yes, link it" tone="accent" icon="check" onPress={() => editItem(c.key, { paysDebt: loan.id })} />

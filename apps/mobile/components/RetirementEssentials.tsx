@@ -197,7 +197,7 @@ export function RetirementEssentials() {
                         <View style={styles.row}>
                           <Text style={[type.body, { color: t.text, fontWeight: "600", flex: 1 }]} numberOfLines={1}>{name}</Text>
                           <Icon name="lock" size={12} color={t.text3} />
-                          <Text style={[type.caption, { color: t.text3 }]}>from Debts</Text>
+                          <Text style={[type.caption, { color: t.text3 }]}>from Accounts</Text>
                         </View>
                         <Text style={[type.caption, { color: t.text3 }]}>Pays your {debtLabel(linked)} {what(linked)}.</Text>
                         <View style={[styles.timeline, { borderLeftColor: t.border }]}>

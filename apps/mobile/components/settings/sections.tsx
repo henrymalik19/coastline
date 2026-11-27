@@ -23,6 +23,8 @@ import { ContributionsCard } from "../ContributionsCard";
 import { RetirementIncomeEditor } from "../RetirementIncomeEditor";
 import { GoalEditor } from "../GoalEditor";
 import { BankBar, BankConnections } from "../BankConnections";
+import { NetWorthCard } from "../MoneyCards";
+import { isCard } from "../../lib/register";
 import { BudgetEditor } from "../BudgetEditor";
 import { RetirementEssentials } from "../RetirementEssentials";
 import { PlanSteps } from "../PlanSteps";
@@ -62,9 +64,9 @@ export const SECTIONS: { title: string; items: SectionMeta[] }[] = [
       { key: "income", title: "Income", subtitle: "Jobs, business, rental and other income", icon: "wallet" },
       { key: "budget", title: "Monthly budget", subtitle: "Now on the Budget tab", icon: "card", hidden: true },
       { key: "savings", title: "Monthly savings", subtitle: "Now on the Budget tab", icon: "target", hidden: true },
-      { key: "accounts", title: "Accounts", subtitle: "Balances you've saved and invested", icon: "database" },
-      { key: "debts", title: "Debts", subtitle: "Balances, interest rates and minimums", icon: "card" },
-      { key: "properties", title: "Property", subtitle: "What each is worth, its mortgage, rent and upkeep", icon: "home" },
+      { key: "accounts", title: "Accounts", subtitle: "What you own and owe: accounts, homes, cards and loans", icon: "database" },
+      { key: "debts", title: "Debts", subtitle: "Now on Accounts", icon: "card", hidden: true },
+      { key: "properties", title: "Property", subtitle: "Now on Accounts", icon: "home", hidden: true },
       { key: "goals", title: "Savings goals", subtitle: "Each goal becomes a step in your plan", icon: "target" },
     ],
   },
@@ -281,12 +283,43 @@ function BudgetSection() {
 
 /* ---------- Accounts ---------- */
 
+/**
+ * Accounts: everything you own and owe, on one page. Your net worth; your accounts (cash, retirement,
+ * investments); your homes, each with its mortgage; your credit cards; and your other loans (a 401(k)
+ * loan, a car or student loan). Payoff dates, extra payments and priority are on Your plan.
+ */
 function AccountsSection() {
   const t = useTheme();
+  const { state } = usePlan();
+  const update = useStore((s) => s.update);
+  const owned = new Set((state.properties ?? []).flatMap((x) => (x.mortgageId ? [x.mortgageId] : [])));
+  const cards = state.debts.filter(isCard);
+  // everything else you owe that isn't a home's mortgage
+  const loans = state.debts.filter((d) => !isCard(d) && !owned.has(d.id));
+  const editor = (dt: (typeof state.debts)[number]) => {
+    const i = state.debts.findIndex((x) => x.id === dt.id);
+    return (
+      <DebtEditor
+        key={dt.id}
+        debt={dt}
+        paidFrom={paidFromFor(state, dt.id)}
+        onChange={(patch) => update((p) => { p.debts[i] = { ...p.debts[i]!, ...patch }; })}
+        onRemove={() => removeItem("this debt", debtLabel(dt), () => update((p) => { p.debts.splice(i, 1); }))}
+      />
+    );
+  };
+  const owe = (list: typeof cards) => list.reduce((a, d) => a + d.balance, 0);
+  const head = (title: string, total?: string) => (
+    <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: space.sm }}>
+      <Text style={[type.overline, { color: t.text3 }]}>{title}</Text>
+      {total ? <Text style={[type.caption, { color: t.text3, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{total}</Text> : null}
+    </View>
+  );
   return (
     <>
+      <NetWorthCard />
       <Text style={[type.body, { color: t.text2 }]}>
-        Cash is your emergency fund. Everything else counts as invested. Tap an account to rename it, change its type or remove it. Tap Reorder to move one.
+        Cash is your emergency fund; everything else you hold counts as invested. Tap anything to change it.
       </Text>
       <BankBar />
       <AccountsEditor
@@ -297,6 +330,21 @@ function AccountsSection() {
           </>
         }
       />
+      {head("Homes")}
+      <PropertiesEditor titled={false} />
+      {cards.length ? (
+        <>
+          {head("Credit cards", `${money(owe(cards))} owed`)}
+          {cards.map(editor)}
+        </>
+      ) : null}
+      {loans.length ? (
+        <>
+          {head("Loans", `${money(owe(loans))} owed`)}
+          {loans.map(editor)}
+        </>
+      ) : null}
+      <AddDebtButtons hasAny={state.debts.length > 0} onAdd={(d) => update((p) => { p.debts.push(d); })} />
     </>
   );
 }
@@ -375,52 +423,6 @@ export function RetirementIncomeSection() {
 
 /* ---------- Debts ---------- */
 
-function DebtsSection() {
-  const t = useTheme();
-  const { state } = usePlan();
-  const update = useStore((s) => s.update);
-  // the grips only while reordering (the cards are big: a scroll shouldn't move one)
-  const [reorder, setReorder] = useState(false);
-  const debts = state.debts;
-  return (
-    <>
-      <Text style={[type.body, { color: t.text2 }]}>
-        Minimum payments come out of your budget every month. Extra payments go to the highest interest rate first.
-      </Text>
-      {debts.length === 0 ? <Empty text="No debts. Nice." /> : null}
-      {debts.length > 1 ? (
-        <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
-          <ReorderToggle on={reorder} onChange={setReorder} what="debts" />
-        </View>
-      ) : null}
-      <DragList
-        count={debts.length}
-        keyOf={(n) => debts[n]!.id}
-        nameOf={(n) => debtLabel(debts[n]!)}
-        grips={reorder}
-        onMove={(from, to) => update((p) => { p.debts = reorderAmong(p.debts, () => true, from, to); })}
-        style={{ gap: space.md }}
-        renderItem={(i, grip) => {
-          const dt = debts[i]!;
-          return (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space.xs }}>
-              {grip}
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <DebtEditor
-                  debt={dt}
-                  paidFrom={paidFromFor(state, dt.id)}
-                  onChange={(patch) => update((p) => { p.debts[i] = { ...p.debts[i]!, ...patch }; })}
-                  onRemove={() => removeItem("this debt", debtLabel(dt), () => update((p) => { p.debts.splice(i, 1); }))}
-                />
-              </View>
-            </View>
-          );
-        }}
-      />
-      <AddDebtButtons hasAny={state.debts.length > 0} onAdd={(d) => update((p) => { p.debts.push(d); })} />
-    </>
-  );
-}
 
 /* ---------- Goals ---------- */
 
@@ -699,8 +701,9 @@ export const SECTION_SCREENS: Record<SectionKey, ComponentType> = {
   savings: () => <Redirect href="/budget" />,
   accounts: AccountsSection,
   banks: () => <BankConnections />,
-  properties: () => <PropertiesEditor titled={false} />,
-  debts: DebtsSection,
+  // now on Accounts
+  properties: () => <Redirect href="/money/accounts" />,
+  debts: () => <Redirect href="/money/accounts" />,
   goals: GoalsSection,
   priorities: () => <PlanSteps />,
   assumptions: AssumptionsSection,

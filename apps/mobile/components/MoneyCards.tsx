@@ -89,18 +89,18 @@ export function NetWorthCard({ startOpen = false }: { startOpen?: boolean }) {
                   label={p.name.trim() || (p.kind === "rental" ? "Rental" : "Home")}
                   hint={`${p.kind === "rental" ? "Rental" : "Home"} · what it would sell for${mortgage ? ` · ${money(Math.max(0, p.value - mortgage.balance))} yours after the mortgage` : ""}`}
                   value={money(p.value)}
-                  href="/money/properties"
+                  href="/money/accounts"
                 />
               );
             })}
           </Group>
-          <Group title="What you owe" total={debts.length ? money(owed) : undefined} manage="/money/debts">
+          <Group title="What you owe" total={debts.length ? money(owed) : undefined} manage="/money/accounts">
             {debts.length ? (
               debts.map((x) => {
                 const link = paycheckFor(state, x.id);
                 const pay = link ? `${money(link.deduction.amount)}/paycheck` : `${money(x.minPayment)}/mo`;
                 const rate = x.promoUntil ? `${pct(x.promoApr ?? 0)} intro` : pct(x.apr);
-                return <Line key={x.id} label={debtLabel(x)} hint={x.payroll ? `${pay} · already out of your 401(k) balance, so not subtracted again` : `${rate} · ${pay}`} value={money(x.balance)} href={budgetIds.has(x.id) ? `/budget?view=transactions&account=${x.id}` : "/money/debts"} />;
+                return <Line key={x.id} label={debtLabel(x)} hint={x.payroll ? `${pay} · already out of your 401(k) balance, so not subtracted again` : `${rate} · ${pay}`} value={money(x.balance)} href={budgetIds.has(x.id) ? `/budget?view=transactions&account=${x.id}` : "/money/accounts"} />;
               })
             ) : (
               <Empty text="No debts" />

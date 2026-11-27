@@ -14,6 +14,8 @@ import { newId, useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
 import { Button, FieldRow, IconButton, InfoText, InfoTip, NumberInput, Select, TextField, ToggleRow } from "./form";
 import { Icon } from "./Icon";
+import { DebtEditor, paidFromFor } from "./DebtEditor";
+import { confirm } from "../lib/confirm";
 import { Card, Divider } from "./ui";
 
 const WORTH_INFO = "What they're worth counts in your net worth, not in Coast FI (it isn't money you can invest). A rental's costs come out of its rent, so they stay out of your retirement spending.";
@@ -183,6 +185,7 @@ export function PropertiesEditor({ titled = true }: { /** Off on its own page, w
 /** A property's mortgage, filled in right here (it's also listed under Debts, for payoff and the budget). */
 function PropertyMortgage({ x, mortgage, free, link }: { x: Property; mortgage?: Debt; free: Debt[]; link: (id: string | undefined) => void }) {
   const t = useTheme();
+  const { state } = usePlan();
   const update = useStore((s) => s.update);
   const label = x.name.trim() || (x.kind === "rental" ? "Rental" : "Home");
   const set = (patch: Partial<Debt>) => update((p) => { const d = p.debts.find((y) => y.id === mortgage?.id); if (d) Object.assign(d, patch); });
@@ -194,13 +197,15 @@ function PropertyMortgage({ x, mortgage, free, link }: { x: Property; mortgage?:
       if (me) me.mortgageId = id;
     });
   };
-  // one made here goes with it; one from Debts is only unlinked
-  const remove = () =>
+  // removing it here removes the mortgage (an unlinked one would be listed under Loans)
+  const remove = async () => {
+    if (!(await confirm("Remove this mortgage?", `${mortgage?.name || "The mortgage"} will be removed from your plan.`, "Remove"))) return;
     update((p) => {
       const me = (p.properties ?? []).find((y) => y.id === x.id);
       if (me) delete me.mortgageId;
-      if (mortgage?.id.startsWith("mort-")) p.debts = p.debts.filter((d) => d.id !== mortgage.id);
+      if (mortgage) p.debts = p.debts.filter((d) => d.id !== mortgage.id);
     });
+  };
   if (!mortgage) {
     // mortgages already listed under Debts: pick one, or add a new one
     return free.length ? (
@@ -218,24 +223,9 @@ function PropertyMortgage({ x, mortgage, free, link }: { x: Property; mortgage?:
     );
   }
   return (
-    <View style={[styles.mortgage, { borderColor: t.border }]}>
-      <View style={styles.row}>
-        <Text style={[type.label, { color: t.text, fontWeight: "700", flex: 1 }]}>Its mortgage</Text>
-        <IconButton icon="trash" color={t.bad} label={mortgage.id.startsWith("mort-") ? `Remove ${label} mortgage` : `Unlink ${label} mortgage`} onPress={remove} />
-      </View>
-      <FieldRow label="Owed" hint="The loan balance today">
-        <NumberInput kind="money" label={`${label} mortgage balance`} value={mortgage.balance} onChange={(v) => set({ balance: v })} />
-      </FieldRow>
-      <FieldRow label="Rate" hint="Interest per year">
-        <NumberInput kind="percent" label={`${label} mortgage rate`} value={mortgage.apr} max={1} onChange={(v) => set({ apr: v })} />
-      </FieldRow>
-      <FieldRow label="Payment" hint="The whole monthly payment, including escrow">
-        <NumberInput kind="money" label={`${label} mortgage payment`} value={mortgage.minPayment} onChange={(v) => set({ minPayment: v })} />
-      </FieldRow>
-      <FieldRow label="Escrow" hint="The part of the payment that is property tax + home insurance. It doesn't pay the loan down, and keeps going after it's paid off (and in retirement)">
-        <NumberInput kind="money" label={`${label} mortgage escrow`} value={mortgage.escrow ?? 0} max={mortgage.minPayment} onChange={(v) => set({ escrow: v > 0 ? v : undefined })} />
-      </FieldRow>
-      <Text style={[type.caption, { color: t.text3 }]}>It's listed under Debts too, where you can add extra payments.</Text>
+    <View style={{ gap: 4 }}>
+      <Text style={[type.label, { color: t.text2 }]}>Its mortgage</Text>
+      <DebtEditor debt={mortgage} paidFrom={paidFromFor(state, mortgage.id)} onChange={set} onRemove={() => void remove()} />
     </View>
   );
 }

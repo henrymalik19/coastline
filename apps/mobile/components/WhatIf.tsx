@@ -276,7 +276,7 @@ export function WhatIf() {
           ) : null}
           <Text style={[type.caption, { color: t.text3 }]}>
             {hasWhatIf({ ...w, retireAge: undefined, coastAge: undefined })
-              ? "To make the rest real: invest more by lowering your budget or raising your income; change spending under Retirement spending; pay more on a mortgage from Debts and your priority order."
+              ? "To make the rest real: invest more by lowering your budget or raising your income; change spending under Retirement spending; pay more on a mortgage from Your plan's payoff order."
               : "One-month changes stay what-ifs until the month comes."}
           </Text>
           <Button title="Reset all what-ifs" onPress={() => void reset()} style={{ alignSelf: "flex-start" }} />

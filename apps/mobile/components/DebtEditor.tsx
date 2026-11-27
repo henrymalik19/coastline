@@ -13,7 +13,7 @@ import { paycheckFor } from "../lib/loans";
 import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
-import { Button, FieldRow, IconButton, MonthField, NumberInput, Select, TextField, ToggleRow } from "./form";
+import { Button, FieldRow, IconButton, MonthField, NumberInput, Segmented, Select, TextField, ToggleRow } from "./form";
 import { mortgageStatus } from "../lib/homeLoan";
 import { Card, Divider } from "./ui";
 import { ScheduleEditor, scheduleSummary, useSchedule } from "./ScheduleEditor";
@@ -198,6 +198,7 @@ export function DebtEditor({
           <Text style={[type.caption, { color: t.text }]}>{kind.note}</Text>
         </View>
       ) : null}
+      {kind.value === "mortgage" ? <RetireChoice debt={debt} onChange={onChange} /> : null}
       <BankLink kind="debt" id={debt.id} name={debt.name} company={debt.company} />
         </>
       ) : null}
@@ -341,6 +342,31 @@ function MortgageSchedule({ debt, onChange }: { debt: Debt; onChange: (patch: Pa
 }
 
 /** One line under a collapsed mortgage: ahead of schedule, or that it runs into retirement. */
+/** A mortgage still running when you retire: keep up the payments (from money set aside), or pay it off then. */
+function RetireChoice({ debt, onChange }: { debt: Debt; onChange: (patch: Partial<Debt>) => void }) {
+  const t = useTheme();
+  const { result } = usePlan();
+  const left = result.mortgagesAtRetire.find((x) => x.id === debt.id);
+  if (!left || left.keepCost === null) return null;
+  const cheaper = left.keepCost < left.payoffCost ? "keep" : "payoff";
+  return (
+    <View style={{ gap: 4 }}>
+      <FieldRow label="When you retire">
+        <Segmented
+          label={`${debtLabel(debt)}: when you retire`}
+          value={left.choice}
+          options={[{ value: "keep" as const, label: "Keep paying" }, { value: "payoff" as const, label: "Pay it off" }]}
+          onChange={(v) => onChange({ atRetire: v === cheaper ? undefined : v })}
+        />
+      </FieldRow>
+      <Text style={[type.caption, { color: t.text3 }]}>
+        Keep paying: {money(left.keepCost, { whole: true })} set aside (it keeps growing while it's paid out). Pay it off: {money(left.payoffCost, { whole: true })}.{" "}
+        {cheaper === "keep" ? "Keeping it costs your number less." : "Paying it off costs your number less."}
+      </Text>
+    </View>
+  );
+}
+
 function MortgageLine({ debt }: { debt: Debt }) {
   const t = useTheme();
   const { state, result, start } = usePlan();

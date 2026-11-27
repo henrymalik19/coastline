@@ -25,7 +25,7 @@ export const HELP = {
     "What you keep after property costs (repairs, insurance, management, taxes). Not the mortgage: add that below and it comes out of your budget as a debt payment.",
   otherAmount: "After-tax amount each time it comes in: a side gig, pension, benefits, alimony, and so on.",
 
-  budget: "Your monthly spending today, not counting debt payments (those go under Debts so the plan can pay them off).",
+  budget: "Your monthly spending today, not counting debt payments (those come from your cards and loans on Accounts, so the plan can pay them off).",
   inRetirement:
     "Will you still pay this after you stop working? Rent, food and utilities usually continue. Commuting, childcare, or a mortgage that'll be paid off usually stop. Everything you'll still pay, plus health insurance, is your retirement budget, and that sets how much you need to save to retire.",
 
@@ -35,7 +35,7 @@ export const HELP = {
   hsa: "Health Savings Account: tax-free for medical costs; works like an extra retirement account.",
   cash: "Checking, savings, high-yield savings. This is your emergency fund.",
   property:
-    "What a home or rental property is worth (roughly what it would sell for). It counts in your net worth, but not toward Coast FI, since you can't spend it without selling. Add its mortgage under Debts.",
+    "What a home or rental property is worth (roughly what it would sell for). It counts in your net worth, but not toward Coast FI, since you can't spend it without selling. Add its mortgage with it on Accounts.",
   apr: "The yearly interest rate on the debt. It's on your statement, often labeled APR.",
   minPayment: "The smallest payment the lender requires each month.",
 

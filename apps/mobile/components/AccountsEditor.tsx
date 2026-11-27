@@ -40,7 +40,7 @@ const COUNTS: { value: PlanAccount; label: string }[] = [
 ];
 const typeLabel = (k: AccountType) => ACCOUNT_TYPES.find((x) => x.value === k)?.label ?? k;
 
-/** How accounts are grouped on the page (by type). Credit cards come from Debts. */
+/** How accounts are grouped on the page (by type). Homes, credit cards and loans are their own groups on Accounts. */
 export const ACCOUNT_GROUPS: { key: string; label: string; types: AccountType[] }[] = [
   { key: "cash", label: "Checking & savings", types: ["cash"] },
   { key: "retirement", label: "Retirement & HSA", types: ["pretax", "roth", "hsa"] },
@@ -63,7 +63,7 @@ const QUICK_ADD: { name: string; type: AccountType; label?: string }[] = [
 /**
  * Every account as one compact row (name, type, balance). Open a row to rename it, change its
  * type or remove it. Grouped by kind (checking & savings, retirement, investments, property, and
- * your credit cards from Debts); drag a row's grip to reorder it within its group. Used in setup and in Settings.
+ * and investments); drag a row's grip to reorder it within its group. Used in setup and in Settings.
  */
 export function AccountsEditor({ afterRetirement }: { /** Shown under the retirement accounts (or after all of them when there are none): what you've contributed this year. */ afterRetirement?: ReactNode } = {}) {
   const t = useTheme();
@@ -86,7 +86,6 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
     update((p) => { p.accounts.push({ id, name: q.name === "Other" ? "" : q.name, type: q.type, balance: 0, ...(q.owner ? { owner: q.owner, counts: "ira" as const } : {}) }); if (q.owner) ensureSpouseStep(p); });
     setOpen(id);
   };
-  const cards = state.debts.filter(isCard);
   const remove = async (a: Account, i: number) => {
     if (a.balance > 0 && !(await confirm("Remove this account?", `"${a.name || "This account"}" will be removed from your plan.`, "Remove"))) return;
     update((p) => { p.accounts.splice(i, 1); });
@@ -94,12 +93,12 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
 
   return (
     <View style={{ gap: space.md }}>
-      {compact && accounts.length + cards.length > 1 ? (
+      {compact && accounts.length > 1 ? (
         <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
           <ReorderToggle on={reorder} onChange={setReorder} what="accounts" />
         </View>
       ) : null}
-      {accounts.length || cards.length ? (
+      {accounts.length ? (
         ACCOUNT_GROUPS.map((g) => {
           const inGroup = (x: Account) => groupKeyOf(x) === g.key;
           const list = accounts.filter(inGroup);
@@ -245,49 +244,6 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
           <Text style={[type.body, { color: t.text3 }]}>No accounts yet</Text>
         </Card>
       )}
-      {cards.length ? (
-        <View style={{ gap: space.xs }}>
-          <View style={[styles.row, styles.groupHead, sticky(0, t.bg)]}>
-            <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Credit cards</Text>
-            <Text style={[type.caption, { color: t.text3, fontWeight: "700", fontVariant: ["tabular-nums"] }]}>{money(cards.reduce((sum, d) => sum + d.balance, 0))} owed</Text>
-          </View>
-          <Card style={{ paddingVertical: space.xs }}>
-            <DragList
-              count={cards.length}
-              keyOf={(n) => cards[n]!.id}
-              nameOf={(n) => fullName(cards[n]!, "Credit card")}
-              grips={grips}
-              onMove={(from, to) => update((p) => { p.debts = reorderAmong(p.debts, isCard, from, to); })}
-              renderItem={(n, grip) => {
-                const d = cards[n]!;
-                const name = fullName(d, "Credit card");
-                const reg = hasRegister(txns, d.id);
-                return (
-                  <View>
-                    {n > 0 ? <Divider /> : null}
-                    <View style={[styles.row, { paddingVertical: space.md }]}>
-                      {cards.length > 1 ? grip : null}
-                      <Pressable
-                        role="link"
-                        accessibilityLabel={`${name}: ${reg ? "transactions" : "edit on Debts"}`}
-                        onPress={() => router.push((reg ? accountTxnsHref(d.id) : "/money/debts") as never)}
-                        style={[styles.row, { flex: 1, minHeight: 36 }]}
-                      >
-                        <View style={{ flex: 1, gap: 1 }}>
-                          <NameWithCompany name={d.name?.trim() || "Credit card"} company={d.company} color={t.text} />
-                          <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>Credit card · {reg ? "transactions" : "edit on Debts"}</Text>
-                        </View>
-                        <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(d.balance)} owed</Text>
-                        <Icon name="chevron" size={14} color={t.accent} />
-                      </Pressable>
-                    </View>
-                  </View>
-                );
-              }}
-            />
-          </Card>
-        </View>
-      ) : null}
       {!accounts.some((a) => groupKeyOf(a) === "retirement") ? afterRetirement : null}
       <View style={{ gap: space.sm }}>
         <Text style={[type.label, { color: t.text2 }]}>Add an account</Text>

@@ -213,8 +213,8 @@ function RentalMortgage({ inc }: { inc: Income }) {
         <Button title="Add its mortgage" icon="plus" onPress={() => set({})} style={{ alignSelf: "flex-start" }} />
         <Text style={[type.caption, { color: t.text3 }]}>
           {other.length
-            ? `Already listed it under Debts (${other.map((d) => d.name || "Mortgage").join(", ")})? Then you're set: adding it here too would count it twice.`
-            : "Owe money on it? Add the mortgage here and it's listed under Debts for you."}
+            ? `Already added it on Accounts (${other.map((d) => d.name || "Mortgage").join(", ")})? Then you're set: adding it here too would count it twice.`
+            : "Owe money on it? Add the mortgage here and it's listed on Accounts for you."}
         </Text>
       </View>
     );
@@ -240,7 +240,7 @@ function RentalMortgage({ inc }: { inc: Income }) {
           <Text style={{ color: keep < 0 ? t.bad : t.text, fontWeight: "700" }}>{money(keep)}/mo</Text> you keep.
         </Text>
         <Text style={[type.caption, { color: t.text3 }]}>
-          The payment is in your budget as a debt, so don't subtract it from the amount above. Escrow, extra payments and the payoff date are under Debts.
+          The payment is in your budget as a debt, so don't subtract it from the amount above. Escrow, extra payments and the payoff date are with the mortgage on Accounts.
         </Text>
       </View>
     </View>
@@ -651,7 +651,7 @@ function LoanFields({ inc, change }: { inc: Income; change: (p: Partial<Income>)
             </>
           ) : null}
           <Text style={[type.caption, { color: t.text3 }]}>
-            It comes out of your take-home like on your pay stub, and shows under Debts so the plan tracks the balance. Don't add it to your budget. The interest goes back into your own 401(k), so the plan doesn't rush to pay it off.
+            It comes out of your take-home like on your pay stub, and shows under Loans on Accounts so the plan tracks the balance. Don't add it to your budget. The interest goes back into your own 401(k), so the plan doesn't rush to pay it off.
           </Text>
         </View>
       ) : null}
@@ -724,7 +724,7 @@ export function IncomesEditor() {
     const at = state.incomes.findIndex((i) => i.id === inc.id);
     const hasProperty = !!propertyFor(state, inc.id);
     const hasMortgage = state.debts.some((d) => d.id === rentalMortgageId(inc.id));
-    const also = [hasProperty ? "its property under Money → Property" : "", hasMortgage ? "its mortgage in Debts" : ""].filter(Boolean).join(" and ");
+    const also = [hasProperty ? "its home on Accounts" : "", hasMortgage ? "its mortgage" : ""].filter(Boolean).join(" and ");
     const msg = `"${inc.name || "This income"}" will be removed from your plan${also ? `, along with ${also}` : ""}.`;
     if (await confirm("Remove this income?", msg, "Remove"))
       update((p) => {

@@ -446,7 +446,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
     const paidBy = (debt: string) => categories.filter((c) => { const k2 = categoryKey(c.group, c.name); const ch2 = catMap[k2]; return k2 !== k && ch2?.action === "loan" && ch2.debt === debt; });
     const one = (value: string, label: string, extra?: string) => {
       const by = paidBy(value.slice(5));
-      return { value, label, hint: by.length ? `Already paid by ${by.map((x) => x.name).join(", ")}` : extra ?? "Counted from Debts, not as spending", section: "Pays a loan" };
+      return { value, label, hint: by.length ? `Already paid by ${by.map((x) => x.name).join(", ")}` : extra ?? "Counted as a loan payment, not as spending", section: "Pays a loan" };
     };
     return [
       ...saved.debts.filter((x) => !isCard(x) && !x.payroll).map((x) => one("loan:plan:" + x.id, `Pays ${debtLabel(x)}`)),
@@ -986,7 +986,7 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
             "check",
             t.good,
             `${s.debtCategoriesLinked} ${s.debtCategoriesLinked === 1 ? "category pays a loan" : "categories pay your loans"}, linked to ${s.debtCategoriesLinked === 1 ? "it" : "them"}`,
-            "Like a mortgage's PITI. The plan already counts the loan from Debts (until it's paid off), so the category isn't counted again in your spending or retirement number.",
+            "Like a mortgage's PITI. The plan already counts the loan from Accounts (until it's paid off), so the category isn't counted again in your spending or retirement number.",
           )
         : null}
       {s.olderWithoutCategory || s.transfersOutside
