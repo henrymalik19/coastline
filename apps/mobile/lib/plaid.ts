@@ -38,7 +38,7 @@ async function call<T>(action: string, body: Record<string, unknown> = {}): Prom
   return data as T;
 }
 
-type ItemRow = { id: string; institution_name: string | null; kind: BankItem["kind"]; status: BankItem["status"]; error_code: string | null; last_synced_at: string | null };
+type ItemRow = { id: string; institution_name: string | null; kind: BankItem["kind"]; status: BankItem["status"]; error_code: string | null; last_synced_at: string | null; txn_error?: string | null };
 type AccountRow = {
   id: string; item: string; account_id: string; name: string; official_name: string | null; mask: string | null; type: string; subtype: string | null;
   current: number | string | null; available: number | string | null; credit_limit: number | string | null; apr: number | string | null; min_payment: number | string | null; updated_at: string;
@@ -57,7 +57,7 @@ async function loadBanksNow(): Promise<void> {
   const planId = useSync.getState().planId;
   if (!supabase || !planId) return;
   const [items, accts] = await Promise.all([
-    supabase.from("plaid_items").select("id, institution_name, kind, status, error_code, last_synced_at").eq("plan_id", planId).order("created_at"),
+    supabase.from("plaid_items").select("*").eq("plan_id", planId).order("created_at"),
     supabase.from("plaid_accounts").select("*").eq("plan_id", planId).order("name"),
   ]);
   if (items.error || accts.error) {
@@ -68,7 +68,7 @@ async function loadBanksNow(): Promise<void> {
     planId,
     loaded: true,
     error: undefined,
-    items: (items.data as ItemRow[]).map((r) => ({ id: r.id, institution: r.institution_name || "Bank", kind: r.kind, status: r.status, errorCode: r.error_code, lastSyncedAt: r.last_synced_at })),
+    items: (items.data as ItemRow[]).map((r) => ({ id: r.id, institution: r.institution_name || "Bank", kind: r.kind, status: r.status, errorCode: r.error_code, lastSyncedAt: r.last_synced_at, txnError: r.txn_error ?? null })),
     accounts: (accts.data as AccountRow[]).map((r) => ({
       id: r.id, item: r.item, accountId: r.account_id, name: r.name, officialName: r.official_name, mask: r.mask, type: r.type, subtype: r.subtype,
       current: num(r.current), available: num(r.available), creditLimit: num(r.credit_limit), apr: num(r.apr), minPayment: num(r.min_payment), updatedAt: r.updated_at,
@@ -186,6 +186,10 @@ export async function pullBankTxns(): Promise<number> {
   markTxnsAt(planId, { at: rows.reduce((m, r) => (r.updated_at > m ? r.updated_at : m), since ?? ""), accounts: sig() });
   return added;
 }
+
+/** A connection with a checking, savings or card account that isn't sharing its transactions (not just "not ready yet"). */
+export const noTransactions = (item: BankItem, accounts: { item: string; type: string }[]) =>
+  !!item.txnError && item.txnError !== "PRODUCT_NOT_READY" && accounts.some((a) => a.item === item.id && (a.type === "depository" || a.type === "credit"));
 
 /** Plaid's message in plain words where it's one we know (the rest as Plaid says it). */
 export function plainBankError(msg: string): string {
@@ -330,10 +334,13 @@ export const connectBank = (kind: "bank" | "investments") =>
     await finish(await openLink(linkToken), kind);
   });
 
-/** Sign in to the bank again when it asks (same connection, same matches). */
-export const reconnectBank = (itemId: string) =>
+/**
+ * Sign in to the bank again when it asks (same connection, same matches). `addTransactions`: also ask it
+ * to share transactions (a connection made for investments that never did).
+ */
+export const reconnectBank = (itemId: string, opts: { addTransactions?: boolean } = {}) =>
   run(async () => {
-    const { linkToken } = await call<{ linkToken: string }>("link_token", { itemId });
+    const { linkToken } = await call<{ linkToken: string }>("link_token", { itemId, ...(opts.addTransactions ? { addTransactions: true } : {}) });
     savePending({ token: linkToken, kind: "bank", itemId, at: Date.now() });
     await finish(await openLink(linkToken), "bank", itemId);
   });

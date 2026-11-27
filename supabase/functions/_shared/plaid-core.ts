@@ -44,7 +44,8 @@ export type TxnRow = {
   transaction_id: string; plan_id: string; item: string; account_id: string; date: string; amount: number; name: string;
   merchant_name: string | null; pending: boolean; pending_transaction_id: string | null; removed: boolean; updated_at: string;
 };
-export type ItemUpdate = { status: string; error_code: string | null; last_synced_at?: string };
+/** txn_error: why the bank's transactions didn't come in last time (Plaid's code), or null when they did. */
+export type ItemUpdate = { status: string; error_code: string | null; last_synced_at?: string; txn_error?: string | null };
 export type AccountRow = {
   plan_id: string; item: string; account_id: string; name: string; official_name: string | null; mask: string | null;
   type: string; subtype: string | null; current: number | null; available: number | null; credit_limit: number | null;
@@ -227,8 +228,8 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
    * Not ready yet at a new connection, or not on this one: nothing, quietly. A sign-in the bank needs
    * stops it like it stops balances.
    */
-  const syncTxns = async (item: string, access_token: string, now: string, spending: boolean) => {
-    if (!spending || !(await txnsOn())) return;
+  const syncTxns = async (item: string, access_token: string, now: string, spending: boolean): Promise<string | null | undefined> => {
+    if (!spending || !(await txnsOn())) return undefined;
     const start = await store.txnCursor!(item);
     for (let attempt = 0; attempt < 3; attempt++) {
       const got = new Map<string, PlaidTxn>();
@@ -246,17 +247,21 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
         const code = e instanceof PlaidHttpError ? e.code : undefined;
         if (code === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION") continue; // the bank changed mid-way: from the start again
         if (code && STATUS_FOR[code]) throw e;
-        return; // not ready yet (PRODUCT_NOT_READY), or not on this connection: balances still count
+        // not ready yet (PRODUCT_NOT_READY), or not on this connection (no consent for transactions):
+        // balances still count; the code is kept on the connection so the app can say so
+        console.warn(`transactions for ${item}: ${code ?? (e instanceof Error ? e.message : String(e))}`);
+        return code ?? "UNKNOWN";
       }
-      if (!cursor || (cursor === start && !got.size && !removed.size)) return;
+      if (!cursor || (cursor === start && !got.size && !removed.size)) return null;
       const rows: TxnRow[] = [...got.values()].map((t) => ({
         transaction_id: t.transaction_id, plan_id: planId, item, account_id: t.account_id, date: t.date, amount: t.amount,
         name: t.name ?? "", merchant_name: t.merchant_name ?? null, pending: !!t.pending, pending_transaction_id: t.pending_transaction_id ?? null,
         removed: false, updated_at: now,
       }));
       await store.saveTxns!(item, rows, [...removed], cursor);
-      return;
+      return null;
     }
+    return undefined;
   };
 
   /** Pull one connection's accounts and balances (and card/loan rates when shared). Records a bank error on the item. */
@@ -292,8 +297,8 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
       const keep = new Set(accounts.map((a) => a.account_id));
       const gone = (await store.accountIds(item)).filter((id) => !keep.has(id));
       if (gone.length) await store.deleteAccounts(gone);
-      await syncTxns(item, access_token, now, accounts.some((a) => a.type === "depository" || a.type === "credit"));
-      await store.updateItem(item, { status: "ok", error_code: null, last_synced_at: now });
+      const txnError = await syncTxns(item, access_token, now, accounts.some((a) => a.type === "depository" || a.type === "credit"));
+      await store.updateItem(item, { status: "ok", error_code: null, last_synced_at: now, ...(txnError !== undefined ? { txn_error: txnError } : {}) });
     } catch (e) {
       const code = e instanceof PlaidHttpError ? e.code : undefined;
       if (code === "NOT_CONFIGURED") throw e;
@@ -340,7 +345,8 @@ export async function handle(body: Record<string, unknown>, userId: string, env:
       if (body.itemId) {
         // update mode: sign in to the bank again (same connection)
         const it = await itemOf(body.itemId);
-        const r = await plaid<{ link_token: string }>("/link/token/create", { ...base, access_token: await accessToken(it.id) });
+        const more = body.addTransactions === true ? { additional_consented_products: ["transactions"] } : {};
+        const r = await plaid<{ link_token: string }>("/link/token/create", { ...base, ...more, access_token: await accessToken(it.id) });
         return { linkToken: r.link_token };
       }
       await mayLink();

@@ -13,6 +13,8 @@ export type BankItem = {
   status: "ok" | "login_required" | "pending_expiration" | "error";
   errorCode?: string | null;
   lastSyncedAt?: string | null;
+  /** Why its transactions didn't come in last time (Plaid's code), e.g. never given consent to share them. */
+  txnError?: string | null;
 };
 
 type PlaidState = {

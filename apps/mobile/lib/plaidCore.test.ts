@@ -268,6 +268,27 @@ describe("bank transactions (server)", () => {
     expect([early.txns, early.items[itemId]?.status]).toEqual([{}, "ok"]);
   });
 
+  it("keeps why transactions didn't come in on the connection, and clears it once they do", async () => {
+    const { store, items } = memStore();
+    syncPages = { "": { error: "ADDITIONAL_CONSENT_REQUIRED" } };
+    fakePlaid();
+    const { itemId } = (await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "investments" }, "u1", env, admin(store))) as { itemId: string };
+    expect([items[itemId]?.status, (items[itemId] as { txn_error?: string }).txn_error]).toEqual(["ok", "ADDITIONAL_CONSENT_REQUIRED"]);
+    syncPages = { "": { added: [ptx("a")], next_cursor: "c1" } };
+    items[itemId]!.last_synced_at = "2026-01-01T00:00:00Z";
+    await handle({ action: "sync", planId: "u1", force: true }, "u1", env, admin(store));
+    expect((items[itemId] as { txn_error?: string | null }).txn_error).toBeNull();
+  });
+
+  it("asks the bank for transactions on an existing connection when the app asks to add them", async () => {
+    const { store } = memStore();
+    const calls = fakePlaid();
+    const { itemId } = (await handle({ action: "exchange", planId: "u1", publicToken: "p", kind: "investments" }, "u1", env, admin(store))) as { itemId: string };
+    await handle({ action: "link_token", planId: "u1", itemId, addTransactions: true }, "u1", env, admin(store));
+    const link = calls.filter((c) => c.path === "/link/token/create").pop()!;
+    expect([link.body.additional_consented_products, link.body.access_token]).toEqual([["transactions"], TOKEN]);
+  });
+
   it("starts over when the bank changes things mid-way", async () => {
     const { store, txns } = memStore();
     let n = 0;

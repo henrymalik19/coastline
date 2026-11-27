@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { Platform, StyleSheet, Text, View } from "react-native";
 import { confirm } from "../lib/confirm";
 import { BANKS_ON } from "../lib/features";
-import { connectBank, connectTestBank, disconnectBank, loadBankAccess, loadBanks, reconnectBank, syncBanks, usePlaid, type BankItem } from "../lib/plaid";
+import { connectBank, connectTestBank, disconnectBank, loadBankAccess, loadBanks, noTransactions, reconnectBank, syncBanks, usePlaid, type BankItem } from "../lib/plaid";
 import { bankLabel, matchOf, type BankAccount } from "../lib/plaidMatch";
 import { usePlan } from "../lib/plan";
 import { supabase } from "../lib/supabase";
@@ -87,6 +87,7 @@ export function BankBar() {
     if (it.status === "login_required" || it.status === "pending_expiration")
       out.push({ key: `${it.id}-login`, text: `${it.institution} needs you to sign in again`, onPress: () => void reconnectBank(it.id) });
     else if (it.status === "error") out.push({ key: `${it.id}-err`, text: `${it.institution} couldn't update`, onPress: () => openPage("/settings/banks") });
+    else if (noTransactions(it, accounts)) out.push({ key: `${it.id}-txns`, text: `${it.institution} isn't sharing transactions`, onPress: () => openPage("/settings/banks") });
     const loose = accounts.filter((b) => b.item === it.id && !matchOf(state, b)).length;
     if (loose) out.push({ key: `${it.id}-loose`, text: `${loose} ${it.institution} account${loose === 1 ? "" : "s"} not set up`, onPress: () => usePlaid.setState({ review: it.id }) });
     return out;
@@ -210,6 +211,14 @@ function ItemBlock({ item, accounts, busy }: { item: BankItem; accounts: BankAcc
           }}
         />
       </View>
+      {item.status === "ok" && noTransactions(item, accounts) ? (
+        <View style={{ gap: 6 }}>
+          <Text style={[type.caption, { color: t.text2 }]}>
+            {item.institution} updates balances but isn't sharing transactions with Coastwise. Turn them on to see each purchase, Zelle and transfer here.
+          </Text>
+          <Button title="Turn on transactions" tone="primary" disabled={busy} onPress={() => void reconnectBank(item.id, { addTransactions: true })} style={{ ...styles.small, alignSelf: "flex-start" }} />
+        </View>
+      ) : null}
       {/* only what still needs a decision; linked ones show in your Accounts list, tagged Linked */}
       {loose.map((b) => (
         <LinkLine key={b.id} b={b} />
