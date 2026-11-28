@@ -2,7 +2,7 @@
  * Registers: the budget accounts that hold transactions (cash accounts and credit cards), each one
  * starting with a "Starting balance" transaction, and keeping the plan's balances in step with them.
  */
-import { accountGroup, budgetCategories, budgetStartCash, budgetView, isStartTxn, registerBalance, run, startTxnId, type BudgetState, type PlanState, type Txn } from "@coastfi/engine";
+import { accountGroup, budgetCategories, budgetStartCash, budgetView, isSpouseIra, isStartTxn, registerBalance, run, startTxnId, type BudgetState, type PlanState, type Txn } from "@coastfi/engine";
 import { fullName } from "./company";
 import { stamp } from "./stamp";
 import { splitLoanMonth, type LoanPart } from "./loanPay";
@@ -135,11 +135,27 @@ export function loanHome(p: PlanState, loanId: string): PlanState["accounts"][nu
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * Money into an IRA or HSA on `date` counts toward what you've contributed for the tax year you
+ * entered (Money → Accounts → Contributed so far): that year's, or last year's until April 15.
+ * Only once you've entered that year (before then the plan doesn't use the numbers).
+ */
+function moveContributed(p: PlanState, a: PlanState["accounts"][number], amount: number, date: string): void {
+  const c = p.contributed;
+  const g = accountGroup(a);
+  if (!c || !amount || (g !== "ira" && g !== "hsa")) return;
+  const y = Number(date.slice(0, 4));
+  if (!(c.year === y || (c.year === y - 1 && date.slice(5) <= "04-15"))) return;
+  const k = g === "hsa" ? "hsa" : isSpouseIra(p, a) ? "iraSpouse" : "ira";
+  c[k] = Math.max(0, round2((+(c[k] ?? 0) || 0) + amount));
+}
+
 /** Move an account you don't budget by `amount` (money into it: an IRA grows, a loan's balance drops). */
-function moveTracking(p: PlanState, id: string, amount: number): void {
+function moveTracking(p: PlanState, id: string, amount: number, date?: string, contribution?: boolean): void {
   const a = p.accounts.find((x) => x.id === id);
   if (a) {
     a.balance = round2((+a.balance || 0) + amount);
+    if (date && contribution) moveContributed(p, a, amount, date);
     return;
   }
   const d = p.debts.find((x) => x.id === id);
@@ -201,13 +217,14 @@ export function loanPaymentParts(p: PlanState, txns: Txn[], loan: string, date: 
  * moved now (kept on the transaction), or undefined. `next` null = it was deleted.
  */
 export function applyTracked(p: PlanState, prev: Txn | undefined, next: Txn | null): number | undefined {
-  if (prev?.trackedAmount && prev.transferAccountId) moveTracking(p, prev.transferAccountId, -prev.trackedAmount);
+  // money in (not a withdrawal) is a contribution, and counts toward the year's
+  if (prev?.trackedAmount && prev.transferAccountId) moveTracking(p, prev.transferAccountId, -prev.trackedAmount, prev.date, prev.trackedAmount > 0);
   const to = next && !next.deleted ? next.transferAccountId : undefined;
   const isTracking = !!to && !budgetAccounts(p).some((a) => a.id === to) && (p.accounts.some((a) => a.id === to) || p.debts.some((d) => d.id === to));
   if (!next || !to || !isTracking) return undefined;
   // money out of checking (−) goes into the account (+), and the other way for a withdrawal
   const amount = round2(-next.amount);
-  moveTracking(p, to, amount);
+  moveTracking(p, to, amount, next.date, amount > 0);
   return amount;
 }
 

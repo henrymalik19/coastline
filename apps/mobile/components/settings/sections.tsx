@@ -295,7 +295,9 @@ function AccountsSection() {
   const { state } = usePlan();
   const update = useStore((s) => s.update);
   const owned = new Set((state.properties ?? []).flatMap((x) => (x.mortgageId ? [x.mortgageId] : [])));
-  const cards = state.debts.filter(isCard);
+  // closed cards go under Closed at the bottom
+  const cards = state.debts.filter((d) => isCard(d) && !d.closed);
+  const closedCards = state.debts.filter((d) => isCard(d) && d.closed);
   // everything else you owe that isn't a home's mortgage
   const loans = state.debts.filter((d) => !isCard(d) && !owned.has(d.id));
   const txns = useStore((s) => s.txns);
@@ -332,34 +334,74 @@ function AccountsSection() {
     <>
       <AccountInUse id={inUse} onClose={() => setInUse(null)} />
       <NetWorthCard />
-      <Text style={[type.body, { color: t.text2 }]}>
-        Cash is your emergency fund; everything else you hold counts as invested. Tap anything to change it.
-      </Text>
       <BankBar />
       <AccountsEditor
-        afterRetirement={
+        afterRetirement={<ContributionsFold />}
+        between={
           <>
-            <SelfInvestCard />
-            <ContributionsCard />
+            {head("Homes")}
+            <PropertiesEditor titled={false} />
+            {cards.length ? (
+              <>
+                {head("Credit cards", `${money(owe(cards))} owed`)}
+                {cards.map(editor)}
+              </>
+            ) : null}
+            {loans.length ? (
+              <>
+                {head("Loans", `${money(owe(loans))} owed`)}
+                {loans.map(editor)}
+              </>
+            ) : null}
           </>
         }
+        closedDebts={closedCards.map(editor)}
+        addDebt={(done) => <AddDebtButtons bare hasAny={state.debts.length > 0} onAdd={(d) => { update((p) => { p.debts.push(d); }); done(); }} />}
       />
-      {head("Homes")}
-      <PropertiesEditor titled={false} />
-      {cards.length ? (
-        <>
-          {head("Credit cards", `${money(owe(cards))} owed`)}
-          {cards.map(editor)}
-        </>
-      ) : null}
-      {loans.length ? (
-        <>
-          {head("Loans", `${money(owe(loans))} owed`)}
-          {loans.map(editor)}
-        </>
-      ) : null}
-      <AddDebtButtons hasAny={state.debts.length > 0} onAdd={(d) => update((p) => { p.debts.push(d); })} />
     </>
+  );
+}
+
+/**
+ * What you invest from take-home and what you've contributed this year, folded into one row (its
+ * summary: this year's 401(k) and IRA so far) so the page stays short.
+ */
+function ContributionsFold() {
+  const t = useTheme();
+  const { state, start } = usePlan();
+  const [open, setOpen] = useState(false);
+  const c = state.contributed;
+  const y = start.getFullYear();
+  const entered = !!c && (c.year === y || c.year === y - 1);
+  const summary = entered
+    ? [`401(k) ${money(c!.k401, { whole: true })}`, `IRA ${money(c!.ira + (c!.iraSpouse ?? 0), { whole: true })}`, c!.hsa ? `HSA ${money(c!.hsa, { whole: true })}` : ""].filter(Boolean).join(" · ")
+    : "Not entered";
+  return (
+    <View style={{ gap: space.sm }}>
+      <Card style={{ paddingVertical: space.xs }}>
+        <Pressable
+          role="button"
+          aria-expanded={open}
+          accessibilityLabel={`Contributions, ${open ? "hide" : "show"}`}
+          onPress={() => setOpen((v) => !v)}
+          style={{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.md, minHeight: 44 }}
+        >
+          <View style={{ transform: [{ rotate: open ? "90deg" : "0deg" }] }}>
+            <Icon name="chevron" size={18} color={t.text3} />
+          </View>
+          <Text numberOfLines={1} style={[type.body, { color: t.text, fontWeight: "500" }]}>Contributions</Text>
+          <Text numberOfLines={1} style={[type.caption, { color: t.text3, flex: 1, textAlign: "right", fontVariant: ["tabular-nums"] }]}>
+            {entered ? `${c!.year}: ${summary}` : summary}
+          </Text>
+        </Pressable>
+      </Card>
+      {open ? (
+        <>
+          <SelfInvestCard />
+          <ContributionsCard />
+        </>
+      ) : null}
+    </View>
   );
 }
 

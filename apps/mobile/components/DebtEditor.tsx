@@ -275,16 +275,21 @@ function PaycheckLoanPayment({ debt }: { debt: Debt }) {
 }
 
 /** "Add a debt" as one button per type. */
-export function AddDebtButtons({ onAdd, hasAny }: { onAdd: (d: Debt) => void; hasAny: boolean }) {
+/** `bare`: just the choices (no heading or + icons), under an "Add debt" button. */
+export function AddDebtButtons({ onAdd, hasAny, bare }: { onAdd: (d: Debt) => void; hasAny: boolean; bare?: boolean }) {
   const t = useTheme();
+  const chips = (
+    <View style={styles.chips}>
+      {DEBT_KINDS.map((k) => (
+        <Button key={k.value} title={k.label} icon={bare ? undefined : "plus"} onPress={() => onAdd(newDebt(k.value))} style={{ minHeight: 36, paddingHorizontal: space.md }} />
+      ))}
+    </View>
+  );
+  if (bare) return chips;
   return (
     <View style={{ gap: space.sm }}>
       <Text style={[type.label, { color: t.text2 }]}>{hasAny ? "Add another debt" : "Add a debt"}</Text>
-      <View style={styles.chips}>
-        {DEBT_KINDS.map((k) => (
-          <Button key={k.value} title={k.label} icon="plus" onPress={() => onAdd(newDebt(k.value))} style={{ minHeight: 36, paddingHorizontal: space.md }} />
-        ))}
-      </View>
+      {chips}
     </View>
   );
 }

@@ -465,3 +465,39 @@ test("an extra 401(k) loan payment makes its own category in Debt payments", asy
   await page.getByRole("option", { name: /401\(k\) loan/ }).click();
   await expect(page.getByText(/Comes out of the Hub International 401\(k\) loan extra category/)).toBeVisible();
 });
+
+test("closed accounts fold under Closed; a transfer into an IRA adds to what you've contributed", async ({ page }) => {
+  await onboard(page);
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app")!);
+    raw.state.plan.accounts = [
+      { id: "chk", name: "Checking", type: "cash", balance: 5000 },
+      { id: "old", name: "Old checking", type: "cash", balance: 0, closed: true },
+      { id: "ira", name: "Roth IRA", type: "roth", balance: 8000 },
+    ];
+    raw.state.plan.debts = [{ id: "visa", name: "Old Visa", kind: "credit_card", balance: 0, apr: 0.24, minPayment: 0, closed: true }];
+    raw.state.plan.contributed = { year: new Date().getFullYear(), k401: 0, ira: 1000, hsa: 0 };
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/budget");
+  await page.getByRole("button", { name: /^Start with / }).click();
+  await page.getByRole("button", { name: "Add a transaction" }).click();
+  await page.getByRole("radio", { name: "Transfer" }).click();
+  await page.getByRole("textbox", { name: "Amount" }).fill("2250");
+  await page.getByRole("button", { name: /^Transfer to: / }).click();
+  await page.getByRole("option", { name: /^Roth IRA/ }).click();
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.goto("/money/accounts");
+  await expect(page.getByRole("button", { name: "Old checking details" })).toHaveCount(0);
+  await expect(page.getByText("Old Visa")).toHaveCount(0);
+  await page.getByRole("button", { name: "Closed accounts, show" }).click();
+  await expect(page.getByRole("button", { name: "Old checking details" })).toBeVisible();
+  await expect(page.getByText("Old Visa").first()).toBeVisible();
+  await expect(page.getByText(/IRA \$3,250/)).toBeVisible();
+  await page.getByRole("button", { name: "Contributions, show" }).click();
+  await expect(page.getByRole("textbox", { name: /^IRA contributed for/ })).toHaveValue(/3,250/);
+  // adding: one row of two buttons that open their choices
+  await page.getByRole("button", { name: "Add account" }).click();
+  await page.getByRole("button", { name: "Roth IRA", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Roth IRA", exact: true })).toHaveCount(0);
+});

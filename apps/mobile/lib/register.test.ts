@@ -30,6 +30,29 @@ describe("transfers to accounts you don't budget", () => {
     expect(p.accounts[1]!.balance).toBe(10_000);
   });
 
+  it("a transfer into an IRA counts toward what you've contributed for the year you entered", () => {
+    const p = plan();
+    // not entered yet: nothing to add to
+    applyTracked(p, undefined, txn({ transferAccountId: "ira" }));
+    expect(p.contributed).toBeUndefined();
+    p.contributed = { year: 2026, k401: 20_000, ira: 1_000, hsa: 0 };
+    const t = txn({ id: "t2", transferAccountId: "ira", amount: -2_250 });
+    const moved = applyTracked(p, undefined, t);
+    expect(p.contributed.ira).toBe(3_250);
+    expect(p.contributed.k401).toBe(20_000);
+    // deleted: taken back off
+    applyTracked(p, { ...t, trackedAmount: moved }, null);
+    expect(p.contributed.ira).toBe(1_000);
+    // a withdrawal isn't a contribution; another year's doesn't count
+    applyTracked(p, undefined, txn({ amount: 500, transferAccountId: "ira", categoryId: "ready" }));
+    applyTracked(p, undefined, txn({ transferAccountId: "ira", date: "2025-12-30" }));
+    expect(p.contributed.ira).toBe(1_000);
+    // last year's, entered: one made by April 15 counts for it
+    p.contributed = { year: 2026, k401: 0, ira: 0, hsa: 0 };
+    applyTracked(p, undefined, txn({ transferAccountId: "ira", date: "2027-04-10" }));
+    expect(p.contributed.ira).toBe(500);
+  });
+
   it("a withdrawal (money in to checking from the IRA) lowers it", () => {
     const p = plan();
     applyTracked(p, undefined, txn({ amount: 1_200, transferAccountId: "ira", categoryId: "ready" }));

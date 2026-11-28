@@ -1,4 +1,4 @@
-import { limitsFor } from "@coastfi/engine";
+import { accountGroup, isSpouseIra, limitsFor } from "@coastfi/engine";
 import { useRouter } from "expo-router";
 import { Text, View } from "react-native";
 import { money } from "../lib/format";
@@ -28,6 +28,29 @@ export function ContributionsCard() {
   const values = c && c.year === year ? { ...c, iraSpouse: c.iraSpouse ?? 0 } : { year, k401: 0, ira: 0, hsa: 0, iraSpouse: 0 };
   const spIra = !!state.spouse && state.accounts.some((a) => a.owner === "spouse");
   const set = (patch: Partial<typeof values>) => update((p) => { p.contributed = { ...values, ...patch, year }; });
+  // what you've moved into your IRAs / HSA here for the year (from now on each one adds itself as you
+  // save it); more than what's entered: one from before, offered to count
+  const txns = useStore((s) => s.txns);
+  const moved = (k: "ira" | "iraSpouse" | "hsa") =>
+    Math.round(
+      txns.reduce((sum, x) => {
+        const a = !x.deleted && (x.trackedAmount ?? 0) > 0 && x.transferAccountId ? state.accounts.find((y) => y.id === x.transferAccountId) : undefined;
+        if (!a) return sum;
+        const g = accountGroup(a);
+        const key = g === "hsa" ? "hsa" : g === "ira" ? (isSpouseIra(state, a) ? "iraSpouse" : "ira") : null;
+        const inYear = x.date.slice(0, 4) === String(year) || (x.date.slice(0, 4) === String(year + 1) && x.date.slice(5) <= "04-15");
+        return key === k && inYear ? sum + x.trackedAmount! : sum;
+      }, 0) * 100,
+    ) / 100;
+  const catchUp = (k: "ira" | "iraSpouse" | "hsa") => {
+    const m = moved(k);
+    if (!(m > values[k] + 0.005)) return null;
+    return (
+      <Text role="button" onPress={() => set({ [k]: m })} style={[type.caption, { color: t.accent, fontWeight: "700", paddingBottom: space.sm }]}>
+        Use {money(m)} from your transfers
+      </Text>
+    );
+  };
 
   const L = limitsFor(state.limits, year);
   const age = state.age + (year - thisYear);
@@ -69,15 +92,17 @@ export function ContributionsCard() {
         <NumberInput kind="money" label={`401(k) contributed in ${year}`} value={values.k401} onChange={(v) => set({ k401: v })} />
       </FieldRow>
       <Divider />
-      <FieldRow label={spIra ? "Your IRA" : "IRA"} hint={hint("ira")} info={`Traditional and Roth IRA together; they share one limit. ${deadline}`}>
+      <FieldRow label={spIra ? "Your IRA" : "IRA"} hint={hint("ira")} info={`Traditional and Roth IRA together; they share one limit. A transfer into an IRA here adds itself. ${deadline}`}>
         <NumberInput kind="money" label={`IRA contributed for ${year}`} value={values.ira} onChange={(v) => set({ ira: v })} />
       </FieldRow>
+      {catchUp("ira")}
       {spIra ? (
         <>
           <Divider />
           <FieldRow label={spouseIraLabel(state)} hint={hint("iraSpouse")} info={`Their own limit, separate from yours. ${deadline}`}>
             <NumberInput kind="money" label={`${spouseIraLabel(state)} contributed for ${year}`} value={values.iraSpouse} onChange={(v) => set({ iraSpouse: v })} />
           </FieldRow>
+          {catchUp("iraSpouse")}
         </>
       ) : null}
       {hsaEligibleInYear(state, year) ? (
@@ -86,6 +111,7 @@ export function ContributionsCard() {
           <FieldRow label="HSA" hint={hint("hsa")} info={`Yours plus your employer's; they share one limit. ${deadline}`}>
             <NumberInput kind="money" label={`HSA contributed for ${year}`} value={values.hsa} onChange={(v) => set({ hsa: v })} />
           </FieldRow>
+          {catchUp("hsa")}
         </>
       ) : null}
       {!hsaEligibleInYear(state, year) ? (

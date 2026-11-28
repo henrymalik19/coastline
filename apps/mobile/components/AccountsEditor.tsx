@@ -72,7 +72,21 @@ const QUICK_ADD: { name: string; type: AccountType; label?: string }[] = [
  * type or remove it. Grouped by kind (checking & savings, retirement, investments, property, and
  * and investments); drag a row's grip to reorder it within its group. Used in setup and in Settings.
  */
-export function AccountsEditor({ afterRetirement }: { /** Shown under the retirement accounts (or after all of them when there are none): what you've contributed this year. */ afterRetirement?: ReactNode } = {}) {
+export function AccountsEditor({
+  afterRetirement,
+  between,
+  closedDebts = [],
+  addDebt,
+}: {
+  /** Shown under the retirement accounts (or after all of them when there are none): what you've contributed this year. */
+  afterRetirement?: ReactNode;
+  /** After the accounts, before Closed (Settings: homes, cards and loans). */
+  between?: ReactNode;
+  /** Closed cards, listed under Closed with the closed accounts. */
+  closedDebts?: ReactNode[];
+  /** The ways to add a debt (`done`: call after adding one): with it, adding is one row of two buttons that open their choices. */
+  addDebt?: (done: () => void) => ReactNode;
+} = {}) {
   const t = useTheme();
   const { state, start } = usePlan();
   const update = useStore((s) => s.update);
@@ -92,6 +106,13 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
   const grips = !compact || reorder;
   const thisMonth = monthKey(start);
   const accounts = state.accounts;
+  // closed at the bank: folded away at the bottom (their history is still there)
+  const live = accounts.filter((a) => !a.closed);
+  const closedAccts = accounts.filter((a) => a.closed);
+  const closedCount = closedAccts.length + closedDebts.length;
+  // opened on a closed one (Budget → Accounts' gear): Closed starts open
+  const [showClosed, setShowClosed] = useState(!!openParam && (closedAccts.some((a) => a.id === openParam) || closedDebts.some((x) => (x as { key?: unknown } | null)?.key === openParam)));
+  const [adding, setAdding] = useState<"account" | "debt" | null>(null);
 
   const sp = state.spouse ? spouseName(state) : null;
   const quick: { name: string; type: AccountType; owner?: "spouse"; label?: string }[] = sp ? [...QUICK_ADD.slice(0, 4), { name: `${sp} Roth IRA`, type: "roth", owner: "spouse" }, ...QUICK_ADD.slice(4)] : QUICK_ADD;
@@ -111,17 +132,133 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
     update((p) => { p.accounts.splice(i, 1); });
   };
 
+  /** One account's row (and, open, its details): in its group, or under Closed. */
+  const rowFor = (a: Account, n: number, grip: ReactNode) => {
+    const i = accounts.indexOf(a);
+        const isOpen = open === a.id;
+        const name = fullName(a, "Unnamed account");
+        const ck = contributionKey(state, a);
+        const per = ck && ck !== "payroll" ? plannedNow(state, ck, thisMonth) : undefined;
+        return (
+          <View nativeID={"acct-" + a.id}>
+            {n > 0 ? <Divider /> : null}
+            <View style={[styles.row, { paddingVertical: space.md }]}>
+              {grip}
+              <Pressable
+                role="button"
+                aria-expanded={isOpen}
+                accessibilityLabel={`${name} details`}
+                accessibilityState={{ expanded: isOpen }}
+                onPress={() => setOpen(isOpen ? null : a.id)}
+                style={[styles.row, { flex: 1, minHeight: 36 }]}
+              >
+                <View style={{ transform: [{ rotate: isOpen ? "90deg" : "0deg" }] }}>
+                  <Icon name="chevron" size={18} color={t.text3} />
+                </View>
+                <View style={{ flex: 1, gap: 1 }}>
+                  <NameWithCompany name={a.name.trim() || "Unnamed account"} company={a.company} color={a.name.trim() || a.company?.trim() ? t.text : t.text3} />
+                  <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>
+                    {typeLabel(a.type)}
+                    {sp && a.owner === "spouse" ? ` · ${sp}'s` : ""}
+                    {a.plaidAccountId ? <Text style={{ color: t.good, fontWeight: "700" }}> · Linked</Text> : null}
+                    {per !== undefined ? <Text style={{ color: t.accent, fontWeight: "700" }}> · +{money(per)}/mo</Text> : null}
+                  </Text>
+                </View>
+              </Pressable>
+              {(
+                hasRegister(txns, a.id) ? (
+                  <Pressable role="link" accessibilityLabel={`${name} transactions`} onPress={() => router.push(accountTxnsHref(a.id) as never)} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(a.balance)}</Text>
+                    <Icon name="chevron" size={14} color={t.accent} />
+                  </Pressable>
+                ) : a.plaidAccountId ? (
+                  // linked: the bank keeps the balance up to date (Settings → Accounts → Connected banks)
+                  <Text accessibilityLabel={`${name} balance from the bank`} style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(a.balance)}</Text>
+                ) : (
+                  <NumberInput kind="money" label={`${name} balance`} value={a.balance} onChange={(v) => update((p) => { p.accounts[i]!.balance = v; })} />
+                )
+              )}
+            </View>
+            {isOpen ? (
+              <View style={{ gap: space.sm, paddingBottom: space.md, paddingLeft: 26 }}>
+                {a.type === "cash" ? (
+                  <Pressable role="link" onPress={() => router.push(accountTxnsHref(a.id) as never)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}>
+                    <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>
+                      {hasRegister(txns, a.id) ? "Transactions (the balance comes from them)" : "Transactions"}
+                    </Text>
+                    <Icon name="chevron" size={12} color={t.accent} />
+                  </Pressable>
+                ) : null}
+                {a.type === "cash" ? <TxnStart id={a.id} /> : null}
+                {a.type === "cash" ? <ToggleRow label="Closed" hint="Keeps its history; it's no longer offered for new transactions" value={!!a.closed} onChange={(v) => update((p) => { if (v) p.accounts[i]!.closed = true; else delete p.accounts[i]!.closed; })} /> : null}
+                {ck === "payroll" ? (
+                  <PayrollNote what={accountGroup(a) === "k401" ? "401(k)" : "HSA"} />
+                ) : ck ? (
+                  <MonthlyAmount
+                    k={ck}
+                    label={name}
+                    note={a.type === "cash" ? "Cash can go past your emergency fund goal if you plan it." : undefined}
+                  />
+                ) : null}
+                <Text style={[type.caption, { color: t.text3 }]}>Company</Text>
+                <CompanyField id={a.id} value={a.company} onChange={(v) => update((p) => { if (v) p.accounts[i]!.company = v; else delete p.accounts[i]!.company; })} />
+                <Text style={[type.caption, { color: t.text3 }]}>Name</Text>
+                <TextField label="Account name" placeholder="e.g. 401(k)" value={a.name} onChange={(v) => update((p) => { p.accounts[i]!.name = v; })} />
+                <Choice label="Account type" options={ACCOUNT_TYPES} value={a.type} onChange={(v) => update((p) => { p.accounts[i]!.type = v; })} />
+                <Text style={[type.caption, { color: t.text3 }]}>{HELP[a.type]}</Text>
+                {a.type !== "cash" ? (
+                  <>
+                    <Choice
+                      label="Counts as"
+                      options={COUNTS}
+                      value={(accountGroup(a) ?? "other") as PlanAccount}
+                      onChange={(v) => update((p) => { p.accounts[i]!.counts = v; })}
+                    />
+                    <Text style={[type.caption, { color: t.text3 }]}>
+                      Which account it is in your budget and forecast. The plan adds to your 401(k), IRA, HSA and brokerage; pick Other for accounts it doesn't add to (an old employer's plan, a pension, a rollover).
+                    </Text>
+                    {sp && accountGroup(a) === "ira" ? (
+                      <>
+                        <Choice
+                          label="Whose account"
+                          options={[{ value: "you", label: "Yours" }, { value: "spouse", label: `${sp}'s` }]}
+                          value={a.owner === "spouse" ? "spouse" : "you"}
+                          onChange={(v) => update((p) => { if (v === "spouse") { p.accounts[i]!.owner = "spouse"; ensureSpouseStep(p); } else delete p.accounts[i]!.owner; })}
+                        />
+                        <Text style={[type.caption, { color: t.text3 }]}>Each of you has your own IRA limit. Your Traditional and Roth IRAs share yours.</Text>
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
+                {a.type === "roth" && accountGroup(a) === "ira" ? (
+                  <FieldRow
+                    label="Put in so far"
+                    info={"What you've contributed over the years, not its growth. Contributions can come out of a Roth IRA any time, without tax or penalty, so they count toward retiring before 59½. Your brokerage may show it as \"contribution basis\", or add up your yearly contributions (Form 5498)."}
+                  >
+                    <NumberInput kind="money" label={`${name} contributions so far`} value={a.contributions ?? 0} onChange={(v) => update((p) => { if (v > 0) p.accounts[i]!.contributions = v; else delete p.accounts[i]!.contributions; })} />
+                  </FieldRow>
+                ) : null}
+                <BankLink kind="account" id={a.id} name={a.name} company={a.company} />
+                <View style={[styles.row, { justifyContent: "flex-end" }]}>
+                  <Button title="Remove" icon="trash" tone="danger" onPress={() => void remove(a, i)} style={{ minHeight: 36 }} />
+                </View>
+              </View>
+            ) : null}
+          </View>
+        );
+  };
+
   return (
     <View style={{ gap: space.md }}>
       <AccountInUse id={inUse} onClose={() => setInUse(null)} />
-      {compact && accounts.length > 1 ? (
+      {compact && live.length > 1 ? (
         <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
           <ReorderToggle on={reorder} onChange={setReorder} what="accounts" />
         </View>
       ) : null}
-      {accounts.length ? (
+      {live.length ? (
         ACCOUNT_GROUPS.map((g) => {
-          const inGroup = (x: Account) => groupKeyOf(x) === g.key;
+          const inGroup = (x: Account) => !x.closed && groupKeyOf(x) === g.key;
           const list = accounts.filter(inGroup);
           if (!list.length) return null;
           const after = g.key === "retirement" ? afterRetirement : null;
@@ -141,118 +278,7 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
                   onMove={(from, to) => update((p) => { p.accounts = reorderAmong(p.accounts, inGroup, from, to); })}
                   renderItem={(n, grip) => {
                     const a = list[n]!;
-                    const i = accounts.indexOf(a);
-            const isOpen = open === a.id;
-            const name = fullName(a, "Unnamed account");
-            const ck = contributionKey(state, a);
-            const per = ck && ck !== "payroll" ? plannedNow(state, ck, thisMonth) : undefined;
-            return (
-              <View nativeID={"acct-" + a.id}>
-                {n > 0 ? <Divider /> : null}
-                <View style={[styles.row, { paddingVertical: space.md }]}>
-                  {list.length > 1 ? grip : null}
-                  <Pressable
-                    role="button"
-                    aria-expanded={isOpen}
-                    accessibilityLabel={`${name} details`}
-                    accessibilityState={{ expanded: isOpen }}
-                    onPress={() => setOpen(isOpen ? null : a.id)}
-                    style={[styles.row, { flex: 1, minHeight: 36 }]}
-                  >
-                    <View style={{ transform: [{ rotate: isOpen ? "90deg" : "0deg" }] }}>
-                      <Icon name="chevron" size={18} color={t.text3} />
-                    </View>
-                    <View style={{ flex: 1, gap: 1 }}>
-                      <NameWithCompany name={a.name.trim() || "Unnamed account"} company={a.company} color={a.name.trim() || a.company?.trim() ? t.text : t.text3} />
-                      <Text style={[type.caption, { color: t.text3 }]} numberOfLines={1}>
-                        {typeLabel(a.type)}
-                        {sp && a.owner === "spouse" ? ` · ${sp}'s` : ""}
-                        {a.plaidAccountId ? <Text style={{ color: t.good, fontWeight: "700" }}> · Linked</Text> : null}
-                        {per !== undefined ? <Text style={{ color: t.accent, fontWeight: "700" }}> · +{money(per)}/mo</Text> : null}
-                      </Text>
-                    </View>
-                  </Pressable>
-                  {(
-                    hasRegister(txns, a.id) ? (
-                      <Pressable role="link" accessibilityLabel={`${name} transactions`} onPress={() => router.push(accountTxnsHref(a.id) as never)} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                        <Text style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(a.balance)}</Text>
-                        <Icon name="chevron" size={14} color={t.accent} />
-                      </Pressable>
-                    ) : a.plaidAccountId ? (
-                      // linked: the bank keeps the balance up to date (Settings → Accounts → Connected banks)
-                      <Text accessibilityLabel={`${name} balance from the bank`} style={[type.body, { color: t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>{money(a.balance)}</Text>
-                    ) : (
-                      <NumberInput kind="money" label={`${name} balance`} value={a.balance} onChange={(v) => update((p) => { p.accounts[i]!.balance = v; })} />
-                    )
-                  )}
-                </View>
-                {isOpen ? (
-                  <View style={{ gap: space.sm, paddingBottom: space.md, paddingLeft: 26 }}>
-                    {a.type === "cash" ? (
-                      <Pressable role="link" onPress={() => router.push(accountTxnsHref(a.id) as never)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start" }}>
-                        <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>
-                          {hasRegister(txns, a.id) ? "Transactions (the balance comes from them)" : "Transactions"}
-                        </Text>
-                        <Icon name="chevron" size={12} color={t.accent} />
-                      </Pressable>
-                    ) : null}
-                    {a.type === "cash" ? <TxnStart id={a.id} /> : null}
-                    {a.type === "cash" ? <ToggleRow label="Closed" hint="Keeps its history; it's no longer offered for new transactions" value={!!a.closed} onChange={(v) => update((p) => { if (v) p.accounts[i]!.closed = true; else delete p.accounts[i]!.closed; })} /> : null}
-                    {ck === "payroll" ? (
-                      <PayrollNote what={accountGroup(a) === "k401" ? "401(k)" : "HSA"} />
-                    ) : ck ? (
-                      <MonthlyAmount
-                        k={ck}
-                        label={name}
-                        note={a.type === "cash" ? "Cash can go past your emergency fund goal if you plan it." : undefined}
-                      />
-                    ) : null}
-                    <Text style={[type.caption, { color: t.text3 }]}>Company</Text>
-                    <CompanyField id={a.id} value={a.company} onChange={(v) => update((p) => { if (v) p.accounts[i]!.company = v; else delete p.accounts[i]!.company; })} />
-                    <Text style={[type.caption, { color: t.text3 }]}>Name</Text>
-                    <TextField label="Account name" placeholder="e.g. 401(k)" value={a.name} onChange={(v) => update((p) => { p.accounts[i]!.name = v; })} />
-                    <Choice label="Account type" options={ACCOUNT_TYPES} value={a.type} onChange={(v) => update((p) => { p.accounts[i]!.type = v; })} />
-                    <Text style={[type.caption, { color: t.text3 }]}>{HELP[a.type]}</Text>
-                    {a.type !== "cash" ? (
-                      <>
-                        <Choice
-                          label="Counts as"
-                          options={COUNTS}
-                          value={(accountGroup(a) ?? "other") as PlanAccount}
-                          onChange={(v) => update((p) => { p.accounts[i]!.counts = v; })}
-                        />
-                        <Text style={[type.caption, { color: t.text3 }]}>
-                          Which account it is in your budget and forecast. The plan adds to your 401(k), IRA, HSA and brokerage; pick Other for accounts it doesn't add to (an old employer's plan, a pension, a rollover).
-                        </Text>
-                        {sp && accountGroup(a) === "ira" ? (
-                          <>
-                            <Choice
-                              label="Whose account"
-                              options={[{ value: "you", label: "Yours" }, { value: "spouse", label: `${sp}'s` }]}
-                              value={a.owner === "spouse" ? "spouse" : "you"}
-                              onChange={(v) => update((p) => { if (v === "spouse") { p.accounts[i]!.owner = "spouse"; ensureSpouseStep(p); } else delete p.accounts[i]!.owner; })}
-                            />
-                            <Text style={[type.caption, { color: t.text3 }]}>Each of you has your own IRA limit. Your Traditional and Roth IRAs share yours.</Text>
-                          </>
-                        ) : null}
-                      </>
-                    ) : null}
-                    {a.type === "roth" && accountGroup(a) === "ira" ? (
-                      <FieldRow
-                        label="Put in so far"
-                        info={"What you've contributed over the years, not its growth. Contributions can come out of a Roth IRA any time, without tax or penalty, so they count toward retiring before 59½. Your brokerage may show it as \"contribution basis\", or add up your yearly contributions (Form 5498)."}
-                      >
-                        <NumberInput kind="money" label={`${name} contributions so far`} value={a.contributions ?? 0} onChange={(v) => update((p) => { if (v > 0) p.accounts[i]!.contributions = v; else delete p.accounts[i]!.contributions; })} />
-                      </FieldRow>
-                    ) : null}
-                    <BankLink kind="account" id={a.id} name={a.name} company={a.company} />
-                    <View style={[styles.row, { justifyContent: "flex-end" }]}>
-                      <Button title="Remove" icon="trash" tone="danger" onPress={() => void remove(a, i)} style={{ minHeight: 36 }} />
-                    </View>
-                  </View>
-                ) : null}
-              </View>
-            );
+            return rowFor(a, n, list.length > 1 ? grip : null);
 
                   }}
                 />
@@ -266,15 +292,60 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
           <Text style={[type.body, { color: t.text3 }]}>No accounts yet</Text>
         </Card>
       )}
-      {!accounts.some((a) => groupKeyOf(a) === "retirement") ? afterRetirement : null}
-      <View style={{ gap: space.sm }}>
-        <Text style={[type.label, { color: t.text2 }]}>Add an account</Text>
-        <View style={styles.chips}>
-          {quick.map((q) => (
-            <Button key={q.label ?? q.name} title={q.label ?? q.name} icon="plus" onPress={() => add(q)} style={{ minHeight: 36, paddingHorizontal: space.md }} />
-          ))}
+      {!live.some((a) => groupKeyOf(a) === "retirement") ? afterRetirement : null}
+      {between}
+      {closedCount ? (
+        <View style={{ gap: space.xs }}>
+          <Pressable
+            role="button"
+            aria-expanded={showClosed}
+            accessibilityLabel={`Closed accounts, ${showClosed ? "hide" : "show"}`}
+            onPress={() => setShowClosed((v) => !v)}
+            style={[styles.row, styles.groupHead, { minHeight: 36 }]}
+          >
+            <View style={{ transform: [{ rotate: showClosed ? "90deg" : "0deg" }] }}>
+              <Icon name="chevron" size={14} color={t.text3} />
+            </View>
+            <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Closed ({closedCount})</Text>
+          </Pressable>
+          {showClosed ? (
+            <>
+              {closedAccts.length ? (
+                <Card style={{ paddingVertical: space.xs }}>
+                  {closedAccts.map((a, n) => <View key={a.id}>{rowFor(a, n, null)}</View>)}
+                </Card>
+              ) : null}
+              {closedDebts}
+            </>
+          ) : null}
         </View>
-      </View>
+      ) : null}
+      {addDebt ? (
+        <View style={{ gap: space.sm }}>
+          <View style={styles.chips}>
+            <Button title="Add account" icon="plus" tone={adding === "account" ? "primary" : undefined} onPress={() => setAdding(adding === "account" ? null : "account")} style={{ minHeight: 40, paddingHorizontal: space.md }} />
+            <Button title="Add debt" icon="plus" tone={adding === "debt" ? "primary" : undefined} onPress={() => setAdding(adding === "debt" ? null : "debt")} style={{ minHeight: 40, paddingHorizontal: space.md }} />
+          </View>
+          {adding === "account" ? (
+            <View style={styles.chips}>
+              {quick.map((q) => (
+                <Button key={q.label ?? q.name} title={q.label ?? q.name} onPress={() => { add(q); setAdding(null); }} style={{ minHeight: 36, paddingHorizontal: space.md }} />
+              ))}
+            </View>
+          ) : adding === "debt" ? (
+            addDebt(() => setAdding(null))
+          ) : null}
+        </View>
+      ) : (
+        <View style={{ gap: space.sm }}>
+          <Text style={[type.label, { color: t.text2 }]}>Add an account</Text>
+          <View style={styles.chips}>
+            {quick.map((q) => (
+              <Button key={q.label ?? q.name} title={q.label ?? q.name} icon="plus" onPress={() => add(q)} style={{ minHeight: 36, paddingHorizontal: space.md }} />
+            ))}
+          </View>
+        </View>
+      )}
     </View>
   );
 }
