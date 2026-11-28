@@ -345,3 +345,26 @@ test("an account's gear on Budget → Accounts opens its settings", async ({ pag
   await page.getByRole("link", { name: "Visa: settings" }).click();
   await expect(page.getByRole("button", { name: /^Visa.* details$/ })).toHaveAttribute("aria-expanded", "true");
 });
+
+test("a transfer's From and To swap with one button", async ({ page }, info) => {
+  await onboard(page);
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app")!);
+    raw.state.plan.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 3000 }, { id: "trv", name: "Travel", type: "cash", balance: 5000 }];
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/budget");
+  await page.getByRole("button", { name: /^Start with / }).click();
+  await page.getByRole("button", { name: "Add a transaction" }).click();
+  await page.getByRole("radio", { name: "Transfer" }).click();
+  await page.getByRole("textbox", { name: "Amount" }).fill("250");
+  await page.getByRole("button", { name: /^Account: / }).click();
+  await page.getByRole("option", { name: /^Travel/ }).click();
+  await page.getByRole("button", { name: /^Transfer to: / }).click();
+  await page.getByRole("option", { name: /^Checking Between/ }).click();
+  await page.getByRole("button", { name: "Swap From and To" }).click();
+  await expect(page.getByRole("button", { name: /^Account: Checking/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Transfer to: Travel/ })).toBeVisible();
+  if (info.project.name === "phone") await page.waitForTimeout(800);
+  if (info.project.name === "phone") await page.screenshot({ path: "C:/Users/malik/AppData/Local/Temp/claude/adb5470ed72fe99d/5d018fbd-d508-4334-9922-e24bcf83a8c8/scratchpad/shots/swap-phone.png" });
+});

@@ -142,6 +142,17 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const fromTracking = kind === "transfer" ? withdrawable.find((a) => a.id === acct) : undefined;
   // only a transfer can start from an investment account
   const acctOk = !!acct && (kind === "transfer" || accounts.some((a) => a.id === acct));
+  // From and To the other way round: only when each can go in the other's place
+  const inBudget = (id: string) => accounts.some((a) => a.id === id);
+  const canSwap =
+    kind === "transfer" && !locked && !!to && !!acct &&
+    (withdrawable.some((a) => a.id === to) ? accounts.some((a) => a.id === acct && a.kind === "cash") : inBudget(to) && (inBudget(acct) || withdrawable.some((a) => a.id === acct)));
+  const swap = () => {
+    const [from, into] = [to, acct];
+    setAcct(from);
+    setTo(into);
+    setXferPick("");
+  };
   const valid = amount > 0 && acctOk && (kind === "transfer" ? !!to && to !== acct && !(fromTracking && isTracking(to)) && !(fromTracking && amount > fromTracking.balance + 0.005) : parts ? splitOk : kind === "in" || !!cat);
   const save = () => {
     if (!valid) return;
@@ -392,7 +403,23 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
               </View>
               {kind === "transfer" ? (
                 <>
-                  {divider}
+                  {/* swap From and To (on the line between them) */}
+                  <View style={{ zIndex: 1 }}>
+                    {divider}
+                    {canSwap ? (
+                      <Pressable
+                        role="button"
+                        accessibilityLabel="Swap From and To"
+                        hitSlop={6}
+                        onPress={swap}
+                        style={({ pressed }) => [styles.swap, { borderColor: t.border, backgroundColor: pressed ? t.accentSoft : t.surface }]}
+                      >
+                        <View style={{ transform: [{ rotate: "90deg" }] }}>
+                          <Icon name="transfer" size={16} color={t.accent} />
+                        </View>
+                      </Pressable>
+                    ) : null}
+                  </View>
                   {listRow(
                     "To",
                     <Select
@@ -494,6 +521,7 @@ const styles = StyleSheet.create({
   selectLike: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44, flex: 1 },
   splitRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
   lockNote: { flexDirection: "row", alignItems: "center", gap: space.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: space.sm },
+  swap: { position: "absolute", left: space.md + 40, top: -15, width: 30, height: 30, borderRadius: 15, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center" },
   suggest: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: space.md, paddingBottom: space.sm, justifyContent: "flex-end" },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, maxWidth: "100%", flexShrink: 1 },
 });
