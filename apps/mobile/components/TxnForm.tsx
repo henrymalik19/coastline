@@ -39,7 +39,9 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const saveTxn = useStore((s) => s.saveTxn);
   const deleteTxn = useStore((s) => s.deleteTxn);
   const cats = useCategories();
-  const accounts = budgetAccounts(state);
+  // closed ones aren't offered (unless this transaction is already in one)
+  const closed = new Set([...state.accounts.filter((a) => a.closed), ...state.debts.filter((d) => d.closed)].map((x) => x.id));
+  const accounts = budgetAccounts(state).filter((a) => !closed.has(a.id) || a.id === txn?.accountId || a.id === txn?.transferAccountId);
   // accounts you can transfer to: other budget accounts, and the ones the plan adds to or you owe on
   const tracking = trackingAccounts(state);
   // money can come out of an investment account into checking (a withdrawal), not out of a loan
@@ -153,8 +155,8 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
     ...(kind === "in" ? [{ value: "ready", label: "Income", hint: "Goes to Unassigned, for you to hand out on Budget" }] : []),
     // each category, then its sub categories ("Childcare › Babysitter")
     ...cats.filter((c) => !c.hidden && !c.parent).flatMap((c) => [
-      { value: c.key, label: c.label, hint: c.group },
-      ...cats.filter((s) => !s.hidden && s.parent === c.key).map((s) => ({ value: s.key, label: `${c.label} › ${s.label}`, hint: c.group })),
+      { value: c.key, label: c.label, section: c.group },
+      ...cats.filter((s) => !s.hidden && s.parent === c.key).map((s) => ({ value: s.key, label: s.label, full: `${c.label} › ${s.label}`, indent: true, section: c.group })),
     ]),
     // hidden categories are history only: listed just when this transaction is already in one (so it still shows)
     ...cats.filter((c) => c.hidden && wasIn.has(c.key)).map((c) => ({ value: c.key, label: c.label, hint: "Archived: history only" })),

@@ -7,7 +7,7 @@ import { HELP } from "../lib/help";
 import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
-import { Button, Choice, FieldRow, IconButton, NumberInput, TextField } from "./form";
+import { Button, Choice, FieldRow, IconButton, NumberInput, TextField, ToggleRow } from "./form";
 import { Icon } from "./Icon";
 import { BankLink } from "./BankLink";
 import { TxnStart } from "./TxnStart";
@@ -176,6 +176,7 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
                       </Pressable>
                     ) : null}
                     {a.type === "cash" ? <TxnStart id={a.id} /> : null}
+                    {a.type === "cash" ? <ToggleRow label="Closed" hint="Keeps its history; it's no longer offered for new transactions" value={!!a.closed} onChange={(v) => update((p) => { if (v) p.accounts[i]!.closed = true; else delete p.accounts[i]!.closed; })} /> : null}
                     {ck === "payroll" ? (
                       <PayrollNote what={accountGroup(a) === "k401" ? "401(k)" : "HSA"} />
                     ) : ck ? (

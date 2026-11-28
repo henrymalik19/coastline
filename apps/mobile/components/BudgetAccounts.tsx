@@ -13,7 +13,7 @@ import { Icon } from "./Icon";
 import { Card, Divider } from "./ui";
 import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
-import { accountTxnsHref, budgetAccounts, isCard, trackingAccounts } from "../lib/register";
+import { accountTxnsHref, budgetAccounts, isCard, todayIso, trackingAccounts } from "../lib/register";
 import { useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
 import { sticky } from "../lib/sticky";
@@ -30,15 +30,25 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
   const update = useStore((s) => s.update);
   const txns = useStore((s) => s.txns);
   const [showTracking, setShowTracking] = useState(false);
+  const [showClosed, setShowClosed] = useState(false);
   const [tip, setTip] = useState(false);
   // phones: the drag grips only while reordering (so a scroll doesn't move an account by accident)
   const compact = useLayout().contentWidth < 600;
   const [reorder, setReorder] = useState(false);
   const grips = !compact || reorder;
   const toggle = compact ? <ReorderToggle on={reorder} onChange={setReorder} what="accounts" /> : null;
-  const all = budgetAccounts(state);
+  const everything = budgetAccounts(state);
+  // closed at the bank: folded away at the bottom (their history is still there)
+  const closedIds = new Set([...state.accounts.filter((a) => a.closed), ...state.debts.filter((d) => d.closed)].map((x) => x.id));
+  const all = everything.filter((a) => !closedIds.has(a.id));
+  const closedList = everything.filter((a) => closedIds.has(a.id));
   const cash = all.filter((a) => a.kind === "cash");
   const cards = all.filter((a) => a.kind === "card");
+  const linked = new Set([...state.accounts, ...state.debts].flatMap((x) => (x.plaidAccountId ? [x.id] : [])));
+  const today = todayIso();
+  /** Cleared so far (what the bank shows), and how many are waiting for you to review. */
+  const cleared = (id: string) => txns.reduce((s, x) => (!x.deleted && x.accountId === id && x.cleared !== "uncleared" && !x.review && x.date <= today ? s + x.amount : s), 0);
+  const toReview = (id: string) => txns.filter((x) => !x.deleted && x.accountId === id && x.review).length;
   const tracking = trackingAccounts(state).filter((a) => a.kind === "acct");
   const count = (id: string) => txns.filter((x) => !x.deleted && x.accountId === id).length;
   const cashTotal = cash.reduce((s, a) => s + (+a.balance || 0), 0);
@@ -64,7 +74,15 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
         >
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text numberOfLines={1} style={[type.body, { color: t.text, fontWeight: "500" }]}>{a.name}</Text>
-            <Text numberOfLines={1} style={[type.caption, { color: t.text3 }]}>{count(a.id)} transaction{count(a.id) === 1 ? "" : "s"}</Text>
+            <Text numberOfLines={1} style={[type.caption, { color: t.text3 }]}>
+              {count(a.id)
+                ? a.kind === "card"
+                  ? state.cardsCovered?.[a.id] ? `Payment set aside ${money(state.cardsCovered[a.id]!)}` : `Cleared ${money(-cleared(a.id))} owed`
+                  : `Cleared ${money(cleared(a.id))}`
+                : "No transactions yet"}
+              {toReview(a.id) ? <Text style={{ color: t.accent, fontWeight: "700" }}> · {toReview(a.id)} to review</Text> : null}
+              {linked.has(a.id) ? <Text style={{ color: t.good, fontWeight: "700" }}> · Linked</Text> : null}
+            </Text>
           </View>
           <Text style={[type.body, { color: a.balance < 0 && a.kind === "cash" ? t.bad : t.text, fontVariant: ["tabular-nums"] }]}>
             {a.kind === "card" ? `${money(-a.balance)} owed` : money(a.balance)}
@@ -115,7 +133,8 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
         </Card>
       ) : (
         <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.xs }]}>
-          Tap an account for its transactions. {compact ? "Tap Reorder, then drag a grip to move one." : "Drag a grip to reorder."} A credit card missing? Set its type to Credit card under Money → Debts.
+          Tap an account for its transactions. {compact ? "Tap Reorder, then drag a grip to move one." : "Drag a grip to reorder."} To add one, link a bank or change its settings, go to{" "}
+          <Text role="link" onPress={() => router.push("/money/accounts" as never)} style={{ color: t.accent, fontWeight: "700" }}>Money → Accounts ›</Text>
         </Text>
       )}
 
@@ -162,6 +181,28 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
                 </View>
                 ); }}
               />
+            </Card>
+          ) : null}
+        </View>
+      ) : null}
+
+      {closedList.length ? (
+        <View style={{ gap: space.xs }}>
+          <Pressable
+            role="button"
+            aria-expanded={showClosed}
+            accessibilityLabel={`Closed accounts, ${showClosed ? "hide" : "show"}`}
+            onPress={() => setShowClosed((v) => !v)}
+            style={[styles.head, { minHeight: 36 }]}
+          >
+            <View style={{ transform: [{ rotate: showClosed ? "90deg" : "0deg" }] }}>
+              <Icon name="chevron" size={14} color={t.text3} />
+            </View>
+            <Text style={[type.overline, { color: t.text3, flex: 1 }]}>Closed ({closedList.length})</Text>
+          </Pressable>
+          {showClosed ? (
+            <Card style={{ paddingVertical: space.xs }}>
+              {closedList.map((a, n) => <View key={a.id}>{row(a, n, null, false)}</View>)}
             </Card>
           ) : null}
         </View>

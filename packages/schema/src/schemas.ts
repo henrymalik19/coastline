@@ -76,6 +76,7 @@ export const AccountSchema = z.object({
   counts: z.enum(["k401", "ira", "hsa", "taxable", "other"]).optional(),
   owner: z.literal("spouse").optional(),
   contributions: money.optional(),
+  closed: z.boolean().optional(),
   homeCosts: money.optional(),
   upkeep: rate.min(0).optional(),
 });
@@ -101,6 +102,7 @@ export const DebtSchema = z.object({
   original: money.optional(),
   payroll: z.boolean().optional(),
   budgetGroup: z.string().optional(),
+  closed: z.boolean().optional(),
 });
 export const PropertySchema = z.object({
   id,

@@ -424,8 +424,11 @@ export function Segmented<T extends string>({
 export function Select<T extends string>({
   options, value, onChange, label, plain, placeholder, trigger,
 }: {
-  /** `section`: a heading over this option and the ones after it with the same section. */
-  options: { value: T; label: string; hint?: string; section?: string }[]; value: T; onChange: (v: T) => void; label: string;
+  /**
+   * `section`: a heading over this option and the ones after it with the same section. `indent`: listed
+   * under the one before it (a sub-category). `full`: its name once picked, when `label` alone isn't enough.
+   */
+  options: { value: T; label: string; hint?: string; section?: string; indent?: boolean; full?: string }[]; value: T; onChange: (v: T) => void; label: string;
   /** No box: right-aligned text and a chevron, for list rows. */
   plain?: boolean;
   placeholder?: string;
@@ -439,7 +442,7 @@ export function Select<T extends string>({
   const searchable = options.length > 8;
   useEffect(() => { if (open) setQ(""); }, [open]);
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const shown = words.length ? options.filter((o) => { const text = `${o.label} ${o.hint ?? ""} ${o.section ?? ""}`.toLowerCase(); return words.every((w) => text.includes(w)); }) : options;
+  const shown = words.length ? options.filter((o) => { const text = `${o.full ?? o.label} ${o.hint ?? ""} ${o.section ?? ""}`.toLowerCase(); return words.every((w) => text.includes(w)); }) : options;
   // where the box is on screen: the list opens right under it (or above, near the bottom), not mid-screen
   const box = useRef<ComponentRef<typeof View>>(null);
   const [anchor, setAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -472,7 +475,7 @@ export function Select<T extends string>({
         onPress={show}
         style={plain ? styles.selectPlain : [styles.select, { borderColor: t.border, backgroundColor: t.surface2 }]}
       >
-        <Text style={[type.body, { color: cur && cur.value ? t.text : t.text3, flex: 1, textAlign: plain ? "right" : "left" }]} numberOfLines={1}>{cur && cur.value ? cur.label : placeholder ?? cur?.label ?? "Pick one"}</Text>
+        <Text style={[type.body, { color: cur && cur.value ? t.text : t.text3, flex: 1, textAlign: plain ? "right" : "left" }]} numberOfLines={1}>{cur && cur.value ? cur.full ?? cur.label : placeholder ?? cur?.label ?? "Pick one"}</Text>
         <Icon name={plain ? "chevron" : "down"} size={plain ? 14 : 16} color={t.text3} />
       </Pressable>
       )}
@@ -509,7 +512,7 @@ export function Select<T extends string>({
                     role="option"
                     aria-selected={on}
                     onPress={() => { onChange(o.value); setOpen(false); }}
-                    style={({ pressed }) => [styles.option, { backgroundColor: on ? t.accentSoft : pressed ? t.surface2 : "transparent" }]}
+                    style={({ pressed }) => [styles.option, o.indent ? { paddingLeft: space.md + 20 } : null, { backgroundColor: on ? t.accentSoft : pressed ? t.surface2 : "transparent" }]}
                   >
                     <View style={{ flex: 1 }}>
                       <Text style={[type.body, { color: on ? t.accent : t.text, fontWeight: on ? "700" : "500" }]}>{o.label}</Text>

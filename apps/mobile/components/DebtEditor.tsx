@@ -123,6 +123,7 @@ export function DebtEditor({
         )}
       </FieldRow>
       {isCard(debt) ? <TxnStart id={debt.id} divider /> : null}
+      {isCard(debt) ? <ToggleRow label="Closed" hint="Keeps its history; it's no longer offered for new transactions" value={!!debt.closed} onChange={(v) => onChange({ closed: v || undefined })} /> : null}
       <Divider />
       <FieldRow label="Interest rate (APR)" hint={`Typical ${kind.label.toLowerCase()}: ${(kind.typicalApr * 100).toFixed(1).replace(/\.0$/, "")}%. Use yours.`} info={HELP.apr}>
         <NumberInput kind="percent" label={`${debtLabel(debt)} APR`} value={debt.apr} max={1} onChange={(v) => onChange({ apr: v })} />

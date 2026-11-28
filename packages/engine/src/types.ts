@@ -133,6 +133,8 @@ export type Account = {
   owner?: "spouse";
   /** A Roth IRA: what you've put in so far (contributions, not growth). It can come out any time, so it counts before 59½. */
   contributions?: number;
+  /** Closed at the bank: kept for its history, but not offered for new transactions. */
+  closed?: boolean;
   /** A home with no mortgage escrow: property tax + insurance a year, which keeps going in retirement. */
   homeCosts?: number;
   /** Repairs and upkeep a year, as a share of the home's value (0.01 = 1%), counted in retirement. */
@@ -231,6 +233,8 @@ export type Debt = {
   payroll?: boolean;
   /** Budget group the payment is listed under (display only; missing = "Debt payments"). */
   budgetGroup?: string;
+  /** A card closed at the bank: kept for its history, but not offered for new transactions. */
+  closed?: boolean;
 };
 
 /** Money that starts coming in after you stop working (today's dollars, per month). */
