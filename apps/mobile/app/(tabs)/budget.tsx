@@ -39,7 +39,7 @@ import { usePlan } from "../../lib/plan";
 import { monthKey, useStore } from "../../lib/store";
 import { radius, space, type, useTheme } from "../../lib/theme";
 import { stackHeight, sticky } from "../../lib/sticky";
-import { useOpenPage } from "../../lib/nav";
+import { useOpenPage, useSetView } from "../../lib/nav";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const nameOf = (ym: string) => `${MON[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
@@ -86,10 +86,13 @@ export default function Budget() {
   const { focus, view: viewParam, account: acctParam, needs: needsParam, review: reviewParam } = useLocalSearchParams<{ focus?: string; view?: string; account?: string; needs?: string; review?: string }>();
   // Categories (assign money), Accounts (what's in each), or Transactions (what came in and went out)
   type View3 = "categories" | "accounts" | "transactions";
-  const [tab, setTab] = useState<View3>(viewParam === "transactions" || viewParam === "accounts" ? viewParam : "categories");
+  const viewOf3 = (v?: string): View3 => (v === "transactions" || v === "accounts" ? v : "categories");
+  const [tab, setTab] = useState<View3>(viewOf3(viewParam));
+  // the URL says which view (so the browser's Back button returns to the one before)
   useEffect(() => {
-    if (viewParam === "transactions" || viewParam === "accounts") setTab(viewParam);
+    setTab(viewOf3(viewParam));
   }, [viewParam, acctParam]);
+  const setView = useSetView();
   useEffect(() => {
     if (!focus) return;
     setTab("categories");
@@ -97,7 +100,7 @@ export default function Budget() {
     setOpen(focus);
     if (Platform.OS === "web" && typeof document !== "undefined")
       setTimeout(() => document.getElementById("cat-" + focus)?.scrollIntoView({ behavior: "smooth", block: "center" }), 350);
-    router.setParams({ focus: undefined });
+    router.setParams({ focus: undefined, view: undefined });
   }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
   const txns = useStore((s) => s.txns);
   const b = liveBudget(state, txns);
@@ -128,7 +131,7 @@ export default function Budget() {
   const needsCount = txns.filter((x) => needsCategory(x, needsCategorySince(start))).length;
   // held for review (not approved in YNAB yet): counted once accepted
   const reviewCount = txns.filter((x) => !x.deleted && x.review).length;
-  const openList = (filter: "needs" | "review") => { setTab("transactions"); router.setParams({ view: "transactions", needs: filter === "needs" ? "1" : undefined, review: filter === "review" ? "1" : undefined }); };
+  const openList = (filter: "needs" | "review") => { setTab("transactions"); setView({ view: "transactions", needs: filter === "needs" ? "1" : undefined, review: filter === "review" ? "1" : undefined }); };
   // a display choice (Settings → Appearance), on unless turned off
   const showReal = useAppearance((s) => s.realSpending);
   const setShowReal = useAppearance((s) => s.setRealSpending);
@@ -945,7 +948,7 @@ export default function Budget() {
                       <Text
                         role="link"
                         accessibilityLabel={`${n} transaction${n === 1 ? "" : "s"} this month: see them in Activity`}
-                        onPress={() => { setOpen(null); setTab("transactions"); router.setParams({ view: "transactions" }); }}
+                        onPress={() => { setOpen(null); setTab("transactions"); setView({ view: "transactions" }); }}
                         style={hintChip}
                       >
                         {n} transaction{n === 1 ? "" : "s"} ›
@@ -1036,7 +1039,7 @@ export default function Budget() {
                 label="Budget view"
                 options={[{ value: "categories", label: "Categories" }, { value: "transactions", label: `Activity${needsCount + reviewCount ? ` · ${needsCount + reviewCount}` : ""}` }, { value: "accounts", label: "Accounts" }]}
                 value={tab}
-                onChange={(v) => { setTab(v); if (v !== "transactions" && (acctParam || viewParam || needsParam || reviewParam)) router.setParams({ account: undefined, view: undefined, needs: undefined, review: undefined }); }}
+                onChange={(v) => { setTab(v); setView(v === "transactions" ? { view: v } : { view: v === "categories" ? undefined : v, account: undefined, needs: undefined, review: undefined }); }}
               />
             </View>
             {tab === "categories" && rtaHidden && !compact ? unassignedChip : null}

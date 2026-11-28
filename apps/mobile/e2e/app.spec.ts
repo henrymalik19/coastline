@@ -211,3 +211,50 @@ test("an account's activity shows its own side of a transfer, once", async ({ pa
   await expect(page.getByText("−$77.77")).toHaveCount(1);
   await expect(page.getByText("+$77.77")).toHaveCount(0);
 });
+
+test("the browser's Back button returns to the Budget view you were on", async ({ page }) => {
+  await onboard(page);
+  await page.goto("/budget");
+  await page.getByRole("button", { name: /^Start with / }).click();
+  const views = page.getByRole("radiogroup", { name: "Budget view" });
+  await views.getByRole("radio", { name: /^Activity/ }).click();
+  await expect(page).toHaveURL(/view=transactions/);
+  await views.getByRole("radio", { name: "Accounts" }).click();
+  await expect(page).toHaveURL(/view=accounts/);
+  await page.goBack();
+  await expect(page).toHaveURL(/view=transactions/);
+  await expect(views.getByRole("radio", { name: /^Activity/ })).toBeChecked();
+  await page.goBack();
+  await expect(page).not.toHaveURL(/view=/);
+  await expect(views.getByRole("radio", { name: "Categories" })).toBeChecked();
+  await page.goForward();
+  await expect(views.getByRole("radio", { name: /^Activity/ })).toBeChecked();
+});
+
+test("a payee picked from the suggestions closes them", async ({ page }) => {
+  await onboard(page);
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app")!);
+    raw.state.plan.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 1000 }];
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/budget");
+  await page.getByRole("button", { name: /^Start with / }).click();
+  await expect(page.getByRole("button", { name: "Add categories" }).first()).toBeVisible();
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app") ?? "{}");
+    const t = (id: string, payee: string) => ({ id, accountId: "chk", payee, date: "2026-11-01", amount: -10, cleared: "cleared", source: "manual", updatedAt: 5 });
+    raw.state.txns = [...(raw.state.txns ?? []), t("p1", "Zelle Payment To Ana"), t("p2", "Zelle Payment To Ben"), t("p3", "Zelle Payment To Cal")];
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/budget");
+  await page.getByRole("button", { name: "Add a transaction" }).click();
+  await page.getByRole("textbox", { name: "Payee" }).fill("zelle");
+  await expect(page.getByRole("button", { name: /^Use Zelle/ })).toHaveCount(3);
+  await page.getByRole("button", { name: "Use Zelle Payment To Ben" }).click();
+  await expect(page.getByRole("textbox", { name: "Payee" })).toHaveValue("Zelle Payment To Ben");
+  await expect(page.getByRole("button", { name: /^Use Zelle/ })).toHaveCount(0);
+  // typing again brings them back
+  await page.getByRole("textbox", { name: "Payee" }).fill("Zelle Payment To");
+  await expect(page.getByRole("button", { name: /^Use Zelle/ })).toHaveCount(3);
+});

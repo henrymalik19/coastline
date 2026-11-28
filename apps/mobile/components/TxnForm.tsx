@@ -54,6 +54,8 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const [kind, setKind] = useState<Kind>(txn ? (txn.transferAccountId ? "transfer" : txn.amount > 0 ? "in" : "out") : transferFrom ? "transfer" : initialKind ?? "out");
   const [amount, setAmount] = useState(Math.abs(txn?.amount ?? initialAmount ?? 0));
   const [payee, setPayee] = useState(txn?.payee ?? "");
+  // a payee picked from the suggestions (or one this transaction already had): no more suggestions until you type
+  const [chosePayee, setChosePayee] = useState(!!txn?.payee);
   const [cat, setCat] = useState(txn?.categoryId ?? categoryId ?? "");
   const [acct, setAcct] = useState(withdrawal ? txn!.transferAccountId! : txn?.accountId ?? transferFrom ?? accountId ?? accounts[0]?.id ?? "");
   const [to, setTo] = useState(withdrawal ? txn!.accountId : txn?.transferAccountId ?? (transferFrom && isTracking(transferFrom) ? accounts.find((a) => a.kind === "cash")?.id ?? "" : ""));
@@ -105,9 +107,13 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
       if (c && c !== "ready") setCat(c);
     }
   };
-  const known = suggestPayees(payees, payee);
+  const typePayee = (v: string) => {
+    setChosePayee(false);
+    pickPayee(v);
+  };
+  const known = chosePayee ? [] : suggestPayees(payees, payee);
   // a name you haven't used before: saved with this transaction, then suggested next time
-  const newPayee = payee.trim().length >= 2 && !payees.has(payee.trim().toLowerCase()) && !known.length;
+  const newPayee = !chosePayee && payee.trim().length >= 2 && !payees.has(payee.trim().toLowerCase()) && !known.length;
 
   const toTracking = tracking.find((a) => a.id === to);
   // a transfer to an IRA or brokerage: you pick the category (the one linked to that account, by default)
@@ -290,7 +296,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                     <TextInput
                       accessibilityLabel={kind === "in" ? "From (payer)" : "Payee"}
                       value={payee}
-                      onChangeText={pickPayee}
+                      onChangeText={typePayee}
                       placeholder={kind === "in" ? "e.g. Hub paycheck" : "e.g. Costco"}
                       placeholderTextColor={t.text3}
                       style={[type.body, styles.inline, { color: t.text }, Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null]}
@@ -299,7 +305,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                   {known.length ? (
                     <View style={[styles.suggest]}>
                       {known.map((p) => (
-                        <Pressable key={p.name} role="button" accessibilityLabel={`Use ${p.name}`} onPress={() => pickPayee(p.name)} style={[styles.chip, { borderColor: t.border, backgroundColor: t.surface }]}>
+                        <Pressable key={p.name} role="button" accessibilityLabel={`Use ${p.name}`} onPress={() => { setChosePayee(true); pickPayee(p.name); }} style={[styles.chip, { borderColor: t.border, backgroundColor: t.surface }]}>
                           {/* a long name (a bank's Zelle line): cut at the end, not the start */}
                           <Text numberOfLines={1} ellipsizeMode="tail" style={[type.caption, { color: t.text2 }]}>{p.name}</Text>
                         </Pressable>

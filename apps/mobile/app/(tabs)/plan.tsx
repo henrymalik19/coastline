@@ -1,6 +1,7 @@
 import { coastNumberAt, investFromTakeHome, type AccountKey } from "@coastfi/engine";
 import { useEffect, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useSetView } from "../../lib/nav";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { AccountsForecast } from "../../components/AccountsForecast";
 import { AccountsProgress } from "../../components/AccountsProgress";
@@ -75,11 +76,12 @@ function Forecast() {
   // the month-by-month table: a way to look at the overview
   const [asTable, setAsTable] = useState(view === "forecast" || view === "table");
   // a link to another view while already here (Your number → Retirement)
+  // the URL says which view (so the browser's Back button returns to the one before)
   useEffect(() => {
-    if (!view) return;
     setTab(viewOf(view));
     if (view === "forecast" || view === "table") setAsTable(true);
   }, [view]);
+  const setView = useSetView();
   const router = useRouter();
   const checkins = useStore((s) => s.checkins);
   const vs = vsPlan(checkins, start);
@@ -94,7 +96,7 @@ function Forecast() {
     setTab("overview");
     setAsTable(true);
   };
-  const go = (v: ViewKey) => { setTab(v); router.setParams({ view: v }); };
+  const go = (v: ViewKey) => { setTab(v); setView({ view: v }); };
 
   // the finish line: when growth alone can carry you, so saving more becomes optional
   const coastM = o.crossing === null ? null : Math.round(o.crossing * 12);
