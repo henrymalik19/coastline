@@ -5,6 +5,7 @@
 import { budgetCategories, budgetStartCash, budgetView, isStartTxn, registerBalance, run, startTxnId, type BudgetState, type PlanState, type Txn } from "@coastfi/engine";
 import { fullName } from "./company";
 import { stamp } from "./stamp";
+import { splitLoanMonth, type LoanPart } from "./loanPay";
 
 export type BudgetAccount = { id: string; name: string; kind: "cash" | "card"; balance: number };
 
@@ -130,6 +131,51 @@ function moveTracking(p: PlanState, id: string, amount: number): void {
   }
   const d = p.debts.find((x) => x.id === id);
   if (d) d.balance = Math.max(0, round2(d.balance - amount));
+}
+
+/** A loan you pay by transfer (not a card, not paid from a paycheck). */
+const payableLoan = (p: PlanState, id: string) => p.debts.find((d) => d.id === id && !isCard(d) && !d.payroll);
+/** Payments to a loan in a month: transfers into it from a budget account. */
+const loanPayments = (txns: Txn[], loan: string, month: string) =>
+  txns.filter((t) => !t.deleted && t.transferAccountId === loan && t.amount < 0 && t.date.slice(0, 7) === month);
+
+/**
+ * A loan's payments in a month only lower its balance by their principal: the month's interest and
+ * escrow come out first (lib/loanPay.ts). Each payment keeps what it moved (`trackedAmount`), so this
+ * redoes the month's: undo all, then lower the balance by each one's principal. `keys`: loan id and
+ * "YYYY-MM" of each month a change touched.
+ */
+export function settleLoans(p: PlanState, txns: Txn[], keys: { loan: string; month: string }[]): Txn[] {
+  let list = txns;
+  const done = new Set<string>();
+  for (const { loan, month } of keys) {
+    const k = loan + "|" + month;
+    const d = payableLoan(p, loan);
+    if (done.has(k) || !d) continue;
+    done.add(k);
+    const pays = loanPayments(list, loan, month);
+    if (!pays.length) continue;
+    const before = round2(d.balance + pays.reduce((s, t) => s + (t.trackedAmount ?? 0), 0));
+    const parts = splitLoanMonth(d, before, month, pays.map((t) => ({ id: t.id, date: t.date, amount: -t.amount })));
+    const principal = (id: string) => parts.get(id)?.principal ?? 0;
+    d.balance = Math.max(0, round2(before - pays.reduce((s, t) => s + principal(t.id), 0)));
+    const ids = new Set(pays.map((t) => t.id));
+    list = list.map((t) => (ids.has(t.id) ? { ...t, trackedAmount: principal(t.id) } : t));
+  }
+  return list;
+}
+
+/** What a payment of `amount` to a loan on `date` would do, with the month's other payments (`self`: one being edited). */
+export function loanPaymentParts(p: PlanState, txns: Txn[], loan: string, date: string, amount: number, self?: string): LoanPart | null {
+  const d = payableLoan(p, loan);
+  if (!d || !(amount > 0)) return null;
+  const month = date.slice(0, 7);
+  const others = loanPayments(txns, loan, month).filter((t) => t.id !== self);
+  // the balance before this month's payments (this one's own effect, if it's being edited, undone too)
+  const mine = self ? txns.find((t) => t.id === self && !t.deleted && t.transferAccountId === loan) : undefined;
+  const before = round2(d.balance + others.reduce((s, t) => s + (t.trackedAmount ?? 0), 0) + (mine?.trackedAmount ?? 0));
+  const id = self ?? "\uffff";
+  return splitLoanMonth(d, before, month, [...others.map((t) => ({ id: t.id, date: t.date, amount: -t.amount })), { id, date, amount }]).get(id) ?? null;
 }
 
 /**

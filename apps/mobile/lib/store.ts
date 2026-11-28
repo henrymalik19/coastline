@@ -1,6 +1,6 @@
 import { startTxnId, transferPair, type PlanState, type Txn } from "@coastfi/engine";
 import { CheckinSchema, PlanStateSchema, TxnSchema, withProperties, type Checkin } from "@coastfi/schema";
-import { applyRegisterBalances, applyTracked, budgetAccounts, foldSavingsLines, hasRegister, startTxnFor, todayIso } from "./register";
+import { applyRegisterBalances, applyTracked, budgetAccounts, foldSavingsLines, hasRegister, settleLoans, startTxnFor, todayIso } from "./register";
 import { ownGroups } from "./budgetOrder";
 import { repairTransfers } from "./transfers";
 import { z } from "zod";
@@ -207,6 +207,8 @@ export const useStore = create<AppState>()(
         // a transfer to or from an IRA, brokerage account or loan moves its balance too (kept on the transaction)
         const moved = applyTracked(plan, old, t);
         list = list.map((x) => (x.id === t.id ? { ...x, trackedAmount: moved } : x));
+        // a loan payment lowers the balance by its principal only (the month's interest and escrow first)
+        list = settleLoans(plan, list, [old, t].flatMap((x) => (x?.transferAccountId ? [{ loan: x.transferAccountId, month: x.date.slice(0, 7) }] : [])));
         applyRegisterBalances(plan, list);
         set({ txns: list, plan, updatedAt: now() });
       },
@@ -218,7 +220,10 @@ export const useStore = create<AppState>()(
         const plan = structuredClone(get().plan);
         applyRegisterBalances(plan, list);
         applyTracked(plan, t, null);
-        set({ txns: list.map((x) => (x.id === id ? { ...x, trackedAmount: undefined } : x)), plan, updatedAt: stamp });
+        const cleared = list.map((x) => (x.id === id ? { ...x, trackedAmount: undefined } : x));
+        // the month's other payments to that loan: one may now be the one that pays the interest
+        const settled = t.transferAccountId ? settleLoans(plan, cleared, [{ loan: t.transferAccountId, month: t.date.slice(0, 7) }]) : cleared;
+        set({ txns: settled, plan, updatedAt: stamp });
       },
       refreshBalances: () => {
         // a transfer that lost its other side: put back (see lib/transfers.ts)

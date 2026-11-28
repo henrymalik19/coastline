@@ -14,7 +14,7 @@ import { closedName, outsideName } from "../lib/outside";
 import { buildPayees, suggestPayees } from "../lib/payees";
 import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
-import { budgetAccounts, trackingAccounts } from "../lib/register";
+import { budgetAccounts, loanPaymentParts, trackingAccounts } from "../lib/register";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, IconButton, moneyText, NumberInput, Segmented, Select } from "./form";
@@ -139,6 +139,15 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const xferCat = xferPick || linkedCat?.key || "ready";
   const xferLabel = xferCat === "ready" ? undefined : cats.find((c) => c.key === xferCat)?.label;
   const toLine = toTracking?.kind === "debt" ? cats.find((c) => c.key === toTracking.key) : undefined;
+  // a loan payment: the month's interest and escrow first, the rest lowers what you owe
+  const loanParts = kind === "transfer" && toTracking?.kind === "debt" ? loanPaymentParts(state, txns, toTracking.id, date, amount, txn?.id) : null;
+  // spent from a loan's payment category, or one linked to an IRA or brokerage account: a transfer
+  // there keeps that account in step (a loan goes down, the IRA goes up)
+  const transferInstead =
+    kind === "out" && !parts && cat
+      ? tracking.find((x) => x.kind === "debt" && x.key === cat) ??
+        tracking.find((x) => x.kind === "acct" && x.id === cats.find((c) => c.key === cat)?.account)
+      : undefined;
   const fromTracking = kind === "transfer" ? withdrawable.find((a) => a.id === acct) : undefined;
   // only a transfer can start from an investment account
   const acctOk = !!acct && (kind === "transfer" || accounts.some((a) => a.id === acct));
@@ -475,10 +484,37 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                 />,
               )}
             </View>
+            {transferInstead ? (
+              <View style={[styles.suggestXfer, { backgroundColor: t.accentSoft }]}>
+                <Text style={[type.caption, { color: t.text, flex: 1 }]}>
+                  {transferInstead.kind === "debt"
+                    ? `A payment on ${transferInstead.name}? As a transfer, what you owe goes down too.`
+                    : `Money into ${transferInstead.name}? As a transfer, its balance goes up too.`}
+                </Text>
+                <Pressable
+                  role="button"
+                  accessibilityLabel={`Make it a transfer to ${transferInstead.name}`}
+                  hitSlop={6}
+                  onPress={() => {
+                    if (transferInstead.kind === "acct") setXferPick(cat);
+                    setTo(transferInstead.id);
+                    setKind("transfer");
+                  }}
+                >
+                  <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Make it a transfer</Text>
+                </Pressable>
+              </View>
+            ) : null}
             {kind === "transfer" && toTracking && !fromTracking ? (
               <Text style={[type.caption, { color: t.text3 }]}>
                 {toTracking.kind === "debt"
-                  ? `${toLine ? `Comes out of the ${toLine.label} category` : "Comes out of Unassigned"}, and lowers what you owe on ${toTracking.name}.`
+                  ? `${toLine ? `Comes out of the ${toLine.label} category` : "Comes out of Unassigned"}. ${
+                      !loanParts
+                        ? `It lowers what you owe on ${toTracking.name}.`
+                        : loanParts.interest + loanParts.escrow < 0.005
+                          ? `All of it lowers what you owe on ${toTracking.name} (this month's interest is paid already).`
+                          : `${[loanParts.interest > 0.005 ? `${money(loanParts.interest)} interest` : "", loanParts.escrow > 0.005 ? `${money(loanParts.escrow)} escrow` : ""].filter(Boolean).join(" and ")} this month; ${money(loanParts.principal)} lowers what you owe on ${toTracking.name}. An extra payment as its own transaction is all principal.`
+                    }`
                   : `${xferLabel ? `Comes out of ${xferLabel}` : "Comes out of Unassigned"}, and adds to ${toTracking.name}.${linkedCat ? "" : " To budget for it, add a category and link it to this account."}`}
               </Text>
             ) : null}
@@ -521,6 +557,7 @@ const styles = StyleSheet.create({
   selectLike: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44, flex: 1 },
   splitRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
   lockNote: { flexDirection: "row", alignItems: "center", gap: space.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: space.sm },
+  suggestXfer: { flexDirection: "row", alignItems: "center", gap: space.sm, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm },
   swap: { position: "absolute", left: space.md + 40, top: -15, width: 30, height: 30, borderRadius: 15, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center" },
   suggest: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: space.md, paddingBottom: space.sm, justifyContent: "flex-end" },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, maxWidth: "100%", flexShrink: 1 },
