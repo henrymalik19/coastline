@@ -1187,8 +1187,6 @@ export default function Budget() {
                       {ownGroup(g) && !g.cats.length ? (
                         <Chip title="Delete group" icon="trash" tone="danger" onPress={() => { setGroupOpen(null); update((p) => removeFromGroups(p, g.name)); }} />
                       ) : null}
-                      <View style={{ flex: 1 }} />
-                      <Chip title="Done" icon="up" onPress={() => setGroupOpen(null)} />
                     </View>
                   </View>
                 ) : null}
