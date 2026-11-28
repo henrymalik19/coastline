@@ -300,7 +300,8 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                     <View style={[styles.suggest]}>
                       {known.map((p) => (
                         <Pressable key={p.name} role="button" accessibilityLabel={`Use ${p.name}`} onPress={() => pickPayee(p.name)} style={[styles.chip, { borderColor: t.border, backgroundColor: t.surface }]}>
-                          <Text style={[type.caption, { color: t.text2 }]}>{p.name}</Text>
+                          {/* a long name (a bank's Zelle line): cut at the end, not the start */}
+                          <Text numberOfLines={1} ellipsizeMode="tail" style={[type.caption, { color: t.text2 }]}>{p.name}</Text>
                         </Pressable>
                       ))}
                     </View>
@@ -469,5 +470,5 @@ const styles = StyleSheet.create({
   splitRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
   lockNote: { flexDirection: "row", alignItems: "center", gap: space.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md, padding: space.sm },
   suggest: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: space.md, paddingBottom: space.sm, justifyContent: "flex-end" },
-  chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, maxWidth: "100%", flexShrink: 1 },
 });

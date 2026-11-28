@@ -27,15 +27,28 @@ export type DragZone = {
   overRef: { current: Over | null };
   setOver: (o: Over | null) => void;
   onCross: (fromList: string, from: number, toList: string, to: number) => void;
+  /** A row is being dragged in one of its lists (an empty list opens up to take it only then). */
+  active: boolean;
+  setActive: (on: boolean) => void;
 };
 
 /** A zone for several DragLists: `onCross` moves a row from one list to another (index `to` in it). */
 export function useDragZone(onCross: DragZone["onCross"]): DragZone {
   const [over, setOverState] = useState<Over | null>(null);
+  const [active, setActiveState] = useState(false);
   const lists = useRef(new Map<string, { node: unknown; layouts: { y: number; h: number }[]; rect?: Rect }>()).current;
   const overRef = useRef<Over | null>(null);
   const cross = useRef(onCross);
   cross.current = onCross;
+  // phones measure each list when a drag starts; an empty one opens up just after, moving the ones below
+  useEffect(() => {
+    if (!active || Platform.OS === "web") return;
+    const id = setTimeout(() => {
+      for (const l of lists.values())
+        (l.node as { measureInWindow?: (cb: (x: number, y: number, w: number, h: number) => void) => void } | null)?.measureInWindow?.((_x, y, _w, h) => { l.rect = { top: y, height: h }; });
+    }, 50);
+    return () => clearTimeout(id);
+  }, [active, lists]);
   return useMemo(
     () => ({
       lists,
@@ -48,8 +61,10 @@ export function useDragZone(onCross: DragZone["onCross"]): DragZone {
         setOverState(o);
       },
       onCross: (a: string, b: number, c: string, d: number) => cross.current(a, b, c, d),
+      active,
+      setActive: (on: boolean) => setActiveState(on),
     }),
-    [over, lists],
+    [over, active, lists],
   );
 }
 
@@ -113,6 +128,7 @@ export function DragList({
       }
     }
     if (zone) zone.set.setOver(d ? overOther(d) : null);
+    if (zone && !!d !== !!drag) zone.set.setActive(!!d);
     setDragState(d);
   };
   const finish = (d: Drag) => {
@@ -158,7 +174,8 @@ export function DragList({
         // above the other groups while a row is dragged out of it
         drag ? { zIndex: 20 } : null,
         target ? { backgroundColor: t.accentSoft, borderRadius: 8, ...(Platform.OS === "web" ? ({ outline: `2px dashed ${t.accent}`, outlineOffset: -2 } as object) : { borderWidth: 2, borderColor: t.accent }) } : null,
-        !count && zone ? { minHeight: 40 } : null,
+        // empty: room to drop a row into, only while one is being dragged
+        !count && zone?.set.active ? { minHeight: 40 } : null,
       ]}
     >
       {target ? <View pointerEvents="none" style={{ position: "absolute", left: 8, right: 8, top: lineY - 1, height: 3, borderRadius: 2, backgroundColor: t.accent, zIndex: 5 }} /> : null}
