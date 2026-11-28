@@ -406,8 +406,9 @@ export default function Budget() {
   );
   const pill = (l: BudgetLine, c: BudgetCategory) => {
     const over = l.available < -0.005;
-    const under = !over && c.target > 0.5 && l.assigned + 0.5 < c.target && c.kind !== "saving";
-    // short of its target: a dashed outline, not orange (orange means a what-if)
+    // short of its target this month: a dashed outline, not orange (orange means a what-if). Money carried
+    // in from last month shows as plain available (green), whatever was assigned this month.
+    const under = !over && c.target > 0.5 && l.assigned + 0.5 < c.target && c.kind !== "saving" && !((l.carried ?? 0) > 0.005);
     const bg = over ? t.badSoft : l.available > 0.5 && !under ? t.goodSoft : t.surface2;
     const fg = over ? t.bad : under ? t.text : l.available > 0.5 ? t.good : t.text3;
     return (

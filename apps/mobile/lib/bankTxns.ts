@@ -187,6 +187,17 @@ export function mergeBankTxns(txns: Txn[], plan: Pick<PlanState, "accounts" | "d
     const id = BANK_ID + r.transactionId;
     byBank.set(r.transactionId, id);
     const base = { id, accountId: acct, date: r.date, amount, cleared: cleared(r.pending), source: "plaid" as const, importId: r.transactionId, updatedAt: stamp };
+    // already here under the bank's id, but no longer marked as the bank's (made a transfer, or kept as
+    // YNAB's): it's the bank's again, with what you set on it (a "new" copy would replace it, and the
+    // old one marked deleted is the same id, so both would go)
+    const sameId = out.get(id);
+    if (sameId) {
+      if (!sameId.deleted) {
+        put({ ...sameId, date: r.date, amount, cleared: cleared(r.pending, sameId.cleared), source: "plaid", importId: r.transactionId, updatedAt: stamp });
+        res.updated++;
+      }
+      continue;
+    }
     // the same purchase already here (typed in, or from YNAB): the closest date wins
     const same = [...out.values()]
       .filter((t) => !t.deleted && t.accountId === acct && t.source !== "plaid" && !isStartTxn(t) && sameAmount(t.amount, amount) && days(t.date, r.date) <= MATCH_DAYS)

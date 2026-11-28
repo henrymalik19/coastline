@@ -2,6 +2,7 @@ import { startTxnId, transferPair, type PlanState, type Txn } from "@coastfi/eng
 import { CheckinSchema, PlanStateSchema, TxnSchema, withProperties, type Checkin } from "@coastfi/schema";
 import { applyRegisterBalances, applyTracked, budgetAccounts, foldSavingsLines, hasRegister, startTxnFor, todayIso } from "./register";
 import { ownGroups } from "./budgetOrder";
+import { repairTransfers } from "./transfers";
 import { z } from "zod";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -220,6 +221,10 @@ export const useStore = create<AppState>()(
         set({ txns: list.map((x) => (x.id === id ? { ...x, trackedAmount: undefined } : x)), plan, updatedAt: stamp });
       },
       refreshBalances: () => {
+        // a transfer that lost its other side: put back (see lib/transfers.ts)
+        const ids = new Set(budgetAccounts(get().plan).map((a) => a.id));
+        const repaired = repairTransfers(get().txns, ids, now());
+        if (repaired.fixed) set({ txns: repaired.txns });
         // a new day: upcoming transactions whose day has come now count in balances
         const plan = structuredClone(get().plan);
         applyRegisterBalances(plan, get().txns);

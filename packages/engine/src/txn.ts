@@ -120,8 +120,12 @@ export function registerBalance(opening: number, txns: Txn[], accountId: string,
 /** The other side of a transfer between two of your accounts (same id prefix, opposite amount). */
 export function transferPair(t: Txn): Txn | null {
   if (!t.transferAccountId) return null;
+  // the bank's (or YNAB's) id stays on the side it came from: a copy here would look like the same
+  // bank transaction twice, and a bank sync would change it (or remove it as a duplicate)
+  const { importId: _i, ynabId: _y, trackedAmount: _tr, review: _r, ...rest } = t;
   return {
-    ...t,
+    ...rest,
+    source: t.source === "plaid" ? "manual" : t.source,
     id: t.transferId ?? t.id + ":t",
     accountId: t.transferAccountId,
     transferAccountId: t.accountId,
