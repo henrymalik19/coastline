@@ -175,7 +175,7 @@ function RentalValue({ inc }: { inc: Income }) {
         <NumberInput kind="money" label="Rental property value" value={account?.balance ?? 0} onChange={setValue} />
       </FieldRow>
       <Text style={[type.caption, { color: t.text3 }]}>
-        It's listed under Money → Property.
+        It's listed under Homes on Money → Accounts.
       </Text>
     </View>
   );

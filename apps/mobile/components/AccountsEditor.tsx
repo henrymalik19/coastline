@@ -87,7 +87,12 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
     setOpen(id);
   };
   const remove = async (a: Account, i: number) => {
-    if (a.balance > 0 && !(await confirm("Remove this account?", `"${a.name || "This account"}" will be removed from your plan.`, "Remove"))) return;
+    // with transactions: removing leaves them without an account; Closed keeps them as its history
+    const n = txns.filter((x) => !x.deleted && x.accountId === a.id).length;
+    const msg = n
+      ? `"${a.name || "This account"}" will be removed from your plan. Its ${n} transaction${n === 1 ? "" : "s"} stay, without an account. To keep them as its history instead, turn on Closed.`
+      : `"${a.name || "This account"}" will be removed from your plan.`;
+    if ((a.balance > 0 || n > 0) && !(await confirm("Remove this account?", msg, "Remove"))) return;
     update((p) => { p.accounts.splice(i, 1); });
   };
 
