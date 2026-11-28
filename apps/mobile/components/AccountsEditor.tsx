@@ -47,6 +47,11 @@ export const ACCOUNT_GROUPS: { key: string; label: string; types: AccountType[] 
   { key: "invest", label: "Investments", types: ["taxable"] },
 ];
 const groupKeyOf = (a: Account) => ACCOUNT_GROUPS.find((g) => g.types.includes(a.type))?.key ?? "invest";
+/** The group an account is listed under ("Checking & savings", "Retirement & HSA", "Investments"), for dropdown sections. */
+export const accountSection = (a: Pick<Account, "type">) => ACCOUNT_GROUPS.find((g) => g.types.includes(a.type))?.label ?? "Investments";
+/** In the order of those groups (a dropdown's sections then come out in the same order). */
+export const byAccountGroup = <T extends Pick<Account, "type">>(list: T[]) =>
+  [...list].sort((x, y) => ACCOUNT_GROUPS.findIndex((g) => g.types.includes(x.type)) - ACCOUNT_GROUPS.findIndex((g) => g.types.includes(y.type)));
 
 /** One-tap ways to add the common accounts. */
 const QUICK_ADD: { name: string; type: AccountType; label?: string }[] = [

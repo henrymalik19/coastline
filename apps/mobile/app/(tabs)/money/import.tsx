@@ -12,6 +12,8 @@ import { fullName, splitCompanies } from "../../../lib/company";
 import { PLAN as TEST_PLAN, REGISTER as TEST_REGISTER } from "../../../lib/testdata/ynabComplex";
 import { Icon, type IconName } from "../../../components/Icon";
 import { Card, Divider, Screen } from "../../../components/ui";
+import { accountSection, byAccountGroup } from "../../../components/AccountsEditor";
+import type { Account } from "@coastfi/engine";
 import { money } from "../../../lib/format";
 import { effectivePlan, usePlan } from "../../../lib/plan";
 import { useLimits } from "../../../lib/limits";
@@ -263,9 +265,11 @@ export default function ImportYnab({ setup }: { setup?: boolean } = {}) {
       : state.accounts.filter((x) => x.type !== "cash");
     const pool = pool0.filter((x) => !takenByOthers.has(x.id));
     return [
-      ...pool.map((x) => ({ value: "match:" + x.id, label: `Same as ${x.name || "account"}` })),
-      { value: "add", label: "Add as a new account" },
-      { value: "skip", label: "Leave it out" },
+      ...(a.kind === "card" || a.kind === "loan"
+        ? pool.map((x) => ({ value: "match:" + x.id, label: `Same as ${x.name || "account"}`, section: a.kind === "card" ? "Your credit cards" : "Your loans" }))
+        : byAccountGroup(pool as { type: Account["type"]; id: string; name: string }[]).map((x) => ({ value: "match:" + x.id, label: `Same as ${x.name || "account"}`, section: `Your ${accountSection(x).toLowerCase()}` }))),
+      { value: "add", label: "Add as a new account", section: "Or" },
+      { value: "skip", label: "Leave it out", section: "Or" },
     ];
   };
   const valueOf = (c: AccountChoice | undefined) => (!c ? "add" : c.action === "match" ? "match:" + c.id : c.action);

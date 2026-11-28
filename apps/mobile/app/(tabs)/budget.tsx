@@ -29,6 +29,7 @@ import { newId } from "../../lib/store";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Icon } from "../../components/Icon";
 import { Card, Divider, Pill, Screen, SectionLabel } from "../../components/ui";
+import { accountSection, byAccountGroup } from "../../components/AccountsEditor";
 import { useAppearance } from "../../lib/appearance";
 import { confirm } from "../../lib/confirm";
 import { debtKind, debtLabel } from "../../lib/debts";
@@ -556,7 +557,7 @@ export default function Budget() {
                 plain
                 label="Spending or investing"
                 value={linkedTo?.id ?? ""}
-                options={[{ value: "", label: "Spending" }, ...linkable.map((a) => ({ value: a.id, label: `Investing in ${a.name.trim() || "account"}` }))]}
+                options={[{ value: "", label: "Spending" }, ...byAccountGroup(linkable).map((a) => ({ value: a.id, label: `Investing in ${a.name.trim() || "account"}`, section: accountSection(a) }))]}
                 onChange={(v) => linkItem(it.id, v)}
               />
             </FormRow>
@@ -570,7 +571,7 @@ export default function Budget() {
                   plain
                   label="Pays a loan"
                   value={it.paysDebt ?? ""}
-                  options={[{ value: "", label: "No" }, ...state.debts.filter((x) => !isCard(x) && !x.payroll).map((x) => ({ value: x.id, label: `${debtLabel(x)} · ${debtKind(x.kind).label}` }))]}
+                  options={[{ value: "", label: "No" }, ...state.debts.filter((x) => !isCard(x) && !x.payroll).sort((a, b) => debtKind(a.kind).label.localeCompare(debtKind(b.kind).label)).map((x) => ({ section: debtKind(x.kind).label, value: x.id, label: `${debtLabel(x)} · ${debtKind(x.kind).label}` }))]}
                   onChange={(v) => editItem(it.id, v ? { paysDebt: v } : { paysDebt: undefined, noSuggest: true })}
                 />
               </FormRow>

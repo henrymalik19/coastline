@@ -12,6 +12,11 @@ import { useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
 import { Button, Select } from "./form";
 
+/** A bank account's section in the list: what the bank calls it, broadly. */
+const KINDS = ["Checking & savings", "Credit cards", "Loans", "Investments", "Other"];
+const bankKind = (b: { type: string }) =>
+  b.type === "depository" ? "Checking & savings" : b.type === "credit" ? "Credit cards" : b.type === "loan" ? "Loans" : b.type === "investment" ? "Investments" : "Other";
+
 export function BankLink({ kind, id, name, company }: { kind: "account" | "debt"; id: string; name: string; company?: string }) {
   const t = useTheme();
   const { state } = usePlan();
@@ -57,7 +62,7 @@ export function BankLink({ kind, id, name, company }: { kind: "account" | "debt"
           label={`Link ${name || "this"} to`}
           value=""
           placeholder="Link"
-          options={free.map((b) => ({ value: b.accountId, label: bankLabel(b), hint: inst(b) }))}
+          options={[...free].sort((x, y) => KINDS.indexOf(bankKind(x)) - KINDS.indexOf(bankKind(y))).map((b) => ({ value: b.accountId, label: bankLabel(b), hint: inst(b), section: bankKind(b) }))}
           onChange={(v) => {
             const b = free.find((x) => x.accountId === v);
             if (!b) return;

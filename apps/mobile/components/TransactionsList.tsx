@@ -337,7 +337,7 @@ export function TransactionsList({
               onChange={setAcct}
               options={[
                 { value: "all", label: `All accounts (${accounts.length})` },
-                ...accounts.map((a) => ({ value: a.id, label: a.name, hint: a.kind === "card" ? "Credit card" : "Cash account" })),
+                ...[...accounts].sort((a, b) => Number(a.kind === "card") - Number(b.kind === "card")).map((a) => ({ value: a.id, label: a.name, hint: a.kind === "card" ? `Owe ${money(-a.balance)}` : money(a.balance), section: a.kind === "card" ? "Credit cards" : "Checking & savings" })),
                 // history from accounts you didn't bring in: all of them, or one
                 ...(closedAccts.length
                   ? [
