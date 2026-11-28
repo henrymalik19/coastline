@@ -15,6 +15,20 @@ const bank = (o: Partial<BankTxn> & Pick<BankTxn, "transactionId">): BankTxn => 
 const live = (txns: Txn[]) => txns.filter((t) => !t.deleted && !t.id.startsWith("start:"));
 
 describe("bank transactions", () => {
+  it("moving the bank's start back on an account with history adds what's missing and matches what's there", () => {
+    const { plan, txns } = setup();
+    const ynab: Txn = { id: "y1", accountId: "chk", date: "2026-11-12", amount: -40, payee: "Gas", categoryId: "gas", cleared: "cleared", source: "ynab", importId: "Y1", updatedAt: 2 };
+    const rows = [bank({ transactionId: "g", date: "2026-11-13", amount: 40, name: "SHELL" }), bank({ transactionId: "z", date: "2026-11-14", amount: 150, name: "Zelle to Pat", merchantName: null })];
+    // the bank's from the newest one here (none before it come in)
+    plan.accounts[0]!.bankFrom = "2026-11-27";
+    expect(live(mergeBankTxns([...txns, ynab], plan, rows, 50).txns).map((t) => t.id)).toEqual(["y1"]);
+    // moved back: the Zelle comes in; the gas is the same purchase, linked, not doubled
+    plan.accounts[0]!.bankFrom = "2026-11-10";
+    const r = mergeBankTxns([...txns, ynab], plan, rows, 60);
+    expect([r.added, r.linked]).toEqual([1, 1]);
+    expect(live(r.txns).map((t) => t.amount).sort((a, b) => a - b)).toEqual([-150, -40]);
+  });
+
   it("a new one comes in held for review, as money out, with the merchant's name", () => {
     const { plan, txns } = setup();
     const r = mergeBankTxns(txns, plan, [bank({ transactionId: "t1", pending: true })], 50);

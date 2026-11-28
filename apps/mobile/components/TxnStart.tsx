@@ -37,6 +37,29 @@ export function TxnStart({ id, divider }: { id: string; divider?: boolean }) {
   if (hasRegister(txns, id)) {
     const start = txns.find((s) => s.id === startTxnId(id) && !s.deleted)!;
     const from = x.plaidAccountId && x.bankFrom && x.bankFrom > start.date ? x.bankFrom : start.date;
+    // linked, with its own transactions already (from YNAB, or typed in): when the bank's start. Earlier
+    // brings in what's missing; one that's already here (same amount, a few days apart) is matched, not doubled
+    if (x.plaidAccountId && x.bankFrom)
+      return (
+        <>
+        {line}
+        <FieldRow label="Bank transactions from" info={`Transactions here start ${formatDate(start.date)}. Your bank's come in from this day (up to 30 days back); ones already here are matched, not added twice.`}>
+          <DateField
+            label="Bank transactions from"
+            value={x.bankFrom}
+            onChange={(v) => {
+              if (!v) return;
+              const day = bankStartDay(v < start.date ? start.date : v, today);
+              update((p) => {
+                const y = p.accounts.find((a) => a.id === id) ?? p.debts.find((d) => d.id === id);
+                if (y) y.bankFrom = day;
+              });
+              void pullBankTxns();
+            }}
+          />
+        </FieldRow>
+        </>
+      );
     return (
       <>
       {line}
