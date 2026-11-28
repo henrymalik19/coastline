@@ -20,7 +20,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Button, Chip, FormList, FormRow, InlineMoney, InlineSwitch, InlineText, NumberInput, Segmented, Select } from "../../components/form";
 import { ChangesLater, MonthlyAmount } from "../../components/ScheduleEditor";
-import { BILLS_GROUP, CLOSED_ACCOUNTS_GROUP, DEBTS_GROUP, groupOf, groupOrder, linkedGroupChoices, moveGroup, moveToGroup, UNGROUPED } from "../../lib/budgetOrder";
+import { BILLS_GROUP, CLOSED_ACCOUNTS_GROUP, DEBTS_GROUP, groupOf, groupOrder, linkedGroupChoices, moveInGroups, moveToGroup, ownGroups, removeFromGroups, renameInGroups, UNGROUPED } from "../../lib/budgetOrder";
 import { archive, archiveSet, canBeSub, makeOwn, moveUnder, parentChoices, restore, subsOf } from "../../lib/subcats";
 import { foldSuggestions } from "../../lib/foldSuggest";
 import { AddCategories, type AddLine, type AddRequest } from "../../components/AddCategories";
@@ -232,6 +232,7 @@ export default function Budget() {
       const name = to.trim();
       if (!name) return;
       p.budget.forEach((x) => { if (groupOf(x) === from) x.group = name; });
+      renameInGroups(p, from, name);
       // everything shown in the group moves with it, including what sits there by default
       p.debts.forEach((x) => { if ((x.budgetGroup?.trim() || "Debt payments") === from) x.budgetGroup = name; });
       p.goals.forEach((x) => { if ((x.budgetGroup?.trim() || (x.recurring ? "Bills" : "Savings goals")) === from) x.budgetGroup = name; });
@@ -281,7 +282,10 @@ export default function Budget() {
   // a bill or debt payment listed in one of your groups goes where that group is, not with the built-ins
   // Savings is built in: a category dragged into it doesn't make it one of your groups (it keeps its place)
   const savingHomes = new Set([SAVINGS_GROUP, "Savings goals"]);
-  const own = groupOrder(state.budget).filter((n) => !savingHomes.has(n));
+  // the built-in groups' names: listed as yours only while a category of yours is in one
+  const builtIn = new Set([BILLS_GROUP, DEBTS_GROUP, CLOSED_ACCOUNTS_GROUP, ...savingHomes]);
+  const named = groupOrder(state.budget);
+  const own = ownGroups(state).filter((n) => !savingHomes.has(n) && (!builtIn.has(n) || named.includes(n)));
   const rank = (c: BudgetCategory) => (savingHomes.has(c.group) ? ORDER.saving * 1000 : own.includes(c.group) ? ORDER.spending * 1000 + own.indexOf(c.group) : ORDER[c.kind] * 1000);
   // hidden categories aren't in the groups: they're listed at the end (an overspent one always shows)
   const hiddenCats = cats.filter((c) => c.hidden);
@@ -293,6 +297,10 @@ export default function Budget() {
     if (!g) groups.push((g = { name: c.group, kind: c.kind, cats: [] }));
     g.cats.push(c);
   }
+  // your empty groups (their last category moved out): still there, in their place, to drag one into or delete
+  for (const name of own) if (!groups.some((g) => g.name === name)) groups.push({ name, kind: "spending", cats: [] });
+  const groupRank = (g: (typeof groups)[number]) => (g.cats[0] ? rank(g.cats[0]) : ORDER.spending * 1000 + own.indexOf(g.name));
+  groups.sort((a, b) => groupRank(a) - groupRank(b));
   const groupNames = [...new Set([...groups.map((g) => g.name), ...groupOrder(state.budget)])];
   /**
    * One of your groups (it has categories you made) can be moved, and its categories dragged, even with a
@@ -1172,9 +1180,12 @@ export default function Budget() {
                       <Chip title="Add categories" icon="plus" tone="accent" onPress={() => setAddReq({ kind: "category", to: "group:" + g.name })} />
                       {ownGroup(g) ? (
                         <>
-                          <Chip title="Earlier" icon="up" disabled={own[0] === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, -1, savingHomes); })} />
-                          <Chip title="Later" icon="down" disabled={own.at(-1) === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, 1, savingHomes); })} />
+                          <Chip title="Earlier" icon="up" disabled={own[0] === g.name} onPress={() => update((p) => moveInGroups(p, g.name, -1, savingHomes))} />
+                          <Chip title="Later" icon="down" disabled={own.at(-1) === g.name} onPress={() => update((p) => moveInGroups(p, g.name, 1, savingHomes))} />
                         </>
+                      ) : null}
+                      {ownGroup(g) && !g.cats.length ? (
+                        <Chip title="Delete group" icon="trash" tone="danger" onPress={() => { setGroupOpen(null); update((p) => removeFromGroups(p, g.name)); }} />
                       ) : null}
                       <View style={{ flex: 1 }} />
                       <Chip title="Done" icon="up" onPress={() => setGroupOpen(null)} />
@@ -1197,6 +1208,11 @@ export default function Budget() {
                       keyOf={(n) => spendCats(g)[n]!.key}
                       nameOf={(n) => spendCats(g)[n]!.name}
                       onMove={(from, to) => update((p) => { p.budget = reorderAmong(p.budget, (b) => !b.hidden && !b.parentId && groupOf(b) === g.name, from, to); })}
+                      empty={g.cats.length ? null : (
+                        <Text style={[type.caption, { color: t.text3, paddingHorizontal: compact ? space.md : space.lg, paddingVertical: space.md }]}>
+                          No categories. {grips ? "Drag one here" : "Tap Reorder, then drag one here"}, or add one. An empty group can be deleted.
+                        </Text>
+                      )}
                       renderItem={(n, grip) => (
                         <View>
                           {n > 0 ? <Divider /> : null}
@@ -1297,7 +1313,7 @@ export default function Budget() {
           </Pressable>
           <View style={styles.editRow}>
             <Button title="Add a group" icon="plus" onPress={() => setAddReq({ kind: "group" })} style={{ minHeight: 36 }} />
-            <Button title="Add categories" icon="plus" tone="ghost" onPress={() => setAddReq({ kind: "category", to: "group:" + (groupOrder(state.budget)[0] ?? UNGROUPED) })} style={{ minHeight: 36 }} />
+            <Button title="Add categories" icon="plus" tone="ghost" onPress={() => setAddReq({ kind: "category", to: "group:" + (own[0] ?? UNGROUPED) })} style={{ minHeight: 36 }} />
           </View>
           <Text style={[type.caption, { color: t.text3 }]}>
             Still paid after you retire: {money(state.budget.filter((x) => x.inRetirement && !x.accountId && !x.hidden).reduce((a, x) => a + x.amount, 0))}/mo of spending (plus healthcare). That sets your retirement number.{" "}

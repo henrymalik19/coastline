@@ -224,6 +224,7 @@ export const PlanStateSchema = z.object({
   contributed: z.object({ year: z.number().int(), k401: nonNeg, ira: nonNeg, hsa: nonNeg, iraSpouse: nonNeg.optional() }).optional(),
   spouse: z.object({ name: z.string(), age: z.number().min(0).max(120) }).optional(),
   properties: z.array(PropertySchema).optional(),
+  budgetGroups: z.array(z.string()).optional(),
   budgetPlan: z
     .object({
       start: z.string().regex(/^\d{4}-\d{2}$/),

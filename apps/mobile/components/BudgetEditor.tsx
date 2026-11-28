@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm, tell } from "../lib/confirm";
 import { keepCategory } from "../lib/combine";
-import { BILLS_GROUP, DEBTS_GROUP, groupOf, mergeGroup, moveGroup, moveToGroup, UNGROUPED } from "../lib/budgetOrder";
+import { BILLS_GROUP, DEBTS_GROUP, groupOf, mergeGroup, moveInGroups, moveToGroup, removeFromGroups, renameInGroups, UNGROUPED } from "../lib/budgetOrder";
 import { DragList, reorderAmong } from "./DragList";
 import { debtLabel } from "../lib/debts";
 import { paycheckFor } from "../lib/loans";
@@ -129,6 +129,7 @@ export function BudgetEditor() {
   const renameGroup = (from: string, to: string) => {
     update((p) => {
       p.budget.forEach((b) => { if (groupOf(b) === from) b.group = to; });
+      renameInGroups(p, from, to);
       regroupLinked(p, from, to);
     });
     setSelected(to);
@@ -143,6 +144,7 @@ export function BudgetEditor() {
     if (await confirm(`Remove "${group}"?`, `This removes the group and its ${count} item${count === 1 ? "" : "s"}.${linked ? " Debt payments and set-asides listed here go back to their own groups." : ""}`, "Remove"))
       update((p) => {
         p.budget = p.budget.filter((b) => b.hidden || groupOf(b) !== group);
+        removeFromGroups(p, group);
         regroupLinked(p, group, undefined);
       });
   };
@@ -342,7 +344,7 @@ export function BudgetEditor() {
                 others={groups.map((g) => g.name).filter((g) => g !== current.name)}
                 onMerge={(into) => {
                   const n = current.rows.length;
-                  update((p) => { p.budget = mergeGroup(p.budget, current.name, into); regroupLinked(p, current.name, into); });
+                  update((p) => { p.budget = mergeGroup(p.budget, current.name, into); removeFromGroups(p, current.name); regroupLinked(p, current.name, into); });
                   setSelected(into);
                   setNotice(`Merged ${current.name} into ${into} (${n} item${n === 1 ? "" : "s"}).`);
                 }}
@@ -353,8 +355,8 @@ export function BudgetEditor() {
             {reorder ? (
               <View style={[styles.reorderBar, { backgroundColor: t.accentSoft }]}>
                 <Text style={[type.caption, { color: t.text, flex: 1 }]}>Move this group</Text>
-                <Button title="Move up" icon="up" disabled={groups[0]?.name === current.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, current.name, -1); })} style={styles.moveBtn} />
-                <Button title="Move down" icon="down" disabled={groups.at(-1)?.name === current.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, current.name, 1); })} style={styles.moveBtn} />
+                <Button title="Move up" icon="up" disabled={groups[0]?.name === current.name} onPress={() => update((p) => moveInGroups(p, current.name, -1))} style={styles.moveBtn} />
+                <Button title="Move down" icon="down" disabled={groups.at(-1)?.name === current.name} onPress={() => update((p) => moveInGroups(p, current.name, 1))} style={styles.moveBtn} />
               </View>
             ) : null}
             <View style={[styles.cols, { paddingHorizontal: space.lg, paddingBottom: space.sm }]}>

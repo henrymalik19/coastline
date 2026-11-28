@@ -1,6 +1,7 @@
 import { startTxnId, transferPair, type PlanState, type Txn } from "@coastfi/engine";
 import { CheckinSchema, PlanStateSchema, TxnSchema, withProperties, type Checkin } from "@coastfi/schema";
 import { applyRegisterBalances, applyTracked, budgetAccounts, foldSavingsLines, hasRegister, startTxnFor, todayIso } from "./register";
+import { ownGroups } from "./budgetOrder";
 import { z } from "zod";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -155,7 +156,10 @@ export const useStore = create<AppState>()(
         const draft = structuredClone(get().plan);
         // before the change, so an amount typed into a line adds to what's folded into it, not twice
         foldSavingsLines(draft);
+        // your groups' order is kept as a list, so a group that's emptied stays (and keeps its place)
+        draft.budgetGroups = ownGroups(draft);
         fn(draft);
+        draft.budgetGroups = ownGroups(draft);
         // sub categories stay in their category's group
         draft.budget = keepFamilyGroups(draft.budget);
         syncGoalSteps(draft);

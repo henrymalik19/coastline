@@ -43,9 +43,11 @@ export function newDebt(kind: DebtKind): Debt {
 
 /** One debt: pick a type, optionally name it, then balance / rate / minimum. */
 export function DebtEditor({
-  debt, onChange, onRemove, paidFrom,
+  debt, onChange, onRemove, paidFrom, startOpen,
 }: {
   debt: Debt; onChange: (patch: Partial<Debt>) => void; onRemove: () => void;
+  /** Open to start with (opened from another page on this one). */
+  startOpen?: boolean;
   /** Set when a paycheck repays this debt (a 401(k) loan): its payment comes from there. */
   paidFrom?: { job: string; perCheck: number };
 }) {
@@ -57,7 +59,7 @@ export function DebtEditor({
     onChange({ kind: k, ...(keepApr ? {} : { apr: debtKind(k).typicalApr }) });
   };
   // filled-in debts start collapsed (one line each); a new, blank one opens to fill in
-  const [open, setOpen] = useState(() => !debt.name && !debt.balance && !debt.minPayment);
+  const [open, setOpen] = useState(() => !!startOpen || (!debt.name && !debt.balance && !debt.minPayment));
   return (
     <Card style={{ gap: space.sm, paddingVertical: open ? space.lg : space.md }}>
       <View style={styles.between}>

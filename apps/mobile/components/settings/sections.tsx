@@ -1,8 +1,8 @@
 import { PlanHistory } from "./PlanHistory";
-import { Redirect, useRouter } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { ImportUndoCard } from "../ImportUndo";
 import { YnabUpdateCard } from "../YnabUpdate";
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { confirm } from "../../lib/confirm";
 import { money, percent } from "../../lib/format";
@@ -301,16 +301,24 @@ function AccountsSection() {
   const txns = useStore((s) => s.txns);
   // a card with transactions can't be removed: close it, or move them into another card
   const [inUse, setInUse] = useState<string | null>(null);
+  // opened from another page on one card (Budget → Accounts' gear): that one open, in view
+  const { open: openParam } = useLocalSearchParams<{ open?: string }>();
+  useEffect(() => {
+    if (!openParam || !state.debts.some((d) => d.id === openParam)) return;
+    if (Platform.OS === "web" && typeof document !== "undefined") setTimeout(() => document.getElementById("acct-" + openParam)?.scrollIntoView({ behavior: "smooth", block: "center" }), 350);
+  }, [openParam]); // eslint-disable-line react-hooks/exhaustive-deps
   const editor = (dt: (typeof state.debts)[number]) => {
     const i = state.debts.findIndex((x) => x.id === dt.id);
     return (
-      <DebtEditor
-        key={dt.id}
-        debt={dt}
-        paidFrom={paidFromFor(state, dt.id)}
-        onChange={(patch) => update((p) => { p.debts[i] = { ...p.debts[i]!, ...patch }; })}
-        onRemove={() => (txnsInAccount(txns, dt.id) ? setInUse(dt.id) : removeItem("this debt", debtLabel(dt), () => update((p) => { p.debts.splice(i, 1); })))}
-      />
+      <View key={dt.id} nativeID={"acct-" + dt.id}>
+        <DebtEditor
+          debt={dt}
+          startOpen={openParam === dt.id}
+          paidFrom={paidFromFor(state, dt.id)}
+          onChange={(patch) => update((p) => { p.debts[i] = { ...p.debts[i]!, ...patch }; })}
+          onRemove={() => (txnsInAccount(txns, dt.id) ? setInUse(dt.id) : removeItem("this debt", debtLabel(dt), () => update((p) => { p.debts.splice(i, 1); })))}
+        />
+      </View>
     );
   };
   const owe = (list: typeof cards) => list.reduce((a, d) => a + d.balance, 0);

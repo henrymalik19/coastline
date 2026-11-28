@@ -290,3 +290,58 @@ test("math in a number box: typed, or with the + − × ÷ keys on a phone", asy
     await expect(page.getByRole("toolbar", { name: "Math keys" })).toHaveCount(0);
   }
 });
+
+test("a group keeps its place when its last category is dragged out, and an empty one can be deleted", async ({ page, isMobile }) => {
+  test.skip(isMobile, "dragging is checked on the desktop layout");
+  await onboard(page);
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app")!);
+    raw.state.plan.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 3000 }];
+    raw.state.plan.budget = [
+      { id: "rent", name: "Rent", amount: 1500, inRetirement: true, group: "Housing" },
+      { id: "food", name: "Groceries", amount: 500, inRetirement: true, group: "Food" },
+      { id: "fun", name: "Fun money", amount: 150, inRetirement: false, group: "Fun" },
+    ];
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/budget");
+  await page.getByRole("button", { name: /^Start with / }).click();
+  const heads = () => page.getByRole("button", { name: / group: rename/ }).allTextContents();
+  const order = async () => (await heads()).map((h) => h.replace(/\$.*$/, "").trim().toUpperCase());
+  expect((await order()).slice(-3)).toEqual(["HOUSING", "FOOD", "FUN"]);
+  // drag Groceries (Food's only category) onto Housing
+  const grip = page.getByRole("slider", { name: /^Move Groceries/ });
+  const to = page.getByText("Rent", { exact: true });
+  const a = (await grip.boundingBox())!;
+  const b = (await to.boundingBox())!;
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i++) await page.mouse.move(a.x + a.width / 2, a.y + (b.y + b.height - a.y) * (i / 12), { steps: 2 });
+  await page.mouse.up();
+  await expect(page.getByText(/No categories\./)).toBeVisible();
+  expect((await order()).slice(-3)).toEqual(["HOUSING", "FOOD", "FUN"]);
+  // the empty group: Delete group
+  await page.getByRole("button", { name: /^Food group: rename/ }).click();
+  await page.getByRole("button", { name: "Delete group" }).click();
+  expect((await order()).slice(-2)).toEqual(["HOUSING", "FUN"]);
+  await expect(page.getByText(/No categories\./)).toHaveCount(0);
+});
+
+test("an account's gear on Budget → Accounts opens its settings", async ({ page }) => {
+  await onboard(page);
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app")!);
+    raw.state.plan.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 1000 }];
+    raw.state.plan.debts = [{ id: "visa", name: "Visa", kind: "credit_card", balance: 200, apr: 0.24, minPayment: 25 }];
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/budget");
+  await page.getByRole("button", { name: /^Start with / }).click();
+  await page.goto("/budget?view=accounts");
+  await page.getByRole("link", { name: "Checking: settings" }).click();
+  await expect(page).toHaveURL(/\/money\/accounts\?open=chk/);
+  await expect(page.getByRole("button", { name: "Checking details" })).toHaveAttribute("aria-expanded", "true");
+  await page.goBack();
+  await page.getByRole("link", { name: "Visa: settings" }).click();
+  await expect(page.getByRole("button", { name: /^Visa.* details$/ })).toHaveAttribute("aria-expanded", "true");
+});

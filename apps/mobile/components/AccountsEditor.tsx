@@ -1,7 +1,7 @@
 import { accountGroup, type Account, type AccountType, type PlanAccount } from "@coastfi/engine";
-import { useState, type ReactNode } from "react";
-import { useRouter } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState, type ReactNode } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { confirm } from "../lib/confirm";
 import { HELP } from "../lib/help";
 import { usePlan } from "../lib/plan";
@@ -78,7 +78,14 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
   const update = useStore((s) => s.update);
   const txns = useStore((s) => s.txns);
   const router = useRouter();
-  const [open, setOpen] = useState<string | null>(null);
+  // opened from another page on one account (Budget → Accounts' gear): that one open, in view
+  const { open: openParam } = useLocalSearchParams<{ open?: string }>();
+  const [open, setOpen] = useState<string | null>(openParam && state.accounts.some((a) => a.id === openParam) ? openParam : null);
+  useEffect(() => {
+    if (!openParam || !state.accounts.some((a) => a.id === openParam)) return;
+    setOpen(openParam);
+    if (Platform.OS === "web" && typeof document !== "undefined") setTimeout(() => document.getElementById("acct-" + openParam)?.scrollIntoView({ behavior: "smooth", block: "center" }), 350);
+  }, [openParam]); // eslint-disable-line react-hooks/exhaustive-deps
   // phones: the drag grips only while reordering (so a scroll doesn't move an account by accident)
   const compact = useLayout().contentWidth < 600;
   const [reorder, setReorder] = useState(false);
@@ -140,7 +147,7 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
             const ck = contributionKey(state, a);
             const per = ck && ck !== "payroll" ? plannedNow(state, ck, thisMonth) : undefined;
             return (
-              <View>
+              <View nativeID={"acct-" + a.id}>
                 {n > 0 ? <Divider /> : null}
                 <View style={[styles.row, { paddingVertical: space.md }]}>
                   {list.length > 1 ? grip : null}

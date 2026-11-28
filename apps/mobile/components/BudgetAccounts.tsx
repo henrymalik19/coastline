@@ -5,6 +5,7 @@
  * order as Money → Accounts.
  */
 import { useRouter } from "expo-router";
+import { useOpenPage } from "../lib/nav";
 import { useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { DragList, reorderAmong } from "./DragList";
@@ -26,6 +27,7 @@ const TRACKING_TIP =
 export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (from: string) => void; /** Where its headings stop, under the Budget's toolbar. */ stickyTop?: number }) {
   const t = useTheme();
   const router = useRouter();
+  const openPage = useOpenPage();
   const { state } = usePlan();
   const update = useStore((s) => s.update);
   const txns = useStore((s) => s.txns);
@@ -89,6 +91,10 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
           </Text>
           <Icon name="chevron" size={14} color={t.text3} />
         </Pressable>
+        {/* its settings (name, closed, link) on Money → Accounts */}
+        <Pressable role="link" accessibilityLabel={`${a.name}: settings`} hitSlop={8} onPress={() => openPage(`/money/accounts?open=${encodeURIComponent(a.id)}`)} style={(st) => ({ padding: 6, opacity: st.pressed ? 0.6 : 1 })}>
+          <Icon name="gear" size={16} color={t.text3} />
+        </Pressable>
       </View>
     </View>
   );
@@ -133,7 +139,7 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
         </Card>
       ) : (
         <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.xs }]}>
-          Tap an account for its transactions. {compact ? "Tap Reorder, then drag a grip to move one." : "Drag a grip to reorder."} To add one, link a bank or change its settings, go to{" "}
+          Tap an account for its transactions, or its gear for its settings. {compact ? "Tap Reorder, then drag a grip to move one." : "Drag a grip to reorder."} To add one or link a bank, go to{" "}
           <Text role="link" onPress={() => router.push("/money/accounts" as never)} style={{ color: t.accent, fontWeight: "700" }}>Money → Accounts ›</Text>
         </Text>
       )}

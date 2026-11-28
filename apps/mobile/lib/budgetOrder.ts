@@ -17,6 +17,31 @@ export function linkedGroupChoices(items: BudgetItem[], fallback: string, curren
   return [...new Set(out)];
 }
 
+/** Your groups in order, empty ones included: the saved list, then any group a category names that isn't in it. */
+export function ownGroups(p: { budget: BudgetItem[]; budgetGroups?: string[] }): string[] {
+  return [...new Set([...(p.budgetGroups ?? []).map((g) => g.trim()).filter(Boolean), ...groupOrder(p.budget)])];
+}
+/** A group renamed: the saved list follows (merging into one already there). */
+export function renameInGroups(p: { budgetGroups?: string[] }, from: string, to: string) {
+  if (p.budgetGroups) p.budgetGroups = [...new Set(p.budgetGroups.map((g) => (g === from ? to : g)))];
+}
+/** A group deleted (or combined into another): off the saved list. */
+export function removeFromGroups(p: { budgetGroups?: string[] }, name: string) {
+  if (p.budgetGroups) p.budgetGroups = p.budgetGroups.filter((g) => g !== name);
+}
+/** Move a group one place earlier (-1) or later (+1) on the saved list, skipping over `fixed` ones. */
+export function moveInGroups(p: { budget: BudgetItem[]; budgetGroups?: string[] }, name: string, by: -1 | 1, fixed: ReadonlySet<string> = new Set()) {
+  const all = ownGroups(p);
+  const order = all.filter((g) => !fixed.has(g));
+  const i = order.indexOf(name);
+  const j = i + by;
+  if (i < 0 || j < 0 || j >= order.length) return;
+  [order[i], order[j]] = [order[j]!, order[i]!];
+  p.budgetGroups = [...order, ...all.filter((g) => fixed.has(g))];
+  // the categories follow, so lists that read the order from them agree
+  p.budget = [...p.budgetGroups.flatMap((g) => p.budget.filter((b) => !b.hidden && groupOf(b) === g)), ...p.budget.filter((b) => b.hidden)];
+}
+
 /** Group names in the order they first appear (hidden categories don't make a group). */
 export function groupOrder(items: BudgetItem[]): string[] {
   const out: string[] = [];

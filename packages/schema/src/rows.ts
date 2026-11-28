@@ -71,7 +71,7 @@ const ADJUSTMENT = auto("id", "month", "kind", "amount", "note");
 const PROPERTY = auto("id", "name", "kind", "value", "mortgageId", "incomeId", "taxInsurance", "upkeep", "inRetirement", "vacancy");
 
 /* ---------- the plan row's columns ---------- */
-const TOP = auto("version", "age", "retireAge", "coastAge", "healthcare", "medicare", "retireSpending", "retireAmountsFrom", "currentInvestMonthly", "ret", "vol", "fee", "swr", "taxRate", "contribGrowth", "filingStatus");
+const TOP = auto("version", "age", "retireAge", "coastAge", "healthcare", "medicare", "retireSpending", "retireAmountsFrom", "currentInvestMonthly", "ret", "vol", "fee", "swr", "taxRate", "contribGrowth", "filingStatus", "budgetGroups");
 const SETTINGS: Field[] = [
   ["steps", "steps"], ["starterEF", "starter_ef"], ["starterEFMonths", "starter_ef_months"], ["efMonths", "ef_months"], ["highApr", "high_apr"],
   ["marginalTax", "marginal_tax"], ["marginalTaxManual", "marginal_tax_manual"], ["hsaEligible", "hsa_eligible"], ["hsaFamily", "hsa_family"],

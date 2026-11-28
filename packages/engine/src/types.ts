@@ -435,6 +435,11 @@ export type PlanState = {
   spouse?: Spouse;
   /** The monthly (envelope) budget: what you assigned each month. */
   budgetPlan?: BudgetState;
+  /**
+   * Your budget groups in order, empty ones included (a group stays after its last category moves out).
+   * Groups your categories name that aren't listed come after, in the order they first appear.
+   */
+  budgetGroups?: string[];
   /** Homes and rentals you own. */
   properties?: Property[];
 };

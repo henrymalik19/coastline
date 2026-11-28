@@ -76,9 +76,11 @@ const rectOf = (l: { node: unknown; rect?: Rect }): Rect | undefined => {
 };
 
 export function DragList({
-  count, keyOf, nameOf, onMove, renderItem, style, zone, grips = true,
+  count, keyOf, nameOf, onMove, renderItem, style, zone, grips = true, empty,
 }: {
   count: number;
+  /** Shown when the list has no rows (a spot to drag one into). */
+  empty?: ReactNode;
   keyOf: (i: number) => string;
   /** The row's name, for screen readers ("Move Savings"). */
   nameOf?: (i: number) => string;
@@ -179,6 +181,7 @@ export function DragList({
       ]}
     >
       {target ? <View pointerEvents="none" style={{ position: "absolute", left: 8, right: 8, top: lineY - 1, height: 3, borderRadius: 2, backgroundColor: t.accent, zIndex: 5 }} /> : null}
+      {!count && empty ? <View pointerEvents="none">{empty}</View> : null}
       {Array.from({ length: count }, (_, i) => {
         const dragging = drag?.from === i;
         return (
