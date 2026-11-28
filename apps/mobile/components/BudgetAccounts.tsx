@@ -111,7 +111,7 @@ export function BudgetAccounts({ onTransfer, stickyTop = 0 }: { onTransfer: (fro
 
       {!all.length ? (
         <Card>
-          <Text style={[type.caption, { color: t.text3 }]}>Add a cash account under Money → Accounts, or a credit card under Money → Debts, to track transactions.</Text>
+          <Text style={[type.caption, { color: t.text3 }]}>Add a cash account or a credit card under Money → Accounts to track transactions.</Text>
         </Card>
       ) : (
         <Text style={[type.caption, { color: t.text3, paddingHorizontal: space.xs }]}>
