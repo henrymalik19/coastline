@@ -416,6 +416,7 @@ export function TransactionsList({
                         <Text numberOfLines={1} style={[type.caption, { color: x.review ? t.accent : uncategorized(x) ? t.warn : t.text3 }]}>
                           {x.review ? `To review · ${x.categoryId || x.splits?.length ? categoryText(cats, x, nameOf, since) : "no category"}` : categoryText(cats, x, nameOf, since)}
                         </Text>
+                        {x.memo ? <Text numberOfLines={1} style={[type.caption, { color: t.text3, fontStyle: "italic" }]}>{x.memo}</Text> : null}
                       </View>
                     )}
                     <View style={{ alignItems: "flex-end", maxWidth: compact ? 120 : 180 }}>

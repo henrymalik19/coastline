@@ -355,8 +355,8 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                   label="Account"
                   value={acct}
                   options={[
-                    ...accounts.map((a) => ({ value: a.id, label: a.name, hint: a.kind === "card" ? "Credit card · owe " + money(-a.balance) : money(a.balance) })),
-                    ...(kind === "transfer" ? withdrawable.map((a) => ({ value: a.id, label: a.name, hint: `A withdrawal · ${money(a.balance)}` })) : []),
+                    ...[...accounts].sort((a, b) => Number(a.kind === "card") - Number(b.kind === "card")).map((a) => ({ value: a.id, label: a.name, hint: a.kind === "card" ? "Owe " + money(-a.balance) : money(a.balance), section: a.kind === "card" ? "Credit cards" : "Checking & savings" })),
+                    ...(kind === "transfer" ? withdrawable.map((a) => ({ value: a.id, label: a.name, hint: `A withdrawal · ${money(a.balance)}`, section: "Retirement & investments" })) : []),
                   ]}
                   onChange={(v) => { setAcct(v); if (withdrawable.some((a) => a.id === v) && isTracking(to)) setTo(""); }}
                 />,
@@ -374,8 +374,8 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                       value={to}
                       options={[
                         { value: "", label: "Choose" },
-                        ...accounts.filter((x) => x.id !== acct && (!fromTracking || x.kind === "cash")).map((x) => ({ value: x.id, label: x.name, hint: x.kind === "card" ? "A card payment" : "Between budget accounts" })),
-                        ...(fromTracking ? [] : tracking.map((x) => ({ value: x.id, label: x.name, hint: x.kind === "debt" ? "A loan payment" : "Counts as saving" }))),
+                        ...accounts.filter((x) => x.id !== acct && (!fromTracking || x.kind === "cash")).sort((a, b) => Number(a.kind === "card") - Number(b.kind === "card")).map((x) => ({ value: x.id, label: x.name, hint: x.kind === "card" ? "A card payment" : "Between budget accounts", section: x.kind === "card" ? "Credit cards" : "Checking & savings" })),
+                        ...(fromTracking ? [] : [...tracking].sort((a, b) => Number(a.kind === "debt") - Number(b.kind === "debt")).map((x) => ({ value: x.id, label: x.name, hint: x.kind === "debt" ? "A loan payment" : "Counts as saving", section: x.kind === "debt" ? "Loans" : "Retirement & investments" }))),
                       ]}
                       onChange={(v) => { setTo(v); setXferPick(""); }}
                     />,
