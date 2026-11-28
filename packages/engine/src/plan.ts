@@ -429,6 +429,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
     let stepAsk = 0;
     let plannedGot = 0;
     let plannedShort = 0;
+    const plannedBy: { key: string; ask: number; got: number }[] = [];
     const alloc: Alloc = {
       k401: 0, k401TakeHome: 0, k401Step: 0, matchGain: 0,
       ira: 0, taxable: 0, ef: 0, debt: 0, hsa: 0, goals: 0, leftover: 0,
@@ -594,6 +595,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         plannedAsk += v;
         if (avail <= 1e-9) {
           plannedShort += v;
+          plannedBy.push({ key: k, ask: v, got: 0 });
           continue;
         }
         if (k === "cash") {
@@ -617,6 +619,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
         }
         const got = before - avail;
         plannedGot += got;
+        plannedBy.push({ key: k, ask: v, got });
         // short when the money ran out (not when a limit or a paid-off balance stopped it)
         if (got < v - 0.005 && avail <= 1e-9) plannedShort += v - got;
       }
@@ -693,6 +696,7 @@ export function simulatePlan(s: PlanState, d: Derived, opts: SimulateOptions = {
       stepAsk,
       plannedGot,
       plannedShort,
+      plannedBy,
       post: payRoth + alloc.k401 * d.rothShare + payHsaEmployer + payHsa + alloc.hsa + alloc.ira + alloc.taxable,
     });
   }

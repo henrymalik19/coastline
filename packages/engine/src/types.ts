@@ -716,6 +716,8 @@ export type MonthRow = {
   stepAsk: number;
   plannedGot: number;
   plannedShort: number;
+  /** Each account in `plannedAsk`: what was set for it this month, and what it got. */
+  plannedBy?: { key: string; ask: number; got: number }[];
   /** Roth/taxable/HSA dollars invested this month. */
   post: number;
 };

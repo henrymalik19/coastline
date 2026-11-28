@@ -360,9 +360,8 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
     { label: "HSA from your paychecks", amount: row0.payHsa ?? 0, where: perCheck((x) => x.hsaPre ?? 0), href: "/money/income" },
     ...loanDebts.map((x) => ({ label: `${debtLabel(x)} from your paycheck`, amount: x.minPayment, where: "goes back into your 401(k)", href: "/money/accounts" })),
   ].filter((x) => x.amount > 0.5);
-  const mine = all
-    .filter((a) => scheduleAmount(merged, a.key, thisMonth) !== undefined)
-    .map((a) => ({ k: a.key, ask: scheduleAmount(merged, a.key, thisMonth)!, got: a.months[0]!.plan + (a.key === "cash" ? 0 : 0) }));
+  // exactly what the plan counted as set this month (from Budget or the table), so it adds up to "You set"
+  const mine = (row0.plannedBy ?? []).filter((x) => x.ask > 0.005).map((x) => ({ k: x.key as AccountKey, ask: x.ask, got: x.got }));
   const notPlanned = Math.max(0, row0.available - row0.plannedGot);
   const shortMonths = pl.months.slice(0, 24).map((m, i) => ({ i, v: m.plannedShort })).filter((x) => x.v > 0.5);
   const line = (labelText: string, value: string, opts?: { strong?: boolean; color?: string; href?: string; hint?: string }) => (
@@ -385,8 +384,7 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
       <Text style={[type.overline, { color: t.text3 }]}>This month ({monthLabel(start, 0)})</Text>
       {fromPay.length ? (
         <>
-          <Text style={[type.caption, { color: t.text3, marginTop: 2 }]}>Comes out of your paychecks first (set on your job)</Text>
-          {fromPay.map((x) => line(x.label, money(x.amount), { href: x.href, hint: x.where || undefined }))}
+          {fromPay.map((x) => line(x.label, money(x.amount), { href: x.href }))}
           <View style={[styles.rule, { backgroundColor: t.border }]} />
         </>
       ) : null}
@@ -395,15 +393,16 @@ export function AccountsForecast({ state, o, start, fill, initialPick, compare }
       {row0.minPay > 0.5 ? line("Debt payments", `− ${money(row0.minPay)}`, { href: "/money/accounts", hint: escrowNow > 0.5 ? `includes ${money(escrowNow)} escrow` : undefined }) : null}
       {row0.setAside > 0.5 ? line("Set aside for recurring goals", `− ${money(row0.setAside)}`, { href: "/money/goals" }) : null}
       {line("Left after bills", money(row0.available), { strong: true, color: row0.available < 0 ? t.bad : t.text })}
-      <View style={[styles.rule, { backgroundColor: t.border }]} />
-      <Text style={[type.caption, { color: t.text3 }]}>You set (Budget)</Text>
-      {mine.length ? mine.map((x) => line(label(x.k).replace(" (what you owe)", isDebt(x.k) ? " (extra)" : ""), `− ${money(x.ask)}`)) : (
-        <Text style={[type.caption, { color: t.text3 }]}>Nothing set yet. Tap an amount in the table to set one.</Text>
-      )}
+      {mine.length ? (
+        <>
+          <View style={[styles.rule, { backgroundColor: t.border }]} />
+          {mine.map((x) => line(label(x.k).replace(" (what you owe)", isDebt(x.k) ? " (extra)" : ""), `− ${money(x.ask)}`))}
+        </>
+      ) : null}
       {row0.plannedShort > 0.5
-        ? line("Short this month", money(-row0.plannedShort), { strong: true, color: t.bad, hint: "Your plan asks for more than is left after bills. Lower an amount, or move one to a later month." })
+        ? line("Short this month", money(-row0.plannedShort), { strong: true, color: t.bad, hint: "Lower an amount, or move one to a later month." })
         : notPlanned > 0.5
-          ? line("Left", money(notPlanned), { color: t.good, hint: "Your priority order fills it. Tap an amount in the table to set it yourself." })
+          ? line("Left for your priority order", money(notPlanned), { strong: true, color: t.good })
           : null}
       {shortMonths.length && !(shortMonths.length === 1 && shortMonths[0]!.i === 0) ? (
         <Text style={[type.caption, { color: t.bad }]}>

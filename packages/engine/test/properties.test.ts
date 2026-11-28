@@ -84,6 +84,8 @@ function expectParity(input: PlanState) {
     delete m.emergency;
     expect(m.setAsideBy).toEqual({}); // no recurring goals on these plans
     delete m.setAsideBy;
+    expect(m.plannedBy).toEqual([]); // nothing set by hand on these plans
+    delete m.plannedBy;
     delete m.debts; // per-debt balances are new in the port
     delete m.available; // new in the port
   }

@@ -32,6 +32,7 @@ const VIEWS: { value: ViewKey; label: string }[] = [
   { value: "retirement", label: "Retirement" },
 ];
 const viewOf = (v?: string): ViewKey => (v === "retirement" || v === "whatif" || v === "overview" || v === "forecast" || v === "table" ? (v === "forecast" || v === "table" ? "overview" : v) : "number");
+const TABLE_TIP = "Left is the money you haven't given a job each month. Your plan fills it in your priority order. Tap any amount to set it yourself.";
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const keyLabel = (k: string) => `${MON[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
 
@@ -68,6 +69,7 @@ function Forecast() {
   const { twoColumn, contentWidth } = useLayout();
   const compact = contentWidth < 600;
   const [whyOpen, setWhyOpen] = useState(false);
+  const [tableTip, setTableTip] = useState(false);
   const { state, result: o, start, forecast, forecastReal, realD, whatIfOn } = usePlan();
   // the table: what you've set, with your what-ifs (what they change shows in orange)
   const real = { ...o, plan: forecast };
@@ -246,13 +248,15 @@ function Forecast() {
               <Text style={[type.caption, { color: asTable === x.v ? t.accent : t.text2, fontWeight: "700" }]}>{x.label}</Text>
             </Pressable>
           ))}
+          {/* what the table means: in a tip, not a paragraph */}
+          {asTable ? (
+            <View style={{ alignSelf: "center" }}>
+              <InfoTip text={TABLE_TIP} label="the table" open={tableTip} onToggle={setTableTip} />
+            </View>
+          ) : null}
         </View>
       ) : null}
-      {tab === "overview" && asTable ? (
-        <Text style={[type.caption, { color: t.text3 }]}>
-          Left is the money you haven't given a job each month. Your plan fills it in your priority order. Tap any amount to set it yourself.
-        </Text>
-      ) : null}
+      {tab === "overview" && asTable && tableTip ? <InfoText text={TABLE_TIP} /> : null}
       {tab === "overview" && asTable ? <WhatIfsOnNote onOpen={() => go("whatif")} /> : null}
       {tab === "overview" && asTable ? (
         <AccountsForecast key={pick ?? "all"} state={state} o={real} start={start} fill initialPick={pick} compare={whatIfOn ? { plan: forecastReal, d: realD } : undefined} />
