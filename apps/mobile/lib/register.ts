@@ -2,7 +2,7 @@
  * Registers: the budget accounts that hold transactions (cash accounts and credit cards), each one
  * starting with a "Starting balance" transaction, and keeping the plan's balances in step with them.
  */
-import { budgetCategories, budgetStartCash, budgetView, isStartTxn, registerBalance, run, startTxnId, type BudgetState, type PlanState, type Txn } from "@coastfi/engine";
+import { accountGroup, budgetCategories, budgetStartCash, budgetView, isStartTxn, registerBalance, run, startTxnId, type BudgetState, type PlanState, type Txn } from "@coastfi/engine";
 import { fullName } from "./company";
 import { stamp } from "./stamp";
 import { splitLoanMonth, type LoanPart } from "./loanPay";
@@ -112,12 +112,25 @@ export function applyRegisterBalances(p: PlanState, txns: Txn[], asOf = todayIso
 }
 
 /** Accounts you don't budget from that a transfer can move money to or from: investments and loans. */
-export type TrackingAccount = { id: string; name: string; kind: "acct" | "debt"; key: string; balance: number };
+/** `payroll`: a 401(k) loan your paycheck repays (an extra payment to it goes back into your 401(k)). */
+export type TrackingAccount = { id: string; name: string; kind: "acct" | "debt"; key: string; balance: number; payroll?: boolean };
 export function trackingAccounts(p: PlanState): TrackingAccount[] {
   return [
     ...p.accounts.filter((a) => a.type !== "cash" && a.type !== "property").map((a) => ({ id: a.id, name: fullName(a, "Account"), kind: "acct" as const, key: "acct:" + a.id, balance: a.balance })),
-    ...p.debts.filter((d) => !isCard(d) && !d.payroll && d.balance > 0).map((d) => ({ id: d.id, name: fullName(d, "Loan"), kind: "debt" as const, key: "debt:" + d.id, balance: d.balance })),
+    ...p.debts.filter((d) => !isCard(d) && d.balance > 0).map((d) => ({ id: d.id, name: fullName(d, "Loan"), kind: "debt" as const, key: "debt:" + d.id, balance: d.balance, ...(d.payroll ? { payroll: true } : {}) })),
   ];
+}
+
+/**
+ * The 401(k) a 401(k) loan is repaid into: the one with the loan's company (the same job), else your
+ * only (or first) 401(k). Undefined when you haven't added one.
+ */
+export function loanHome(p: PlanState, loanId: string): PlanState["accounts"][number] | undefined {
+  const d = p.debts.find((x) => x.id === loanId && x.payroll);
+  if (!d) return undefined;
+  const k401s = p.accounts.filter((a) => accountGroup(a) === "k401");
+  const co = d.company?.trim().toLowerCase();
+  return (co ? k401s.find((a) => a.company?.trim().toLowerCase() === co || a.name.toLowerCase().includes(co)) : undefined) ?? k401s[0];
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -130,7 +143,11 @@ function moveTracking(p: PlanState, id: string, amount: number): void {
     return;
   }
   const d = p.debts.find((x) => x.id === id);
-  if (d) d.balance = Math.max(0, round2(d.balance - amount));
+  if (!d) return;
+  d.balance = Math.max(0, round2(d.balance - amount));
+  // a 401(k) loan: what you pay on it goes back into your 401(k)
+  const home = d.payroll ? loanHome(p, d.id) : undefined;
+  if (home) home.balance = round2((+home.balance || 0) + amount);
 }
 
 /** A loan you pay by transfer (not a card, not paid from a paycheck). */

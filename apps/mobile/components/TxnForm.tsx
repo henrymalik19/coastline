@@ -14,7 +14,8 @@ import { closedName, outsideName } from "../lib/outside";
 import { buildPayees, suggestPayees } from "../lib/payees";
 import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
-import { budgetAccounts, loanPaymentParts, trackingAccounts } from "../lib/register";
+import { budgetAccounts, loanHome, loanPaymentParts, trackingAccounts } from "../lib/register";
+import { fullName } from "../lib/company";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, IconButton, moneyText, NumberInput, Segmented, Select } from "./form";
@@ -140,7 +141,10 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
 
   const toTracking = tracking.find((a) => a.id === to);
   // a transfer to an IRA or brokerage: you pick the category (the one linked to that account, by default)
-  const toInvest = kind === "transfer" && toTracking?.kind === "acct";
+  // an extra payment on a 401(k) loan: like money into an IRA, you pick the category it comes out of
+  const toInvest = kind === "transfer" && (toTracking?.kind === "acct" || !!toTracking?.payroll);
+  // where a 401(k) loan's payments go back to
+  const loanHomeAcct = toTracking?.payroll ? loanHome(state, toTracking.id) : undefined;
   const linkedCat = toInvest ? cats.find((c) => c.account === toTracking.id) : undefined;
   const xferCat = xferPick || linkedCat?.key || "ready";
   const xferLabel = xferCat === "ready" ? undefined : cats.find((c) => c.key === xferCat)?.label;
@@ -513,7 +517,9 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
             ) : null}
             {kind === "transfer" && toTracking && !fromTracking ? (
               <Text style={[type.caption, { color: t.text3 }]}>
-                {toTracking.kind === "debt"
+                {toTracking.payroll
+                  ? `${xferLabel ? `Comes out of ${xferLabel}` : "Comes out of Unassigned"}. Your paycheck pays the interest, so all of it lowers what you owe on ${toTracking.name}${loanHomeAcct ? ` and goes back into ${fullName(loanHomeAcct, "your 401(k)")}` : ""}.`
+                  : toTracking.kind === "debt"
                   ? `${toLine ? `Comes out of the ${toLine.label} category` : "Comes out of Unassigned"}. ${
                       !loanParts
                         ? `It lowers what you owe on ${toTracking.name}.`

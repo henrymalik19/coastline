@@ -70,3 +70,21 @@ describe("two payments the same day", () => {
     expect(parts.get("a-extra")!.principal).toBe(500);
   });
 });
+
+describe("an extra payment on a 401(k) loan", () => {
+  it("lowers the loan by all of it and puts it back into your 401(k); deleting it undoes both", () => {
+    const plan = freshPlan();
+    plan.accounts = [
+      { id: "chk", name: "Checking", type: "cash", balance: 5000 },
+      { id: "k", name: "Hub International 401(k)", type: "pretax", balance: 80_000 },
+    ];
+    plan.debts = [{ id: "loan", name: "Hub International 401(k) loan", kind: "k401_loan", balance: 25_000, apr: 0.09, minPayment: 528, payroll: true }];
+    const t: Txn = { id: "x", accountId: "chk", transferAccountId: "loan", date: "2026-11-28", amount: -1_000, cleared: "cleared", source: "manual", updatedAt: 1 };
+    const moved = applyTracked(plan, undefined, t);
+    const txns = settleLoans(plan, [{ ...t, trackedAmount: moved }], [{ loan: "loan", month: "2026-11" }]);
+    expect([plan.debts[0]!.balance, plan.accounts[1]!.balance]).toEqual([24_000, 81_000]);
+    expect(loanHistory(plan.debts[0]!, txns).get("x")!.note).toBe("Extra: all principal");
+    applyTracked(plan, txns[0], null);
+    expect([plan.debts[0]!.balance, plan.accounts[1]!.balance]).toEqual([25_000, 80_000]);
+  });
+});

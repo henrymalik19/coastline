@@ -48,7 +48,7 @@ export function splitLoanMonth(
  * today's balance). One that never moved the balance (brought in from YNAB) says so.
  */
 export function loanHistory(
-  d: Pick<Debt, "id" | "balance" | "escrow" | "apr" | "promoApr" | "promoUntil">,
+  d: Pick<Debt, "id" | "balance" | "escrow" | "apr" | "promoApr" | "promoUntil" | "payroll">,
   txns: { id: string; date: string; amount: number; deleted?: boolean; transferAccountId?: string; trackedAmount?: number }[],
 ): Map<string, { note: string; after: number }> {
   const pays = txns
@@ -67,6 +67,8 @@ export function loanHistory(
     for (const p of [...these].reverse()) {
       let note: string;
       if (p.principal === undefined) note = "Not counted in the balance";
+      // a 401(k) loan: your paycheck pays the interest, so one you add is all principal
+      else if (d.payroll) note = "Extra: all principal";
       else {
         const part = split.get(p.id)!;
         const first = counted[0]?.id === p.id;
