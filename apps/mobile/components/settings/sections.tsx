@@ -40,6 +40,8 @@ import { Diagnostics } from "../Diagnostics";
 import { HealthcareSuggestion } from "../HealthcareSuggestion";
 import { hsaEverEligible, HsaEligibilityChanges } from "../HsaEligibility";
 import { useOpenPage } from "../../lib/nav";
+import { AccountInUse } from "../AccountInUse";
+import { txnsInAccount } from "../../lib/moveAccount";
 
 /* ---------- registry ---------- */
 
@@ -296,6 +298,9 @@ function AccountsSection() {
   const cards = state.debts.filter(isCard);
   // everything else you owe that isn't a home's mortgage
   const loans = state.debts.filter((d) => !isCard(d) && !owned.has(d.id));
+  const txns = useStore((s) => s.txns);
+  // a card with transactions can't be removed: close it, or move them into another card
+  const [inUse, setInUse] = useState<string | null>(null);
   const editor = (dt: (typeof state.debts)[number]) => {
     const i = state.debts.findIndex((x) => x.id === dt.id);
     return (
@@ -304,7 +309,7 @@ function AccountsSection() {
         debt={dt}
         paidFrom={paidFromFor(state, dt.id)}
         onChange={(patch) => update((p) => { p.debts[i] = { ...p.debts[i]!, ...patch }; })}
-        onRemove={() => removeItem("this debt", debtLabel(dt), () => update((p) => { p.debts.splice(i, 1); }))}
+        onRemove={() => (txnsInAccount(txns, dt.id) ? setInUse(dt.id) : removeItem("this debt", debtLabel(dt), () => update((p) => { p.debts.splice(i, 1); })))}
       />
     );
   };
@@ -317,6 +322,7 @@ function AccountsSection() {
   );
   return (
     <>
+      <AccountInUse id={inUse} onClose={() => setInUse(null)} />
       <NetWorthCard />
       <Text style={[type.body, { color: t.text2 }]}>
         Cash is your emergency fund; everything else you hold counts as invested. Tap anything to change it.

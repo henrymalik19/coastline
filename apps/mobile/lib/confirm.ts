@@ -2,7 +2,7 @@ import { Alert, Platform } from "react-native";
 import { create } from "zustand";
 
 /** The "are you sure?" waiting for an answer (shown by ConfirmHost), if any. */
-export type PendingConfirm = { title: string; message: string; action: string; resolve: (ok: boolean) => void };
+export type PendingConfirm = { title: string; message: string; action: string; resolve: (ok: boolean) => void; /** Just to say something: OK only. */ notice?: boolean };
 export const useConfirm = create<{ pending: PendingConfirm | null }>(() => ({ pending: null }));
 
 /**
@@ -23,6 +23,17 @@ export function confirm(title: string, message: string, action: string): Promise
       { text: action, style: "destructive", onPress: () => resolve(true) },
     ]),
   );
+}
+
+/** Say something that needs no answer (why something can't be done): one OK button. */
+export function tell(title: string, message: string): Promise<void> {
+  if (Platform.OS === "web") {
+    return new Promise((resolve) => {
+      useConfirm.getState().pending?.resolve(false);
+      useConfirm.setState({ pending: { title, message, action: "OK", notice: true, resolve: () => resolve() } });
+    });
+  }
+  return new Promise((resolve) => Alert.alert(title, message, [{ text: "OK", onPress: () => resolve() }]));
 }
 
 /** Answer the open question (from the dialog's buttons). */

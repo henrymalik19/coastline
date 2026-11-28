@@ -108,7 +108,7 @@ export function NetWorthCard({ startOpen = false }: { startOpen?: boolean }) {
           </Group>
           {property > 0 ? <Text style={[type.caption, { color: t.text3 }]}>Property counts in net worth, not toward Coast FI (you can't spend it without selling).</Text> : null}
           <Pressable role="link" onPress={() => router.push("/settings")} hitSlop={6} style={styles.manage}>
-            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Manage income, accounts, debts and goals</Text>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Manage income, accounts and goals</Text>
             <Icon name="chevron" size={12} color={t.accent} />
           </Pressable>
         </>

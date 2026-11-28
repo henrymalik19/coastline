@@ -7,7 +7,7 @@ import { ReorderToggle } from "../../components/ReorderToggle";
 import { fullName } from "../../lib/company";
 import { debtItPays, newLoanPayment, paidLastTwoMonths, setLoanPayment } from "../../lib/debtLink";
 import { ImportUndoReminder, useImported } from "../../components/ImportUndo";
-import { txnsIn } from "../../lib/combine";
+import { keepCategory, txnsIn } from "../../lib/combine";
 import { addMonths, BUDGET_ITEM, budgetCategories, monthsBetween, budgetView, isHistoryTxn, SAVINGS_GROUP, spendingHistory, type BudgetCategory, type BudgetLine, type Txn } from "@coastfi/engine";
 import { TxnForm } from "../../components/TxnForm";
 import { BackupFirst } from "../../components/BackupFirst";
@@ -31,7 +31,7 @@ import { Icon } from "../../components/Icon";
 import { Card, Divider, Pill, Screen, SectionLabel } from "../../components/ui";
 import { accountSection, byAccountGroup } from "../../components/AccountsEditor";
 import { useAppearance } from "../../lib/appearance";
-import { confirm } from "../../lib/confirm";
+import { confirm, tell } from "../../lib/confirm";
 import { debtKind, debtLabel } from "../../lib/debts";
 import { money, monthLabel } from "../../lib/format";
 import { useLayout } from "../../lib/layout";
@@ -296,7 +296,9 @@ export default function Budget() {
   const ownGroup = (g: (typeof groups)[number]) => own.includes(g.name);
   // (sub categories ride along under their category: not dragged on their own)
   const spendCats = (g: (typeof groups)[number]) => g.cats.filter((c) => c.kind === "spending" && !c.parent);
-  dragGroups.current = groups.filter(ownGroup).map((g) => ({ name: g.name, cats: spendCats(g) }));
+  // Savings (your emergency fund, goals) takes categories too: drag one in, like a Roth IRA line
+  const dropGroup = (g: (typeof groups)[number]) => ownGroup(g) || g.cats.every((c) => c.kind === "saving");
+  dragGroups.current = groups.filter(dropGroup).map((g) => ({ name: g.name, cats: spendCats(g) }));
   const rta = view.readyToAssign;
   // overspent categories (red): Unassigned doesn't count them, so they come first
   const red = cats.filter((c) => view.lines[c.key]!.available < -0.005);
@@ -446,6 +448,8 @@ export default function Budget() {
           icon="trash"
           tone="danger"
           onPress={async () => {
+            const keep = keepCategory(state.budget, txns, it.id);
+            if (keep) return void tell(keep.title, keep.message);
             if (await confirm(`Delete "${it.name || "this category"}"?`, `It comes off your budget and your plan.${kids.length ? " Its sub categories become categories of their own." : ""} This can't be undone.`, "Delete")) {
               setOpen(null);
               update((p) => { p.budget = p.budget.filter((x) => x.id !== it.id).map((x) => { if (x.parentId !== it.id) return x; const { parentId: _, ...own } = x; return own; }); });
@@ -509,7 +513,9 @@ export default function Budget() {
                 icon="trash"
                 tone="danger"
                 onPress={async () => {
-                  if (await confirm(`Delete "${it.name || "this category"}"?`, "Its transactions are kept but won't have a category. This can't be undone.", "Delete")) {
+                  const keep = keepCategory(state.budget, txns, it.id);
+                  if (keep) return void tell(keep.title, keep.message.replace(" Combine it into another category instead (Combine into): its transactions move with it.", " Restore it and combine it into another category: its transactions move with it."));
+                  if (await confirm(`Delete "${it.name || "this category"}"?`, "It comes off your budget for good. This can't be undone.", "Delete")) {
                     setOpen(null);
                     update((p) => { p.budget = p.budget.filter((x) => x.id !== it.id); });
                   }
@@ -1170,7 +1176,7 @@ export default function Budget() {
                     </View>
                   </View>
                 ) : null}
-                {ownGroup(g) ? (
+                {dropGroup(g) ? (
                   <>
                     {g.cats.filter((c) => c.kind !== "spending").map((c, n) => (
                       <View key={c.key}>
@@ -1277,7 +1283,7 @@ export default function Budget() {
             </Card>
           ) : null}
           <Pressable role="link" onPress={() => router.push("/settings")} hitSlop={6} style={styles.link}>
-            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Manage income, accounts, debts and goals</Text>
+            <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Manage income, accounts and goals</Text>
             <Icon name="chevron" size={12} color={t.accent} />
           </Pressable>
           <Pressable role="link" onPress={() => router.push("/money/spending")} hitSlop={6} style={styles.link}>

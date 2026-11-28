@@ -1,7 +1,8 @@
 import { BUDGET_ITEM, monthsBetween, nextDue, setAsideFor, type BudgetItem, type Debt, type Goal, type MonthRow } from "@coastfi/engine";
 import { useEffect, useState, type ReactNode } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { confirm } from "../lib/confirm";
+import { confirm, tell } from "../lib/confirm";
+import { keepCategory } from "../lib/combine";
 import { BILLS_GROUP, DEBTS_GROUP, groupOf, mergeGroup, moveGroup, moveToGroup, UNGROUPED } from "../lib/budgetOrder";
 import { DragList, reorderAmong } from "./DragList";
 import { debtLabel } from "../lib/debts";
@@ -50,6 +51,7 @@ export function BudgetEditor() {
   const t = useTheme();
   const { state, result, start, actual } = usePlan();
   const update = useStore((s) => s.update);
+  const txns = useStore((s) => s.txns);
   // compact rows when the items pane itself is narrow (phones, or two panes on a mid-size window)
   const { contentWidth } = useLayout();
   const twoPane = useTwoPane();
@@ -133,6 +135,10 @@ export function BudgetEditor() {
     setNotice(null);
   };
   const removeGroup = async (group: string, count: number) => {
+    // a category in it that's still in use keeps the group
+    const used = state.budget.filter((b) => !b.hidden && groupOf(b) === group && keepCategory(state.budget, txns, b.id));
+    if (used.length)
+      return void tell(`"${group}" has categories in use`, `${used.map((b) => b.name.trim() || "Unnamed").join(", ")} ${used.length === 1 ? "has" : "have"} transactions or sub categories. Combine ${used.length === 1 ? "it" : "them"} into another category (or move them to another group) first.`);
     const linked = placedDebts(group).length + placedGoals(group).length;
     if (await confirm(`Remove "${group}"?`, `This removes the group and its ${count} item${count === 1 ? "" : "s"}.${linked ? " Debt payments and set-asides listed here go back to their own groups." : ""}`, "Remove"))
       update((p) => {
@@ -460,7 +466,12 @@ export function BudgetEditor() {
                 onEdit={() => setEditing(item.id)}
                 onDone={() => setEditing(null)}
                 onChange={(patch) => update((p) => { p.budget[index] = { ...p.budget[index]!, ...patch }; })}
-                onRemove={() => { setEditing(null); update((p) => { p.budget.splice(index, 1); }); }}
+                onRemove={() => {
+                  const keep = keepCategory(state.budget, txns, item.id);
+                  if (keep) return void tell(keep.title, keep.message);
+                  setEditing(null);
+                  update((p) => { p.budget.splice(index, 1); });
+                }}
               />
                   );
                 }}

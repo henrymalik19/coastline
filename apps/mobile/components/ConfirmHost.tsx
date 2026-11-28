@@ -23,7 +23,7 @@ export function ConfirmHost() {
           <Text style={[type.heading, { color: t.text }]}>{pending.title}</Text>
           {pending.message ? <Text style={[type.body, { color: t.text2 }]}>{pending.message}</Text> : null}
           <View style={styles.row}>
-            <Button title="Cancel" tone="ghost" onPress={() => answerConfirm(false)} style={{ minHeight: 44 }} />
+            {pending.notice ? null : <Button title="Cancel" tone="ghost" onPress={() => answerConfirm(false)} style={{ minHeight: 44 }} />}
             <Button title={pending.action} tone={/delete|remove|start over|start fresh|replace it/i.test(pending.action) ? "danger" : "primary"} onPress={() => answerConfirm(true)} style={{ minHeight: 44 }} />
           </View>
         </Pressable>

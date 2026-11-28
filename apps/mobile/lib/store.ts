@@ -13,6 +13,7 @@ import { applyYnabUpdate, canUndoUpdate, snapshotUpdate, undoYnabUpdate as undoY
 import { renamePayeesIn } from "./payees";
 import { bankStarts, mergeBankTxns, type BankTxn } from "./bankTxns";
 import { combineCategory, uncombineTxns } from "./combine";
+import { moveAccountTxns } from "./moveAccount";
 import { keepFamilyGroups } from "./subcats";
 import { salvagePlan, salvageTxns } from "./salvage";
 import { sawStamps, stamp } from "./stamp";
@@ -119,6 +120,8 @@ export type AppState = {
   startTxns: (accountId: string, date: string, balance: number) => void;
   /** Combine one budget category into another (lib/combine.ts). Returns its undo (puts both back as they were). */
   combineCategories: (from: string, into: string) => () => void;
+  /** Move an account's transactions into another and remove it (lib/moveAccount.ts). Returns how many moved. */
+  moveAccount: (from: string, to: string) => number;
   /** Put the plan and transactions back as they were just before the last import. `keepAdded`: ones you added since stay where they still fit. */
   undoImport: (keepAdded?: boolean) => void;
   /** Keep the import as it is: no more undo (drops the copy kept for it). */
@@ -282,6 +285,12 @@ export const useStore = create<AppState>()(
           const at = now();
           set({ plan: structuredClone(before), txns: uncombineTxns(get().txns, r.changed, at), updatedAt: at });
         };
+      },
+      moveAccount: (from, to) => {
+        const stamp = now();
+        const r = moveAccountTxns(get().plan, get().txns, from, to, stamp);
+        set({ plan: r.plan, txns: r.txns, updatedAt: stamp });
+        return r.moved;
       },
       mergeBank: (rows, current = new Map()) => {
         const s = get();

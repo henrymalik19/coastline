@@ -11,6 +11,22 @@ const add = (a: number | undefined, b: number | undefined) => Math.round(((a ?? 
 /** How many transactions are filed under a category (split lines count once per transaction). */
 export const txnsIn = (txns: Txn[], id: string) => txns.filter((t) => !t.deleted && (t.categoryId === id || t.splits?.some((x) => x.categoryId === id))).length;
 
+/**
+ * Why a category can't be deleted yet, or null when it can: one with sub categories (move or delete
+ * those first), or one that transactions are filed under (combine it into another, and they move with it).
+ */
+export function keepCategory(budget: { id: string; name: string; parentId?: string }[], txns: Txn[], id: string): { title: string; message: string } | null {
+  const me = budget.find((b) => b.id === id);
+  const name = me?.name.trim() || "This category";
+  const subs = budget.filter((b) => b.parentId === id);
+  if (subs.length)
+    return { title: `"${name}" has sub categories`, message: `Move them out of it or delete them first (${subs.map((b) => b.name.trim() || "Unnamed").join(", ")}).` };
+  const n = txnsIn(txns, id);
+  if (n)
+    return { title: `"${name}" has transactions`, message: `${n} transaction${n === 1 ? " is" : "s are"} filed under it, so it can't be deleted. Combine it into another category instead (Combine into): its transactions move with it.` };
+  return null;
+}
+
 /** The plan and transactions with `from` combined into `into` (new objects; `stamp` marks the transactions changed). */
 export function combineCategory(plan: PlanState, txns: Txn[], from: string, into: string, stamp: number): { plan: PlanState; txns: Txn[]; changed: Txn[] } {
   const p = structuredClone(plan);

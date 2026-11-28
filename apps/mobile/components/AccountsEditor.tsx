@@ -8,6 +8,8 @@ import { usePlan } from "../lib/plan";
 import { newId, useStore } from "../lib/store";
 import { space, type, useTheme } from "../lib/theme";
 import { Button, Choice, FieldRow, IconButton, NumberInput, TextField, ToggleRow } from "./form";
+import { AccountInUse } from "./AccountInUse";
+import { txnsInAccount } from "../lib/moveAccount";
 import { Icon } from "./Icon";
 import { BankLink } from "./BankLink";
 import { TxnStart } from "./TxnStart";
@@ -91,18 +93,20 @@ export function AccountsEditor({ afterRetirement }: { /** Shown under the retire
     update((p) => { p.accounts.push({ id, name: q.name === "Other" ? "" : q.name, type: q.type, balance: 0, ...(q.owner ? { owner: q.owner, counts: "ira" as const } : {}) }); if (q.owner) ensureSpouseStep(p); });
     setOpen(id);
   };
+  // one with transactions can't be removed: close it, or move them into another account
+  const [inUse, setInUse] = useState<string | null>(null);
   const remove = async (a: Account, i: number) => {
-    // with transactions: removing leaves them without an account; Closed keeps them as its history
-    const n = txns.filter((x) => !x.deleted && x.accountId === a.id).length;
-    const msg = n
-      ? `"${a.name || "This account"}" will be removed from your plan. Its ${n} transaction${n === 1 ? "" : "s"} stay, without an account. To keep them as its history instead, turn on Closed.`
-      : `"${a.name || "This account"}" will be removed from your plan.`;
-    if ((a.balance > 0 || n > 0) && !(await confirm("Remove this account?", msg, "Remove"))) return;
+    if (txnsInAccount(txns, a.id)) {
+      setInUse(a.id);
+      return;
+    }
+    if (a.balance > 0 && !(await confirm("Remove this account?", `"${a.name || "This account"}" will be removed from your plan.`, "Remove"))) return;
     update((p) => { p.accounts.splice(i, 1); });
   };
 
   return (
     <View style={{ gap: space.md }}>
+      <AccountInUse id={inUse} onClose={() => setInUse(null)} />
       {compact && accounts.length > 1 ? (
         <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
           <ReorderToggle on={reorder} onChange={setReorder} what="accounts" />
