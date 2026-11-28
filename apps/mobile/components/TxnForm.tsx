@@ -3,7 +3,7 @@
  * accounts. Built for quick entry on a phone: amount, payee (remembers its last category), category,
  * account, date.
  */
-import { isHistoryTxn, type Txn } from "@coastfi/engine";
+import { accountGroup, isHistoryTxn, type Txn } from "@coastfi/engine";
 import { useMemo, useRef, useState } from "react";
 import { calc, hideMathKeys, mathChars, mathTargetId, showMathKeys } from "../lib/calc";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -48,6 +48,12 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   // money can come out of an investment account into checking (a withdrawal), not out of a loan
   const withdrawable = tracking.filter((a) => a.kind === "acct");
   const isTracking = (id: string) => tracking.some((a) => a.id === id);
+  // a 401(k) (Roth too, a 403(b), 457 or TSP) only takes money from your paycheck: not somewhere to
+  // transfer to (money can still come out of one, like a 401(k) loan into checking)
+  const payrollOnly = (id: string) => {
+    const a = state.accounts.find((x) => x.id === id);
+    return !!a && accountGroup(a) === "k401";
+  };
   // a withdrawal is kept on the budget account's side: money in, from the IRA
   const withdrawal = !!txn?.transferAccountId && txn.amount > 0 && isTracking(txn.transferAccountId);
   const nameOf = (id: string) => accounts.find((a) => a.id === id)?.name ?? tracking.find((a) => a.id === id)?.name ?? outsideName(id) ?? "Account";
@@ -146,7 +152,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const transferInstead =
     kind === "out" && !parts && cat
       ? tracking.find((x) => x.kind === "debt" && x.key === cat) ??
-        tracking.find((x) => x.kind === "acct" && x.id === cats.find((c) => c.key === cat)?.account)
+        tracking.find((x) => x.kind === "acct" && !payrollOnly(x.id) && x.id === cats.find((c) => c.key === cat)?.account)
       : undefined;
   const fromTracking = kind === "transfer" ? withdrawable.find((a) => a.id === acct) : undefined;
   // only a transfer can start from an investment account
@@ -155,7 +161,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const inBudget = (id: string) => accounts.some((a) => a.id === id);
   const canSwap =
     kind === "transfer" && !locked && !!to && !!acct &&
-    (withdrawable.some((a) => a.id === to) ? accounts.some((a) => a.id === acct && a.kind === "cash") : inBudget(to) && (inBudget(acct) || withdrawable.some((a) => a.id === acct)));
+    (withdrawable.some((a) => a.id === to) ? accounts.some((a) => a.id === acct && a.kind === "cash") : inBudget(to) && (inBudget(acct) || (withdrawable.some((a) => a.id === acct) && !payrollOnly(acct))));
   const swap = () => {
     const [from, into] = [to, acct];
     setAcct(from);
@@ -439,7 +445,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
                       options={[
                         { value: "", label: "Choose" },
                         ...accounts.filter((x) => x.id !== acct && (!fromTracking || x.kind === "cash")).sort((a, b) => Number(a.kind === "card") - Number(b.kind === "card")).map((x) => ({ value: x.id, label: x.name, hint: x.kind === "card" ? "A card payment" : "Between budget accounts", section: x.kind === "card" ? "Credit cards" : "Checking & savings" })),
-                        ...(fromTracking ? [] : [...tracking].sort((a, b) => Number(a.kind === "debt") - Number(b.kind === "debt")).map((x) => ({ value: x.id, label: x.name, hint: x.kind === "debt" ? "A loan payment" : "Counts as saving", section: x.kind === "debt" ? "Loans" : "Retirement & investments" }))),
+                        ...(fromTracking ? [] : [...tracking].filter((x) => !payrollOnly(x.id) || x.id === to).sort((a, b) => Number(a.kind === "debt") - Number(b.kind === "debt")).map((x) => ({ value: x.id, label: x.name, hint: x.kind === "debt" ? "A loan payment" : "Counts as saving", section: x.kind === "debt" ? "Loans" : "Retirement & investments" }))),
                       ]}
                       onChange={(v) => { setTo(v); setXferPick(""); }}
                     />,

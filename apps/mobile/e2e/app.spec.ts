@@ -411,3 +411,29 @@ test("a loan's Payments list shows each payment's interest, escrow and principal
   await expect(page.getByText("Owed after $199,000")).toBeVisible();
   await expect(page.getByText("Owed after $199,500")).toBeVisible();
 });
+
+test("a 401(k) isn't offered to transfer to (only your paycheck adds to it); an IRA is", async ({ page }) => {
+  await onboard(page);
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app")!);
+    raw.state.plan.accounts = [
+      { id: "chk", name: "Checking", type: "cash", balance: 5000 },
+      { id: "k", name: "Work 401(k)", type: "pretax", balance: 20000 },
+      { id: "rk", name: "Roth 401(k)", type: "roth", balance: 5000 },
+      { id: "ira", name: "Roth IRA", type: "roth", balance: 8000 },
+    ];
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/budget");
+  await page.getByRole("button", { name: /^Start with / }).click();
+  await page.getByRole("button", { name: "Add a transaction" }).click();
+  await page.getByRole("radio", { name: "Transfer" }).click();
+  await page.getByRole("button", { name: /^Transfer to: / }).click();
+  await expect(page.getByRole("option", { name: /^Roth IRA/ })).toBeVisible();
+  await expect(page.getByRole("option", { name: /401\(k\)/ })).toHaveCount(0);
+  await page.getByRole("option", { name: /^Roth IRA/ }).click();
+  await page.waitForTimeout(500);
+  // out of one is still fine (a 401(k) loan into checking)
+  await page.getByRole("button", { name: /^Account: / }).click();
+  await expect(page.getByRole("option", { name: /^Work 401\(k\)/ })).toBeVisible();
+});
