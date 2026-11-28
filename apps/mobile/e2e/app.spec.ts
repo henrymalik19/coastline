@@ -437,3 +437,31 @@ test("a 401(k) isn't offered to transfer to (only your paycheck adds to it); an 
   await page.getByRole("button", { name: /^Account: / }).click();
   await expect(page.getByRole("option", { name: /^Work 401\(k\)/ })).toBeVisible();
 });
+
+test("an extra 401(k) loan payment makes its own category in Debt payments", async ({ page }) => {
+  await onboard(page);
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app")!);
+    const p = raw.state.plan;
+    p.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 5000 }, { id: "k", name: "Hub International 401(k)", type: "pretax", balance: 80000 }];
+    p.debts = [{ id: "loan", name: "Hub International 401(k) loan", kind: "k401_loan", balance: 25000, apr: 0.09, minPayment: 528, payroll: true }];
+    p.incomes[0].deductions = [...(p.incomes[0].deductions ?? []), { id: "ded", kind: "k401_loan", amount: 264, debtId: "loan" }];
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/budget");
+  await page.getByRole("button", { name: /^Start with / }).click();
+  await page.getByRole("button", { name: "Add a transaction" }).click();
+  await page.getByRole("radio", { name: "Transfer" }).click();
+  await page.getByRole("textbox", { name: "Amount" }).fill("1000");
+  await page.getByRole("button", { name: /^Transfer to: / }).click();
+  await page.getByRole("option", { name: /401\(k\) loan/ }).click();
+  await expect(page.getByText(/a new "Hub International 401\(k\) loan extra" category in Debt payments/)).toBeVisible();
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Hub International 401(k) loan extra").first()).toBeVisible();
+  // the next one uses it
+  await page.getByRole("button", { name: "Add a transaction" }).click();
+  await page.getByRole("radio", { name: "Transfer" }).click();
+  await page.getByRole("button", { name: /^Transfer to: / }).click();
+  await page.getByRole("option", { name: /401\(k\) loan/ }).click();
+  await expect(page.getByText(/Comes out of the Hub International 401\(k\) loan extra category/)).toBeVisible();
+});

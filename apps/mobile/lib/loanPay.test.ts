@@ -1,4 +1,4 @@
-import type { Txn } from "@coastfi/engine";
+import { budgetScheduleMonths, run, type Txn } from "@coastfi/engine";
 import { describe, expect, it } from "vitest";
 import { loanHistory, splitLoanMonth } from "./loanPay";
 import { freshPlan } from "./presets";
@@ -86,5 +86,30 @@ describe("an extra payment on a 401(k) loan", () => {
     expect(loanHistory(plan.debts[0]!, txns).get("x")!.note).toBe("Extra: all principal");
     applyTracked(plan, txns[0], null);
     expect([plan.debts[0]!.balance, plan.accounts[1]!.balance]).toEqual([25_000, 80_000]);
+  });
+});
+
+describe("money assigned to a 401(k) loan's extra category", () => {
+  it("is all extra in the forecast (the paycheck pays the payment)", () => {
+    const plan = freshPlan();
+    plan.debts = [{ id: "loan", name: "401(k) loan", kind: "k401_loan", balance: 25_000, apr: 0.09, minPayment: 528, payroll: true }];
+    plan.budget = [{ id: "x", name: "401(k) loan extra", amount: 0, inRetirement: false, group: "Debt payments", paysDebt: "loan" }];
+    plan.budgetPlan = { start: "2026-11", startCash: 0, months: { "2026-11": { assigned: { x: 300 } } } };
+    expect(budgetScheduleMonths(plan)?.["debt:loan"]).toEqual({ "2026-11": 300 });
+  });
+});
+
+describe("the forecast with that extra", () => {
+  it("pays the loan down by it and puts it back into the 401(k)", () => {
+    const plan = freshPlan();
+    plan.incomes = [{ id: "job", name: "Hub", kind: "job", gross: 120_000, freq: "monthly", net: 7_000, netMode: "manual" } as never];
+    plan.debts = [{ id: "loan", name: "401(k) loan", kind: "k401_loan", balance: 25_000, apr: 0.09, minPayment: 528, payroll: true }];
+    plan.budget = [{ id: "x", name: "401(k) loan extra", amount: 0, inRetirement: false, group: "Debt payments", paysDebt: "loan" }];
+    plan.budgetPlan = { start: "2026-11", startCash: 0, months: { "2026-11": { assigned: { x: 300 } } } };
+    plan.plan.scheduleMonths = { ...(plan.plan.scheduleMonths ?? {}), ...budgetScheduleMonths(plan) };
+    const r = run(plan, new Date(2026, 10, 15));
+    const m = r.plan.months[0]!;
+    expect(m.plannedBy?.find((x) => x.key === "debt:loan")?.got).toBe(300);
+    expect(m.loanBackExtra).toBe(300);
   });
 });

@@ -16,6 +16,7 @@ import { money } from "../lib/format";
 import { usePlan } from "../lib/plan";
 import { budgetAccounts, loanHome, loanPaymentParts, trackingAccounts } from "../lib/register";
 import { fullName } from "../lib/company";
+import { DEBTS_GROUP } from "../lib/budgetOrder";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { Button, IconButton, moneyText, NumberInput, Segmented, Select } from "./form";
@@ -40,6 +41,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const txns = useStore((s) => s.txns);
   const saveTxn = useStore((s) => s.saveTxn);
   const deleteTxn = useStore((s) => s.deleteTxn);
+  const update = useStore((s) => s.update);
   const cats = useCategories();
   // closed ones aren't offered (unless this transaction is already in one)
   const closed = new Set([...state.accounts.filter((a) => a.closed), ...state.debts.filter((d) => d.closed)].map((x) => x.id));
@@ -142,13 +144,16 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const toTracking = tracking.find((a) => a.id === to);
   // a transfer to an IRA or brokerage: you pick the category (the one linked to that account, by default)
   // an extra payment on a 401(k) loan: like money into an IRA, you pick the category it comes out of
-  const toInvest = kind === "transfer" && (toTracking?.kind === "acct" || !!toTracking?.payroll);
+  const toInvest = kind === "transfer" && toTracking?.kind === "acct";
   // where a 401(k) loan's payments go back to
   const loanHomeAcct = toTracking?.payroll ? loanHome(state, toTracking.id) : undefined;
   const linkedCat = toInvest ? cats.find((c) => c.account === toTracking.id) : undefined;
   const xferCat = xferPick || linkedCat?.key || "ready";
   const xferLabel = xferCat === "ready" ? undefined : cats.find((c) => c.key === xferCat)?.label;
-  const toLine = toTracking?.kind === "debt" ? cats.find((c) => c.key === toTracking.key) : undefined;
+  // a 401(k) loan's extra payments come out of its own category in Debt payments (made the first time)
+  const extraItem = toTracking?.payroll ? state.budget.find((b) => b.paysDebt === toTracking.id && !b.hidden) : undefined;
+  const extraName = toTracking?.payroll ? `${toTracking.name} extra` : "";
+  const toLine = toTracking?.kind === "debt" ? cats.find((c) => c.key === (toTracking.payroll ? extraItem?.id : toTracking.key)) : undefined;
   // a loan payment: the month's interest and escrow first, the rest lowers what you owe
   const loanParts = kind === "transfer" && toTracking?.kind === "debt" ? loanPaymentParts(state, txns, toTracking.id, date, amount, txn?.id) : null;
   // spent from a loan's payment category, or one linked to an IRA or brokerage account: a transfer
@@ -156,7 +161,8 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const transferInstead =
     kind === "out" && !parts && cat
       ? tracking.find((x) => x.kind === "debt" && x.key === cat) ??
-        tracking.find((x) => x.kind === "acct" && !payrollOnly(x.id) && x.id === cats.find((c) => c.key === cat)?.account)
+        tracking.find((x) => x.kind === "acct" && !payrollOnly(x.id) && x.id === cats.find((c) => c.key === cat)?.account) ??
+        tracking.find((x) => x.payroll && state.budget.some((b) => b.id === cat && b.paysDebt === x.id))
       : undefined;
   const fromTracking = kind === "transfer" ? withdrawable.find((a) => a.id === acct) : undefined;
   // only a transfer can start from an investment account
@@ -191,7 +197,16 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
     };
     if (kind === "transfer" && fromTracking) saveTxn({ ...base, accountId: to, amount, transferAccountId: acct, categoryId: "ready", splits: undefined }, isoDay(start));
     // to a loan: its payment line; to an IRA or brokerage: the category you picked (else Unassigned)
-    else if (kind === "transfer") saveTxn({ ...base, splits: undefined, transferAccountId: to, categoryId: !toTracking ? undefined : toInvest ? xferCat : toLine ? toTracking.key : "ready" }, isoDay(start));
+    else if (kind === "transfer" && toTracking?.payroll) {
+      // its category in Debt payments: the one there, or a new one now
+      let line = extraItem?.id;
+      if (!line) {
+        const id = newId();
+        line = id;
+        update((p) => { p.budget.push({ id, name: extraName, amount: 0, inRetirement: false, group: DEBTS_GROUP, paysDebt: toTracking.id }); });
+      }
+      saveTxn({ ...base, splits: undefined, transferAccountId: to, categoryId: line }, isoDay(start));
+    } else if (kind === "transfer") saveTxn({ ...base, splits: undefined, transferAccountId: to, categoryId: !toTracking ? undefined : toInvest ? xferCat : toLine ? toTracking.key : "ready" }, isoDay(start));
     else if (parts) {
       const sign = kind === "in" ? 1 : -1;
       // a split line keeps its original category when it's the same line as before (same position)
@@ -518,7 +533,7 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
             {kind === "transfer" && toTracking && !fromTracking ? (
               <Text style={[type.caption, { color: t.text3 }]}>
                 {toTracking.payroll
-                  ? `${xferLabel ? `Comes out of ${xferLabel}` : "Comes out of Unassigned"}. Your paycheck pays the interest, so all of it lowers what you owe on ${toTracking.name}${loanHomeAcct ? ` and goes back into ${fullName(loanHomeAcct, "your 401(k)")}` : ""}.`
+                  ? `Comes out of ${toLine ? `the ${toLine.label} category` : `a new "${extraName}" category in Debt payments`}. Your paycheck pays the interest, so all of it lowers what you owe on ${toTracking.name}${loanHomeAcct ? ` and goes back into ${fullName(loanHomeAcct, "your 401(k)")}` : ""}.`
                   : toTracking.kind === "debt"
                   ? `${toLine ? `Comes out of the ${toLine.label} category` : "Comes out of Unassigned"}. ${
                       !loanParts

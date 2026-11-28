@@ -280,8 +280,9 @@ export function budgetScheduleMonths(s: Pick<PlanState, "debts" | "goals" | "bud
       }
       else if (key.startsWith("debt:")) {
         const x = (s.debts ?? []).find((y) => "debt:" + y.id === key);
-        if (!x || x.payroll) continue;
-        amount = Math.max(0, num(v) - Math.max(0, num(x.minPayment)));
+        if (!x) continue;
+        // a 401(k) loan: your paycheck pays its payment, so all you assign is extra
+        amount = x.payroll ? Math.max(0, num(v)) : Math.max(0, num(v) - Math.max(0, num(x.minPayment)));
       }
       if (amount === undefined) continue;
       const row = (out[key] ??= {});
