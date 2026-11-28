@@ -1,6 +1,6 @@
 import type { Txn } from "@coastfi/engine";
 import { describe, expect, it } from "vitest";
-import { splitLoanMonth } from "./loanPay";
+import { loanHistory, splitLoanMonth } from "./loanPay";
 import { freshPlan } from "./presets";
 import { applyTracked, loanPaymentParts, settleLoans } from "./register";
 
@@ -43,5 +43,30 @@ describe("a loan payment lowers what you owe by its principal", () => {
     txns = settleLoans(plan, txns.map((t) => (t.id === "regular" ? { ...t, deleted: true, trackedAmount: undefined } : t)), [{ loan: "home", month: "2026-11" }]);
     expect(plan.debts[0]!.balance).toBe(200_000);
     expect(txns.find((t) => t.id === "extra")!.trackedAmount).toBe(0);
+  });
+});
+
+describe("a loan's payments, as its Activity lists them", () => {
+  it("each one's interest, escrow and principal, and what was owed after it", () => {
+    const d = { id: "home", balance: 199_000, escrow: 400, apr: 0.06 };
+    const rows = loanHistory(d, [
+      { ...pay("regular", "2026-11-01", 1_900), trackedAmount: 500 },
+      { ...pay("extra", "2026-11-20", 500), trackedAmount: 500 },
+      { ...pay("ynab", "2026-10-01", 1_900) },
+    ]);
+    expect(rows.get("regular")).toEqual({ note: "$1,000 interest · $400 escrow · $500 principal", after: 199_500 });
+    expect(rows.get("extra")).toEqual({ note: "Extra: all principal", after: 199_000 });
+    expect(rows.get("ynab")).toEqual({ note: "Not counted in the balance", after: 200_000 });
+  });
+});
+
+describe("two payments the same day", () => {
+  it("the bigger one (the regular payment) pays the month's interest and escrow", () => {
+    const parts = splitLoanMonth({ apr: 0.06, escrow: 400 }, 200_000, "2026-11", [
+      { id: "a-extra", date: "2026-11-28", amount: 500 },
+      { id: "z-regular", date: "2026-11-28", amount: 1_900 },
+    ]);
+    expect(parts.get("z-regular")!.principal).toBe(500);
+    expect(parts.get("a-extra")!.principal).toBe(500);
   });
 });

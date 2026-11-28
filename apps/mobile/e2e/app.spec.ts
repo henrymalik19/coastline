@@ -384,3 +384,30 @@ test("a loan's category suggests a transfer, which shows the interest, escrow an
   await page.getByRole("button", { name: "Make it a transfer to Mortgage" }).click();
   await expect(page.getByText(/\$1,000 interest and \$400 escrow this month; \$500 lowers what you owe/)).toBeVisible();
 });
+
+test("a loan's Payments list shows each payment's interest, escrow and principal", async ({ page }) => {
+  await onboard(page);
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app")!);
+    raw.state.plan.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 5000 }];
+    raw.state.plan.debts = [{ id: "home", name: "Mortgage", kind: "mortgage", balance: 200000, apr: 0.06, minPayment: 1900, escrow: 400 }];
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/budget");
+  await page.getByRole("button", { name: /^Start with / }).click();
+  for (const amount of ["1900", "500"]) {
+    await page.getByRole("button", { name: "Add a transaction" }).click();
+    await page.getByRole("radio", { name: "Transfer" }).click();
+    await page.getByRole("textbox", { name: "Amount" }).fill(amount);
+    await page.getByRole("button", { name: /^Transfer to: / }).click();
+    await page.getByRole("option", { name: /^Mortgage A loan/ }).click();
+    await page.getByRole("button", { name: "Save" }).click();
+  }
+  await page.goto("/money/accounts");
+  await page.getByRole("link", { name: "Mortgage payments" }).click();
+  await expect(page).toHaveURL(/account=home/);
+  await expect(page.getByText("$1,000 interest · $400 escrow · $500 principal")).toBeVisible();
+  await expect(page.getByText("Extra: all principal")).toBeVisible();
+  await expect(page.getByText("Owed after $199,000")).toBeVisible();
+  await expect(page.getByText("Owed after $199,500")).toBeVisible();
+});

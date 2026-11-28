@@ -16,7 +16,8 @@ import { closedName, OUTSIDE, outsideName } from "../lib/outside";
 import { money } from "../lib/format";
 import { useLayout } from "../lib/layout";
 import { usePlan } from "../lib/plan";
-import { budgetAccounts } from "../lib/register";
+import { budgetAccounts, trackingAccounts } from "../lib/register";
+import { loanHistory } from "../lib/loanPay";
 import { newId, useStore } from "../lib/store";
 import { radius, space, type, useTheme } from "../lib/theme";
 import { ClearedDot } from "./ClearedDot";
@@ -61,11 +62,20 @@ export function TransactionsList({
   // the month shown: starts as the Budget's; ‹ › go to any month, old history included
   const [month, setMonth] = useState(budgetMonth);
   useEffect(() => setMonth(budgetMonth), [budgetMonth]);
-  const [acct, setAcct] = useState(account && budgetAccounts(state).some((a) => a.id === account) ? account : "all");
+  // the accounts you don't keep transactions in (a loan, an IRA): their list is what you moved into them
+  const tracking = trackingAccounts(state);
+  const [acct, setAcct] = useState(account && (budgetAccounts(state).some((a) => a.id === account) || tracking.some((a) => a.id === account)) ? account : "all");
+  const trackingPicked = tracking.find((a) => a.id === acct);
+  // a loan: each payment's interest, escrow and principal, and what was owed after it
+  const loan = trackingPicked?.kind === "debt" ? state.debts.find((d) => d.id === acct) : undefined;
+  const loanRows = useMemo(() => (loan ? loanHistory(loan, txns) : null), [loan, txns]);
   // tell the Budget screen, so its Add a transaction starts in this account
-  useEffect(() => { onAccountChange?.(acct); }, [acct]); // eslint-disable-line react-hooks/exhaustive-deps
+  // (a loan or IRA isn't one you add to directly: Add starts as before)
+  useEffect(() => { onAccountChange?.(tracking.some((x) => x.id === acct) ? "all" : acct); }, [acct]); // eslint-disable-line react-hooks/exhaustive-deps
   // which dates: the month picked above, every date, or a range you pick
-  const [range, setRange] = useState<"month" | "all" | "custom">("month");
+  const [range, setRange] = useState<"month" | "all" | "custom">(account && tracking.some((a) => a.id === account) ? "all" : "month");
+  // a loan or IRA picked: every date (its payments are spread over months)
+  useEffect(() => { if (tracking.some((a) => a.id === acct)) setRange("all"); }, [acct]); // eslint-disable-line react-hooks/exhaustive-deps
   const [from, setFrom] = useState<string | undefined>(undefined);
   const [to, setTo] = useState<string | undefined>(undefined);
   const allMonths = range === "all";
@@ -339,6 +349,8 @@ export function TransactionsList({
                 { value: "all", label: `All accounts (${accounts.length})` },
                 ...[...accounts].sort((a, b) => Number(a.kind === "card") - Number(b.kind === "card")).map((a) => ({ value: a.id, label: a.name, hint: a.kind === "card" ? `Owe ${money(-a.balance)}` : money(a.balance), section: a.kind === "card" ? "Credit cards" : "Checking & savings" })),
                 // history from accounts you didn't bring in: all of them, or one
+                // loans and investments: what you've paid or moved into each
+                ...[...tracking].sort((a, b) => Number(a.kind === "acct") - Number(b.kind === "acct")).map((a) => ({ value: a.id, label: a.name, hint: a.kind === "debt" ? `Owe ${money(a.balance)}` : money(a.balance), section: a.kind === "debt" ? "Loans" : "Retirement & investments" })),
                 ...(closedAccts.length
                   ? [
                       { value: CLOSED, label: `All closed accounts (${closedAccts.length})`, hint: "History only", section: "Closed accounts" },
@@ -406,8 +418,8 @@ export function TransactionsList({
                             {x.amount < 0 ? nameOf(x.transferAccountId) : nameOf(x.accountId)}
                           </Text>
                         </View>
-                        <Text numberOfLines={1} style={[type.caption, { color: uncategorized(x) ? t.warn : t.text3 }]}>
-                          {transferNote(x)}
+                        <Text numberOfLines={loanRows ? 2 : 1} style={[type.caption, { color: uncategorized(x) ? t.warn : t.text3 }]}>
+                          {loanRows?.get(x.id)?.note ?? transferNote(x)}
                         </Text>
                       </View>
                     ) : (
@@ -421,9 +433,12 @@ export function TransactionsList({
                     )}
                     <View style={{ alignItems: "flex-end", maxWidth: compact ? 120 : 180 }}>
                       <Text style={[type.body, { color: x.transferAccountId ? t.text2 : x.amount > 0 ? t.good : t.text, fontWeight: "600", fontVariant: ["tabular-nums"] }]}>
-                        {acct === "all" && x.transferAccountId ? "" : x.amount > 0 ? "+" : "−"}{money(Math.abs(x.amount))}
+                        {(acct === "all" && x.transferAccountId) || trackingPicked ? "" : x.amount > 0 ? "+" : "−"}{money(Math.abs(x.amount))}
                       </Text>
                       {/* all accounts: which account it's in, as a small tag under the amount */}
+                      {loanRows?.has(x.id) ? (
+                        <Text numberOfLines={1} style={[type.caption, { color: t.text3, fontVariant: ["tabular-nums"] }]}>Owed after {money(loanRows.get(x.id)!.after)}</Text>
+                      ) : null}
                       {acct === "all" && !x.transferAccountId ? (
                         <View style={[styles.acctTag, { backgroundColor: t.surface2 }]}>
                           <Text numberOfLines={1} style={[type.caption, { color: t.text2, fontWeight: "600" }]}>{nameOf(x.accountId)}</Text>

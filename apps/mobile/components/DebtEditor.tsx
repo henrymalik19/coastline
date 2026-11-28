@@ -3,7 +3,8 @@ import { useState } from "react";
 import { CompanyField } from "./CompanyField";
 import { BankLink } from "./BankLink";
 import { TxnStart } from "./TxnStart";
-import { isCard } from "../lib/register";
+import { accountTxnsHref, isCard } from "../lib/register";
+import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { DEBT_KINDS, debtKind, debtLabel } from "../lib/debts";
 import { money, percent } from "../lib/format";
@@ -60,6 +61,9 @@ export function DebtEditor({
   };
   // filled-in debts start collapsed (one line each); a new, blank one opens to fill in
   const [open, setOpen] = useState(() => !!startOpen || (!debt.name && !debt.balance && !debt.minPayment));
+  const router = useRouter();
+  // a loan you pay by transfer: its payments (each one's interest, escrow and principal) on Activity
+  const payments = !isCard(debt) && !debt.payroll;
   return (
     <Card style={{ gap: space.sm, paddingVertical: open ? space.lg : space.md }}>
       <View style={styles.between}>
@@ -88,6 +92,12 @@ export function DebtEditor({
         </Pressable>
         <IconButton icon="trash" color={t.bad} label={`Remove ${debtLabel(debt)}`} onPress={onRemove} />
       </View>
+      {payments ? (
+        <Pressable role="link" accessibilityLabel={`${debtLabel(debt)} payments`} onPress={() => router.push(accountTxnsHref(debt.id) as never)} hitSlop={6} style={{ flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start", paddingLeft: 26 }}>
+          <Text style={[type.caption, { color: t.accent, fontWeight: "700" }]}>Payments</Text>
+          <Icon name="chevron" size={12} color={t.accent} />
+        </Pressable>
+      ) : null}
       {open ? (
         <>
       <View role="radiogroup" aria-label="Type of debt" style={styles.chips}>
