@@ -3,6 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { AppState, Platform } from "react-native";
 import { ConfirmHost } from "../components/ConfirmHost";
+import { MathBar } from "../components/MathBar";
 import { PlanChoiceHost } from "../components/PlanChoiceHost";
 import { InviteHost } from "../components/InviteHost";
 import { LoadNoticeHost, SaveProblemBar } from "../components/LoadNoticeHost";
@@ -70,6 +71,7 @@ export default function RootLayout() {
       <LoadNoticeHost />
       <SaveProblemBar />
       <ConfirmHost />
+      <MathBar />
     </>
   );
 }

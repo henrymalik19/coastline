@@ -258,3 +258,35 @@ test("a payee picked from the suggestions closes them", async ({ page }) => {
   await page.getByRole("textbox", { name: "Payee" }).fill("Zelle Payment To");
   await expect(page.getByRole("button", { name: /^Use Zelle/ })).toHaveCount(3);
 });
+
+test("math in a number box: typed, or with the + − × ÷ keys on a phone", async ({ page, isMobile }) => {
+  await onboard(page);
+  await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("coastfi.app")!);
+    raw.state.plan.accounts = [{ id: "chk", name: "Checking", type: "cash", balance: 1000 }];
+    localStorage.setItem("coastfi.app", JSON.stringify(raw));
+  });
+  await page.goto("/budget");
+  await page.getByRole("button", { name: /^Start with / }).click();
+  await page.getByRole("button", { name: "Add a transaction" }).click();
+  const amount = page.getByRole("textbox", { name: "Amount" });
+  await amount.fill("42.10+8.90");
+  await amount.blur();
+  await expect(amount).toHaveValue("51");
+  if (isMobile) {
+    // the phone's number pad has no +: the keys above it do
+    await amount.click();
+    await amount.fill("20");
+    await expect(page.getByRole("toolbar", { name: "Math keys" })).toBeVisible();
+    await page.getByRole("button", { name: "Type ×" }).click();
+    await amount.pressSequentially("3");
+    await expect(amount).toHaveValue("20×3");
+    await expect(amount).toBeFocused();
+    await page.getByRole("button", { name: "Work it out" }).click();
+    await expect(amount).toHaveValue("60");
+    await amount.blur();
+    await expect(page.getByRole("toolbar", { name: "Math keys" })).toHaveCount(0);
+  } else {
+    await expect(page.getByRole("toolbar", { name: "Math keys" })).toHaveCount(0);
+  }
+});

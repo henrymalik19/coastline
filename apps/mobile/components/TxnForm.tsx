@@ -4,7 +4,8 @@
  * account, date.
  */
 import { isHistoryTxn, type Txn } from "@coastfi/engine";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { calc, hideMathKeys, mathChars, mathTargetId, showMathKeys } from "../lib/calc";
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { CalendarModal } from "./Calendar";
 import { Icon } from "./Icon";
@@ -63,6 +64,22 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
   const [memo, setMemo] = useState(txn?.memo ?? "");
   const [cleared, setCleared] = useState(txn ? txn.cleared !== "uncleared" : false);
   const [amountText, setAmountText] = useState(txn ? moneyText(Math.abs(txn.amount), false) : initialAmount ? moneyText(initialAmount, false) : "");
+  // math in the amount: "42.10+8.95" (a receipt and a tip), or "+5" on top of what was there
+  const [mathId] = useState(mathTargetId);
+  const amountStart = useRef(0);
+  const amountNow = useRef(amountText);
+  amountNow.current = amountText;
+  const amountOf = (s: string) => Math.max(0, Math.round((calc(s.replace(/[+\-*/×÷−]+$/, ""), amountStart.current) ?? 0) * 100) / 100);
+  const typeAmount = (v: string) => {
+    const clean = mathChars(v);
+    setAmountText(clean);
+    setAmount(amountOf(clean));
+  };
+  const amountKey = (k: string) => {
+    if (k !== "=") return typeAmount(amountNow.current + k);
+    const v = amountOf(amountNow.current);
+    setAmountText(v ? String(v) : "");
+  };
   const [picking, setPicking] = useState(false);
   // reconciled = matched to a bank statement: what would change the balance is locked unless you say so
   const [unlocked, setUnlocked] = useState(false);
@@ -276,8 +293,10 @@ export function TxnForm({ txn, accountId, categoryId, initialKind, initialAmount
               <TextInput
                 accessibilityLabel="Amount"
                 value={amountText}
-                onChangeText={(v) => { const clean = v.replace(/[^0-9.]/g, ""); setAmountText(clean); setAmount(Number(clean) || 0); }}
-                onBlur={() => setAmountText(amount ? moneyText(amount, false) : "")}
+                onChangeText={typeAmount}
+                onFocus={() => { amountStart.current = amount; showMathKeys({ id: mathId, key: amountKey }); }}
+                onBlur={() => { hideMathKeys(mathId); const v = amountOf(amountText); setAmount(v); setAmountText(v ? moneyText(v, false) : ""); }}
+                onSubmitEditing={() => amountKey("=")}
                 placeholder="0"
                 placeholderTextColor={t.text3}
                 keyboardType="decimal-pad"

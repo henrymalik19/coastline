@@ -279,8 +279,10 @@ export default function Budget() {
   /* ---------- the month ---------- */
   const groups: { name: string; kind: BudgetCategory["kind"]; cats: BudgetCategory[] }[] = [];
   // a bill or debt payment listed in one of your groups goes where that group is, not with the built-ins
-  const own = groupOrder(state.budget);
-  const rank = (c: BudgetCategory) => (own.includes(c.group) ? ORDER.spending * 1000 + own.indexOf(c.group) : ORDER[c.kind] * 1000);
+  // Savings is built in: a category dragged into it doesn't make it one of your groups (it keeps its place)
+  const savingHomes = new Set([SAVINGS_GROUP, "Savings goals"]);
+  const own = groupOrder(state.budget).filter((n) => !savingHomes.has(n));
+  const rank = (c: BudgetCategory) => (savingHomes.has(c.group) ? ORDER.saving * 1000 : own.includes(c.group) ? ORDER.spending * 1000 + own.indexOf(c.group) : ORDER[c.kind] * 1000);
   // hidden categories aren't in the groups: they're listed at the end (an overspent one always shows)
   const hiddenCats = cats.filter((c) => c.hidden);
   const putUnder = (pairs: { id: string; under: string }[]) =>
@@ -300,7 +302,7 @@ export default function Budget() {
   // (sub categories ride along under their category: not dragged on their own)
   const spendCats = (g: (typeof groups)[number]) => g.cats.filter((c) => c.kind === "spending" && !c.parent);
   // Savings (your emergency fund, goals) takes categories too: drag one in, like a Roth IRA line
-  const dropGroup = (g: (typeof groups)[number]) => ownGroup(g) || g.cats.every((c) => c.kind === "saving");
+  const dropGroup = (g: (typeof groups)[number]) => ownGroup(g) || savingHomes.has(g.name) || g.cats.every((c) => c.kind === "saving");
   dragGroups.current = groups.filter(dropGroup).map((g) => ({ name: g.name, cats: spendCats(g) }));
   const rta = view.readyToAssign;
   // overspent categories (red): Unassigned doesn't count them, so they come first
@@ -1170,8 +1172,8 @@ export default function Budget() {
                       <Chip title="Add categories" icon="plus" tone="accent" onPress={() => setAddReq({ kind: "category", to: "group:" + g.name })} />
                       {ownGroup(g) ? (
                         <>
-                          <Chip title="Earlier" icon="up" disabled={groupOrder(state.budget)[0] === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, -1); })} />
-                          <Chip title="Later" icon="down" disabled={groupOrder(state.budget).at(-1) === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, 1); })} />
+                          <Chip title="Earlier" icon="up" disabled={own[0] === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, -1, savingHomes); })} />
+                          <Chip title="Later" icon="down" disabled={own.at(-1) === g.name} onPress={() => update((p) => { p.budget = moveGroup(p.budget, g.name, 1, savingHomes); })} />
                         </>
                       ) : null}
                       <View style={{ flex: 1 }} />

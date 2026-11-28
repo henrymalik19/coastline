@@ -43,14 +43,18 @@ export function setHidden(items: BudgetItem[], id: string, hidden: boolean): Bud
   return [...rest.slice(0, at), shown, ...rest.slice(at)];
 }
 
-/** Move a whole group one place earlier (-1) or later (+1). Items keep their order inside groups. */
-export function moveGroup(items: BudgetItem[], group: string, by: -1 | 1): BudgetItem[] {
-  const order = groupOrder(items);
+/**
+ * Move a whole group one place earlier (-1) or later (+1). Items keep their order inside groups.
+ * `fixed`: groups that keep their own place (Savings, with categories dragged into it): skipped over.
+ */
+export function moveGroup(items: BudgetItem[], group: string, by: -1 | 1, fixed: ReadonlySet<string> = new Set()): BudgetItem[] {
+  const all = groupOrder(items);
+  const order = all.filter((g) => !fixed.has(g));
   const i = order.indexOf(group);
   const j = i + by;
   if (i < 0 || j < 0 || j >= order.length) return items;
   [order[i], order[j]] = [order[j]!, order[i]!];
-  return [...order.flatMap((g) => items.filter((b) => !b.hidden && groupOf(b) === g)), ...items.filter((b) => b.hidden)];
+  return [...[...order, ...all.filter((g) => fixed.has(g))].flatMap((g) => items.filter((b) => !b.hidden && groupOf(b) === g)), ...items.filter((b) => b.hidden)];
 }
 
 /** Move an item one place up (-1) or down (+1) within its own group. */

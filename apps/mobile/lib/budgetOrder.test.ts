@@ -14,6 +14,11 @@ describe("budget order", () => {
     expect(groupOrder(moveGroup(items, "Other", -1))).toEqual(["Housing", "Food", "Other", "Car"]);
   });
 
+  it("skips over a group that keeps its own place (Savings, with a category dragged into it)", () => {
+    const withSav = [item("rent", "Housing"), item("roth", "Savings"), item("food", "Food")];
+    expect(groupOrder(moveGroup(withSav, "Food", -1, new Set(["Savings"])))).toEqual(["Food", "Housing", "Savings"]);
+  });
+
   it("doesn't move past the ends", () => {
     expect(moveGroup(items, "Housing", -1)).toBe(items);
     expect(moveGroup(items, "Other", 1)).toBe(items);

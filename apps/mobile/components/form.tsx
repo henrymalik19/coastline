@@ -5,6 +5,7 @@ import { radius, space, type, useTheme } from "../lib/theme";
 import { formatDate, parseDate } from "../lib/dates";
 import { CalendarModal, MonthModal } from "./Calendar";
 import { Icon, type IconName } from "./Icon";
+import { calc, hideMathKeys, mathChars, mathTargetId, showMathKeys } from "../lib/calc";
 
 /* ---------- number input ---------- */
 
@@ -87,6 +88,32 @@ export function NumberInput({
   const [focused, setFocused] = useState(false);
   const [text, setText] = useState(toText(value, kind, true));
   const typing = useTypingSave(onChange);
+  // math: "120+35", or "+50" on top of what was there when you started typing
+  const [mathId] = useState(mathTargetId);
+  const startVal = useRef(value);
+  const textNow = useRef(text);
+  textNow.current = text;
+  const toDisplay = (v: number) => (kind === "percent" ? v * 100 : v);
+  const fromDisplay = (n: number) => (kind === "percent" ? n / 100 : kind === "int" ? Math.round(n) : n);
+  const worked = (s: string) => {
+    const n = calc(s.replace(/[+\-*/×÷−]+$/, ""), toDisplay(startVal.current), min < 0);
+    return n === null ? null : fromDisplay(n);
+  };
+  const isMath = (s: string) => /[+*/×÷−]|\d-/.test(s) || (min >= 0 && s.trim().startsWith("-"));
+  const typeText = (raw: string) => {
+    const clean = isMath(raw) ? mathChars(raw, kind !== "int") : sanitize(raw, kind, min < 0);
+    setText(clean);
+    const n = isMath(clean) ? (calc(clean, toDisplay(startVal.current), min < 0) === null ? null : worked(clean)) : fromText(clean, kind);
+    if (n !== null) {
+      current.current = clamp(n);
+      typing.push(clamp(n));
+    }
+  };
+  const mathKey = (k: string) => {
+    if (k !== "=") return typeText(textNow.current + k);
+    const n = worked(textNow.current);
+    if (n !== null) setText(toText(clamp(n), kind, false));
+  };
   useEffect(() => {
     if (!focused && !typing.waiting()) setText(toText(value, kind, true));
   }, [value, kind, focused]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -145,24 +172,23 @@ export function NumberInput({
       <TextInput
         accessibilityLabel={label}
         value={text}
-        onChangeText={(raw) => {
-          const clean = sanitize(raw, kind, min < 0);
-          setText(clean);
-          const n = fromText(clean, kind);
-          if (n !== null) {
-            current.current = clamp(n);
-            typing.push(clamp(n));
-          }
-        }}
+        onChangeText={typeText}
         onFocus={() => {
           setFocused(true);
+          startVal.current = value;
           setText(toText(value, kind, false));
+          showMathKeys({ id: mathId, key: mathKey });
         }}
         onBlur={() => {
+          hideMathKeys(mathId);
+          // an unfinished sum ("120+") counts what's there
+          const n = worked(text);
+          if (n !== null && Math.abs(clamp(n) - current.current) > 1e-9) typing.push(clamp(n));
           typing.flush();
           setFocused(false);
-          if (fromText(text, kind) === null) onChange(clamp(0));
+          if (n === null) onChange(clamp(0));
         }}
+        onSubmitEditing={() => mathKey("=")}
         keyboardType={kind === "int" ? "number-pad" : "decimal-pad"}
         inputMode={kind === "int" ? "numeric" : "decimal"}
         selectTextOnFocus
@@ -601,11 +627,22 @@ export function InlineMoney({ value, onChange, label, compact, allowNegative }: 
   useEffect(() => {
     if (!focused) setText(show(value));
   }, [value, focused]);
+  // math: "120+35", or "+50" on top of what was there
+  const [mathId] = useState(mathTargetId);
+  const textNow = useRef(text);
+  textNow.current = text;
+  const worked = (s: string) => calc(s.replace(/[+\-*/×÷−]+$/, ""), value, !!allowNegative);
   const commit = () => {
+    hideMathKeys(mathId);
     setFocused(false);
-    const v = (allowNegative && text.trim().startsWith("-") ? -1 : 1) * Number(text.replace(/[^0-9.]/g, ""));
-    if (Number.isFinite(v) && Math.abs(v - value) > 0.004) onChange(Math.round(v * 100) / 100);
+    const v = worked(text);
+    if (v !== null && Number.isFinite(v) && Math.abs(v - value) > 0.004) onChange(Math.round((allowNegative ? v : Math.max(0, v)) * 100) / 100);
     else setText(show(value));
+  };
+  const mathKey = (k: string) => {
+    if (k !== "=") return setText(textNow.current + k);
+    const v = worked(textNow.current);
+    if (v !== null) setText(String(Math.round(v * 100) / 100));
   };
   return (
     <View style={[styles.inlineMoney, { borderColor: focused ? t.accent : t.border, backgroundColor: t.surface2 }]}>
@@ -613,8 +650,8 @@ export function InlineMoney({ value, onChange, label, compact, allowNegative }: 
       <TextInput
         accessibilityLabel={label}
         value={text}
-        onChangeText={setText}
-        onFocus={() => { setFocused(true); setText(value ? String(+value.toFixed(2)) : ""); }}
+        onChangeText={(s) => setText(mathChars(s))}
+        onFocus={() => { setFocused(true); setText(value ? String(+value.toFixed(2)) : ""); showMathKeys({ id: mathId, key: mathKey }); }}
         onBlur={commit}
         onSubmitEditing={commit}
         keyboardType={allowNegative ? "numbers-and-punctuation" : "decimal-pad"}
